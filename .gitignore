@@ -1,0 +1,47 @@
+# ENV FILES
+.env
+.env.*
+!.env.template
+!.env.example
+
+# FRONTEND (Node/Vite)
+node_modules/
+dist/
+build/
+.vite/
+coverage/
+
+# BACKEND (Python/FastAPI)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+.Python
+venv/
+.env/
+Pipfile.lock
+poetry.lock
+
+# DOCKER / VOLUMES
+postgres_data/
+redis_data/
+qdrant_data/
+pgadmin_data/
+docker-compose.override.yml
+
+# SYSTEM FILES
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# LOGS / TEMP FILES
+*.log
+tmp/
+temp/
+
+# SECURITY FILES
+*.pem
+*.key
+*.crt

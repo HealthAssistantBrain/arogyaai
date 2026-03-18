@@ -1,0 +1,56 @@
+@import "tailwindcss";
+@config "../tailwind.config.js";
+
+@layer base {
+  body {
+    @apply bg-background text-text-primary font-sans;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer components {
+  .card-container {
+    @apply bg-card rounded-card shadow-card p-5 transition-all duration-300;
+  }
+
+  .card-container:hover {
+    @apply shadow-card-hover;
+  }
+
+  .hero-number {
+    @apply text-4xl font-extrabold tracking-tight text-text-primary;
+  }
+
+  .text-secondary {
+    @apply text-text-secondary;
+  }
+
+  .text-muted {
+    @apply text-text-muted;
+  }
+}
+
+/* Custom Scrollbar for modern look */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-text-muted/30 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-text-muted/50;
+}
+
+/* Ensure DM Sans bold is used for numbers */
+.font-number {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 700;
+}

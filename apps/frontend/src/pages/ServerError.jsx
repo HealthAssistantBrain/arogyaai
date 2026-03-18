@@ -1,0 +1,205 @@
+import { useNavigate } from 'react-router-dom';
+import { ROUTES } from '../router/routes';
+import { motion } from 'framer-motion';
+import { 
+  Dna, 
+  Activity, 
+  RefreshCw, 
+  Home, 
+  LifeBuoy, 
+  Bell, 
+  ChevronDown,
+  AlertTriangle,
+  FlaskConical,
+  Zap
+} from 'lucide-react';
+
+const ServerError = () => {
+  const navigate = useNavigate();
+
+  const handleRetry = () => {
+    window.location.reload();
+  };
+
+  return (
+    <div className="bg-[#EAEAEA] dark:bg-[#13082A] text-[#13082A] font-display min-h-screen flex flex-col antialiased transition-colors duration-500 overflow-hidden h-screen">
+      
+      {/* Optimized Header (Standardized Dashboard Style) */}
+      <header className="h-24 bg-white/80 dark:bg-[#13082A]/80 backdrop-blur-2xl border-b border-slate-200 dark:border-white/5 px-10 flex items-center justify-between shrink-0 sticky top-0 z-50">
+        <div className="flex items-center gap-4 cursor-pointer" onClick={() => navigate(ROUTES.DASHBOARD)}>
+          <div className="bg-gradient-to-br from-[#6143f4] to-[#009CDE] size-11 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-[#6143f4]/20 transform hover:rotate-12 transition-transform">
+            <Activity size={24} strokeWidth={2.5} />
+          </div>
+          <div>
+            <h1 className="text-2xl font-black tracking-tighter text-[#13082A] dark:text-white uppercase leading-none italic">Arogya<span className="text-[#6143f4]">AI</span></h1>
+            <p className="text-[9px] font-black text-[#009CDE] uppercase tracking-widest mt-1 italic opacity-70">Predictive Health</p>
+          </div>
+        </div>
+
+        <nav className="hidden lg:flex items-center gap-12">
+          {['Platform', 'Solutions', 'Security'].map((item) => (
+            <button key={item} className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 hover:text-[#6143f4] transition-colors italic">{item}</button>
+          ))}
+        </nav>
+
+        <div className="flex items-center gap-8 pl-10 border-l border-slate-200 dark:border-white/10 ml-10">
+          <button className="relative p-3.5 text-slate-400 hover:text-[#6143f4] transition-all group">
+            <Bell size={20} strokeWidth={2.5} />
+            <span className="absolute top-3.5 right-3.5 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-white dark:ring-[#13082A]"></span>
+          </button>
+          <div className="flex items-center gap-4 cursor-pointer group">
+            <div className="text-right hidden xl:block">
+              <p className="text-[10px] font-black text-[#13082A] dark:text-white uppercase tracking-widest leading-none mb-1 group-hover:text-[#6143f4] transition-colors italic">Elena Smith</p>
+              <p className="text-[9px] font-black text-[#009CDE] uppercase tracking-widest leading-none opacity-80 italic">Verified Node</p>
+            </div>
+            <div className="size-11 rounded-2xl bg-gradient-to-tr from-[#6143f4] to-[#009CDE] p-[2px] shadow-lg shadow-[#6143f4]/20 transform group-hover:scale-105 transition-transform">
+               <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtUF7rDszaKWnU4spXfT8-Qr3kMrRMSi601P0wbsVaRFaUw1wvLoQ11WFXLHECfRlS0AHBeeEWdgZCIMsDXI-RQhlQ2ADI8MYAwxDZtHGlIt1gMgcVWnKoH7MWh6C8LGzwzsmPEAIs30k82rc21e8g2HOmjfvnj45oImCcshimNh2J9Mb99JBkRjkXrDmF_IKfQw-BMQhlxmcLueluJHdA6Hvx4qsmEE1bcslk48rRb3AJmNmxNlhGsSwayHWKDkceETbHU3K0LObc" alt="User" className="size-full object-cover rounded-2xl border-2 border-white dark:border-white/10" />
+            </div>
+            <ChevronDown size={14} className="text-slate-400 group-hover:text-[#6143f4] transition-colors" />
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col items-center justify-center relative px-8 overflow-hidden bg-gradient-to-b from-transparent to-slate-200/50 dark:to-black/20">
+        {/* Dynamic Background Mesh */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] bg-gradient-to-tr from-[#6143f4]/5 to-[#009CDE]/5 rounded-full blur-[140px] -z-10 animate-pulse"></div>
+        
+        <div className="max-w-4xl w-full text-center space-y-16 py-12">
+          
+          {/* Enhanced Medical Illustration Node */}
+          <div className="relative mb-12 flex h-80 w-80 mx-auto items-center justify-center lg:h-[30rem] lg:w-[30rem]">
+            {/* Pulsing Abstract Base */}
+            <div className="absolute inset-0 animate-pulse rounded-full bg-[#6143f4]/5 blur-[100px]"></div>
+            <div className="absolute inset-16 rounded-full border border-dashed border-[#6143f4]/20 animate-[spin_30s_linear_infinite]"></div>
+            <div className="absolute inset-24 rounded-full border border-dashed border-[#009CDE]/10 animate-[spin_20s_linear_infinite_reverse]"></div>
+            
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 1, ease: "easeOut" }}
+              className="relative z-10 flex flex-col items-center"
+            >
+              <div className="mb-10 flex h-40 w-40 items-center justify-center rounded-[3.5rem] bg-white dark:bg-slate-900 shadow-4xl shadow-[#6143f4]/30 border border-[#6143f4]/10 transform transition-transform hover:rotate-6 group">
+                <FlaskConical size={80} className="text-[#6143f4] group-hover:scale-110 transition-transform duration-500" strokeWidth={2.5} />
+                <div className="absolute -top-4 -right-4 size-12 bg-red-500 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-red-500/30 animate-bounce">
+                  <AlertTriangle size={24} strokeWidth={3} />
+                </div>
+              </div>
+              
+              {/* Real-time Status Pulse Indicators */}
+              <div className="flex gap-4">
+                <div className="flex items-center gap-2 px-6 py-2 bg-white/50 dark:bg-white/5 backdrop-blur-xl rounded-full border border-white dark:border-white/10 shadow-sm">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#009CDE] animate-pulse"></span>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-[#009CDE] italic">Sync Pending</span>
+                </div>
+                <div className="flex items-center gap-2 px-6 py-2 bg-slate-100 rounded-full border border-slate-200 opacity-40">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#6143f4]/30"></span>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Floating Contextual Data Nodes */}
+            <motion.div 
+              animate={{ y: [0, -20, 0], x: [0, 10, 0] }}
+              transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+              className="absolute right-0 top-1/4 size-20 rounded-3xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-white/10 p-5 shadow-3xl flex items-center justify-center text-[#009CDE] group hover:bg-[#009CDE] hover:text-white transition-colors cursor-help"
+            >
+              <Activity size={32} strokeWidth={2.5} className="group-hover:scale-110 transition-transform" />
+            </motion.div>
+            
+            <motion.div 
+              animate={{ y: [0, 20, 0], x: [0, -10, 0] }}
+              transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+              className="absolute -left-4 bottom-1/4 size-24 rounded-[2rem] bg-white dark:bg-slate-900 border border-slate-100 dark:border-white/10 p-6 shadow-3xl flex items-center justify-center text-[#6143f4] group hover:bg-[#6143f4] hover:text-white transition-colors cursor-help"
+            >
+              <Dna size={40} strokeWidth={2.5} className="animate-spin-slow group-hover:scale-110 transition-transform" />
+            </motion.div>
+
+            <motion.div 
+              animate={{ scale: [1, 1.1, 1] }}
+              transition={{ duration: 3, repeat: Infinity }}
+              className="absolute top-0 left-1/4 size-16 rounded-2xl bg-gradient-to-tr from-[#6143f4] to-[#009CDE] p-4 shadow-2xl flex items-center justify-center text-white"
+            >
+              <Zap size={24} fill="currentColor" />
+            </motion.div>
+          </div>
+
+          {/* Messaging Section */}
+          <div className="space-y-10 relative z-10">
+            <div className="inline-flex items-center gap-4 rounded-full bg-[#6143f4]/10 px-8 py-3 text-[11px] font-black uppercase tracking-[0.5em] text-[#6143f4] border border-[#6143f4]/10 italic">
+              Critical Data Error 500
+            </div>
+            <h1 className="text-8xl font-black text-[#13082A] dark:text-white tracking-tighter uppercase leading-[0.8] italic translate-y-2">
+              System <span className="text-[#6143f4]">Synchronicity</span> <br/>
+              <span className="text-[#009CDE]">Error</span>
+            </h1>
+            <p className="mx-auto max-w-2xl text-lg font-bold leading-relaxed text-slate-500 dark:text-slate-400 font-display uppercase tracking-tight italic opacity-80 decoration-[#6143f4] decoration-2 underline-offset-8">
+              Our diagnostic systems are currently undergoing an unexpected procedure. <br className="hidden md:block" /> 
+              We are working to restore the connection to your healthcare data network.
+            </p>
+
+            <div className="flex flex-col items-center justify-center gap-8 pt-10 sm:flex-row">
+              <button 
+                onClick={handleRetry}
+                className="w-full sm:w-auto flex items-center justify-center gap-6 rounded-[2rem] bg-[#6143f4] px-16 py-7 text-[11px] font-black text-white uppercase tracking-[0.5em] shadow-3xl shadow-[#6143f4]/30 transition-all hover:scale-[1.05] hover:shadow-[#6143f4]/50 active:scale-95 group italic"
+              >
+                <RefreshCw size={20} strokeWidth={3} className="group-hover:rotate-180 transition-transform duration-700" />
+                Retry Procedure
+              </button>
+              <button 
+                onClick={() => navigate(ROUTES.DASHBOARD)}
+                className="w-full sm:w-auto flex items-center justify-center gap-6 rounded-[2rem] bg-white dark:bg-white/5 px-16 py-7 text-[11px] font-black text-[#13082A] dark:text-white uppercase tracking-[0.5em] shadow-xl border border-slate-200 dark:border-white/10 transition-all hover:bg-slate-50 dark:hover:bg-white/10 active:scale-95 italic hover:border-[#6143f4]/30"
+              >
+                <Home size={20} strokeWidth={2.5} />
+                Return Home
+              </button>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      {/* Standardized Clinical Footer */}
+      <footer className="footer-clinical shrink-0 h-32 border-t border-slate-200 dark:border-white/5 bg-white/40 dark:bg-white/5 px-10 backdrop-blur-2xl flex items-center relative overflow-hidden z-20">
+        <div className="max-w-7xl mx-auto w-full flex flex-col items-center justify-between gap-8 md:flex-row">
+          <div className="flex items-center gap-10">
+            <div className="flex items-center gap-4 group cursor-help">
+              <span className="h-3 w-3 rounded-full bg-amber-500 shadow-[0_0_15px_#f59e0b] animate-pulse"></span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 italic">Status: Maintenance Overload</span>
+              <div className="h-6 w-px bg-slate-300 dark:bg-white/10"></div>
+            </div>
+            <p className="text-[11px] font-black uppercase tracking-[0.4em] text-slate-400 italic opacity-80">"Precision in every pulse"</p>
+          </div>
+          <div className="flex items-center gap-12">
+            {[
+              { label: 'Documentation', icon: <LifeBuoy size={14} /> },
+              { label: 'Contact Support', icon: <AlertTriangle size={14} /> }
+            ].map((item) => (
+              <button 
+                key={item.label} 
+                className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 hover:text-[#6143f4] transition-all italic group"
+              >
+                <span className="group-hover:scale-110 transition-transform">{item.icon}</span>
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </footer>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes spin-slow {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .animate-spin-slow { animation: spin-slow 12s linear infinite; }
+        
+        .shadow-4xl {
+          box-shadow: 0 40px 100px -20px rgba(97,67,244,0.35);
+        }
+      `}} />
+    </div>
+  );
+};
+
+export default ServerError;

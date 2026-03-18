@@ -1,0 +1,202 @@
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  BarChart3, 
+  User, 
+  HelpCircle, 
+  Link as LinkIcon, 
+  ArrowLeft, 
+  ArrowRight,
+  CheckCircle,
+  Smartphone,
+  Watch,
+  Heart,
+  ExternalLink,
+  ChevronRight,
+  Smartphone as Link2
+} from 'lucide-react';
+import toast from 'react-hot-toast';
+import { useAuthStore } from '../store/authStore';
+import { ROUTES } from '../router/routes';
+
+const DeviceConnection = () => {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const setOnboardingStep = useAuthStore((state) => state.setOnboardingStep);
+
+  const handleFinish = () => {
+    setOnboardingStep(5);
+    toast.success('Onboarding profile completed!');
+    if (searchParams.get('return') === 'summary') {
+      navigate(ROUTES.ONBOARDING_SUMMARY);
+    } else {
+      navigate(ROUTES.ONBOARDING_SUMMARY);
+    }
+  };
+
+  // Animation variants
+  const containerVariants = {
+    initial: { opacity: 0 },
+    animate: { opacity: 1, transition: { staggerChildren: 0.1 } }
+  };
+
+  const itemVariants = {
+    initial: { opacity: 0, y: 15 },
+    animate: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } }
+  };
+
+  const devices = [
+    {
+      id: 'google-fit',
+      name: 'Google Fit',
+      status: 'Not Connected',
+      logo: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCS25j_dy3JfF0ITunb_0Wf4v33FuI_CT4ptVocPAe-Sp0XHyQjFPMdPAD-3ElS_tk_nrb0FOQHcB007rgTKpZht-aRsArkTXJErBXkPLmUTf8yG99KvBQVpJyXvD9Gibnm6SH2rrEJoFKStTMiM9WuSap8_nLUBmACz_Wd2FWSI-QCLAQd97xUTsz7bWwRknr1AmofRNGKrm7uP2Cln1Y4NdLy8lzs5pps_qCpeS5xl2ip7tBwAcwC2apm0Q1gn58TY7NMpJDJZFFp',
+      color: 'text-red-500',
+      bgColor: 'bg-red-50 dark:bg-red-500/10'
+    },
+    {
+      id: 'apple-health',
+      name: 'Apple Health',
+      status: 'Not Connected',
+      logo: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAqwu7dSyubLk6CGVhftcKxU6rxdE2zKhKB8JAk_9Kw5us3Xab2C1ZnUBZ1UGzAyNgcW8X6xcTqv2o_CmD7Sfmoa9aA9uzPecq4uxue2ftgdQMAbs18Btf1RcAmJMdjCoVtziogmqTEgAKz0UuVmTImBpVAcAetwBfnI_FCGRU18u4j__dB5RJ0VkDf_LDuFlFWoBWSTkT_ArZMohsOhz9ReROqG72jGzDfFOdO_2RhIEy9sOBaTna0TXFieGbXNNAPGZn1rsbLGLHb',
+      color: 'text-red-500',
+      bgColor: 'bg-red-50 dark:bg-red-500/10'
+    },
+    {
+      id: 'fitbit',
+      name: 'Fitbit',
+      status: 'Not Connected',
+      logo: 'https://lh3.googleusercontent.com/aida-public/AB6AXuABgoB7VYj1U5_qc0_hFION4cF-3hCz3zwcc1Q6tldYr1LL_9DgueGp7dW0KOtRttIXtHKb6mbk_YZLxNHZrE3XKoBWY1xUxBLY1rUFzhIjWxCx8ca8W2EZ2TeXhes1Bk3u31grfdcWGKFwXGz4FaJE9JaCMYkAF4LDZ1RJD--BAIjiLTjtKBjWvKB4jmVv85QKjumsOYXZzzal51AL6p4aTTNgfL8fONaAEatySF9qbUlwp6hmNNT2W9Bw3z6CkEJd0upudDs2WxLM',
+      color: 'text-red-500',
+      bgColor: 'bg-red-50 dark:bg-red-500/10'
+    }
+  ];
+
+  return (
+    <div className="bg-[#f6f5f8] dark:bg-[#131022] font-display text-[#13082A] dark:text-slate-100 min-h-screen flex flex-col antialiased">
+      {/* Navigation Header - Matched Stitch */}
+      <header className="flex items-center justify-between border-b border-[#6143f4]/10 bg-white/80 dark:bg-[#131022]/80 backdrop-blur-md px-10 py-4 sticky top-0 z-50">
+        <div className="flex items-center gap-4">
+          <div className="bg-[#6143f4] p-2 rounded-lg text-white shadow-lg shadow-[#6143f4]/20 flex items-center justify-center">
+            <BarChart3 size={20} />
+          </div>
+          <h2 className="text-[#13082A] dark:text-white text-xl font-bold tracking-tight">ArogyaAI</h2>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="text-right hidden sm:block">
+            <p className="text-xs font-bold text-[#6143f4] uppercase tracking-widest leading-none">Onboarding</p>
+            <p className="text-sm text-slate-500 mt-1">Step 4 of 4</p>
+          </div>
+          <div className="bg-[#6143f4]/10 rounded-full p-1 border border-[#6143f4]/20">
+            <div className="h-10 w-10 rounded-full bg-[#6143f4]/10 flex items-center justify-center overflow-hidden">
+               <User size={20} className="text-[#6143f4]" />
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="flex-1 flex items-center justify-center p-6 md:p-12">
+        <motion.div 
+          variants={containerVariants}
+          initial="initial"
+          animate="animate"
+          className="max-w-4xl w-full bg-white dark:bg-slate-900 rounded-xl shadow-xl shadow-[#6143f4]/5 overflow-hidden border border-[#6143f4]/5"
+        >
+          <div className="p-6 md:p-10">
+            {/* Progress Indicator */}
+            <div className="mb-10">
+              <div className="flex justify-between items-end mb-3">
+                <div>
+                  <span className="text-xs font-bold text-[#6143f4] tracking-widest uppercase mb-1 block">Final Step</span>
+                  <h1 className="text-2xl md:text-3xl font-bold">Device Connection</h1>
+                </div>
+                <div className="text-right">
+                  <span className="text-sm font-bold text-[#6143f4]">100% Complete</span>
+                </div>
+              </div>
+              <div className="h-2 w-full bg-[#6143f4]/10 rounded-full overflow-hidden">
+                <motion.div 
+                   initial={{ width: '75%' }}
+                   animate={{ width: '100%' }}
+                   transition={{ duration: 1, ease: "easeOut" }}
+                   className="h-full bg-[#6143f4] rounded-full"
+                ></motion.div>
+              </div>
+            </div>
+
+            {/* Hero Section */}
+            <div className="text-center mb-12">
+              <h2 className="text-3xl font-bold text-[#13082A] dark:text-white mb-4 tracking-tight">
+                Connect Your Health Ecosystem
+              </h2>
+              <p className="text-slate-600 dark:text-slate-400 text-base max-w-xl mx-auto font-medium leading-relaxed">
+                Sync your wearable data for personalized health insights powered by clinical-grade AI models.
+              </p>
+            </div>
+
+            {/* Integration Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+              {devices.map((device) => (
+                <div 
+                  key={device.id}
+                  className="group bg-slate-50 dark:bg-slate-800/50 border-2 border-slate-100 dark:border-slate-800 p-6 rounded-xl flex flex-col items-center text-center transition-all hover:bg-[#6143f4]/5 hover:border-[#6143f4]/20"
+                >
+                  <div className="size-20 bg-white dark:bg-slate-700 rounded-2xl mb-6 flex items-center justify-center overflow-hidden shadow-sm border border-slate-100 dark:border-white/5 p-4">
+                    <img src={device.logo} alt={device.name} className="w-full h-full object-contain" />
+                  </div>
+                  
+                  <h3 className="text-lg font-bold text-[#13082A] dark:text-white mb-1">{device.name}</h3>
+                  <p className="text-[10px] font-bold text-slate-500 mb-6 uppercase tracking-widest">
+                    {device.status}
+                  </p>
+                  
+                  <button className="w-full py-3 bg-[#6143f4] text-white rounded-lg font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#6143f4]/20 hover:bg-[#6143f4]/90 active:scale-95 transition-all">
+                    <LinkIcon size={16} />
+                    Connect Now
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Secondary Action */}
+            <div className="text-center mb-12">
+              <button 
+                onClick={handleFinish}
+                className="text-slate-400 hover:text-[#6143f4] font-bold text-xs uppercase tracking-widest transition-all flex items-center gap-2 mx-auto"
+              >
+                Skip for now, I'll connect later
+                <ChevronRight size={14} />
+              </button>
+            </div>
+
+            {/* Navigation Controls */}
+            <div className="pt-8 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-4 justify-between items-center">
+              <button 
+                onClick={() => navigate(ROUTES.ONBOARDING_STEP_3)}
+                className="w-full sm:w-auto px-8 py-3 rounded-lg border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
+              >
+                <ArrowLeft size={16} />
+                Back
+              </button>
+              <button 
+                onClick={handleFinish}
+                className="w-full sm:w-auto px-10 py-3 rounded-lg bg-[#6143f4] text-white font-bold hover:bg-[#6143f4]/90 shadow-lg shadow-[#6143f4]/25 transition-all flex items-center justify-center gap-2"
+              >
+                Continue to Summary
+                <ArrowRight size={16} />
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      </main>
+
+      <footer className="py-8 px-10 text-center text-slate-400 text-xs mt-auto">
+         © 2024 ArogyaAI Health Systems. All data is encrypted and HIPAA compliant.
+      </footer>
+      {/* Footer Decoration */}
+      <div className="fixed bottom-0 left-0 w-full h-1 bg-gradient-to-r from-[#6143f4] via-[#009CDE] to-[#6143f4] opacity-50 z-50"></div>
+    </div>
+  );
+};
+
+export default DeviceConnection;

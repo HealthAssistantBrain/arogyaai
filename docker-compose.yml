@@ -1,0 +1,122 @@
+services:
+  frontend:
+    build: 
+      context: ./apps/frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    networks:
+      - arogyaai_net
+
+  backend:
+    build: ./apps/backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    networks:
+      - arogyaai_net
+    depends_on:
+      - postgres
+      - redis
+
+  auth-service:
+    build: ./services/auth-service
+    env_file:
+      - .env
+    networks:
+      - arogyaai_net
+
+  data-service:
+    build: ./services/data-service
+    env_file:
+      - .env
+    networks:
+      - arogyaai_net
+
+  prediction-service:
+    build: ./services/prediction-service
+    env_file:
+      - .env
+    networks:
+      - arogyaai_net
+
+  rag-service:
+    build: ./services/rag-service
+    env_file:
+      - .env
+    networks:
+      - arogyaai_net
+
+  postgres:
+    image: postgres:15-alpine
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-arogyaai}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - arogyaai_net
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    env_file:
+      - .env
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@arogyaai.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - arogyaai_net
+    depends_on:
+      - postgres
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - arogyaai_net
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - arogyaai_net
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - arogyaai_net
+
+networks:
+  arogyaai_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+  redis_data:
+  qdrant_data:

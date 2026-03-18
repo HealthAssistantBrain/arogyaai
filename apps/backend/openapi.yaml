@@ -1,0 +1,1033 @@
+openapi: "3.0.3"
+info:
+  title: ArogyaAI Backend API
+  version: "1.0.0"
+  description: >
+    Production-grade OpenAPI specification for ArogyaAI — a health-tech platform.
+    Covers authentication, user management, health profiles, data ingestion,
+    medical records, AI analysis, RAG-powered explanations, and alert management.
+  contact:
+    name: ArogyaAI Engineering
+    email: engineering@arogyaai.com
+  license:
+    name: Private
+
+servers:
+  - url: http://localhost:8000
+    description: Local Development
+  - url: https://api.arogyaai.com
+    description: Production
+
+# ============================================================
+# SECURITY SCHEME
+# ============================================================
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token issued at login or refresh.
+
+  # ============================================================
+  # REUSABLE SCHEMAS
+  # ============================================================
+  schemas:
+
+    # --- Common ---
+    UUIDField:
+      type: string
+      format: uuid
+      example: "550e8400-e29b-41d4-a716-446655440000"
+
+    ErrorDetail:
+      type: object
+      properties:
+        detail:
+          type: string
+          example: "Validation error or descriptive message"
+
+    # --- Auth ---
+    SignupRequest:
+      type: object
+      required: [email, password, full_name]
+      properties:
+        email:
+          type: string
+          format: email
+          example: "john@arogyaai.com"
+        password:
+          type: string
+          format: password
+          minLength: 8
+          example: "Secure@1234"
+        full_name:
+          type: string
+          example: "John Doe"
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: "john@arogyaai.com"
+        password:
+          type: string
+          format: password
+          example: "Secure@1234"
+
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIs..."
+        refresh_token:
+          type: string
+          example: "dGhpcyBpcyBhIHJlZnJlc2..."
+        token_type:
+          type: string
+          example: "bearer"
+
+    RefreshTokenRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+          example: "dGhpcyBpcyBhIHJlZnJlc2..."
+
+    # --- User ---
+    UserResponse:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/UUIDField'
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        is_email_verified:
+          type: boolean
+        is_onboarding_done:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        full_name:
+          type: string
+          example: "John Updated"
+        is_onboarding_done:
+          type: boolean
+
+    # --- Health Profile ---
+    HealthProfileRequest:
+      type: object
+      properties:
+        date_of_birth:
+          type: string
+          format: date
+          example: "1990-05-14"
+        gender:
+          type: string
+          enum: [MALE, FEMALE, OTHER, PREFER_NOT_TO_SAY]
+        blood_group:
+          type: string
+          enum: ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]
+        height_cm:
+          type: number
+          format: float
+          example: 172.5
+        weight_kg:
+          type: number
+          format: float
+          example: 72.0
+        allergies:
+          type: array
+          items:
+            type: string
+          example: ["Penicillin", "Pollen"]
+
+    HealthProfileResponse:
+      allOf:
+        - $ref: '#/components/schemas/HealthProfileRequest'
+        - type: object
+          properties:
+            id:
+              $ref: '#/components/schemas/UUIDField'
+            user_id:
+              $ref: '#/components/schemas/UUIDField'
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+
+    # --- Vitals ---
+    VitalsRequest:
+      type: object
+      required: [heart_rate_bpm]
+      properties:
+        heart_rate_bpm:
+          type: integer
+          example: 78
+        blood_pressure_sys:
+          type: integer
+          example: 122
+        blood_pressure_dia:
+          type: integer
+          example: 80
+        oxygen_saturation_spo2:
+          type: number
+          format: float
+          example: 98.4
+        body_temperature_c:
+          type: number
+          format: float
+          example: 37.1
+
+    VitalsResponse:
+      allOf:
+        - $ref: '#/components/schemas/VitalsRequest'
+        - type: object
+          properties:
+            id:
+              $ref: '#/components/schemas/UUIDField'
+            user_id:
+              $ref: '#/components/schemas/UUIDField'
+            recorded_at:
+              type: string
+              format: date-time
+            created_at:
+              type: string
+              format: date-time
+
+    # --- Wearable ---
+    WearableRequest:
+      type: object
+      properties:
+        device_id:
+          $ref: '#/components/schemas/UUIDField'
+        step_count:
+          type: integer
+          example: 9234
+        calories_burned:
+          type: number
+          example: 342.5
+        sleep_duration_minutes:
+          type: integer
+          example: 425
+        sleep_score:
+          type: integer
+          example: 78
+
+    WearableResponse:
+      allOf:
+        - $ref: '#/components/schemas/WearableRequest'
+        - type: object
+          properties:
+            id:
+              $ref: '#/components/schemas/UUIDField'
+            user_id:
+              $ref: '#/components/schemas/UUIDField'
+            recorded_at:
+              type: string
+              format: date-time
+
+    # --- Reports ---
+    ReportResponse:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/UUIDField'
+        user_id:
+          $ref: '#/components/schemas/UUIDField'
+        report_type:
+          type: string
+          enum: [BLOOD_TEST, MRI, XRAY, PRESCRIPTION, CLINICAL_NOTE, GENETIC, OTHER]
+        file_url:
+          type: string
+          format: uri
+          example: "https://cdn.arogyaai.com/reports/a1b2c3.pdf"
+        status:
+          type: string
+          enum: [PENDING, PROCESSING, COMPLETED, FAILED]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # --- Risk Score ---
+    RiskScoreResponse:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/UUIDField'
+        report_id:
+          $ref: '#/components/schemas/UUIDField'
+        user_id:
+          $ref: '#/components/schemas/UUIDField'
+        risk_level:
+          type: string
+          enum: [LOW, MODERATE, HIGH, CRITICAL, UNKNOWN]
+        overall_score:
+          type: number
+          format: float
+          example: 82.5
+        confidence_score:
+          type: number
+          format: float
+          example: 0.91
+        ml_model_version:
+          type: string
+          example: "arogyaai-model-v2.1"
+        calculated_at:
+          type: string
+          format: date-time
+
+    # --- Recommendations ---
+    RecommendationRequest:
+      type: object
+      required: [risk_score_id]
+      properties:
+        risk_score_id:
+          $ref: '#/components/schemas/UUIDField'
+
+    RecommendationItem:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/UUIDField'
+        category:
+          type: string
+          enum: [DIET, EXERCISE, MEDICATION, LIFESTYLE, CONSULTATION]
+        priority:
+          type: string
+          enum: [LOW, MEDIUM, HIGH, URGENT]
+        recommendation_text:
+          type: string
+          example: "Reduce sodium intake and increase daily hydration."
+        created_at:
+          type: string
+          format: date-time
+
+    # --- Explain ---
+    ExplainRequest:
+      type: object
+      required: [report_id]
+      properties:
+        report_id:
+          $ref: '#/components/schemas/UUIDField'
+
+    ExplainResponse:
+      type: object
+      properties:
+        report_id:
+          $ref: '#/components/schemas/UUIDField'
+        factors:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+                example: "Systolic Blood Pressure"
+              impact:
+                type: string
+                example: "+18%"
+              direction:
+                type: string
+                enum: [POSITIVE, NEGATIVE, NEUTRAL]
+        summary:
+          type: string
+          example: "Elevated diastolic pressure and elevated triglycerides are the top contributors to your risk."
+
+    # --- Alerts ---
+    AlertResponse:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/UUIDField'
+        user_id:
+          $ref: '#/components/schemas/UUIDField'
+        alert_type:
+          type: string
+          enum: [VITAL_ANOMALY, REPORT_READY, SYSTEM_UPDATE, REMINDER, SECURITY]
+        severity:
+          type: string
+          enum: [INFO, WARNING, CRITICAL]
+        title:
+          type: string
+          example: "Abnormal Heart Rate Detected"
+        message:
+          type: string
+          example: "Your resting heart rate exceeded 110 BPM at 9:04 AM."
+        is_read:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+  # ============================================================
+  # REUSABLE RESPONSES
+  # ============================================================
+  responses:
+    Unauthorized:
+      description: Missing or invalid JWT token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorDetail'
+          example:
+            detail: "Not authenticated"
+
+    BadRequest:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorDetail'
+          example:
+            detail: "Field 'email' is required"
+
+    InternalError:
+      description: Unexpected server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorDetail'
+          example:
+            detail: "Internal server error"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorDetail'
+          example:
+            detail: "Resource not found"
+
+# ============================================================
+# GLOBAL SECURITY (override per endpoint if public)
+# ============================================================
+security:
+  - BearerAuth: []
+
+# ============================================================
+# PATHS / ENDPOINTS
+# ============================================================
+paths:
+
+  # ---- AUTH ----
+  /auth/signup:
+    post:
+      tags: [Authentication]
+      summary: Register a new user account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupRequest'
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Authenticate and receive JWT tokens
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Invalid email or password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auth/logout:
+    post:
+      tags: [Authentication]
+      summary: Revoke current session's refresh token
+      responses:
+        '200':
+          description: Logged out successfully
+          content:
+            application/json:
+              example:
+                message: "Session revoked"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auth/refresh-token:
+    post:
+      tags: [Authentication]
+      summary: Issue a new access token using a valid refresh token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: New access token issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          description: Refresh token expired or revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ---- USERS ----
+  /users/me:
+    get:
+      tags: [Users]
+      summary: Get the currently authenticated user's profile
+      responses:
+        '200':
+          description: User data returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags: [Users]
+      summary: Update the authenticated user's profile fields
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [Users]
+      summary: Soft-delete the currently authenticated user account
+      responses:
+        '200':
+          description: Account deleted
+          content:
+            application/json:
+              example:
+                message: "Account successfully deleted"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ---- HEALTH PROFILE ----
+  /health-profile:
+    get:
+      tags: [Health Profile]
+      summary: Retrieve the authenticated user's health profile
+      responses:
+        '200':
+          description: Health profile data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthProfileResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [Health Profile]
+      summary: Create a new health profile (one per user)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HealthProfileRequest'
+      responses:
+        '201':
+          description: Profile created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthProfileResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Health profile already exists for this user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags: [Health Profile]
+      summary: Update the existing health profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HealthProfileRequest'
+      responses:
+        '200':
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthProfileResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ---- VITALS ----
+  /vitals:
+    post:
+      tags: [Data Ingestion]
+      summary: Ingest a new vitals reading for the authenticated user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VitalsRequest'
+      responses:
+        '201':
+          description: Vitals recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VitalsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Data Ingestion]
+      summary: Retrieve paginated vitals history for the authenticated user
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: from_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: List of vitals records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VitalsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ---- WEARABLE ----
+  /wearable:
+    post:
+      tags: [Data Ingestion]
+      summary: Ingest wearable telemetry data from a connected device
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WearableRequest'
+      responses:
+        '201':
+          description: Wearable data recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WearableResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Data Ingestion]
+      summary: Retrieve paginated wearable data history
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of wearable records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WearableResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ---- REPORTS ----
+  /reports/upload:
+    post:
+      tags: [Medical Records]
+      summary: Upload a medical report file (PDF, image)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, report_type]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                report_type:
+                  type: string
+                  enum: [BLOOD_TEST, MRI, XRAY, PRESCRIPTION, CLINICAL_NOTE, GENETIC, OTHER]
+      responses:
+        '201':
+          description: Report uploaded and queued for processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /reports:
+    get:
+      tags: [Medical Records]
+      summary: List all reports for the authenticated user
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [PENDING, PROCESSING, COMPLETED, FAILED]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Report list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReportResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /reports/{id}:
+    get:
+      tags: [Medical Records]
+      summary: Retrieve a specific report by UUID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUIDField'
+      responses:
+        '200':
+          description: Report detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ---- ANALYSIS / PREDICTION ----
+  /analysis/run:
+    post:
+      tags: [AI & Prediction]
+      summary: Trigger ML analysis on a specific uploaded report
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [report_id]
+              properties:
+                report_id:
+                  $ref: '#/components/schemas/UUIDField'
+      responses:
+        '202':
+          description: Analysis job accepted and queued
+          content:
+            application/json:
+              example:
+                message: "Analysis job queued. Risk score will be available shortly."
+                report_id: "550e8400-e29b-41d4-a716-446655440000"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /risk/{report_id}:
+    get:
+      tags: [AI & Prediction]
+      summary: Get the risk score result for a specific report
+      parameters:
+        - name: report_id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUIDField'
+      responses:
+        '200':
+          description: Risk score data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskScoreResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ---- EXPLANATION (RAG) ----
+  /explain/report:
+    post:
+      tags: [RAG Explanation]
+      summary: Generate a natural language explanation of a risk score via RAG pipeline
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExplainRequest'
+      responses:
+        '200':
+          description: Explanation generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExplainResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /recommendations:
+    post:
+      tags: [RAG Explanation]
+      summary: Get personalized health recommendations for a given risk_score_id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecommendationRequest'
+      responses:
+        '200':
+          description: List of recommendations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecommendationItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ---- ALERTS ----
+  /alerts:
+    get:
+      tags: [Alerts]
+      summary: Retrieve all alerts for the authenticated user (paginated)
+      parameters:
+        - name: is_read
+          in: query
+          schema:
+            type: boolean
+        - name: severity
+          in: query
+          schema:
+            type: string
+            enum: [INFO, WARNING, CRITICAL]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Alerts list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AlertResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /alerts/{id}/read:
+    patch:
+      tags: [Alerts]
+      summary: Mark a specific alert as read
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUIDField'
+      responses:
+        '200':
+          description: Alert marked as read
+          content:
+            application/json:
+              example:
+                message: "Alert marked as read"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
