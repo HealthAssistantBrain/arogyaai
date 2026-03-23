@@ -18,17 +18,19 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Handle 401 (logout + redirect) and 503 (maintenance) globally
+// Handle 401 (logout + redirect) globally.
+// NOTE: 503 is intentionally NOT hard-redirected here.
+// A transient 503 during backend/DB startup would push the user to the
+// maintenance page even though the service recovers within seconds.
+// Let each calling component decide how to handle 503 (show a toast, retry).
+// The /maintenance route still exists and can be navigated to explicitly.
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
       useAuthStore.getState().hardReset();
-      // Reset to landing page — matches routing contract
       window.location.href = '/';
-    }
-    if (error.response?.status === 503) {
-      window.location.href = '/maintenance';
+      return; // page is navigating; don't propagate further
     }
     return Promise.reject(error);
   }

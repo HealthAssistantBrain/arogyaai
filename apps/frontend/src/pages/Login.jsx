@@ -22,6 +22,7 @@ const loginSchema = z.object({
 
 
 const Login = () => {
+  const Motion = motion;
   const navigate = useNavigate();
   const location = useLocation();
   
@@ -29,11 +30,11 @@ const Login = () => {
   const setToken        = useAuthStore((state) => state.setToken);
   const hydrateAuth     = useAuthStore((state) => state.hydrateAuth);
 
-  // ── Patch 3: consume ?redirect= param injected by AuthGuard, fallback to state.from, then /dashboard
+  // ── Patch 3: consume ?redirect= param injected by AuthGuard, fallback to state.from, then home
   const params     = new URLSearchParams(location.search)
   const redirectTo = params.get('redirect')
     || location.state?.from?.pathname
-    || ROUTES.DASHBOARD;
+    || ROUTES.HOME;
 
   const {
     register,
@@ -67,9 +68,16 @@ const Login = () => {
       // 4. Force hydrate /users/me synchronously before navigating ensuring deterministic routing bounds matches
       await hydrateAuth();
 
+      // #region agent log (Login post-hydrate snapshot)
+      {
+        const s = useAuthStore.getState();
+        fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H6',location:'src/pages/Login.jsx:onSubmit',message:'Login success navigating to home for INIT resolution',data:{computedRedirectTo:redirectTo,navigateTo:ROUTES.HOME,isAuthenticated:s.isAuthenticated,isEmailVerified:s.isEmailVerified,onboardingDone:s.onboardingDone,onboardingStep:s.onboardingStep,isHydrated:s.isHydrated,isHydratingAuth:s.isHydratingAuth},timestamp:Date.now()})}).catch(()=>{});
+      }
+      // #endregion
+
       // 5. Allow Route Guards to pick up navigation interception
       toast.success('Welcome back!');
-      navigate(redirectTo, { replace: true });
+      navigate(ROUTES.HOME, { replace: true });
     } catch (err) {
       console.error('Login failed:', err);
       toast.error(err.message || 'Invalid email or password');
@@ -89,7 +97,7 @@ const Login = () => {
   };
 
   return (
-    <motion.div 
+    <Motion.div 
       variants={pageVariants}
       initial="initial"
       animate="animate"
@@ -102,7 +110,7 @@ const Login = () => {
         <div className="absolute -bottom-[10%] -right-[5%] w-[40%] h-[40%] bg-[#6143f4]/10 rounded-full blur-[120px]"></div>
       </div>
 
-      <motion.div 
+      <Motion.div 
         animate={{ y: [0, -10, 0] }}
         transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
         className="w-full max-w-[480px] bg-white dark:bg-slate-900/50 rounded-xl shadow-2xl shadow-[#6143f4]/5 overflow-hidden border border-slate-200/60 dark:border-slate-800 z-10"
@@ -194,8 +202,8 @@ const Login = () => {
         
         {/* Aesthetic Footer Graphic */}
         <div className="h-2 w-full bg-gradient-to-r from-[#6143f4]/20 via-[#6143f4] to-[#6143f4]/20"></div>
-      </motion.div>
-    </motion.div>
+      </Motion.div>
+    </Motion.div>
   );
 };
 

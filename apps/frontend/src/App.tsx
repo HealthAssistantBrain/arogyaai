@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { INIT_RESOLVER } from './router/INIT_RESOLVER';
 import AppRouter from './router';
@@ -49,7 +48,7 @@ export default function App() {
   }
 
   return (
-    <BrowserRouter>
+    <>
       <AppRouter />
       <Toaster
         position="top-right"
@@ -60,6 +59,6 @@ export default function App() {
           error: { iconTheme: { primary: '#ef4444', secondary: '#0A0F2E' } },
         }}
       />
-    </BrowserRouter>
+    </>
   );
 }

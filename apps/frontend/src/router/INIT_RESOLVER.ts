@@ -5,6 +5,9 @@ export type InitResult = { route: string | null; cause: string } | null;
 export async function INIT_RESOLVER(): Promise<InitResult> {
   console.log('INIT START');
 
+  // Ensure persisted auth is loaded before making INIT decisions.
+  await (useAuthStore as any).persist?.rehydrate?.();
+
   // ─── Step 1: Wait for Zustand store to rehydrate from localStorage ───────
   await new Promise<void>((resolve) => {
     const state = useAuthStore.getState();
@@ -31,10 +34,12 @@ export async function INIT_RESOLVER(): Promise<InitResult> {
 
   console.log('TOKEN:', token ? `${token.slice(0, 20)}…` : null);
 
-  // ─── Step 3: No token → send to landing / login ───────────────────────────
+  // ─── Step 3: No token → login ──────────────────────────────────────────────
   if (!token) {
-    return { route: null, cause: 'No token — guest user' };
-    // Returning null lets the router load normally; guards redirect to /login
+    // #region agent log (INIT no token decision)
+    fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H4',location:'src/router/INIT_RESOLVER.ts:noToken',message:'INIT no token -> /login',data:{tokenPresent:false},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    return { route: '/login', cause: 'No token — guest user' };
   }
 
   // ─── Step 4: Verify with backend ─────────────────────────────────────────
@@ -68,29 +73,45 @@ export async function INIT_RESOLVER(): Promise<InitResult> {
     const data = await response.json();
     console.log('AUTH RESPONSE DATA:', data);
 
+    // #region agent log (INIT_RESOLVER auth/me payload)
+    fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'pre-fix',hypothesisId:'H2',location:'src/router/INIT_RESOLVER.ts:authMe',message:'INIT_RESOLVER /auth/me parsed (onboarding fields presence)',data:{has_is_onboarding_done:data?.is_onboarding_done!==undefined,is_onboarding_done:data?.is_onboarding_done,has_onboarding_step:data?.onboarding_step!==undefined,onboarding_step:data?.onboarding_step},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
     // Sync Zustand with the fresh server state
     store.setUser(data);
+    store.setOnboardingStatus({
+      onboardingDone: data?.onboardingDone ?? data?.is_onboarding_done ?? false,
+      onboardingStep: data?.onboardingStep ?? data?.onboarding_step ?? 1,
+    });
+
+    const isEmailVerified = data?.isEmailVerified ?? data?.is_email_verified ?? false;
+    const onboardingDone = data?.onboardingDone ?? data?.is_onboarding_done ?? false;
+    const onboardingStepRaw = data?.onboardingStep ?? data?.onboarding_step ?? store.onboardingStep ?? 1;
+    const onboardingStep = Number.isFinite(Number(onboardingStepRaw)) ? Number(onboardingStepRaw) : 1;
 
     // Email not verified → gate
-    if (data.is_email_verified === false) {
+    if (isEmailVerified === false) {
       return { route: '/email-verification', cause: 'Email unverified' };
     }
 
-    // Onboarding not done → step gate (non-blocking if endpoint missing)
-    if (data.is_onboarding_done === false) {
+    // #region agent log (INIT_RESOLVER decision)
+    fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H4',location:'src/router/INIT_RESOLVER.ts:decision',message:'INIT_RESOLVER global decision inputs',data:{isEmailVerified,onboardingDone,onboardingStep,store_onboardingDone:store.onboardingDone,store_onboardingStep:store.onboardingStep},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
+    if (!onboardingDone) {
       return {
-        route: `/onboarding/step-${store.onboardingStep || 1}`,
+        route: `/onboarding/step-${onboardingStep || 1}`,
         cause: 'Onboarding incomplete',
       };
     }
 
-    // All clear — let the router load its own routing from here
-    return { route: null, cause: 'Authenticated and fully onboarded' };
+    // #region agent log (INIT complete -> dashboard)
+    fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H4',location:'src/router/INIT_RESOLVER.ts:done',message:'INIT onboarded -> /dashboard',data:{is_email_verified:data?.is_email_verified,onboardingDone,onboardingStep},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    return { route: '/dashboard', cause: 'Authenticated and fully onboarded' };
 
   } catch (err: any) {
-    // Network failure — DON'T clear the token; fall through so the user
-    // can still see the cached page and handle errors inline.
     console.warn('INIT_RESOLVER network error:', err?.message);
-    return { route: null, cause: `Network error: ${err?.message}` };
+    return { route: '/login', cause: `Network error: ${err?.message}` };
   }
 }

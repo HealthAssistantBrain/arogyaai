@@ -59,9 +59,12 @@ export function GuardedRoute({ children, guards }: GuardedRouteProps) {
 
   // ── ONBOARDING_GUARD ───────────────────────────────────────────────────────
   // Blocks users who haven't completed onboarding yet.
-  if (guards.includes('ONBOARDING_GUARD') && authStore.isAuthenticated && !authStore.onboardingDone) {
+  if (guards.includes('ONBOARDING_GUARD') && authStore.isAuthenticated && authStore.onboardingDone !== true) {
     if (!redirectFired.current) {
       redirectFired.current = true;
+      // #region agent log (GuardedRoute onboarding redirect)
+      fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H5',location:'src/components/guards/GuardedRoute.tsx:ONBOARDING_GUARD',message:'GuardedRoute redirecting to onboarding',data:{path:location.pathname,isAuthenticated:authStore.isAuthenticated,onboardingDone:authStore.onboardingDone,onboardingStep:authStore.onboardingStep},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       return <Navigate to={`/onboarding/step-${authStore.onboardingStep || 1}`} state={{ isGuardRedirect: true }} replace />;
     }
   }

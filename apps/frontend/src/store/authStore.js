@@ -14,7 +14,7 @@ export const useAuthStore = create(
         token:             null,
         isAuthenticated:   false,
         isEmailVerified:   false,
-        onboardingStep:    0,       // ← number 0 — NOT string '0'
+        onboardingStep:    1,       // onboarding starts at step 1
         onboardingDone:    false,
         role:              'user',  // ← 'user' | 'doctor' | 'admin' (Patch 4)
         isHydrated:        false,   // ← set to true after persist rehydration (Patch 7)
@@ -36,13 +36,31 @@ export const useAuthStore = create(
         setEmailVerified: () =>
           set({ isEmailVerified: true }, false, 'setEmailVerified'),
 
+        setOnboardingStatus: (data) => {
+          const onboardingDone = data?.onboardingDone ?? data?.is_onboarding_done ?? false
+          const rawStep = data?.onboardingStep ?? data?.onboarding_step ?? 1
+          const normalizedStep = Number.isFinite(Number(rawStep)) ? Number(rawStep) : 1
+          const onboardingStep = onboardingDone
+            ? 6
+            : (normalizedStep >= 1 && normalizedStep <= 5 ? normalizedStep : 1)
+          // #region agent log (setOnboardingStatus normalization)
+          fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H9',location:'src/store/authStore.js:setOnboardingStatus',message:'setOnboardingStatus normalized payload',data:{raw_onboardingDone:data?.onboardingDone??data?.is_onboarding_done,raw_onboardingStep:data?.onboardingStep??data?.onboarding_step,onboardingDone,onboardingStep},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+          set({ onboardingDone, onboardingStep }, false, 'setOnboardingStatus')
+        },
+
         setOnboardingStep: (step) => {
           // ── SECTION 4: FINALIZE ONBOARDING LOCK ──
           // Once onboardingDone is true, freeze onboarding state.
           // Ignore ANY state updates attempting to modify onboarding step backwards.
           if (get().onboardingDone === true) return;
-          
-          set({ onboardingStep: step }, false, 'setOnboardingStep')
+
+          const requestedStep = Number.isFinite(Number(step)) ? Number(step) : 1
+          const safeStep = requestedStep >= 1 && requestedStep <= 5 ? requestedStep : 1
+          // #region agent log (setOnboardingStep clamp)
+          fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H9',location:'src/store/authStore.js:setOnboardingStep',message:'setOnboardingStep requested/clamped',data:{requestedStep,safeStep,currentOnboardingDone:get().onboardingDone,currentPath:window?.location?.pathname},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+          set({ onboardingStep: safeStep }, false, 'setOnboardingStep')
         },
 
         setHydrated: () =>
@@ -62,17 +80,28 @@ export const useAuthStore = create(
           ),
 
         // ── Auth Hydration Logic ───────────────────────────────────────────
-        // Called by GlobalStateValidator to sync JWT token with true DB state
+        // Called by GlobalStateValidator to sync JWT token with true DB state.
+        // Accepts an optional tokenOverride so callers like Signup can set the
+        // token and start hydration in ONE atomic Zustand update, preventing the
+        // brief "ghost token" state (token set, isAuthenticated still false) that
+        // guards detect as invalid and incorrectly call logout().
         // ────────────────────────────────────────────────────────────────────
-        hydrateAuth: async () => {
-          const { token } = get()
-          
+        hydrateAuth: async (tokenOverride = null) => {
+          const token = tokenOverride !== null ? tokenOverride : get().token
+
           if (!token) {
             set({ isHydrated: true, isHydratingAuth: false })
             return
           }
 
-          set({ isHydratingAuth: true })
+          // Atomic: if an explicit token was passed, set it together with
+          // isHydratingAuth=true so guards never see the ghost-token state.
+          if (tokenOverride !== null) {
+            set({ token: tokenOverride, isHydratingAuth: true }, false, 'hydrateAuth_start')
+          } else {
+            set({ isHydratingAuth: true })
+          }
+
           try {
             // Hit the newly scaffolded backend /users/me endpoint
             const res = await fetch('http://localhost:8000/users/me', {
@@ -82,18 +111,49 @@ export const useAuthStore = create(
             if (!res.ok) throw new Error('Token rejected by server')
             
             const dbUser = await res.json()
+
+            const normalizedOnboardingDone = dbUser?.is_onboarding_done ?? false
+            const stepFromServerRaw = dbUser?.onboarding_step ?? dbUser?.onboardingStep
+            const stepFromServer = Number.isFinite(Number(stepFromServerRaw))
+              ? Number(stepFromServerRaw)
+              : null
+            const persistedStepRaw = get().onboardingStep
+            const persistedStep = Number.isFinite(Number(persistedStepRaw))
+              ? Number(persistedStepRaw)
+              : null
+            // Incomplete onboarding must stay inside steps 1..5; never hydrate as step 6.
+            const fallbackIncompleteStep =
+              persistedStep !== null && persistedStep >= 1 && persistedStep <= 5
+                ? persistedStep
+                : 1
+            const normalizedOnboardingStep = normalizedOnboardingDone
+              ? 6
+              : (
+                stepFromServer !== null && stepFromServer >= 1 && stepFromServer <= 5
+                  ? stepFromServer
+                  : fallbackIncompleteStep
+              )
+
+            // #region agent log (authStore hydrateAuth normalization)
+            fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H3',location:'src/store/authStore.js:hydrateAuth',message:'hydrateAuth received user + normalized onboarding fields',data:{has_is_onboarding_done:dbUser?.is_onboarding_done!==undefined,raw_is_onboarding_done:dbUser?.is_onboarding_done,normalizedOnboardingDone,has_onboarding_step:dbUser?.onboarding_step!==undefined,raw_onboarding_step:dbUser?.onboarding_step,persistedStep,normalizedOnboardingStep},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
             
             // Sync Zustand precisely to the Postgres reality
             set({
               user: dbUser,
               isAuthenticated: true,
               isEmailVerified: dbUser.is_email_verified ?? true, // Fallback if backend doesn't implement yet
-              onboardingDone: dbUser.is_onboarding_done,
+              onboardingDone: normalizedOnboardingDone,
               // Only modify onboardingStep if onboarding is legitimately incomplete
-              onboardingStep: dbUser.is_onboarding_done ? 6 : get().onboardingStep,
+              onboardingStep: normalizedOnboardingDone ? 6 : normalizedOnboardingStep,
               isHydrated: true,
               isHydratingAuth: false
             }, false, 'hydrateAuth_SUCCESS')
+
+            // #region agent log (authStore final state snapshot)
+            const s = get();
+            fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H3',location:'src/store/authStore.js:hydrateAuth',message:'AUTH STATE (post-hydrateAuth_SUCCESS)',data:{isAuthenticated:s.isAuthenticated,isEmailVerified:s.isEmailVerified,onboardingDone:s.onboardingDone,onboardingStep:s.onboardingStep,isHydrated:s.isHydrated,isHydratingAuth:s.isHydratingAuth},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
             
           } catch (err) {
             console.error('[Zustand] Auth Hydration Failed:', err)
@@ -146,7 +206,7 @@ export const useAuthStore = create(
               token:            null,
               isAuthenticated:  false,
               isEmailVerified:  false,
-              onboardingStep:   0,
+              onboardingStep:   1,
               onboardingDone:   false,
               role:             'user',
               isHydrated:       true,  // Keep true so routing doesn't infinite-loop

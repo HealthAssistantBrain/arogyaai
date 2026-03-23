@@ -24,10 +24,11 @@ const STEP_ROUTES = {
 
 // Helper to reduce cognitive complexity in AuthGuard
 const isAllowedDuringOnboarding = (pathname, expectedStep) => {
+  const isCompletionAllowed = expectedStep === ROUTES.ONBOARDING_COMPLETION
   return (
     pathname === expectedStep ||
-    pathname === ROUTES.ONBOARDING_COMPLETION ||
-    pathname === ROUTES.ACCOUNT_CREATED ||
+    (isCompletionAllowed && pathname === ROUTES.ONBOARDING_COMPLETION) ||
+    (isCompletionAllowed && pathname === ROUTES.ACCOUNT_CREATED) ||
     pathname === ROUTES.LOGOUT ||
     pathname.startsWith('/help')
   )
@@ -75,6 +76,10 @@ export default function AuthGuard() {
       onboardingDone,
       isHydrated
     })
+
+    // #region agent log (AuthGuard snapshot)
+    fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H8',location:'src/components/guards/AuthGuard.jsx:useEffect',message:'AuthGuard observed state',data:{path:location.pathname,isAuthenticated,isEmailVerified,onboardingDone,onboardingStep,isHydrated,isHydratingAuth},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
   }, [location.pathname, isAuthenticated, isEmailVerified, onboardingDone, isHydrated])
 
   // ── SECTION 3: HYDRATION LOCK ──
@@ -109,12 +114,15 @@ export default function AuthGuard() {
 
   // Exception for email verification view: if verified, they shouldn't be here
   if (location.pathname === ROUTES.EMAIL_VERIFICATION) {
-     return <SafeNavigate to={ROUTES.DASHBOARD} replace />
+    return <SafeNavigate to={ROUTES.DASHBOARD} replace />
   }
 
   // Rule 3: Valid Email, but Onboarding Not Done -> Force Onboarding Sequence
-  if (onboardingDone === false) {
+  if (onboardingDone !== true) {
     const expectedStep = STEP_ROUTES[onboardingStep] ?? ROUTES.ONBOARDING_STEP_1
+    // #region agent log (AuthGuard onboarding expected path)
+    fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H8',location:'src/components/guards/AuthGuard.jsx:onboardingGate',message:'AuthGuard onboarding gate expected path computed',data:{path:location.pathname,onboardingDone,onboardingStep,expectedStep,allowsCompletion:expectedStep===ROUTES.ONBOARDING_COMPLETION},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     
     if (!isAllowedDuringOnboarding(location.pathname, expectedStep)) {
       return <SafeNavigate to={expectedStep} replace />
@@ -124,9 +132,9 @@ export default function AuthGuard() {
 
   // Rule 4: Onboarding is DONE. NEVER access onboarding routes again.
   if (onboardingDone === true) {
-     if (location.pathname.startsWith('/onboarding') || location.pathname === ROUTES.ACCOUNT_CREATED) {
-       return <SafeNavigate to={ROUTES.DASHBOARD} replace />
-     }
+    if (location.pathname.startsWith('/onboarding') || location.pathname === ROUTES.ACCOUNT_CREATED) {
+      return <SafeNavigate to={ROUTES.DASHBOARD} replace />
+    }
   }
 
   // Rule 5: Allow Access

@@ -31,8 +31,11 @@ export default function EmailVerificationPage() {
       if (data.is_email_verified) {
         setEmailVerified();
         setUser(data);
-        toast.success('Email verified! Redirecting to dashboard…');
-        navigate('/dashboard', { replace: true });
+        // #region agent log (EmailVerification success route handoff)
+        fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H7',location:'src/pages/EmailVerification.tsx:handleCheckVerification',message:'Email verified navigating to home for INIT/guards decision',data:{is_email_verified:data?.is_email_verified,is_onboarding_done:data?.is_onboarding_done,onboarding_step:data?.onboarding_step},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        toast.success('Email verified! Redirecting…');
+        navigate('/', { replace: true });
       } else {
         toast.error('Email not verified yet. Please check your inbox and click the link.');
       }

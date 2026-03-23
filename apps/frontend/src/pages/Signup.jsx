@@ -31,7 +31,6 @@ const Signup = () => {
   const [showPassword, setShowPassword] = useState(false);
   
   // Selector pattern for Zustand
-  const setToken = useAuthStore((state) => state.setToken);
   const hydrateAuth = useAuthStore((state) => state.hydrateAuth);
 
   const {
@@ -45,6 +44,9 @@ const Signup = () => {
 
   const onSubmit = async (data) => {
     try {
+      // #region agent log (Signup request payload)
+      fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H10',location:'src/pages/Signup.jsx:onSubmit',message:'Signup submit started',data:{email:data?.email,hasPassword:Boolean(data?.password),passwordLength:data?.password?.length ?? 0,fullNameLength:data?.fullName?.length ?? 0,hasDob:Boolean(data?.dob)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       // Real API Call
       const response = await api.post('/auth/signup', {
         email: data.email,
@@ -52,18 +54,30 @@ const Signup = () => {
         full_name: data.fullName
       });
       
-      // Store token from backend
-      setToken(response.data.access_token);
-      
-      // Force immediate DB sync before allowing router to proceed
-      await hydrateAuth();
-      
+      // Pass the token directly to hydrateAuth so that token + isHydratingAuth
+      // are set in ONE atomic Zustand update.  This eliminates the brief ghost-
+      // token window (token set, isAuthenticated still false) that previously
+      // caused GuestGuard / GlobalStateValidator to call logout() mid-flight.
+      await hydrateAuth(response.data.access_token);
+
+      // If hydrateAuth failed internally (network down, DB unavailable) it calls
+      // logout() and leaves isAuthenticated=false.  Don't show success in that case.
+      const { isAuthenticated, isEmailVerified, onboardingDone } = useAuthStore.getState();
+      if (!isAuthenticated) {
+        toast.error('Account created but we could not reach the server. Please log in.');
+        navigate(ROUTES.LOGIN, { replace: true });
+        return;
+      }
+
+      // #region agent log (Signup success route handoff)
+      fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H6',location:'src/pages/Signup.jsx:onSubmit',message:'Signup success navigating to home for INIT resolution',data:{isAuthenticated,isEmailVerified,onboardingDone,navigateTo:ROUTES.HOME},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       toast.success('Account created successfully!');
-      
-      // Navigating to DASHBOARD. Guard will intercept and deterministically
-      // push to Email Verifcation / Onboarding based on real DB values.
-      navigate(ROUTES.DASHBOARD, { replace: true });
+      navigate(ROUTES.HOME, { replace: true });
     } catch (err) {
+      // #region agent log (Signup request failed)
+      fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H10',location:'src/pages/Signup.jsx:onSubmit',message:'Signup request failed',data:{status:err?.response?.status,detail:err?.response?.data?.detail,message:err?.message,code:err?.code},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       console.error('[Signup] error:', err);
       toast.error(err.response?.data?.detail || 'Failed to create account. Please try again.');
     }
