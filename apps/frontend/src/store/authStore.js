@@ -1,4 +1,4 @@
-import { create }            from 'zustand'
+import { create } from 'zustand'
 import { persist, devtools } from 'zustand/middleware'
 
 // ── Patch 7: isHydrated prevents guard decisions before Zustand hydrates from localStorage
@@ -10,15 +10,15 @@ export const useAuthStore = create(
   devtools(
     persist(
       (set, get) => ({
-        user:              null,
-        token:             null,
-        isAuthenticated:   false,
-        isEmailVerified:   false,
-        onboardingStep:    1,       // onboarding starts at step 1
-        onboardingDone:    false,
-        role:              'user',  // ← 'user' | 'doctor' | 'admin' (Patch 4)
-        isHydrated:        false,   // ← set to true after persist rehydration (Patch 7)
-        isHydratingAuth:   false,   // ← network fetching lock
+        user: null,
+        token: null,
+        isAuthenticated: false,
+        isEmailVerified: false,
+        onboardingStep: 1,       // onboarding starts at step 1
+        onboardingDone: false,
+        role: 'user',  // ← 'user' | 'doctor' | 'admin' (Patch 4)
+        isHydrated: false,   // ← set to true after persist rehydration (Patch 7)
+        isHydratingAuth: false,   // ← network fetching lock
 
         setUser: (user) =>
           set({ user, isAuthenticated: true }, false, 'setUser'),
@@ -44,7 +44,7 @@ export const useAuthStore = create(
             ? 6
             : (normalizedStep >= 1 && normalizedStep <= 5 ? normalizedStep : 1)
           // #region agent log (setOnboardingStatus normalization)
-          fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H9',location:'src/store/authStore.js:setOnboardingStatus',message:'setOnboardingStatus normalized payload',data:{raw_onboardingDone:data?.onboardingDone??data?.is_onboarding_done,raw_onboardingStep:data?.onboardingStep??data?.onboarding_step,onboardingDone,onboardingStep},timestamp:Date.now()})}).catch(()=>{});
+          fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'fcf4a1' }, body: JSON.stringify({ sessionId: 'fcf4a1', runId: 'post-fix', hypothesisId: 'H9', location: 'src/store/authStore.js:setOnboardingStatus', message: 'setOnboardingStatus normalized payload', data: { raw_onboardingDone: data?.onboardingDone ?? data?.is_onboarding_done, raw_onboardingStep: data?.onboardingStep ?? data?.onboarding_step, onboardingDone, onboardingStep }, timestamp: Date.now() }) }).catch(() => { });
           // #endregion
           set({ onboardingDone, onboardingStep }, false, 'setOnboardingStatus')
         },
@@ -58,7 +58,7 @@ export const useAuthStore = create(
           const requestedStep = Number.isFinite(Number(step)) ? Number(step) : 1
           const safeStep = requestedStep >= 1 && requestedStep <= 5 ? requestedStep : 1
           // #region agent log (setOnboardingStep clamp)
-          fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H9',location:'src/store/authStore.js:setOnboardingStep',message:'setOnboardingStep requested/clamped',data:{requestedStep,safeStep,currentOnboardingDone:get().onboardingDone,currentPath:window?.location?.pathname},timestamp:Date.now()})}).catch(()=>{});
+          fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'fcf4a1' }, body: JSON.stringify({ sessionId: 'fcf4a1', runId: 'post-fix', hypothesisId: 'H9', location: 'src/store/authStore.js:setOnboardingStep', message: 'setOnboardingStep requested/clamped', data: { requestedStep, safeStep, currentOnboardingDone: get().onboardingDone, currentPath: window?.location?.pathname }, timestamp: Date.now() }) }).catch(() => { });
           // #endregion
           set({ onboardingStep: safeStep }, false, 'setOnboardingStep')
         },
@@ -105,11 +105,12 @@ export const useAuthStore = create(
           try {
             // Hit the newly scaffolded backend /users/me endpoint
             const res = await fetch('http://localhost:8000/users/me', {
-              headers: { Authorization: `Bearer ${token}` }
+              headers: { Authorization: `Bearer ${token}` },
+              credentials: 'include'
             })
 
             if (!res.ok) throw new Error('Token rejected by server')
-            
+
             const dbUser = await res.json()
 
             const normalizedOnboardingDone = dbUser?.is_onboarding_done ?? false
@@ -135,9 +136,9 @@ export const useAuthStore = create(
               )
 
             // #region agent log (authStore hydrateAuth normalization)
-            fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H3',location:'src/store/authStore.js:hydrateAuth',message:'hydrateAuth received user + normalized onboarding fields',data:{has_is_onboarding_done:dbUser?.is_onboarding_done!==undefined,raw_is_onboarding_done:dbUser?.is_onboarding_done,normalizedOnboardingDone,has_onboarding_step:dbUser?.onboarding_step!==undefined,raw_onboarding_step:dbUser?.onboarding_step,persistedStep,normalizedOnboardingStep},timestamp:Date.now()})}).catch(()=>{});
+            fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'fcf4a1' }, body: JSON.stringify({ sessionId: 'fcf4a1', runId: 'post-fix', hypothesisId: 'H3', location: 'src/store/authStore.js:hydrateAuth', message: 'hydrateAuth received user + normalized onboarding fields', data: { has_is_onboarding_done: dbUser?.is_onboarding_done !== undefined, raw_is_onboarding_done: dbUser?.is_onboarding_done, normalizedOnboardingDone, has_onboarding_step: dbUser?.onboarding_step !== undefined, raw_onboarding_step: dbUser?.onboarding_step, persistedStep, normalizedOnboardingStep }, timestamp: Date.now() }) }).catch(() => { });
             // #endregion
-            
+
             // Sync Zustand precisely to the Postgres reality
             set({
               user: dbUser,
@@ -152,9 +153,9 @@ export const useAuthStore = create(
 
             // #region agent log (authStore final state snapshot)
             const s = get();
-            fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H3',location:'src/store/authStore.js:hydrateAuth',message:'AUTH STATE (post-hydrateAuth_SUCCESS)',data:{isAuthenticated:s.isAuthenticated,isEmailVerified:s.isEmailVerified,onboardingDone:s.onboardingDone,onboardingStep:s.onboardingStep,isHydrated:s.isHydrated,isHydratingAuth:s.isHydratingAuth},timestamp:Date.now()})}).catch(()=>{});
+            fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'fcf4a1' }, body: JSON.stringify({ sessionId: 'fcf4a1', runId: 'post-fix', hypothesisId: 'H3', location: 'src/store/authStore.js:hydrateAuth', message: 'AUTH STATE (post-hydrateAuth_SUCCESS)', data: { isAuthenticated: s.isAuthenticated, isEmailVerified: s.isEmailVerified, onboardingDone: s.onboardingDone, onboardingStep: s.onboardingStep, isHydrated: s.isHydrated, isHydratingAuth: s.isHydratingAuth }, timestamp: Date.now() }) }).catch(() => { });
             // #endregion
-            
+
           } catch (err) {
             console.error('[Zustand] Auth Hydration Failed:', err)
             // Invalid DB state or rejected token → Wipe session but persist hydrated=true to unblock routing
@@ -176,14 +177,14 @@ export const useAuthStore = create(
           set(
             {
               // ── Session fields cleared ──────────────────────
-              user:            null,
-              token:           null,
+              user: null,
+              token: null,
               isAuthenticated: false,
-              role:            'user',
+              role: 'user',
               // ── User-level fields PRESERVED ─────────────────
-              onboardingDone:   onboardingDone,
-              onboardingStep:   onboardingStep,
-              isEmailVerified:  isEmailVerified,
+              onboardingDone: onboardingDone,
+              onboardingStep: onboardingStep,
+              isEmailVerified: isEmailVerified,
             },
             false,
             'logout'
@@ -202,15 +203,15 @@ export const useAuthStore = create(
           // 1. Wipe all Zustand state back to absolute zero
           set(
             {
-              user:             null,
-              token:            null,
-              isAuthenticated:  false,
-              isEmailVerified:  false,
-              onboardingStep:   1,
-              onboardingDone:   false,
-              role:             'user',
-              isHydrated:       true,  // Keep true so routing doesn't infinite-loop
-              isHydratingAuth:  false,
+              user: null,
+              token: null,
+              isAuthenticated: false,
+              isEmailVerified: false,
+              onboardingStep: 1,
+              onboardingDone: false,
+              role: 'user',
+              isHydrated: true,  // Keep true so routing doesn't infinite-loop
+              isHydratingAuth: false,
             },
             false,
             'hardReset'
@@ -230,13 +231,13 @@ export const useAuthStore = create(
         // This ensures onboardingDone / onboardingStep / isEmailVerified
         // survive page refreshes and logout/login cycles permanently.
         partialize: (state) => ({
-          token:            state.token,
-          user:             state.user,
-          isAuthenticated:  state.isAuthenticated,
-          isEmailVerified:  state.isEmailVerified,
-          onboardingDone:   state.onboardingDone,
-          onboardingStep:   state.onboardingStep,
-          role:             state.role,
+          token: state.token,
+          user: state.user,
+          isAuthenticated: state.isAuthenticated,
+          isEmailVerified: state.isEmailVerified,
+          onboardingDone: state.onboardingDone,
+          onboardingStep: state.onboardingStep,
+          role: state.role,
         }),
       }
     )

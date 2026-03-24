@@ -1,7 +1,7 @@
-from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.orm import Session
 import jwt
+import secrets
 
 from database.session import get_db
 from models import User, Session as DBSession
@@ -12,7 +12,7 @@ from core.config import settings
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-async def signup(user_data: UserCreate, db: Session = Depends(get_db)):
+async def signup(user_data: UserCreate, response: Response, db: Session = Depends(get_db)):
     """Register a new user account, hash the password, and issue JWT tokens."""
     # 1. Verification
     user_exists = db.query(User).filter(User.email == user_data.email).first()
@@ -46,6 +46,16 @@ async def signup(user_data: UserCreate, db: Session = Depends(get_db)):
     db.add(session)
     db.commit()
 
+    # 5. CSRF Cookie (Requested for production-grade security flow)
+    csrf_token = secrets.token_urlsafe(32)
+    response.set_cookie(
+        key="csrf_token", 
+        value=csrf_token, 
+        httponly=False,  # Allow frontend to read for double-submission if needed
+        samesite="lax",
+        secure=False     # Set true in production with HTTPS
+    )
+
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
@@ -53,7 +63,7 @@ async def signup(user_data: UserCreate, db: Session = Depends(get_db)):
     )
 
 @router.post("/login", response_model=TokenResponse)
-async def login(user_data: UserLogin, db: Session = Depends(get_db)):
+async def login(user_data: UserLogin, response: Response, db: Session = Depends(get_db)):
     """Authenticate via email/password, issue tokens, track session."""
     user = db.query(User).filter(User.email == user_data.email, User.is_deleted == False).first()
     
@@ -73,6 +83,16 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
     )
     db.add(session)
     db.commit()
+
+    # CSRF Cookie
+    csrf_token = secrets.token_urlsafe(32)
+    response.set_cookie(
+        key="csrf_token", 
+        value=csrf_token, 
+        httponly=False,
+        samesite="lax",
+        secure=False
+    )
     
     return TokenResponse(
         access_token=access_token,

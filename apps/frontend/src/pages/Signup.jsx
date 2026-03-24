@@ -29,6 +29,7 @@ const signupSchema = z.object({
 const Signup = () => {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
+  const [apiError, setApiError] = useState(null);
   
   // Selector pattern for Zustand
   const hydrateAuth = useAuthStore((state) => state.hydrateAuth);
@@ -43,17 +44,14 @@ const Signup = () => {
   });
 
   const onSubmit = async (data) => {
+    setApiError(null);
     try {
-      // #region agent log (Signup request payload)
-      fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H10',location:'src/pages/Signup.jsx:onSubmit',message:'Signup submit started',data:{email:data?.email,hasPassword:Boolean(data?.password),passwordLength:data?.password?.length ?? 0,fullNameLength:data?.fullName?.length ?? 0,hasDob:Boolean(data?.dob)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      // Real API Call
       const response = await api.post('/auth/signup', {
         email: data.email,
         password: data.password,
         full_name: data.fullName
       });
-      
+
       // Pass the token directly to hydrateAuth so that token + isHydratingAuth
       // are set in ONE atomic Zustand update.  This eliminates the brief ghost-
       // token window (token set, isAuthenticated still false) that previously
@@ -62,24 +60,27 @@ const Signup = () => {
 
       // If hydrateAuth failed internally (network down, DB unavailable) it calls
       // logout() and leaves isAuthenticated=false.  Don't show success in that case.
-      const { isAuthenticated, isEmailVerified, onboardingDone } = useAuthStore.getState();
+      const { isAuthenticated } = useAuthStore.getState();
       if (!isAuthenticated) {
         toast.error('Account created but we could not reach the server. Please log in.');
         navigate(ROUTES.LOGIN, { replace: true });
         return;
       }
 
-      // #region agent log (Signup success route handoff)
-      fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H6',location:'src/pages/Signup.jsx:onSubmit',message:'Signup success navigating to home for INIT resolution',data:{isAuthenticated,isEmailVerified,onboardingDone,navigateTo:ROUTES.HOME},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       toast.success('Account created successfully!');
       navigate(ROUTES.HOME, { replace: true });
     } catch (err) {
-      // #region agent log (Signup request failed)
-      fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H10',location:'src/pages/Signup.jsx:onSubmit',message:'Signup request failed',data:{status:err?.response?.status,detail:err?.response?.data?.detail,message:err?.message,code:err?.code},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       console.error('[Signup] error:', err);
-      toast.error(err.response?.data?.detail || 'Failed to create account. Please try again.');
+      const status = err.response?.status;
+
+      if (status === 409) {
+        // Email already taken — show inline error, do NOT redirect
+        setApiError('This email is already registered. Please sign in instead.');
+      } else if (status === 422) {
+        setApiError('Please check your details and try again.');
+      } else {
+        toast.error(err.response?.data?.detail || 'Failed to create account. Please try again.');
+      }
     }
   };
 
@@ -241,6 +242,14 @@ const Signup = () => {
                 </div>
                 
                 <div className="pt-2">
+                  {apiError && (
+                    <div className="mb-3 px-4 py-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-sm flex items-start gap-2">
+                      <span className="flex-1">{apiError}</span>
+                      {apiError.includes('sign in') && (
+                        <Link to={ROUTES.LOGIN} className="font-bold underline whitespace-nowrap">Sign in</Link>
+                      )}
+                    </div>
+                  )}
                   <button 
                     disabled={isSubmitting}
                     className="w-full py-4 bg-[#6143f4] hover:bg-[#6143f4]/90 text-white font-bold rounded-lg shadow-lg shadow-[#6143f4]/30 transition-all active:scale-[0.98] disabled:opacity-70 flex items-center justify-center gap-2" 
