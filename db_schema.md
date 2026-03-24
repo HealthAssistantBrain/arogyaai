@@ -38,6 +38,7 @@ CREATE TABLE users (
     full_name VARCHAR(150),
     is_email_verified BOOLEAN DEFAULT FALSE NOT NULL,
     is_onboarding_done BOOLEAN DEFAULT FALSE NOT NULL,
+    onboarding_step INTEGER DEFAULT 1 NOT NULL,
     is_deleted BOOLEAN DEFAULT FALSE NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL

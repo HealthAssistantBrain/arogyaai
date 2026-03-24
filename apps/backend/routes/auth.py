@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.orm import Session
 import jwt
 import secrets
+from datetime import datetime, timezone
+from core.utils import safe_input
 
 from database.session import get_db
 from models import User, Session as DBSession
@@ -23,21 +25,26 @@ async def signup(user_data: UserCreate, response: Response, db: Session = Depend
         )
     
     # 2. Hashing & Creation
+    print(f"DEBUG: Starting signup for {user_data.email}")
     hashed_pwd = get_password_hash(user_data.password)
     new_user = User(
         email=user_data.email,
         password_hash=hashed_pwd,
-        full_name=user_data.full_name
+        full_name=safe_input(user_data.full_name) if user_data.full_name else None
     )
     db.add(new_user)
+    print("DEBUG: User added to session")
     db.commit()
+    print("DEBUG: User committed")
     db.refresh(new_user)
+    print(f"DEBUG: User refreshed, ID: {new_user.id}")
 
     # 3. Token Generation
     access_token = create_access_token(subject=new_user.id)
     refresh_token, refresh_expire = create_refresh_token(subject=new_user.id)
     
     # 4. Session Persistence
+    print(f"DEBUG: Creating session for user ID {new_user.id}")
     session = DBSession(
         user_id=new_user.id,
         refresh_token_hash=get_password_hash(refresh_token), # Security Rule: Hash refresh token
@@ -45,6 +52,7 @@ async def signup(user_data: UserCreate, response: Response, db: Session = Depend
     )
     db.add(session)
     db.commit()
+    print("DEBUG: Session committed, signup complete")
 
     # 5. CSRF Cookie (Requested for production-grade security flow)
     csrf_token = secrets.token_urlsafe(32)

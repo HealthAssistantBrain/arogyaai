@@ -2,7 +2,7 @@
 Session model — maps to the `sessions` table.
 1:N from User. Manages JWT refresh token state.
 """
-from sqlalchemy import Column, String, Text, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, String, Text, Boolean, DateTime, ForeignKey, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -18,7 +18,7 @@ class Session(UUIDPrimaryKeyMixin, Base):
     user_agent          = Column(Text)
     is_revoked          = Column(Boolean, default=False, nullable=False)
     expires_at          = Column(DateTime(timezone=True), nullable=False)
-    created_at          = Column(DateTime(timezone=True), nullable=False)
+    created_at          = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     # ── Relationships ──────────────────────────────────────────
     user = relationship("User", back_populates="sessions")

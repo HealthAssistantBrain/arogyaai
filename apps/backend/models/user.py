@@ -3,7 +3,7 @@ User model — maps to the `users` table.
 """
 import enum
 
-from sqlalchemy import Column, String, Boolean, Enum
+from sqlalchemy import Column, String, Boolean, Enum, Integer
 from sqlalchemy.orm import relationship
 
 from .base import Base, UUIDPrimaryKeyMixin, TimestampMixin
@@ -11,12 +11,14 @@ from .base import Base, UUIDPrimaryKeyMixin, TimestampMixin
 
 class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "users"
+    
 
     email          = Column(String(255), unique=True, nullable=False, index=True)
     password_hash  = Column(String(255), nullable=False)
     full_name      = Column(String(150))
     is_email_verified  = Column(Boolean, default=False, nullable=False)
     is_onboarding_done = Column(Boolean, default=False, nullable=False)
+    onboarding_step    = Column(Integer, default=1, nullable=False)
     is_deleted         = Column(Boolean, default=False, nullable=False)
 
     # ── Relationships ──────────────────────────────────────────

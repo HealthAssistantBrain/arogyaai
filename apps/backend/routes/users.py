@@ -90,6 +90,7 @@ def get_me(current_user: User = Depends(get_current_user_from_header)):
         "full_name":           current_user.full_name,
         "is_email_verified":   current_user.is_email_verified,
         "is_onboarding_done":  current_user.is_onboarding_done,
+        "onboarding_step":     current_user.onboarding_step,
         "role":                "user",
         "created_at":          current_user.created_at.isoformat() if current_user.created_at else None,
     }
