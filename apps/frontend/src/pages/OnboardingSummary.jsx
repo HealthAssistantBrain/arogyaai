@@ -1,19 +1,19 @@
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  ClipboardList, 
-  Bell, 
-  User, 
-  Edit3, 
-  Stethoscope, 
-  Activity, 
-  Footprints, 
-  Utensils, 
-  Moon, 
-  BrainCircuit, 
-  Watch, 
-  Heart, 
-  ShieldCheck, 
+import {
+  ClipboardList,
+  Bell,
+  User,
+  Edit3,
+  Stethoscope,
+  Activity,
+  Footprints,
+  Utensils,
+  Moon,
+  BrainCircuit,
+  Watch,
+  Heart,
+  ShieldCheck,
   ArrowRight,
   TrendingUp,
   CheckCircle2,
@@ -30,10 +30,33 @@ const OnboardingSummary = () => {
   const navigate = useNavigate();
   const setOnboardingStep = useAuthStore((state) => state.setOnboardingStep);
 
-  const handleConfirm = () => {
-    setOnboardingStep(6);
-    toast.success('Onboarding complete! Initialising your dashboard...');
-    navigate(ROUTES.ONBOARDING_COMPLETION);
+  const handleConfirm = async () => {
+    try {
+      const token = useAuthStore.getState().token;
+      const user = useAuthStore.getState().user;
+
+      // Call prediction compute as requested by user
+      await fetch('http://localhost:8000/prediction/compute', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          user_id: user?.id || 'unknown',
+          data_points: { source: 'onboarding_summary' }
+        })
+      });
+
+      setOnboardingStep(6);
+      toast.success('Onboarding complete! Initialising your dashboard...');
+      navigate(ROUTES.ONBOARDING_COMPLETION);
+    } catch (err) {
+      console.error("Prediction compute failed:", err);
+      // Proceed anyway to avoid blocking the user, but log the error
+      setOnboardingStep(6);
+      navigate(ROUTES.ONBOARDING_COMPLETION);
+    }
   };
 
   const handleEdit = (step) => {
@@ -69,14 +92,14 @@ const OnboardingSummary = () => {
           </div>
           <div className="bg-[#6143f4]/10 rounded-full p-1 border border-[#6143f4]/20">
             <div className="h-10 w-10 rounded-full bg-[#6143f4]/10 flex items-center justify-center overflow-hidden">
-               <User size={20} className="text-[#6143f4]" />
+              <User size={20} className="text-[#6143f4]" />
             </div>
           </div>
         </div>
       </header>
 
       <main className="flex-1 flex items-center justify-center p-6 md:p-12">
-        <motion.div 
+        <motion.div
           variants={containerVariants}
           initial="initial"
           animate="animate"
@@ -95,7 +118,7 @@ const OnboardingSummary = () => {
                 </div>
               </div>
               <div className="h-2 w-full bg-[#6143f4]/10 rounded-full overflow-hidden">
-                <motion.div 
+                <motion.div
                   initial={{ width: '75%' }}
                   animate={{ width: '100%' }}
                   transition={{ duration: 1, ease: "easeOut" }}
@@ -217,14 +240,14 @@ const OnboardingSummary = () => {
 
             {/* Action Buttons */}
             <div className="mt-12 pt-8 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-4 justify-between items-center">
-              <button 
+              <button
                 onClick={() => navigate(ROUTES.ONBOARDING_STEP_4)}
                 className="w-full sm:w-auto px-8 py-3 rounded-lg border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
               >
                 <ArrowLeft size={16} />
                 Back
               </button>
-              <button 
+              <button
                 onClick={handleConfirm}
                 className="w-full sm:w-auto px-10 py-3 rounded-lg bg-[#6143f4] text-white font-bold hover:bg-[#6143f4]/90 shadow-lg shadow-[#6143f4]/25 transition-all flex items-center justify-center gap-2"
               >
@@ -237,7 +260,7 @@ const OnboardingSummary = () => {
       </main>
 
       <footer className="py-8 px-10 text-center text-slate-400 text-xs mt-auto">
-         © 2024 ArogyaAI Health Systems. All data is encrypted and HIPAA compliant.
+        © 2024 ArogyaAI Health Systems. All data is encrypted and HIPAA compliant.
       </footer>
       {/* Footer Decoration */}
       <div className="fixed bottom-0 left-0 w-full h-1 bg-gradient-to-r from-[#6143f4] via-[#009CDE] to-[#6143f4] opacity-50 z-50"></div>

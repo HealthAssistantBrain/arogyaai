@@ -1,12 +1,12 @@
 import { useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  BarChart3, 
-  User, 
-  Sparkles, 
-  Binary, 
-  CheckCircle2, 
+import {
+  BarChart3,
+  User,
+  Sparkles,
+  Binary,
+  CheckCircle2,
   ArrowRight,
   ShieldCheck,
   Activity,
@@ -25,8 +25,8 @@ const OnboardingCompletion = () => {
 
   // BUG 1 FIX: completeOnboarding() MUST be called BEFORE navigate()
   // Single shared handler wired to both CTA button and auto-redirect timer
-  const handleGoToDashboard = () => {
-    completeOnboarding();                        // ① write to store first
+  const handleGoToDashboard = async () => {
+    await completeOnboarding();                  // ① write to store and backend first
     navigate(ROUTES.DASHBOARD, { replace: true }); // ② then navigate
   };
 
@@ -64,14 +64,14 @@ const OnboardingCompletion = () => {
             </div>
             <div className="bg-[#6143f4]/10 rounded-full p-1 border border-[#6143f4]/20">
               <div className="h-10 w-10 rounded-full bg-[#6143f4]/10 flex items-center justify-center overflow-hidden shadow-sm">
-                 <User size={20} className="text-[#6143f4]" />
+                <User size={20} className="text-[#6143f4]" />
               </div>
             </div>
           </div>
         </header>
 
         <main className="flex-1 flex flex-col items-center justify-center">
-          <motion.div 
+          <motion.div
             variants={containerVariants}
             initial="initial"
             animate="animate"
@@ -82,7 +82,7 @@ const OnboardingCompletion = () => {
               <div className="absolute inset-0 opacity-20 mix-blend-overlay" style={{ backgroundImage: "url('https://www.transparenttextures.com/patterns/carbon-fibre.png')" }}></div>
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="relative flex items-center justify-center">
-                  <motion.div 
+                  <motion.div
                     animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.1, 0.3] }}
                     transition={{ duration: 4, repeat: Infinity }}
                     className="absolute w-48 h-48 bg-white/20 rounded-full"
@@ -91,14 +91,14 @@ const OnboardingCompletion = () => {
                   <div className="z-10 bg-white/10 backdrop-blur-xl p-8 rounded-full border border-white/30 shadow-2xl">
                     <ShieldCheck size={72} className="text-white" strokeWidth={2} />
                   </div>
-                  <motion.div 
+                  <motion.div
                     animate={{ y: [0, -4, 0] }}
                     transition={{ duration: 3, repeat: Infinity }}
                     className="absolute -top-4 -right-4 bg-[#009CDE] p-3 rounded-full shadow-lg border-2 border-white"
                   >
                     <Sparkles size={18} className="text-white" fill="currentColor" />
                   </motion.div>
-                  <motion.div 
+                  <motion.div
                     animate={{ y: [0, 4, 0] }}
                     transition={{ duration: 4, repeat: Infinity, delay: 0.5 }}
                     className="absolute -bottom-2 -left-6 bg-[#6143f4] p-2 rounded-lg shadow-lg border-2 border-white"
@@ -117,29 +117,29 @@ const OnboardingCompletion = () => {
                 <span className="text-xs font-bold uppercase tracking-wider">Analysis Complete</span>
               </motion.div>
 
-              <motion.h1 
+              <motion.h1
                 variants={itemVariants}
                 className="text-3xl md:text-4xl font-black text-[#13082A] dark:text-white leading-tight tracking-tight mb-4"
               >
                 Your Health Profile is Ready
               </motion.h1>
 
-              <motion.p 
+              <motion.p
                 variants={itemVariants}
                 className="text-slate-500 dark:text-slate-400 text-lg font-normal leading-relaxed mb-8 max-w-[440px]"
               >
                 Our AI engine is now analyzing your data to provide personalized health intelligence. You're ready to explore your predictive insights.
               </motion.p>
-              
+
               <motion.div variants={itemVariants} className="w-full space-y-4">
-                <button 
+                <button
                   onClick={handleGoToDashboard}
                   className="w-full flex cursor-pointer items-center justify-center overflow-hidden rounded-xl h-14 px-8 bg-[#6143f4] hover:bg-[#6143f4]/90 active:scale-[0.98] transition-all text-white text-lg font-bold shadow-lg shadow-[#6143f4]/25 group"
                 >
                   <span className="truncate">Go to Dashboard</span>
                   <ArrowRight size={20} className="ml-2 group-hover:translate-x-1 transition-transform" />
                 </button>
-                
+
                 <div className="flex items-center justify-center gap-6 pt-4">
                   <div className="flex flex-col items-center">
                     <span className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Markers</span>
@@ -160,21 +160,21 @@ const OnboardingCompletion = () => {
             </div>
           </motion.div>
 
-          <motion.footer 
+          <motion.footer
             variants={itemVariants}
             className="mt-8 flex flex-col items-center gap-4 opacity-50"
           >
             <p className="text-xs text-slate-500 font-medium tracking-tight">Secured with 256-bit AES Encryption</p>
             <div className="flex gap-6 items-center grayscale">
-               <div className="w-12 h-4 bg-slate-400 rounded-sm" style={{ WebkitMaskImage: "url('https://upload.wikimedia.org/wikipedia/commons/e/e1/Norton_by_Symantec_Logo.svg')", maskImage: "url('https://upload.wikimedia.org/wikipedia/commons/e/e1/Norton_by_Symantec_Logo.svg')", maskRepeat: 'no-repeat', maskSize: 'contain' }}></div>
-               <div className="w-12 h-4 bg-slate-400 rounded-sm" style={{ WebkitMaskImage: "url('https://upload.wikimedia.org/wikipedia/commons/thumb/c/c9/HIPAA_Logo.svg/1000px-HIPAA_Logo.svg.png')", maskImage: "url('https://upload.wikimedia.org/wikipedia/commons/thumb/c/c9/HIPAA_Logo.svg/1000px-HIPAA_Logo.svg.png')", maskRepeat: 'no-repeat', maskSize: 'contain' }}></div>
+              <div className="w-12 h-4 bg-slate-400 rounded-sm" style={{ WebkitMaskImage: "url('https://upload.wikimedia.org/wikipedia/commons/e/e1/Norton_by_Symantec_Logo.svg')", maskImage: "url('https://upload.wikimedia.org/wikipedia/commons/e/e1/Norton_by_Symantec_Logo.svg')", maskRepeat: 'no-repeat', maskSize: 'contain' }}></div>
+              <div className="w-12 h-4 bg-slate-400 rounded-sm" style={{ WebkitMaskImage: "url('https://upload.wikimedia.org/wikipedia/commons/thumb/c/c9/HIPAA_Logo.svg/1000px-HIPAA_Logo.svg.png')", maskImage: "url('https://upload.wikimedia.org/wikipedia/commons/thumb/c/c9/HIPAA_Logo.svg/1000px-HIPAA_Logo.svg.png')", maskRepeat: 'no-repeat', maskSize: 'contain' }}></div>
             </div>
           </motion.footer>
         </main>
       </div>
 
       {/* Auto-redirect loading bar */}
-      <motion.div 
+      <motion.div
         initial={{ scaleX: 0 }}
         animate={{ scaleX: 1 }}
         transition={{ duration: 3.0, ease: "linear" }}

@@ -103,7 +103,7 @@ def update_me(
     db: Session = Depends(get_db),
 ):
     """Update mutable profile fields (full_name, etc.)."""
-    allowed_fields = {"full_name"}
+    allowed_fields = {"full_name", "is_onboarding_done", "onboarding_step"}
     for field, value in updates.items():
         if field in allowed_fields:
             setattr(current_user, field, value)

@@ -1,9 +1,9 @@
 import { useEffect } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
-import { useAuthStore }                   from '../../store/authStore'
-import { ROUTES }                         from '../../router/routes'
-import LoadingScreen                      from '../../pages/LoadingScreen'
-import SafeNavigate                       from './SafeNavigate'
+import { useAuthStore } from '../../store/authStore'
+import { ROUTES } from '../../router/routes'
+import LoadingScreen from '../../pages/LoadingScreen'
+import SafeNavigate from './SafeNavigate'
 
 const EMAIL_UNVERIFIED_ALLOWLIST = [
   ROUTES.EMAIL_VERIFICATION,
@@ -20,6 +20,7 @@ const STEP_ROUTES = {
   3: ROUTES.ONBOARDING_STEP_3,
   4: ROUTES.ONBOARDING_STEP_4,
   5: ROUTES.ONBOARDING_SUMMARY,
+  6: ROUTES.ONBOARDING_COMPLETION,
 }
 
 // Helper to reduce cognitive complexity in AuthGuard
@@ -59,13 +60,13 @@ const getLoginRedirectPath = (pathname, search) => {
 export default function AuthGuard() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const isEmailVerified = useAuthStore((s) => s.isEmailVerified)
-  const onboardingDone  = useAuthStore((s) => s.onboardingDone)
-  const onboardingStep  = useAuthStore((s) => s.onboardingStep)
-  const isHydrated      = useAuthStore((s) => s.isHydrated)
+  const onboardingDone = useAuthStore((s) => s.onboardingDone)
+  const onboardingStep = useAuthStore((s) => s.onboardingStep)
+  const isHydrated = useAuthStore((s) => s.isHydrated)
   const isHydratingAuth = useAuthStore((s) => s.isHydratingAuth)
-  const token           = useAuthStore((s) => s.token)
-  const logout          = useAuthStore((s) => s.logout)
-  const location        = useLocation()
+  const token = useAuthStore((s) => s.token)
+  const logout = useAuthStore((s) => s.logout)
+  const location = useLocation()
 
   // ── SECTION 11: DEBUG MODE ──
   useEffect(() => {
@@ -78,7 +79,7 @@ export default function AuthGuard() {
     })
 
     // #region agent log (AuthGuard snapshot)
-    fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H8',location:'src/components/guards/AuthGuard.jsx:useEffect',message:'AuthGuard observed state',data:{path:location.pathname,isAuthenticated,isEmailVerified,onboardingDone,onboardingStep,isHydrated,isHydratingAuth},timestamp:Date.now()})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'fcf4a1' }, body: JSON.stringify({ sessionId: 'fcf4a1', runId: 'post-fix', hypothesisId: 'H8', location: 'src/components/guards/AuthGuard.jsx:useEffect', message: 'AuthGuard observed state', data: { path: location.pathname, isAuthenticated, isEmailVerified, onboardingDone, onboardingStep, isHydrated, isHydratingAuth }, timestamp: Date.now() }) }).catch(() => { });
     // #endregion
   }, [location.pathname, isAuthenticated, isEmailVerified, onboardingDone, isHydrated])
 
@@ -121,9 +122,9 @@ export default function AuthGuard() {
   if (onboardingDone !== true) {
     const expectedStep = STEP_ROUTES[onboardingStep] ?? ROUTES.ONBOARDING_STEP_1
     // #region agent log (AuthGuard onboarding expected path)
-    fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H8',location:'src/components/guards/AuthGuard.jsx:onboardingGate',message:'AuthGuard onboarding gate expected path computed',data:{path:location.pathname,onboardingDone,onboardingStep,expectedStep,allowsCompletion:expectedStep===ROUTES.ONBOARDING_COMPLETION},timestamp:Date.now()})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'fcf4a1' }, body: JSON.stringify({ sessionId: 'fcf4a1', runId: 'post-fix', hypothesisId: 'H8', location: 'src/components/guards/AuthGuard.jsx:onboardingGate', message: 'AuthGuard onboarding gate expected path computed', data: { path: location.pathname, onboardingDone, onboardingStep, expectedStep, allowsCompletion: expectedStep === ROUTES.ONBOARDING_COMPLETION }, timestamp: Date.now() }) }).catch(() => { });
     // #endregion
-    
+
     if (!isAllowedDuringOnboarding(location.pathname, expectedStep)) {
       return <SafeNavigate to={expectedStep} replace />
     }

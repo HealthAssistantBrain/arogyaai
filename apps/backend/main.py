@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # Import modular routers
-from routes import auth, intelligence, users
+from routes import auth, intelligence, users, prediction
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -29,3 +29,4 @@ def health_check():
 app.include_router(auth.router)       # /auth/*
 app.include_router(users.router)      # /users/*  (includes /users/me)
 app.include_router(intelligence.router)
+app.include_router(prediction.router)

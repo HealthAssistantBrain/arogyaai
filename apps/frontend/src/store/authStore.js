@@ -10,6 +10,8 @@ export const useAuthStore = create(
   devtools(
     persist(
       (set, get) => ({
+        // Trace state for debugging
+        logOnboardingState: () => console.log("ONBOARDING STATE:", get()),
         user: null,
         token: null,
         isAuthenticated: false,
@@ -56,7 +58,7 @@ export const useAuthStore = create(
           if (get().onboardingDone === true) return;
 
           const requestedStep = Number.isFinite(Number(step)) ? Number(step) : 1
-          const safeStep = requestedStep >= 1 && requestedStep <= 5 ? requestedStep : 1
+          const safeStep = requestedStep >= 1 && requestedStep <= 6 ? requestedStep : 1
           // #region agent log (setOnboardingStep clamp)
           fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'fcf4a1' }, body: JSON.stringify({ sessionId: 'fcf4a1', runId: 'post-fix', hypothesisId: 'H9', location: 'src/store/authStore.js:setOnboardingStep', message: 'setOnboardingStep requested/clamped', data: { requestedStep, safeStep, currentOnboardingDone: get().onboardingDone, currentPath: window?.location?.pathname }, timestamp: Date.now() }) }).catch(() => { });
           // #endregion
@@ -72,12 +74,30 @@ export const useAuthStore = create(
         // the OnboardingGuard reads onboardingDone=false and
         // redirects back to the last step creating an infinite loop
         // ────────────────────────────────────────────────────────────────────
-        completeOnboarding: () =>
-          set(
-            { onboardingDone: true, onboardingStep: 6 },
-            false,
-            'completeOnboarding'
-          ),
+        completeOnboarding: async () => {
+          try {
+            const token = get().token;
+            // Persist to backend so reload doesn't trigger recursion
+            await fetch('http://localhost:8000/users/me', {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({ is_onboarding_done: true, onboarding_step: 6 })
+            });
+
+            set(
+              { onboardingDone: true, onboardingStep: 6 },
+              false,
+              'completeOnboarding'
+            );
+          } catch (err) {
+            console.error("Failed to persist onboarding completion:", err);
+            // Fallback: update local state anyway
+            set({ onboardingDone: true, onboardingStep: 6 });
+          }
+        },
 
         // ── Auth Hydration Logic ───────────────────────────────────────────
         // Called by GlobalStateValidator to sync JWT token with true DB state.

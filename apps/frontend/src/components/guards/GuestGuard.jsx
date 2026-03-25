@@ -1,9 +1,9 @@
 import { useEffect } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
-import { useAuthStore }      from '../../store/authStore'
-import { ROUTES }            from '../../router/routes'
-import LoadingScreen         from '../../pages/LoadingScreen'
-import SafeNavigate          from './SafeNavigate'
+import { useAuthStore } from '../../store/authStore'
+import { ROUTES } from '../../router/routes'
+import LoadingScreen from '../../pages/LoadingScreen'
+import SafeNavigate from './SafeNavigate'
 
 const STEP_ROUTES = {
   0: ROUTES.ONBOARDING_STEP_1,
@@ -12,6 +12,7 @@ const STEP_ROUTES = {
   3: ROUTES.ONBOARDING_STEP_3,
   4: ROUTES.ONBOARDING_STEP_4,
   5: ROUTES.ONBOARDING_SUMMARY,
+  6: ROUTES.ONBOARDING_COMPLETION,
 }
 
 // Helper to check token parity
@@ -24,13 +25,13 @@ const hasTokenParityError = (isAuthenticated, token) => {
 export default function GuestGuard() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const isEmailVerified = useAuthStore((s) => s.isEmailVerified)
-  const onboardingDone  = useAuthStore((s) => s.onboardingDone)
-  const onboardingStep  = useAuthStore((s) => s.onboardingStep)
-  const isHydrated      = useAuthStore((s) => s.isHydrated)
+  const onboardingDone = useAuthStore((s) => s.onboardingDone)
+  const onboardingStep = useAuthStore((s) => s.onboardingStep)
+  const isHydrated = useAuthStore((s) => s.isHydrated)
   const isHydratingAuth = useAuthStore((s) => s.isHydratingAuth)
-  const token           = useAuthStore((s) => s.token)
-  const logout          = useAuthStore((s) => s.logout)
-  const location        = useLocation()
+  const token = useAuthStore((s) => s.token)
+  const logout = useAuthStore((s) => s.logout)
+  const location = useLocation()
 
   // ── SECTION 11: DEBUG MODE ──
   useEffect(() => {

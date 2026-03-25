@@ -1,9 +1,9 @@
 import { useEffect } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
-import { useAuthStore }                   from '../../store/authStore'
-import { ROUTES }                         from '../../router/routes'
-import LoadingScreen                      from '../../pages/LoadingScreen'
-import SafeNavigate                       from './SafeNavigate'
+import { useAuthStore } from '../../store/authStore'
+import { ROUTES } from '../../router/routes'
+import LoadingScreen from '../../pages/LoadingScreen'
+import SafeNavigate from './SafeNavigate'
 
 const STEP_ROUTES = {
   0: ROUTES.ONBOARDING_STEP_1,
@@ -12,16 +12,17 @@ const STEP_ROUTES = {
   3: ROUTES.ONBOARDING_STEP_3,
   4: ROUTES.ONBOARDING_STEP_4,
   5: ROUTES.ONBOARDING_SUMMARY,
+  6: ROUTES.ONBOARDING_COMPLETION,
 }
 
 export default function ActiveOnboardingGuard() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const isEmailVerified = useAuthStore((s) => s.isEmailVerified)
-  const onboardingDone  = useAuthStore((s) => s.onboardingDone)
-  const onboardingStep  = useAuthStore((s) => s.onboardingStep)
-  const isHydrated      = useAuthStore((s) => s.isHydrated)
+  const onboardingDone = useAuthStore((s) => s.onboardingDone)
+  const onboardingStep = useAuthStore((s) => s.onboardingStep)
+  const isHydrated = useAuthStore((s) => s.isHydrated)
   const isHydratingAuth = useAuthStore((s) => s.isHydratingAuth)
-  const location        = useLocation()
+  const location = useLocation()
 
   // ── SECTION 11: DEBUG MODE ──
   useEffect(() => {
@@ -42,10 +43,10 @@ export default function ActiveOnboardingGuard() {
   // ── SECTION 4: STRICT ROUTING WATERFALL ──
   if (!isAuthenticated) {
     return <SafeNavigate to={ROUTES.LOGIN} replace />
-  } 
+  }
   else if (!isEmailVerified) {
     return <SafeNavigate to={ROUTES.EMAIL_VERIFICATION} replace />
-  } 
+  }
   else if (onboardingDone === false) {
     let expectedPath;
     if (onboardingStep <= 1) expectedPath = ROUTES.ONBOARDING_STEP_1;
@@ -55,7 +56,7 @@ export default function ActiveOnboardingGuard() {
     else if (onboardingStep === 5) expectedPath = ROUTES.ONBOARDING_SUMMARY;
     else if (onboardingStep === 6) expectedPath = ROUTES.ONBOARDING_COMPLETION;
     else expectedPath = ROUTES.ONBOARDING_STEP_1; // fallback
-    
+
     // ── SECTION 3: HARDEN ACTIVEONBOARDINGGUARD ──
     // Strict Step Validation: Block ALL manual navigation (forward/backward/URL entry)
     // The user MUST be on the exact mapped path for their precise step integer.
@@ -63,7 +64,7 @@ export default function ActiveOnboardingGuard() {
       return <SafeNavigate to={expectedPath} replace />
     }
     return <Outlet />
-  } 
+  }
   else {
     return <SafeNavigate to={ROUTES.DASHBOARD} replace />
   }
