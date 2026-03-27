@@ -49,3 +49,5 @@ temp/
 # AGENT FILES
 .agent/
 
+package-lock.json
+
