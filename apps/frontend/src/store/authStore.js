@@ -14,6 +14,7 @@ export const useAuthStore = create(
         logOnboardingState: () => console.log("ONBOARDING STATE:", get()),
         user: null,
         token: null,
+        refreshToken: null,      // ← Added for session revocation
         isAuthenticated: false,
         isEmailVerified: false,
         onboardingStep: 1,       // onboarding starts at step 1
@@ -33,6 +34,10 @@ export const useAuthStore = create(
             return
           }
           set({ token }, false, 'setToken')
+        },
+
+        setRefreshToken: (refreshToken) => {
+          set({ refreshToken }, false, 'setRefreshToken')
         },
 
         setEmailVerified: () =>
@@ -184,33 +189,50 @@ export const useAuthStore = create(
           }
         },
 
-        // ── Bug Fix (Step 1): logout ONLY clears session data.
-        // onboardingDone, onboardingStep, isEmailVerified are USER-LEVEL state
-        // and MUST be preserved across logout/login cycles so returning users
-        // skip onboarding and go straight to /dashboard.
-        // DO NOT call localStorage.removeItem() — Zustand persist will rehydrate
-        // the remaining onboarding fields correctly on next login.
-        logout: () => {
-          // Preserve onboarding + email verification state before clearing session
-          const { onboardingDone, onboardingStep, isEmailVerified } = get()
+        // ── Logout Fix ──────────────────────────────────────────────────
+        // requirements: Call POST /auth/logout with refresh_token, clear store,
+        // remove localStorage key "arogyaai-auth", redirect to "/".
+        // ─────────────────────────────────────────────────────────────────
+        logout: async () => {
+          const { refreshToken } = get()
 
+          try {
+            if (refreshToken) {
+              await fetch('http://localhost:8000/auth/logout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refresh_token: refreshToken })
+              })
+            }
+          } catch (err) {
+            console.error('[authStore] Logout request failed:', err)
+            // Continue with local logout regardless of backend success
+          }
+
+          // 1. Wipe all Zustand state back to absolute zero (No stale state remains)
           set(
             {
-              // ── Session fields cleared ──────────────────────
               user: null,
               token: null,
+              refreshToken: null,
               isAuthenticated: false,
+              isEmailVerified: false,
+              onboardingStep: 1,
+              onboardingDone: false,
               role: 'user',
-              // ── User-level fields PRESERVED ─────────────────
-              onboardingDone: onboardingDone,
-              onboardingStep: onboardingStep,
-              isEmailVerified: isEmailVerified,
+              isHydrated: true,
+              isHydratingAuth: false,
             },
             false,
             'logout'
           )
-          // Only clear volatile session keys — NOT the full persist store
+
+          // 2. Nuke the Zustand persist localStorage key entirely
+          localStorage.removeItem('arogyaai-auth')
           sessionStorage.clear()
+
+          // 3. Redirect user to "/" (landing page)
+          window.location.href = '/'
         },
 
         // ── HARD RESET ────────────────────────────────────────────────────────────────
@@ -225,6 +247,7 @@ export const useAuthStore = create(
             {
               user: null,
               token: null,
+              refreshToken: null,
               isAuthenticated: false,
               isEmailVerified: false,
               onboardingStep: 1,
@@ -247,11 +270,10 @@ export const useAuthStore = create(
           // ── Patch 7: signal hydration complete so guards can safely run
           if (state) state.setHydrated()
         },
-        // ── Step 2: Explicitly declare which fields are persisted.
-        // This ensures onboardingDone / onboardingStep / isEmailVerified
-        // survive page refreshes and logout/login cycles permanently.
+        // ── persisted fields ──
         partialize: (state) => ({
           token: state.token,
+          refreshToken: state.refreshToken,
           user: state.user,
           isAuthenticated: state.isAuthenticated,
           isEmailVerified: state.isEmailVerified,
