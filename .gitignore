@@ -48,6 +48,15 @@ temp/
 
 # AGENT FILES
 .agent/
+.gemini/
+.gsd/
+adapters/
+docs/
+scripts/
+GSD-STYLE.md 
+model_capabilities.yaml
+PROJECT_RULES.md 
+.memory/
 
 package-lock.json
 
