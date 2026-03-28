@@ -59,9 +59,12 @@ export default function OnboardingGuard() {
   if (!isAuthenticated) {
     return <SafeNavigate to={ROUTES.LOGIN} replace />
   }
-  else if (!isEmailVerified) {
-    return <SafeNavigate to={ROUTES.EMAIL_VERIFICATION} replace />
-  }
+  // ── PHASE 1: Email verification NOT enforced ────────────────────────────
+  // Re-enable in Phase 2:
+  // else if (!isEmailVerified) {
+  //   return <SafeNavigate to={ROUTES.EMAIL_VERIFICATION} replace />
+  // }
+  // ────────────────────────────────────────────────────────────────────────
   else if (onboardingDone === false) {
     const stepPath = STEP_ROUTES[onboardingStep] ?? ROUTES.ONBOARDING_STEP_1
     return <SafeNavigate to={stepPath} replace />

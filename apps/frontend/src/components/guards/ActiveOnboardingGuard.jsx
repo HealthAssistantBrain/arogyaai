@@ -44,9 +44,6 @@ export default function ActiveOnboardingGuard() {
   if (!isAuthenticated) {
     return <SafeNavigate to={ROUTES.LOGIN} replace />
   }
-  else if (!isEmailVerified) {
-    return <SafeNavigate to={ROUTES.EMAIL_VERIFICATION} replace />
-  }
   else if (onboardingDone === false) {
     let expectedPath;
     if (onboardingStep <= 1) expectedPath = ROUTES.ONBOARDING_STEP_1;

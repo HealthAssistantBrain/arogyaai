@@ -59,7 +59,6 @@ const getLoginRedirectPath = (pathname, search) => {
 
 export default function AuthGuard() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
-  const isEmailVerified = useAuthStore((s) => s.isEmailVerified)
   const onboardingDone = useAuthStore((s) => s.onboardingDone)
   const onboardingStep = useAuthStore((s) => s.onboardingStep)
   const isHydrated = useAuthStore((s) => s.isHydrated)
@@ -68,76 +67,41 @@ export default function AuthGuard() {
   const logout = useAuthStore((s) => s.logout)
   const location = useLocation()
 
-  // ── SECTION 11: DEBUG MODE ──
-  useEffect(() => {
-    console.log('[ROUTER DEBUG - AUTH GUARD]', {
-      path: location.pathname,
-      isAuthenticated,
-      isEmailVerified,
-      onboardingDone,
-      isHydrated
-    })
-
-    // #region agent log (AuthGuard snapshot)
-    fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'fcf4a1' }, body: JSON.stringify({ sessionId: 'fcf4a1', runId: 'post-fix', hypothesisId: 'H8', location: 'src/components/guards/AuthGuard.jsx:useEffect', message: 'AuthGuard observed state', data: { path: location.pathname, isAuthenticated, isEmailVerified, onboardingDone, onboardingStep, isHydrated, isHydratingAuth }, timestamp: Date.now() }) }).catch(() => { });
-    // #endregion
-  }, [location.pathname, isAuthenticated, isEmailVerified, onboardingDone, isHydrated])
-
-  // ── SECTION 3: HYDRATION LOCK ──
+  // ── HYDRATION LOCK: block ALL routing decisions until server sync is done ──
+  // isHydrated + isHydratingAuth together guarantee we have fresh server state.
   if (!isHydrated || isHydratingAuth) {
     return <LoadingScreen />
   }
 
-  // ── SECTION 2: STATE NORMALIZATION ENFORCEMENT ──
-  // If state is completely desynced, clear everything to fail safely (Test 4/10)
-  // ── UPGRADE: Apply strict token parity validations
+  // ── TOKEN PARITY: catch desync between isAuthenticated and token ─────────
   if (hasTokenParityError(isAuthenticated, token)) {
     logout()
-    return <SafeNavigate to={ROUTES.LOGIN} replace />
+    return <SafeNavigate to={ROUTES.HOME} replace />
   }
 
-  // ── SECTION 4: STRICT ROUTING WATERFALL ──
-
-  // Rule 1: Not authenticated -> login
+  // ── STRICT ROUTING WATERFALL (Phase 1) ──────────────────────────────
+  // Rule 1: Not authenticated → landing page
   if (!isAuthenticated) {
-    return <SafeNavigate to={getLoginRedirectPath(location.pathname, location.search)} state={{ from: location }} replace />
+    return <SafeNavigate to={ROUTES.HOME} replace />
   }
 
-  // Rule 2: Authenticated but email not verified -> Verify Email
-  if (!isEmailVerified) {
-    if (!isAllowedUnverifiedRoute(location.pathname)) {
-      return <SafeNavigate to={ROUTES.EMAIL_VERIFICATION} replace />
-    }
-    return <Outlet /> // Explicit exception exit
-  }
+  // Rule 2 (Phase 1): Email verification NOT enforced.
+  // Re-enable in Phase 2 by restoring the isEmailVerified check here.
 
-  // ── IMPORTANT: Below here, User IS Authenticated AND Email IS Verified ──
-
-  // Exception for email verification view: if verified, they shouldn't be here
-  if (location.pathname === ROUTES.EMAIL_VERIFICATION) {
-    return <SafeNavigate to={ROUTES.DASHBOARD} replace />
-  }
-
-  // Rule 3: Valid Email, but Onboarding Not Done -> Force Onboarding Sequence
+  // Rule 3: Authenticated, onboarding not done → correct onboarding step
   if (onboardingDone !== true) {
     const expectedStep = STEP_ROUTES[onboardingStep] ?? ROUTES.ONBOARDING_STEP_1
-    // #region agent log (AuthGuard onboarding expected path)
-    fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'fcf4a1' }, body: JSON.stringify({ sessionId: 'fcf4a1', runId: 'post-fix', hypothesisId: 'H8', location: 'src/components/guards/AuthGuard.jsx:onboardingGate', message: 'AuthGuard onboarding gate expected path computed', data: { path: location.pathname, onboardingDone, onboardingStep, expectedStep, allowsCompletion: expectedStep === ROUTES.ONBOARDING_COMPLETION }, timestamp: Date.now() }) }).catch(() => { });
-    // #endregion
-
     if (!isAllowedDuringOnboarding(location.pathname, expectedStep)) {
       return <SafeNavigate to={expectedStep} replace />
     }
     return <Outlet />
   }
 
-  // Rule 4: Onboarding is DONE. NEVER access onboarding routes again.
-  if (onboardingDone === true) {
-    if (location.pathname.startsWith('/onboarding') || location.pathname === ROUTES.ACCOUNT_CREATED) {
-      return <SafeNavigate to={ROUTES.DASHBOARD} replace />
-    }
+  // Rule 4: Onboarding done → prevent revisiting onboarding routes
+  if (location.pathname.startsWith('/onboarding') || location.pathname === ROUTES.ACCOUNT_CREATED) {
+    return <SafeNavigate to={ROUTES.DASHBOARD} replace />
   }
 
-  // Rule 5: Allow Access
+  // Rule 5: All checks passed → allow
   return <Outlet />
 }

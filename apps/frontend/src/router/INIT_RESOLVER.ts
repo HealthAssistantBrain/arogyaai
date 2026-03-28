@@ -37,7 +37,7 @@ export async function INIT_RESOLVER(): Promise<InitResult> {
   // ─── Step 3: No token → login ──────────────────────────────────────────────
   if (!token) {
     // #region agent log (INIT no token decision)
-    fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H4',location:'src/router/INIT_RESOLVER.ts:noToken',message:'INIT no token -> /login',data:{tokenPresent:false},timestamp:Date.now()})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'fcf4a1' }, body: JSON.stringify({ sessionId: 'fcf4a1', runId: 'post-fix', hypothesisId: 'H4', location: 'src/router/INIT_RESOLVER.ts:noToken', message: 'INIT no token -> /login', data: { tokenPresent: false }, timestamp: Date.now() }) }).catch(() => { });
     // #endregion
     return { route: '/login', cause: 'No token — guest user' };
   }
@@ -50,7 +50,7 @@ export async function INIT_RESOLVER(): Promise<InitResult> {
   ).replace(/\/$/, '');
 
   try {
-    const response = await fetch(`${baseUrl}/auth/me`, {
+    const response = await fetch(`${baseUrl}/users/me`, {
       headers: { Authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(5000),
     });
@@ -74,7 +74,7 @@ export async function INIT_RESOLVER(): Promise<InitResult> {
     console.log('AUTH RESPONSE DATA:', data);
 
     // #region agent log (INIT_RESOLVER auth/me payload)
-    fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'pre-fix',hypothesisId:'H2',location:'src/router/INIT_RESOLVER.ts:authMe',message:'INIT_RESOLVER /auth/me parsed (onboarding fields presence)',data:{has_is_onboarding_done:data?.is_onboarding_done!==undefined,is_onboarding_done:data?.is_onboarding_done,has_onboarding_step:data?.onboarding_step!==undefined,onboarding_step:data?.onboarding_step},timestamp:Date.now()})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'fcf4a1' }, body: JSON.stringify({ sessionId: 'fcf4a1', runId: 'pre-fix', hypothesisId: 'H2', location: 'src/router/INIT_RESOLVER.ts:authMe', message: 'INIT_RESOLVER /auth/me parsed (onboarding fields presence)', data: { has_is_onboarding_done: data?.is_onboarding_done !== undefined, is_onboarding_done: data?.is_onboarding_done, has_onboarding_step: data?.onboarding_step !== undefined, onboarding_step: data?.onboarding_step }, timestamp: Date.now() }) }).catch(() => { });
     // #endregion
 
     // Sync Zustand with the fresh server state
@@ -89,13 +89,15 @@ export async function INIT_RESOLVER(): Promise<InitResult> {
     const onboardingStepRaw = data?.onboardingStep ?? data?.onboarding_step ?? store.onboardingStep ?? 1;
     const onboardingStep = Number.isFinite(Number(onboardingStepRaw)) ? Number(onboardingStepRaw) : 1;
 
-    // Email not verified → gate
-    if (isEmailVerified === false) {
-      return { route: '/email-verification', cause: 'Email unverified' };
-    }
+    // ── PHASE 1: Email verification NOT enforced ──────────────────────────
+    // Re-enable in Phase 2:
+    // if (isEmailVerified === false) {
+    //   return { route: '/email-verification', cause: 'Email unverified' };
+    // }
+    // ──────────────────────────────────────────────────────────────────────
 
     // #region agent log (INIT_RESOLVER decision)
-    fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H4',location:'src/router/INIT_RESOLVER.ts:decision',message:'INIT_RESOLVER global decision inputs',data:{isEmailVerified,onboardingDone,onboardingStep,store_onboardingDone:store.onboardingDone,store_onboardingStep:store.onboardingStep},timestamp:Date.now()})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'fcf4a1' }, body: JSON.stringify({ sessionId: 'fcf4a1', runId: 'post-fix', hypothesisId: 'H4', location: 'src/router/INIT_RESOLVER.ts:decision', message: 'INIT_RESOLVER global decision inputs', data: { isEmailVerified, onboardingDone, onboardingStep, store_onboardingDone: store.onboardingDone, store_onboardingStep: store.onboardingStep }, timestamp: Date.now() }) }).catch(() => { });
     // #endregion
 
     if (!onboardingDone) {
@@ -106,7 +108,7 @@ export async function INIT_RESOLVER(): Promise<InitResult> {
     }
 
     // #region agent log (INIT complete -> dashboard)
-    fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H4',location:'src/router/INIT_RESOLVER.ts:done',message:'INIT onboarded -> /dashboard',data:{is_email_verified:data?.is_email_verified,onboardingDone,onboardingStep},timestamp:Date.now()})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'fcf4a1' }, body: JSON.stringify({ sessionId: 'fcf4a1', runId: 'post-fix', hypothesisId: 'H4', location: 'src/router/INIT_RESOLVER.ts:done', message: 'INIT onboarded -> /dashboard', data: { is_email_verified: data?.is_email_verified, onboardingDone, onboardingStep }, timestamp: Date.now() }) }).catch(() => { });
     // #endregion
     return { route: '/dashboard', cause: 'Authenticated and fully onboarded' };
 

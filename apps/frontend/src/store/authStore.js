@@ -183,9 +183,30 @@ export const useAuthStore = create(
 
           } catch (err) {
             console.error('[Zustand] Auth Hydration Failed:', err)
-            // Invalid DB state or rejected token → Wipe session but persist hydrated=true to unblock routing
-            get().logout()
-            set({ isHydrated: true, isHydratingAuth: false }, false, 'hydrateAuth_FAIL')
+            // ── CRITICAL: Do NOT call logout() here. logout() fires
+            // window.location.href = '/' which is a full page reload.
+            // That re-triggers INIT_RESOLVER, which can loop into the
+            // maintenance page if the backend is still returning 500.
+            //
+            // Instead, wipe session state in-place without any redirect.
+            // Callers (Signup / Login) handle navigation themselves.
+            set(
+              {
+                user: null,
+                token: null,
+                refreshToken: null,
+                isAuthenticated: false,
+                isEmailVerified: false,
+                onboardingStep: 1,
+                onboardingDone: false,
+                role: 'user',
+                isHydrated: true,        // unblock guards
+                isHydratingAuth: false,  // unblock guards
+              },
+              false,
+              'hydrateAuth_FAIL'
+            )
+            localStorage.removeItem('arogyaai-auth')
           }
         },
 
@@ -267,8 +288,29 @@ export const useAuthStore = create(
       {
         name: 'arogyaai-auth',                   // ← exact key — must match this
         onRehydrateStorage: () => (state) => {
-          // ── Patch 7: signal hydration complete so guards can safely run
-          if (state) state.setHydrated()
+          // ── Patch 7 + Race-Fix ──────────────────────────────────────────────
+          // PROBLEM: Previously, setHydrated() set isHydrated=true without setting
+          // isHydratingAuth=true. Guards would unblock on the FIRST render and
+          // route on stale localStorage state before hydrateAuth() ran.
+          //
+          // FIX: If a token is present, atomically set BOTH flags so guards are
+          // blocked from the very first render. hydrateAuth() then runs immediately
+          // (not after a render cycle via useEffect) and clears the lock when done.
+          // ─────────────────────────────────────────────────────────────────────
+          if (!state) return;
+
+          const token = state.token;
+          if (token) {
+            // Token exists → server sync needed → lock guards immediately
+            state.isHydrated = true;
+            state.isHydratingAuth = true;
+            // Call hydrateAuth synchronously (it is async internally)
+            // This fires BEFORE any React renders, preventing the stale-state window.
+            state.hydrateAuth();
+          } else {
+            // No token → no server sync needed → unlock guards directly
+            state.setHydrated();
+          }
         },
         // ── persisted fields ──
         partialize: (state) => ({

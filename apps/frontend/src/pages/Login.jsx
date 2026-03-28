@@ -3,11 +3,11 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { motion } from 'framer-motion';
-import { 
-  Activity, 
-  Mail, 
-  Lock, 
-  User as UserIcon, 
+import {
+  Activity,
+  Mail,
+  Lock,
+  User as UserIcon,
   Apple
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -25,13 +25,13 @@ const Login = () => {
   const Motion = motion;
   const navigate = useNavigate();
   const location = useLocation();
-  
+
   // Selector pattern for Zustand
-  const setToken        = useAuthStore((state) => state.setToken);
-  const hydrateAuth     = useAuthStore((state) => state.hydrateAuth);
+  const setToken = useAuthStore((state) => state.setToken);
+  const hydrateAuth = useAuthStore((state) => state.hydrateAuth);
 
   // ── Patch 3: consume ?redirect= param injected by AuthGuard, fallback to state.from, then home
-  const params     = new URLSearchParams(location.search)
+  const params = new URLSearchParams(location.search)
   const redirectTo = params.get('redirect')
     || location.state?.from?.pathname
     || ROUTES.HOME;
@@ -59,25 +59,41 @@ const Login = () => {
         throw new Error(errData?.detail || 'Invalid email or password');
       }
 
-      // 2. Extrapolate Access Token cleanly
+      // 2. Extract access token
       const { access_token } = await response.json();
-      
-      // 3. Supply JWT into App Store mapping
+
+      // 3. Set token in store
       setToken(access_token);
-      
-      // 4. Force hydrate /users/me synchronously before navigating ensuring deterministic routing bounds matches
+
+      // 4. Sync with server state (blocks until /users/me resolves)
       await hydrateAuth();
 
-      // #region agent log (Login post-hydrate snapshot)
-      {
-        const s = useAuthStore.getState();
-        fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H6',location:'src/pages/Login.jsx:onSubmit',message:'Login success navigating to home for INIT resolution',data:{computedRedirectTo:redirectTo,navigateTo:ROUTES.HOME,isAuthenticated:s.isAuthenticated,isEmailVerified:s.isEmailVerified,onboardingDone:s.onboardingDone,onboardingStep:s.onboardingStep,isHydrated:s.isHydrated,isHydratingAuth:s.isHydratingAuth},timestamp:Date.now()})}).catch(()=>{});
-      }
-      // #endregion
+      // 5. Read resolved state and route deterministically
+      const { isAuthenticated, onboardingDone, isEmailVerified } = useAuthStore.getState();
 
-      // 5. Allow Route Guards to pick up navigation interception
+      if (!isAuthenticated) {
+        toast.error('Login failed, please try again.');
+        return;
+      }
+
       toast.success('Welcome back!');
-      navigate(ROUTES.HOME, { replace: true });
+
+      // ── EMAIL VERIFICATION ONCE-FLAG ───────────────────────────────────
+      // Phase 1: not enforced, but show the page ONCE per session as a UX nudge.
+      // sessionStorage is cleared on tab/browser close, so it triggers again on next session.
+      const hasSeenEmailVerification = sessionStorage.getItem('hasSeenEmailVerification');
+      if (!isEmailVerified && !hasSeenEmailVerification) {
+        sessionStorage.setItem('hasSeenEmailVerification', 'true');
+        navigate(ROUTES.EMAIL_VERIFICATION, { replace: true });
+        return;
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
+      // 6. Route based on actual onboarding state (NEVER route to "/")
+      navigate(
+        onboardingDone ? ROUTES.DASHBOARD : ROUTES.ONBOARDING_STEP_1,
+        { replace: true }
+      );
     } catch (err) {
       console.error('Login failed:', err);
       toast.error(err.message || 'Invalid email or password');
@@ -97,7 +113,7 @@ const Login = () => {
   };
 
   return (
-    <Motion.div 
+    <Motion.div
       variants={pageVariants}
       initial="initial"
       animate="animate"
@@ -110,7 +126,7 @@ const Login = () => {
         <div className="absolute -bottom-[10%] -right-[5%] w-[40%] h-[40%] bg-[#6143f4]/10 rounded-full blur-[120px]"></div>
       </div>
 
-      <Motion.div 
+      <Motion.div
         animate={{ y: [0, -10, 0] }}
         transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
         className="w-full max-w-[480px] bg-white dark:bg-slate-900/50 rounded-xl shadow-2xl shadow-[#6143f4]/5 overflow-hidden border border-slate-200/60 dark:border-slate-800 z-10"
@@ -126,7 +142,7 @@ const Login = () => {
           <h1 className="text-slate-900 dark:text-slate-100 text-3xl font-bold leading-tight">Welcome back</h1>
           <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium">The future of healthcare intelligence</p>
         </div>
-        
+
         {/* Social Login */}
         <div className="px-8 pb-4 flex flex-col gap-3">
           <button type="button" className="w-full flex items-center justify-center gap-3 h-12 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors duration-200 group">
@@ -138,13 +154,13 @@ const Login = () => {
             <span className="text-slate-700 dark:text-slate-200 font-medium">Continue with Apple</span>
           </button>
         </div>
-        
+
         <div className="px-8 py-4 flex items-center gap-4">
           <div className="h-px grow bg-slate-200 dark:bg-slate-800"></div>
           <span className="text-xs uppercase tracking-widest text-slate-400 font-bold">Or login with email</span>
           <div className="h-px grow bg-slate-200 dark:bg-slate-800"></div>
         </div>
-        
+
         {/* Login Form */}
         <form className="px-8 pb-10 space-y-5" onSubmit={handleSubmit(onSubmit, handleValidationErrors)}>
           <div className="space-y-1.5">
@@ -153,15 +169,15 @@ const Login = () => {
               <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors">
                 <Mail size={20} />
               </div>
-              <input 
+              <input
                 {...register('email')}
-                className="w-full h-14 pl-12 pr-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-[#6143f4]/20 focus:border-[#6143f4] outline-none transition-all duration-200 text-slate-900 dark:text-slate-100" 
-                placeholder="name@company.com" 
-                type="email" 
+                className="w-full h-14 pl-12 pr-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-[#6143f4]/20 focus:border-[#6143f4] outline-none transition-all duration-200 text-slate-900 dark:text-slate-100"
+                placeholder="name@company.com"
+                type="email"
               />
             </div>
           </div>
-          
+
           <div className="space-y-1.5">
             <div className="flex justify-between items-center">
               <label className="text-slate-700 dark:text-slate-300 text-sm font-semibold ml-1">Password</label>
@@ -171,18 +187,18 @@ const Login = () => {
               <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors">
                 <Lock size={20} />
               </div>
-              <input 
+              <input
                 {...register('password')}
-                className="w-full h-14 pl-12 pr-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-[#6143f4]/20 focus:border-[#6143f4] outline-none transition-all duration-200 text-slate-900 dark:text-slate-100" 
-                placeholder="••••••••" 
-                type="password" 
+                className="w-full h-14 pl-12 pr-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-[#6143f4]/20 focus:border-[#6143f4] outline-none transition-all duration-200 text-slate-900 dark:text-slate-100"
+                placeholder="••••••••"
+                type="password"
               />
             </div>
           </div>
-          
-          <button 
+
+          <button
             disabled={isSubmitting}
-            className="w-full h-14 bg-[#6143f4] hover:bg-[#6143f4]/90 text-white font-bold rounded-lg shadow-lg shadow-[#6143f4]/25 transition-all duration-200 active:scale-[0.98] mt-2 disabled:opacity-70 flex items-center justify-center gap-2" 
+            className="w-full h-14 bg-[#6143f4] hover:bg-[#6143f4]/90 text-white font-bold rounded-lg shadow-lg shadow-[#6143f4]/25 transition-all duration-200 active:scale-[0.98] mt-2 disabled:opacity-70 flex items-center justify-center gap-2"
             type="submit"
           >
             {isSubmitting ? 'Signing In...' : (
@@ -191,15 +207,15 @@ const Login = () => {
               </>
             )}
           </button>
-          
+
           <div className="pt-6 text-center">
             <p className="text-slate-500 dark:text-slate-400 text-sm">
-              Don't have an account? 
+              Don't have an account?
               <Link className="text-[#6143f4] font-bold hover:underline ml-1" to={ROUTES.SIGNUP}>Sign up for free</Link>
             </p>
           </div>
         </form>
-        
+
         {/* Aesthetic Footer Graphic */}
         <div className="h-2 w-full bg-gradient-to-r from-[#6143f4]/20 via-[#6143f4] to-[#6143f4]/20"></div>
       </Motion.div>

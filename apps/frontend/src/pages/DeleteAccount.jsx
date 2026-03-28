@@ -6,39 +6,39 @@ import api from '../lib/axios';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import React from 'react';
-import { 
-  LayoutDashboard, 
-  Brain, 
-  FlaskConical, 
-  History, 
-  Activity, 
-  FileText, 
-  Settings, 
-  ShieldCheck, 
-  Bell, 
-  Search,
-  MoreVertical,
-  Waves,
-  Shield,
-  CheckCircle2,
-  HelpCircle,
-  AlertTriangle,
-  Trash2,
-  Database,
-  Smartphone,
-  Watch,
-  WifiOff,
-  ChevronRight,
-  Info,
-  Check,
-  ShieldAlert
+import {
+    LayoutDashboard,
+    Brain,
+    FlaskConical,
+    History,
+    Activity,
+    FileText,
+    Settings,
+    ShieldCheck,
+    Bell,
+    Search,
+    MoreVertical,
+    Waves,
+    Shield,
+    CheckCircle2,
+    HelpCircle,
+    AlertTriangle,
+    Trash2,
+    Database,
+    Smartphone,
+    Watch,
+    WifiOff,
+    ChevronRight,
+    Info,
+    Check,
+    ShieldAlert
 } from 'lucide-react';
 
 const DeleteAccount = () => {
     const navigate = useNavigate();
-    const hardReset  = useAuthStore((s) => s.hardReset);
+    const hardReset = useAuthStore((s) => s.hardReset);
     const [isConfirmed, setIsConfirmed] = useState(false);
-    const [isDeleting,  setIsDeleting]  = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     // Call real DELETE /users/me, then hard-reset everything
     const handleDelete = async () => {
@@ -47,12 +47,18 @@ const DeleteAccount = () => {
         try {
             await api.delete('/users/me');
         } catch (err) {
-            // Even on network failure, we still wipe local state so the
-            // user is not stuck in a broken authenticated UI
+            // Backend was not reached — abort and inform the user.
+            // Do NOT clear state here: that would mislead the user into thinking
+            // the account was deleted when it was not.
             console.error('[DeleteAccount] API error:', err);
+            toast.error('Could not reach the server. Please try again.');
+            setIsDeleting(false);
+            return;
         }
+        // API call succeeded — now wipe local state and redirect.
         hardReset();
-        navigate(ROUTES.HOME, { replace: true });
+        // Force full browser reset to landing page to avoid guard-race conditions.
+        window.location.href = '/';
     };
 
     const sidebarLinks = [
@@ -68,23 +74,23 @@ const DeleteAccount = () => {
     ];
 
     const consequences = [
-        { 
-            icon: Database, 
-            title: 'Data Loss', 
+        {
+            icon: Database,
+            title: 'Data Loss',
             desc: 'All biometric logs and medical records wiped from secure servers.',
             color: 'text-amber-500',
             bg: 'bg-amber-500/10'
         },
-        { 
-            icon: Brain, 
-            title: 'AI Models', 
+        {
+            icon: Brain,
+            title: 'AI Models',
             desc: 'Personalized models and predictive insights permanently erased.',
             color: 'text-primary',
             bg: 'bg-primary/10'
         },
-        { 
-            icon: WifiOff, 
-            title: 'Device Link', 
+        {
+            icon: WifiOff,
+            title: 'Device Link',
             desc: 'Connections to wearables and smart sensors will be severed.',
             color: 'text-[#009cde]',
             bg: 'bg-[#009cde]/10'
@@ -105,7 +111,7 @@ const DeleteAccount = () => {
                             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1">Healthcare OS</p>
                         </div>
                     </div>
-                    
+
                     <nav className="flex-1 px-5 space-y-1.5 overflow-y-auto pb-6 custom-scrollbar">
                         {['Intelligence', 'History & Labs', 'Management'].map((group) => (
                             <div key={group} className="py-2">
@@ -114,11 +120,10 @@ const DeleteAccount = () => {
                                     <button
                                         key={link.label}
                                         onClick={() => navigate(link.path)}
-                                        className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-[1.25rem] transition-all group ${
-                                            link.active 
-                                            ? 'bg-[#6143f4] text-white shadow-2xl shadow-[#6143f4]/30 font-black' 
+                                        className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-[1.25rem] transition-all group ${link.active
+                                            ? 'bg-[#6143f4] text-white shadow-2xl shadow-[#6143f4]/30 font-black'
                                             : 'text-slate-500 dark:text-slate-400 hover:bg-[#6143f4]/5 hover:text-[#6143f4] font-bold'
-                                        }`}
+                                            }`}
                                     >
                                         <link.icon size={18} className={link.active ? 'text-white' : 'text-slate-400 group-hover:text-[#6143f4]'} />
                                         <span className="text-[11px] uppercase tracking-widest leading-none">{link.label}</span>
@@ -130,14 +135,14 @@ const DeleteAccount = () => {
 
                     <div className="p-6 border-t border-slate-100 dark:border-white/5">
                         <div className="flex items-center gap-3 p-3 rounded-[1.5rem] bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 hover:border-[#6143f4]/30 transition-colors cursor-pointer group">
-                             <div className="size-11 rounded-xl bg-[#6143f4]/10 overflow-hidden flex items-center justify-center text-[#6143f4] text-xs font-black border-2 border-transparent group-hover:border-[#6143f4] transition-all">
-                                 SC
-                             </div>
-                             <div className="flex-1 min-w-0">
-                                 <p className="text-xs font-black truncate text-[#13082a] dark:text-white uppercase">Dr. Sarah Chen</p>
-                                 <p className="text-[9px] text-[#6143f4] uppercase tracking-widest font-black leading-none mt-1">Premium Member</p>
-                             </div>
-                             <MoreVertical size={14} className="text-slate-400" />
+                            <div className="size-11 rounded-xl bg-[#6143f4]/10 overflow-hidden flex items-center justify-center text-[#6143f4] text-xs font-black border-2 border-transparent group-hover:border-[#6143f4] transition-all">
+                                SC
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-xs font-black truncate text-[#13082a] dark:text-white uppercase">Dr. Sarah Chen</p>
+                                <p className="text-[9px] text-[#6143f4] uppercase tracking-widest font-black leading-none mt-1">Premium Member</p>
+                            </div>
+                            <MoreVertical size={14} className="text-slate-400" />
                         </div>
                     </div>
                 </aside>
@@ -149,7 +154,7 @@ const DeleteAccount = () => {
                         <div className="flex-1 max-w-xl">
                             <div className="relative group/search">
                                 <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within/search:text-[#6143f4] transition-colors" size={18} />
-                                <input className="w-full pl-14 pr-6 py-4 bg-slate-100 dark:bg-white/5 border border-transparent rounded-[1.5rem] focus:ring-4 focus:ring-[#6143f4]/10 focus:border-[#6143f4]/30 transition-all text-[13px] text-[#13082a] dark:text-white placeholder:text-slate-400 font-bold uppercase tracking-tight" placeholder="Search security parameters..." type="text"/>
+                                <input className="w-full pl-14 pr-6 py-4 bg-slate-100 dark:bg-white/5 border border-transparent rounded-[1.5rem] focus:ring-4 focus:ring-[#6143f4]/10 focus:border-[#6143f4]/30 transition-all text-[13px] text-[#13082a] dark:text-white placeholder:text-slate-400 font-bold uppercase tracking-tight" placeholder="Search security parameters..." type="text" />
                             </div>
                         </div>
                         <div className="flex items-center gap-5 ml-8">
@@ -166,7 +171,7 @@ const DeleteAccount = () => {
                                     <p className="text-[9px] text-[#6143f4] uppercase tracking-widest font-black leading-none mt-1">Chief Surgeon</p>
                                 </div>
                                 <div className="size-12 rounded-2xl border-2 border-[#6143f4]/20 p-1 bg-white">
-                                    <img className="size-full rounded-xl object-cover" alt="Dr. Sarah Chen" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCmca7uoDE5AXEl5Lm8J0kNozFbXew2KmxjvbMH9Uxz6_puV-3M4e6vnlXT3lEb_5cr82WJlJpIhLxX0n3slwWbP57cryd-X1PYojJGyEJFIbxEi5GoRB7BAanTNFGumWZcuLVazL6mqrjhuvUC3gGRtjHZVA9j0pjweqT5KOzZfnYTmtLSNDWzJTJ0I2GNWutesIDE2flIJl8eYqrE_zQxMiy9H-ayg4LdE001a6UkDGckUUtZ533LriYErfK1okd7WRmFj5K6lXvB"/>
+                                    <img className="size-full rounded-xl object-cover" alt="Dr. Sarah Chen" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCmca7uoDE5AXEl5Lm8J0kNozFbXew2KmxjvbMH9Uxz6_puV-3M4e6vnlXT3lEb_5cr82WJlJpIhLxX0n3slwWbP57cryd-X1PYojJGyEJFIbxEi5GoRB7BAanTNFGumWZcuLVazL6mqrjhuvUC3gGRtjHZVA9j0pjweqT5KOzZfnYTmtLSNDWzJTJ0I2GNWutesIDE2flIJl8eYqrE_zQxMiy9H-ayg4LdE001a6UkDGckUUtZ533LriYErfK1okd7WRmFj5K6lXvB" />
                                 </div>
                             </div>
                         </div>
@@ -175,7 +180,7 @@ const DeleteAccount = () => {
                     {/* Content Area */}
                     <div className="flex-1 p-10 lg:p-12 custom-scrollbar overflow-y-auto">
                         <div className="max-w-5xl mx-auto space-y-12 pb-16">
-                            
+
                             {/* Breadcrumbs */}
                             <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">
                                 <button onClick={() => navigate(ROUTES.SETTINGS)} className="hover:text-[#6143f4] transition-colors">Settings</button>
@@ -192,7 +197,7 @@ const DeleteAccount = () => {
                             </div>
 
                             {/* IRREVERSIBLE WARNING CARD */}
-                            <motion.div 
+                            <motion.div
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 className="bg-[#fff1f2] dark:bg-red-500/5 border-2 border-red-200 dark:border-red-500/20 rounded-[3rem] p-10 flex flex-col md:flex-row gap-8 items-start relative overflow-hidden group shadow-[0_20px_50px_-10px_rgba(239,68,68,0.1)]"
@@ -243,19 +248,18 @@ const DeleteAccount = () => {
                                 </div>
 
                                 <div className="flex flex-col md:flex-row gap-6">
-                                    <button 
+                                    <button
                                         disabled={!isConfirmed}
-                                        onClick={handleDelete} 
-                                        className={`flex-1 group/btn flex items-center justify-center gap-4 py-6 px-10 rounded-[2rem] font-black text-xs uppercase tracking-[0.25em] transition-all duration-500 relative overflow-hidden ${
-                                            isConfirmed 
-                                            ? 'bg-[#ef4444] text-white shadow-[0_25px_50px_-12px_rgba(239,68,68,0.5)] hover:scale-[1.02] active:scale-95' 
+                                        onClick={handleDelete}
+                                        className={`flex-1 group/btn flex items-center justify-center gap-4 py-6 px-10 rounded-[2rem] font-black text-xs uppercase tracking-[0.25em] transition-all duration-500 relative overflow-hidden ${isConfirmed
+                                            ? 'bg-[#ef4444] text-white shadow-[0_25px_50px_-12px_rgba(239,68,68,0.5)] hover:scale-[1.02] active:scale-95'
                                             : 'bg-slate-100 dark:bg-white/5 text-slate-400 cursor-not-allowed opacity-50 grayscale'
-                                        }`}
+                                            }`}
                                     >
                                         <Trash2 size={20} className="group-hover/btn:animate-bounce" />
                                         <span>Permanently Delete Account</span>
                                     </button>
-                                    <button 
+                                    <button
                                         onClick={() => navigate(ROUTES.SETTINGS)}
                                         className="flex-1 py-6 px-10 rounded-[2rem] bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-300 font-black text-xs uppercase tracking-[0.25em] hover:bg-slate-200 dark:hover:bg-white/10 hover:text-[#13082a] dark:hover:text-white transition-all active:scale-95"
                                     >
@@ -267,7 +271,7 @@ const DeleteAccount = () => {
                             {/* SUPPORT BLOCK */}
                             <div className="pt-8 text-center space-y-6">
                                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 leading-none">
-                                    Need help before you go? 
+                                    Need help before you go?
                                     <button onClick={() => navigate(ROUTES.HELP)} className="text-[#009cde] hover:underline ml-2 transition-all">
                                         Contact our support intelligence
                                     </button>
@@ -279,7 +283,8 @@ const DeleteAccount = () => {
                 </main>
             </div>
 
-            <style dangerouslySetInnerHTML={{ __html: `
+            <style dangerouslySetInnerHTML={{
+                __html: `
                 .no-scrollbar::-webkit-scrollbar { display: none; }
                 .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
                 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }

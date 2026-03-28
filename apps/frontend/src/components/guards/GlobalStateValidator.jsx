@@ -4,22 +4,27 @@ import { useAuthStore } from '../../store/authStore';
 export default function GlobalStateValidator() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isEmailVerified = useAuthStore((s) => s.isEmailVerified);
-  const onboardingDone  = useAuthStore((s) => s.onboardingDone);
-  const onboardingStep  = useAuthStore((s) => s.onboardingStep);
-  const token           = useAuthStore((s) => s.token);
-  const isHydrated      = useAuthStore((s) => s.isHydrated);
+  const onboardingDone = useAuthStore((s) => s.onboardingDone);
+  const onboardingStep = useAuthStore((s) => s.onboardingStep);
+  const token = useAuthStore((s) => s.token);
+  const isHydrated = useAuthStore((s) => s.isHydrated);
   const isHydratingAuth = useAuthStore((s) => s.isHydratingAuth);
-  const hydrateAuth     = useAuthStore((s) => s.hydrateAuth);
-  const logout          = useAuthStore((s) => s.logout);
+  const hydrateAuth = useAuthStore((s) => s.hydrateAuth);
+  const logout = useAuthStore((s) => s.logout);
 
-  // ── 0. Trigger backend Hydration on startup
+  // ── 0. Trigger backend Hydration on startup ───────────────────────────────────
+  // NOTE: Cold-start hydration is now handled directly in authStore's
+  // onRehydrateStorage callback, which fires BEFORE any React renders.
+  // This effect is a FALLBACK for mid-session token changes (e.g. after login
+  // where a new token is set and the component is already mounted).
+  // isHydratingAuth guard prevents double-calls with the cold-start path.
+  // ─────────────────────────────────────────────────────────────────────
   useEffect(() => {
-    // Only attempt to sync if Zustand has loaded from localStorage AND we have a token
     if (isHydrated && token && !isHydratingAuth) {
-      // NOTE: strict mode runs this twice, authStore tracks isHydratingAuth to prevent dupes
       hydrateAuth();
     }
-  }, [isHydrated, token]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]); // Only re-run when token changes (not isHydrated, which fires the cold-start path)
 
   useEffect(() => {
     // ── SECTION 9: Wait for both persist hydration AND network auth hydration

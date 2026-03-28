@@ -27,29 +27,21 @@ export function GuardedRoute({ children, guards }: GuardedRouteProps) {
   }
 
   // ── EMAIL_GUARD ────────────────────────────────────────────────────────────
-  // Blocks authenticated-but-unverified users.
-  // CRITICAL: NEVER redirect if already on /email-verification (prevents loop).
-  if (
-    guards.includes('EMAIL_GUARD') &&
-    authStore.isAuthenticated &&
-    !authStore.isEmailVerified &&
-    location.pathname !== '/email-verification'
-  ) {
-    if (!redirectFired.current) {
-      redirectFired.current = true;
-      return <Navigate to="/email-verification" state={{ isGuardRedirect: true }} replace />;
-    }
-  }
+  // PHASE 1: Email verification NOT enforced. Re-enable in Phase 2:
+  // if (guards.includes('EMAIL_GUARD') && authStore.isAuthenticated &&
+  //     !authStore.isEmailVerified && location.pathname !== '/email-verification') {
+  //   if (!redirectFired.current) {
+  //     redirectFired.current = true;
+  //     return <Navigate to="/email-verification" state={{ isGuardRedirect: true }} replace />;
+  //   }
+  // }
 
   // ── GUEST_GUARD ────────────────────────────────────────────────────────────
   // Blocks authenticated users from accessing login/signup pages.
   if (guards.includes('GUEST_GUARD') && authStore.isAuthenticated) {
     if (!redirectFired.current) {
       redirectFired.current = true;
-      // Only redirect to dashboard if email is verified, otherwise email-verification
-      if (!authStore.isEmailVerified) {
-        return <Navigate to="/email-verification" state={{ isGuardRedirect: true }} replace />;
-      }
+      // PHASE 1: Skip email verification gate, go directly to dashboard/onboarding.
       const target = authStore.onboardingDone
         ? '/dashboard'
         : `/onboarding/step-${authStore.onboardingStep || 1}`;

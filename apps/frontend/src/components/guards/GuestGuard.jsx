@@ -57,9 +57,13 @@ export default function GuestGuard() {
 
   // ── SECTION 4: STRICT ROUTING WATERFALL ──
   if (isAuthenticated) {
-    if (!isEmailVerified) {
-      return <SafeNavigate to={ROUTES.EMAIL_VERIFICATION} replace />
-    } else if (onboardingDone === false) {
+    // ── PHASE 1: Email verification NOT enforced ──────────────────────────
+    // Re-enable in Phase 2:
+    // if (!isEmailVerified) {
+    //   return <SafeNavigate to={ROUTES.EMAIL_VERIFICATION} replace />
+    // } else if (onboardingDone === false) { ...
+    // ─────────────────────────────────────────────────────────────────────
+    if (onboardingDone === false) {
       const stepPath = STEP_ROUTES[onboardingStep] ?? ROUTES.ONBOARDING_STEP_1
       return <SafeNavigate to={stepPath} replace />
     } else {

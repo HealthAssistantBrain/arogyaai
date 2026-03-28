@@ -1,6 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Header
+from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 import jwt
+import uuid
 import secrets
 from datetime import datetime, timezone
 from core.utils import safe_input
@@ -12,6 +14,8 @@ from core.security import verify_password, get_password_hash, create_access_toke
 from core.config import settings
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 @router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def signup(user_data: UserCreate, response: Response, db: Session = Depends(get_db)):
@@ -176,3 +180,47 @@ async def logout(data: RefreshTokenRequest, db: Session = Depends(get_db)):
             return {"message": "Session revoked successfully"}
             
     raise HTTPException(status_code=401, detail="Session not found or already revoked")
+
+
+@router.post("/verify-email", status_code=status.HTTP_200_OK)
+async def verify_email(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+):
+    """
+    Mark the authenticated user's email as verified.
+    Reads the access token from the standard Authorization: Bearer header.
+    Phase 1: Immediate trust-grant. Phase 2: Replace with signed email-link.
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_id = payload.get("sub")
+        token_type = payload.get("type")
+        if not user_id or token_type != "access":
+            raise credentials_exception
+    except jwt.PyJWTError:
+        raise credentials_exception
+
+    user = db.query(User).filter(
+        User.id == uuid.UUID(user_id),
+        User.is_deleted == False    # noqa: E712
+    ).first()
+
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    if user.is_email_verified:
+        return {"message": "Email already verified", "is_email_verified": True}
+
+    user.is_email_verified = True
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    return {"message": "Email verified successfully", "is_email_verified": True}

@@ -118,7 +118,19 @@ def delete_me(
     current_user: User = Depends(get_current_user_from_header),
     db: Session = Depends(get_db),
 ):
-    """Soft-delete the authenticated user."""
+    """Soft-delete the authenticated user and revoke all active sessions."""
+    from models import Session as DBSession
+
+    # 1. Soft-delete user
     current_user.is_deleted = True
     current_user.updated_at = datetime.now(timezone.utc)
+    db.add(current_user)
+    
+    # 2. Revoke all active sessions for this user
+    db.query(DBSession).filter(
+        DBSession.user_id == current_user.id,
+        DBSession.is_revoked == False
+    ).update({"is_revoked": True}, synchronize_session='fetch')
+
+    db.flush()
     db.commit()
