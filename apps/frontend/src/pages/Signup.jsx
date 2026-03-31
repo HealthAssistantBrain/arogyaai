@@ -30,6 +30,7 @@ const Signup = () => {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [apiError, setApiError] = useState(null);
+  const hydrateAuth = useAuthStore((state) => state.hydrateAuth);
 
   const {
     register,
@@ -51,27 +52,40 @@ const Signup = () => {
 
       const accessToken = response.data.access_token;
 
-      // ── SAFE TOKEN PERSISTENCE ──────────────────────────────────────────────────
-      // Write token directly into the Zustand store so the persist middleware
-      // flushes it to localStorage BEFORE the page reload below.
-      // We do NOT call hydrateAuth() here — that risks a /users/me 500 from
-      // the freshly-started backend triggering logout() and a second hard
-      // redirect, which previously produced the maintenance-page loop.
-      // INIT_RESOLVER will call /users/me on the fresh page load instead —
-      // by that point the backend is fully ready and the call succeeds.
-      useAuthStore.setState({ token: accessToken });
+      // ── HYDRATE STATE ─────────────────────────────────────────────────────
+      // await hydrateAuth so that isAuthenticated=true + onboardingDone=false
+      // are written to Zustand BEFORE navigate() is called.
+      // This is critical: isAuthenticated is persisted in the Zustand store.
+      // If we navigate without hydrating, guards see isAuthenticated=false
+      // and redirect the user away from onboarding.
+      await hydrateAuth(accessToken);
       // ─────────────────────────────────────────────────────────────────────
 
       toast.success('Account created successfully!');
 
-      // ── HARD REDIRECT (bypasses all guards) ─────────────────────────────────
-      // window.location.replace triggers a full page reload:
-      //   → INIT_RESOLVER runs fresh with the persisted token
-      //   → /users/me succeeds → onboardingDone=false → returns '/onboarding/step-1'
-      //   → App.tsx: result.route === pathname → setInitComplete(true)
-      //   → AuthGuard sees stable, server-verified state
-      // This eliminates ALL guard race conditions from the post-signup path.
-      window.location.replace('/onboarding/step-1');
+      // Read the now-stable state after hydration
+      const { isAuthenticated, onboardingDone } = useAuthStore.getState();
+
+      // ── EMAIL VERIFICATION ONCE-FLAG ──────────────────────────────────────
+      // New accounts are always unverified. Show page once as a UX nudge.
+      const hasSeenEmailVerification = sessionStorage.getItem('hasSeenEmailVerification');
+      const { isEmailVerified = false } = useAuthStore.getState();
+
+      if (!isEmailVerified && !hasSeenEmailVerification) {
+        sessionStorage.setItem('hasSeenEmailVerification', 'true');
+        navigate(ROUTES.EMAIL_VERIFICATION, { replace: true });
+        return;
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
+      // Deterministic routing after hydration
+      // New users always go to onboarding. Fallback to step-1 if hydration
+      // failed transiently (hydrateAuth's transient-fail path sets
+      // isAuthenticated=true so guards don't kick them out).
+      navigate(
+        (isAuthenticated && onboardingDone) ? ROUTES.DASHBOARD : ROUTES.ONBOARDING_STEP_1,
+        { replace: true }
+      );
     } catch (err) {
       console.error('[Signup] error:', err);
       const status = err.response?.status;

@@ -183,30 +183,36 @@ export const useAuthStore = create(
 
           } catch (err) {
             console.error('[Zustand] Auth Hydration Failed:', err)
-            // ── CRITICAL: Do NOT call logout() here. logout() fires
-            // window.location.href = '/' which is a full page reload.
-            // That re-triggers INIT_RESOLVER, which can loop into the
-            // maintenance page if the backend is still returning 500.
-            //
-            // Instead, wipe session state in-place without any redirect.
-            // Callers (Signup / Login) handle navigation themselves.
-            set(
-              {
-                user: null,
-                token: null,
-                refreshToken: null,
-                isAuthenticated: false,
-                isEmailVerified: false,
-                onboardingStep: 1,
-                onboardingDone: false,
-                role: 'user',
-                isHydrated: true,        // unblock guards
-                isHydratingAuth: false,  // unblock guards
-              },
-              false,
-              'hydrateAuth_FAIL'
-            )
-            localStorage.removeItem('arogyaai-auth')
+            // ── Determine whether this was a hard auth rejection or a transient error
+            const isHardReject = err?.message === 'Token rejected by server'
+
+            if (isHardReject) {
+              // 401/403: token is dead → wipe everything, user must re-login
+              set(
+                {
+                  user: null, token: null, refreshToken: null,
+                  isAuthenticated: false, isEmailVerified: false,
+                  onboardingStep: 1, onboardingDone: false, role: 'user',
+                  isHydrated: true, isHydratingAuth: false,
+                },
+                false, 'hydrateAuth_HARD_FAIL'
+              )
+              localStorage.removeItem('arogyaai-auth')
+            } else {
+              // Transient failure (backend 500, network down, etc.).
+              // Keep the token: don't log the user out for a temporary error.
+              // Set isAuthenticated=true to unblock guards so the user reaches onboarding.
+              // The next page reload will re-run hydrateAuth and sync correctly.
+              const existingToken = get().token
+              set(
+                {
+                  isAuthenticated: !!existingToken, // true if we still have a token
+                  isHydrated: true,
+                  isHydratingAuth: false,
+                },
+                false, 'hydrateAuth_TRANSIENT_FAIL'
+              )
+            }
           }
         },
 

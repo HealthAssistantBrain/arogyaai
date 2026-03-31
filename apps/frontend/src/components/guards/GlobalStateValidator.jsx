@@ -34,11 +34,28 @@ export default function GlobalStateValidator() {
     let isValid = false;
     let reason = '';
 
+    // STATE 0: HYDRATING FALLBACK
+    // After a transient hydrateAuth failure, we set isAuthenticated=true but
+    // user=null so the user isn't kicked out by a temporary backend 500.
+    // This is transitional and will self-correct on the next hydrateAuth call.
+    if (isAuthenticated && !token) {
+      // isAuthenticated without token → hard parity error
+      isValid = false;
+      reason = 'isAuthenticated=true but no token';
+    }
     // STATE 1: GUEST
-    if (!isAuthenticated && !token) {
+    else if (!isAuthenticated && !token) {
       isValid = true;
     }
-    // SECION 5: TOKEN PARITY HARDENING
+    // STATE 1b: TOKEN-ONLY (transient after signup/login before hydrateAuth resolves)
+    // isAuthenticated may still be false immediately after setToken() fires.
+    // The hydrateAuth call will fix this; GlobalStateValidator must not interfere.
+    // We skip validation here and let hydrateAuth+isHydratingAuth handle it.
+    // (isHydratingAuth=true already returns early above, so this is belt+suspenders)
+    else if (!isAuthenticated && token) {
+      isValid = true; // ghost-token? No — this is the pre-hydration state window
+    }
+    // SECTION 5: TOKEN PARITY HARDENING
     // Any state with isAuthenticated MUST have a valid token string
     else if (isAuthenticated && (!token || typeof token !== 'string' || token.trim() === '')) {
       isValid = false;
