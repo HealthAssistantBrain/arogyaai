@@ -57,6 +57,7 @@ GSD-STYLE.md
 model_capabilities.yaml
 PROJECT_RULES.md 
 .memory/
+gsd-template/
 
 package-lock.json
 
