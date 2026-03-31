@@ -25,6 +25,7 @@ import {
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { ROUTES } from '../router/routes';
+import api from '../lib/axios';
 
 const OnboardingSummary = () => {
   const navigate = useNavigate();
@@ -35,17 +36,10 @@ const OnboardingSummary = () => {
       const token = useAuthStore.getState().token;
       const user = useAuthStore.getState().user;
 
-      // Call prediction compute as requested by user
-      await fetch('http://localhost:8000/prediction/compute', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          user_id: user?.id || 'unknown',
-          data_points: { source: 'onboarding_summary' }
-        })
+      // Call prediction compute using shared api instance
+      await api.post('/prediction/compute', {
+        user_id: user?.id || 'unknown',
+        data_points: { source: 'onboarding_summary' }
       });
 
       setOnboardingStep(6);

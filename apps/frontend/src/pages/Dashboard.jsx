@@ -1,25 +1,25 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  LayoutDashboard, 
-  Sparkles, 
-  Activity, 
-  History, 
-  FlaskConical, 
-  FileText, 
-  Moon, 
-  Watch, 
-  Settings, 
-  Bell, 
-  Plus, 
-  Search, 
-  TrendingUp, 
-  Heart, 
-  Flame, 
-  Footprints, 
-  Droplets, 
-  Utensils, 
+import {
+  LayoutDashboard,
+  Sparkles,
+  Activity,
+  History,
+  FlaskConical,
+  FileText,
+  Moon,
+  Watch,
+  Settings,
+  Bell,
+  Plus,
+  Search,
+  TrendingUp,
+  Heart,
+  Flame,
+  Footprints,
+  Droplets,
+  Utensils,
   CloudLightning,
   AlertCircle,
   AlertTriangle,
@@ -36,51 +36,67 @@ import {
   ClipboardList,
   Wind
 } from 'lucide-react';
-import { 
-  AreaChart, 
-  Area, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
-  BarChart, 
-  Bar, 
-  PieChart, 
-  Pie, 
-  Cell 
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell
 } from 'recharts';
 import { ROUTES } from '../router/routes';
+import useDashboardStore from '../store/dashboardStore';
+import { useAuthStore } from '../store/authStore';
 
-// Mock data for charts
-const hrvData = [
-  { time: '12 AM', value: 80 },
-  { time: '4 AM', value: 60 },
-  { time: '8 AM', value: 75 },
-  { time: '12 PM', value: 40 },
-  { time: '4 PM', value: 65 },
-  { time: '8 PM', value: 30 },
-  { time: '11 PM', value: 35 },
-];
-
-const sleepData = [
-  { day: 'MON', hours: 6.0 },
-  { day: 'TUE', hours: 4.5 },
-  { day: 'WED', hours: 8.0 },
-  { day: 'THU', hours: 3.5 },
-  { day: 'FRI', hours: 7.0 },
-  { day: 'SAT', hours: 9.0 },
-  { day: 'SUN', hours: 7.5 },
-];
-
-const riskScoreData = [
-  { name: 'Risk', value: 84 },
-  { name: 'Remaining', value: 16 },
-];
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('Dashboard');
+
+  // ── Store ─────────────────────────────────────────────────────────────────
+  const { healthScore, history, prediction, profile, alerts,
+    loading, error, fetchDashboardData } = useDashboardStore();
+  const authUser = useAuthStore((s) => s.user);
+
+  useEffect(() => { fetchDashboardData(); }, [fetchDashboardData]);
+
+  // ── Per-module data + status ──────────────────────────────────────────────
+  // Each store key is now a slice: { data, status, source, last_updated }
+  const hsData = healthScore?.data;
+  const hiData = history?.data;
+  const predData = prediction?.data;
+  const profData = profile?.data;
+  const alertsData = alerts?.data?.alerts ?? [];
+
+  // Status: 'ready' | 'processing' | 'fallback'
+  const hsStatus = healthScore?.status ?? 'fallback';
+  const hiStatus = history?.status ?? 'fallback';
+  const predStatus = prediction?.status ?? 'fallback';
+  const isShimmer = (status) => status === 'processing';  // dim + animate
+  const isFallback = (status) => status === 'fallback';    // show subtle badge
+
+  // ── Derived display values ────────────────────────────────────────────────
+  const score = hsData?.score ?? 75;
+  const scoreLabel = hsData?.label ?? '…';
+  const riskScoreData = [
+    { name: 'Score', value: score },
+    { name: 'Remaining', value: 100 - score },
+  ];
+  const hrvData = hiData?.hrv ?? [];
+  const sleepData = hiData?.sleep ?? [];
+  const avgBpm = hiData?.hrv_average_bpm ?? '—';
+  const avgSleep = hiData?.sleep_average_hours ?? '—';
+  const displayName = profData?.full_name ?? authUser?.full_name ?? 'User';
+  const bioAgeDelta = predData?.biological_age_delta ?? '—';
+  const metabolicRate = predData?.metabolic_rate ?? '—';
+  const trajectilePercentile = predData?.trajectory_percentile ?? '—';
+  const predRecs = predData?.recommendations ?? [];
 
   const sidebarLinks = [
     { icon: LayoutDashboard, label: 'Dashboard', path: ROUTES.DASHBOARD },
@@ -106,7 +122,7 @@ const Dashboard = () => {
 
   return (
     <div className="bg-[#f6f5f8] dark:bg-[#131022] font-display text-[#13082A] dark:text-slate-100 min-h-screen flex antialiased">
-      
+
       {/* Left Sidebar - Matched Stitch */}
       <aside className="w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col h-screen sticky top-0 z-30">
         <div className="p-6 flex items-center gap-3">
@@ -118,18 +134,17 @@ const Dashboard = () => {
             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest leading-none mt-1">Predictive Intelligence</p>
           </div>
         </div>
-        
+
         <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto custom-scrollbar">
           {sidebarLinks.map((link) => (
             <Link
               key={link.label}
               to={link.path}
               onClick={() => setActiveTab(link.label)}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
-                activeTab === link.label
-                ? 'bg-[#6143f4] text-white font-bold shadow-lg shadow-[#6143f4]/20' 
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${activeTab === link.label
+                ? 'bg-[#6143f4] text-white font-bold shadow-lg shadow-[#6143f4]/20'
                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium'
-              }`}
+                }`}
             >
               <link.icon size={20} className={activeTab === link.label ? 'text-white' : 'text-slate-400 group-hover:text-[#6143f4]'} />
               <span className="text-sm tracking-tight">{link.label}</span>
@@ -138,15 +153,15 @@ const Dashboard = () => {
         </nav>
 
         <div className="p-4 border-t border-slate-200 dark:border-slate-800">
-          <div 
-            className="flex items-center gap-3 p-2 bg-slate-50 dark:bg-slate-800 rounded-xl cursor-pointer hover:shadow-sm transition-all group" 
+          <div
+            className="flex items-center gap-3 p-2 bg-slate-50 dark:bg-slate-800 rounded-xl cursor-pointer hover:shadow-sm transition-all group"
             onClick={() => navigate(ROUTES.SETTINGS)}
           >
             <div className="size-10 rounded-full bg-slate-200 overflow-hidden border-2 border-white dark:border-slate-700">
-              <img 
-                className="w-full h-full object-cover" 
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuBPkHhB8aAs5Z1UwSyM_LdR-SyUEMtPS07vvYHxs9EMhVRFMGV8HTc5N6pRdsg7HVwQIbJDs1XXltwkD6GIPIr1IExxq456POx_gkPwKIlpr3Cxhe0-W1noATGc5LQUbo3H7vWJAJh_ZYrnt7OunVQptWY7NY4Lz3K058baTGYLspNX8CCtBRT9OHGE-Ja-cudI8XPxUDQTYoGMIqmY67CeBCo08e_M5jaIGFYWOxd7xml6Gj7DbaUOaW3YHjL1tXaKGdMPVnQIuJpb" 
-                alt="User Profile" 
+              <img
+                className="w-full h-full object-cover"
+                src="https://lh3.googleusercontent.com/aida-public/AB6AXuBPkHhB8aAs5Z1UwSyM_LdR-SyUEMtPS07vvYHxs9EMhVRFMGV8HTc5N6pRdsg7HVwQIbJDs1XXltwkD6GIPIr1IExxq456POx_gkPwKIlpr3Cxhe0-W1noATGc5LQUbo3H7vWJAJh_ZYrnt7OunVQptWY7NY4Lz3K058baTGYLspNX8CCtBRT9OHGE-Ja-cudI8XPxUDQTYoGMIqmY67CeBCo08e_M5jaIGFYWOxd7xml6Gj7DbaUOaW3YHjL1tXaKGdMPVnQIuJpb"
+                alt="User Profile"
               />
             </div>
             <div className="flex-1 overflow-hidden">
@@ -160,20 +175,20 @@ const Dashboard = () => {
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
-        
+
         {/* Top Header Navbar - Matched Stitch */}
         <header className="h-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-8 flex items-center justify-between sticky top-0 z-20">
           <div className="flex items-center gap-4 flex-1">
             <div className="relative w-full max-w-md group">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" size={18} />
-              <input 
-                className="w-full pl-10 pr-4 py-2 bg-slate-100 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-[#6143f4] text-sm font-medium" 
-                placeholder="Search health records, insights, or labs..." 
+              <input
+                className="w-full pl-10 pr-4 py-2 bg-slate-100 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-[#6143f4] text-sm font-medium"
+                placeholder="Search health records, insights, or labs..."
                 type="text"
               />
             </div>
           </div>
-          
+
           <div className="flex items-center gap-4">
             <button className="p-2 text-slate-500 bg-transparent hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full relative transition-colors">
               <Bell size={20} />
@@ -188,22 +203,46 @@ const Dashboard = () => {
         </header>
 
         {/* Dashboard Content Container */}
-        <motion.div 
+        <motion.div
           variants={containerVariants}
           initial="initial"
           animate="animate"
           className="p-8 space-y-8 max-w-7xl mx-auto w-full"
         >
+          {/* Error Banner — Added Post-Audit */}
+          <AnimatePresence>
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-4 rounded-r-xl flex items-center gap-4 group"
+              >
+                <AlertCircle className="text-red-500 shrink-0" size={24} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-red-900 dark:text-red-200 font-bold text-sm">Dashboard Data Sync Issue</p>
+                  <p className="text-red-700 dark:text-red-400/80 text-xs font-medium truncate">{error}</p>
+                </div>
+                <button
+                  onClick={() => fetchDashboardData()}
+                  className="bg-red-500 text-white px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-red-600 transition-colors"
+                >
+                  Retry Now
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Section 1: Hero Stats Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
+
             {/* Health Risk Gauge - Matched Stitch */}
             <motion.div variants={itemVariants} className="lg:col-span-1 bg-white dark:bg-slate-900 p-8 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col items-center justify-center text-center relative overflow-hidden group">
               <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                 <BarChart2 size={120} className="text-[#6143f4]" />
               </div>
               <h3 className="text-slate-500 font-bold text-xs uppercase tracking-[0.2em] mb-8">Health Risk Score</h3>
-              
+
               <div className="relative size-48">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -229,25 +268,25 @@ const Dashboard = () => {
                   <span className="text-slate-400 font-bold text-sm tracking-tight mt-1">Optimal</span>
                 </div>
               </div>
-              
+
               <p className="mt-8 text-slate-500 font-medium text-sm">
                 Your risk factor has decreased by <span className="text-green-500 font-bold px-1.5 py-0.5 bg-green-50 dark:bg-green-500/10 rounded-lg">4.2%</span> since last month.
               </p>
             </motion.div>
 
             {/* Environmental Risk Card - NEW Additive Link */}
-            <motion.div 
-               variants={itemVariants} 
-               onClick={() => navigate(ROUTES.AQI_MONITOR)}
-               className="lg:col-span-1 bg-gradient-to-br from-[#13082A] to-[#1a1433] p-8 rounded-xl shadow-xl border border-white/5 flex flex-col items-center justify-center text-center relative overflow-hidden group cursor-pointer hover:scale-[1.02] transition-all"
+            <motion.div
+              variants={itemVariants}
+              onClick={() => navigate(ROUTES.AQI_MONITOR)}
+              className="lg:col-span-1 bg-gradient-to-br from-[#13082A] to-[#1a1433] p-8 rounded-xl shadow-xl border border-white/5 flex flex-col items-center justify-center text-center relative overflow-hidden group cursor-pointer hover:scale-[1.02] transition-all"
             >
               <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
                 <Wind size={120} className="text-white" />
               </div>
               <h3 className="text-white/40 font-bold text-[10px] uppercase tracking-[0.3em] mb-8 italic">Environmental Risk</h3>
               <div className="size-32 bg-white/5 rounded-full flex items-center justify-center relative shadow-inner">
-                 <Wind size={48} className="text-[#6143f4] animate-pulse" />
-                 <div className="absolute -bottom-2 bg-[#6143f4] text-white text-[10px] font-black px-3 py-1 rounded-full shadow-lg">156 AQI</div>
+                <Wind size={48} className="text-[#6143f4] animate-pulse" />
+                <div className="absolute -bottom-2 bg-[#6143f4] text-white text-[10px] font-black px-3 py-1 rounded-full shadow-lg">156 AQI</div>
               </div>
               <p className="mt-8 text-white/60 font-medium text-xs leading-relaxed">
                 Atmospheric particulates are <span className="text-[#6143f4] font-black underline">elevated</span>. High priority risk modifier detected.
@@ -257,47 +296,47 @@ const Dashboard = () => {
               </div>
             </motion.div>
 
-            {/* HRV Chart - Matched Stitch */}
+            {/* HRV Chart */}
             <motion.div variants={itemVariants} className="lg:col-span-2 bg-white dark:bg-slate-900 p-8 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col group">
               <div className="flex justify-between items-start mb-8">
                 <div>
                   <h3 className="text-slate-500 font-bold text-xs uppercase tracking-[0.2em] mb-1">Heart Rate Variability</h3>
-                  <p className="text-3xl font-black text-[#13082A] dark:text-white">72 <span className="text-sm font-medium text-slate-400 ml-1">bpm average</span></p>
+                  <p className="text-3xl font-black text-[#13082A] dark:text-white">{avgBpm} <span className="text-sm font-medium text-slate-400 ml-1">bpm average</span></p>
                 </div>
                 <div className="flex gap-2">
                   <span className="px-3 py-1 bg-[#6143f4]/10 text-[#6143f4] rounded-full text-[10px] font-black uppercase tracking-widest border border-[#6143f4]/20">Live</span>
                   <span className="px-3 py-1 bg-slate-50 dark:bg-slate-800 text-slate-500 rounded-full text-[10px] font-black uppercase tracking-widest border border-slate-100 dark:border-slate-700">24h</span>
                 </div>
               </div>
-              
+
               <div className="flex-1 min-h-[180px] w-full mt-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={hrvData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                     <defs>
                       <linearGradient id="hrvGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#6143f4" stopOpacity={0.15}/>
-                        <stop offset="95%" stopColor="#6143f4" stopOpacity={0}/>
+                        <stop offset="5%" stopColor="#6143f4" stopOpacity={0.15} />
+                        <stop offset="95%" stopColor="#6143f4" stopOpacity={0} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.03)" />
-                    <Tooltip 
+                    <Tooltip
                       contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 40px rgba(0,0,0,0.05)', fontWeight: 'bold' }}
                       itemStyle={{ color: '#6143f4' }}
                     />
-                    <Area 
-                      type="monotone" 
-                      dataKey="value" 
-                      stroke="#6143f4" 
+                    <Area
+                      type="monotone"
+                      dataKey="value"
+                      stroke="#6143f4"
                       strokeWidth={3}
-                      fillOpacity={1} 
-                      fill="url(#hrvGradient)" 
+                      fillOpacity={1}
+                      fill="url(#hrvGradient)"
                       animationDuration={2000}
                     />
-                    <XAxis 
-                      dataKey="time" 
-                      axisLine={false} 
-                      tickLine={false} 
-                      tick={{ fontSize: 9, fontWeight: 'bold', fill: '#94a3b8' }} 
+                    <XAxis
+                      dataKey="time"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 9, fontWeight: 'bold', fill: '#94a3b8' }}
                       dy={10}
                     />
                   </AreaChart>
@@ -306,10 +345,10 @@ const Dashboard = () => {
             </motion.div>
           </div>
 
-          {/* Section 2: AI Prediction - Matched Stitch */}
+          {/* Section 2: AI Prediction */}
           <motion.div variants={itemVariants} className="relative overflow-hidden rounded-xl p-8 bg-gradient-to-br from-[#6143f4] via-[#6143f4]/90 to-[#009CDE] shadow-xl group border border-white/10">
             <div className="absolute inset-0 opacity-15 pointer-events-none mix-blend-overlay">
-               <div className="absolute top-0 left-0 w-full h-full" style={{ backgroundImage: "url('https://www.transparenttextures.com/patterns/carbon-fibre.png')" }}></div>
+              <div className="absolute top-0 left-0 w-full h-full" style={{ backgroundImage: "url('https://www.transparenttextures.com/patterns/carbon-fibre.png')" }}></div>
             </div>
             <div className="relative z-10 flex flex-col lg:flex-row gap-8 items-center">
               <div className="flex-1">
@@ -319,7 +358,9 @@ const Dashboard = () => {
                 </div>
                 <h2 className="text-3xl font-black text-white mb-4 tracking-tight">5-Year Health Trajectory</h2>
                 <p className="text-white/80 text-lg leading-relaxed max-w-2xl font-medium">
-                  Based on your metabolic markers and genetic predispositions, your cardiovascular health is projected to remain in the <span className="text-white font-black underline decoration-white/40 decoration-2 underline-offset-4">90th percentile</span>. We recommend increasing your intake of Omega-3 to offset minor oxidative stress indicators detected in recent samples.
+                  Based on your metabolic markers, your cardiovascular health is projected to remain in the{' '}
+                  <span className="text-white font-black underline decoration-white/40 decoration-2 underline-offset-4">{trajectilePercentile}th percentile</span>.
+                  {predRecs[0] && <> {predRecs[0]}.</>}
                 </p>
                 <div className="mt-8 flex flex-wrap gap-4">
                   <button className="bg-white text-[#6143f4] px-6 py-3 rounded-xl font-bold text-sm shadow-xl hover:scale-105 transition-all active:scale-95">Detailed Simulation</button>
@@ -335,7 +376,7 @@ const Dashboard = () => {
                   <div className="space-y-2">
                     <div className="flex justify-between items-end">
                       <span className="text-white/70 text-xs font-bold">Biological Age</span>
-                      <span className="text-white font-black text-xl tracking-tight">-4.2y</span>
+                      <span className="text-white font-black text-xl tracking-tight">{bioAgeDelta}</span>
                     </div>
                     <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
                       <motion.div initial={{ width: 0 }} animate={{ width: '75%' }} transition={{ duration: 1.5, delay: 0.5 }} className="h-full bg-white rounded-full shadow-lg shadow-white/20"></motion.div>
@@ -344,7 +385,7 @@ const Dashboard = () => {
                   <div className="space-y-2">
                     <div className="flex justify-between items-end">
                       <span className="text-white/70 text-xs font-bold">Metabolic Rate</span>
-                      <span className="text-white font-black text-xl tracking-tight">High</span>
+                      <span className="text-white font-black text-xl tracking-tight">{metabolicRate}</span>
                     </div>
                     <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
                       <motion.div initial={{ width: 0 }} animate={{ width: '85%' }} transition={{ duration: 1.5, delay: 0.7 }} className="h-full bg-white rounded-full shadow-lg shadow-white/20"></motion.div>
@@ -357,29 +398,29 @@ const Dashboard = () => {
 
           {/* Section 3: Secondary Stats Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            {/* Sleep Quality - Matched Stitch */}
+
+            {/* Sleep Quality */}
             <motion.div variants={itemVariants} className="bg-white dark:bg-slate-900 p-8 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
               <h3 className="text-slate-500 font-bold text-xs uppercase tracking-[0.2em] mb-4">Sleep Quality</h3>
               <div className="flex items-end gap-2 mb-8">
-                <span className="text-3xl font-black text-[#13082A] dark:text-white">7.5</span>
+                <span className="text-3xl font-black text-[#13082A] dark:text-white">{avgSleep}</span>
                 <span className="text-slate-400 font-medium mb-1.5">hrs avg</span>
               </div>
               <div className="h-32 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={sleepData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.03)" />
-                    <XAxis 
-                      dataKey="day" 
-                      axisLine={false} 
-                      tickLine={false} 
-                      tick={{ fontSize: 9, fontWeight: 'bold', fill: '#94a3b8' }} 
+                    <XAxis
+                      dataKey="day"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 9, fontWeight: 'bold', fill: '#94a3b8' }}
                     />
                     <Tooltip cursor={{ fill: 'rgba(0,0,0,0.02)' }} />
-                    <Bar 
-                      dataKey="hours" 
-                      fill="#6143f4" 
-                      radius={[4, 4, 4, 4]} 
+                    <Bar
+                      dataKey="hours"
+                      fill="#6143f4"
+                      radius={[4, 4, 4, 4]}
                       barSize={16}
                       animationDuration={1500}
                     >
@@ -401,7 +442,7 @@ const Dashboard = () => {
               </div>
               <div className="space-y-6">
                 <div className="h-4 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden shadow-inner border border-white dark:border-slate-700">
-                  <motion.div 
+                  <motion.div
                     initial={{ width: 0 }}
                     animate={{ width: '84.32%' }}
                     transition={{ duration: 1.5, ease: "easeOut" }}
@@ -446,31 +487,38 @@ const Dashboard = () => {
 
           {/* Section 4: Critical Alerts & Recommendations */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-12">
-            
-            {/* Alerts Panel - Matched Stitch */}
+
+            {/* Alerts Panel — dynamic from backend */}
             <motion.div variants={itemVariants} className="bg-white dark:bg-slate-900 p-8 rounded-xl shadow-sm border-l-4 border-red-500 border-slate-100 dark:border-slate-800 relative overflow-hidden group">
               <div className="flex items-center justify-between mb-8">
                 <h3 className="text-red-500 font-black text-xs uppercase tracking-[0.3em] flex items-center gap-2">
                   <AlertCircle size={16} fill="currentColor" /> Critical Updates
                 </h3>
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">2 Active Alerts</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  {alertsData.length > 0 ? `${alertsData.length} Active Alert${alertsData.length > 1 ? 's' : ''}` : 'No Active Alerts'}
+                </span>
               </div>
               <div className="space-y-4">
-                <div className="p-5 bg-red-50 dark:bg-red-900/10 rounded-xl border border-red-100 dark:border-red-500/20 flex items-start gap-4 transition-all hover:bg-red-50/80 group/alert cursor-pointer">
-                  <AlertTriangle className="text-red-500 mt-0.5 shrink-0 group-hover/alert:scale-110 transition-transform" size={20} />
-                  <div>
-                    <p className="text-sm font-bold text-red-900 dark:text-red-200">Abnormal Lipid Profile Detected</p>
-                    <p className="text-xs text-red-700 dark:text-red-400/80 mt-1 font-medium leading-relaxed">LDL levels spiked in the last 48 hours. Please avoid high-sodium meals today.</p>
-                    <button className="mt-3 text-xs font-bold underline text-red-600 hover:text-red-700 decoration-2">Review Lab Details</button>
+                {alertsData.length === 0 ? (
+                  <div className="flex items-center gap-3 text-slate-400 text-sm font-medium py-4">
+                    <CheckCircle size={18} className="text-green-400" />
+                    All health indicators are within normal range.
                   </div>
-                </div>
-                <div className="p-5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800 flex items-start gap-4 transition-all hover:bg-slate-100 cursor-pointer group/alert2">
-                  <RotateCcw className="text-slate-500 mt-0.5 shrink-0 group-hover/alert2:rotate-180 transition-transform duration-700" size={20} />
-                  <div>
-                    <p className="text-sm font-bold text-[#13082A] dark:text-white">Wearable Sync Issue</p>
-                    <p className="text-xs text-slate-500 mt-1 font-medium leading-relaxed">Smartwatch hasn't reported ECG data in 4 hours. Check connection.</p>
+                ) : alertsData.map((alert, i) => (
+                  <div key={i} className={`p-5 rounded-xl border flex items-start gap-4 transition-all cursor-pointer ${alert.severity === 'critical'
+                    ? 'bg-red-50 dark:bg-red-900/10 border-red-100 dark:border-red-500/20 hover:bg-red-50/80'
+                    : 'bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800 hover:bg-slate-100'
+                    }`}>
+                    <AlertTriangle className={`mt-0.5 shrink-0 ${alert.severity === 'critical' ? 'text-red-500' : 'text-slate-500'}`} size={20} />
+                    <div>
+                      <p className={`text-sm font-bold ${alert.severity === 'critical' ? 'text-red-900 dark:text-red-200' : 'text-[#13082A] dark:text-white'}`}>{alert.title}</p>
+                      <p className={`text-xs mt-1 font-medium leading-relaxed ${alert.severity === 'critical' ? 'text-red-700 dark:text-red-400/80' : 'text-slate-500'}`}>{alert.message}</p>
+                      {alert.action_label && (
+                        <button className="mt-3 text-xs font-bold underline text-red-600 hover:text-red-700 decoration-2">{alert.action_label}</button>
+                      )}
+                    </div>
                   </div>
-                </div>
+                ))}
               </div>
             </motion.div>
 
@@ -501,17 +549,18 @@ const Dashboard = () => {
         </motion.div>
 
         <footer className="py-8 px-10 text-center text-slate-400 dark:text-slate-600 text-[10px] font-bold uppercase tracking-[0.3em] mt-auto border-t border-slate-100 dark:border-slate-800 bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm relative z-20">
-           © 2024 ArogyaAI Neural Systems • Clinical Grade Intelligence • HIPAA Certified
+          © 2024 ArogyaAI Neural Systems • Clinical Grade Intelligence • HIPAA Certified
         </footer>
       </main>
 
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #6143f422; border-radius: 20px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #6143f444; }
       `}} />
-    </div>
+    </div >
   );
 };
 

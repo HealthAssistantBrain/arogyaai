@@ -72,16 +72,16 @@ apiClient.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const { data } = await axios.post(
-          `${API_URL}/auth/refresh`,
-          {},
+        const { data: envelope } = await axios.post(
+          `${API_URL}/auth/refresh-token`,
+          { refresh_token: useAuthStore.getState().refreshToken },
           { withCredentials: true }
         );
-        
-        const newAccessToken = data.access_token || data.token;
+
+        const newAccessToken = envelope.data.access_token;
         useAuthStore.getState().setToken(newAccessToken);
         processQueue(null, newAccessToken);
-        
+
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
         return apiClient(originalRequest);
       } catch (refreshError) {

@@ -1,0 +1,221 @@
+"""
+dashboard_service.py
+====================
+Unified service layer for all dashboard data.
+
+Each method returns a pipeline-compatible envelope:
+
+    {
+        "success":      bool,
+        "status":       "ready" | "processing" | "fallback",
+        "source":       "ml" | "wearable" | "computed" | "mock",
+        "data":         {...},
+        "last_updated": ISO-8601 string,
+        "alerts":       [...],   # only on get_alerts()
+    }
+
+Adding a real ML/wearable data-source in the future requires ONLY changing
+the corresponding private _fetch_*() helper — the route layer and frontend
+contract stay identical.
+"""
+
+from __future__ import annotations
+
+import math
+import random
+from datetime import datetime, timezone
+from typing import Optional
+
+from sqlalchemy.orm import Session
+
+from models import User
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _user_rng(user: User) -> random.Random:
+    """Deterministic RNG seeded by user.id — same user always gets same data."""
+    seed = int(str(user.id).replace("-", ""), 16) % (2 ** 32)
+    return random.Random(seed)
+
+
+def _envelope(data: dict, status: str, source: str, error: Optional[str] = None) -> dict:
+    return {
+        "success": error is None,
+        "status": status,          # "ready" | "processing" | "fallback"
+        "source": source,          # "ml" | "wearable" | "computed" | "mock"
+        "data": data,
+        "error": error,
+        "last_updated": _now(),
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Private data fetchers (swap these out for real ML calls)
+# ─────────────────────────────────────────────────────────────────────────────
+
+from integrations.prediction_client import PredictionClient
+from integrations.wearable_client import WearableClient
+from integrations.rag_client import RAGClient
+
+# Initialize clients
+prediction_client = PredictionClient()
+wearable_client = WearableClient()
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Private data fetchers (delegated to integrations)
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def _fetch_ml_health_score(user: User) -> Optional[dict]:
+    """Delegates to PredictionClient."""
+    response = await prediction_client.get_prediction({"user_id": str(user.id)})
+    if response.get("success") and response.get("status") == "ready":
+        return response.get("data")
+    return None
+
+
+async def _fetch_wearable_history(user: User) -> Optional[dict]:
+    """Delegates to WearableClient."""
+    response = await wearable_client.get_vitals(str(user.id))
+    if response.get("success") and response.get("status") == "ready":
+        return response.get("data")
+    return None
+
+
+async def _fetch_ml_prediction(user: User) -> Optional[dict]:
+    """Delegates to PredictionClient."""
+    response = await prediction_client.get_trajectory(str(user.id))
+    if response.get("success") and response.get("status") == "ready":
+        return response.get("data")
+    return None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Public service methods (called by route handlers)
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def get_health_score(user: User, db: Session) -> dict:
+    ml_result = await _fetch_ml_health_score(user)
+
+    if ml_result is not None:
+        return _envelope(ml_result, status="ready", source="ml")
+
+    # ── Fallback: derive score from persisted onboarding data ─────────────────
+    raw_score = getattr(user, "health_score", None)
+
+    if raw_score is None:
+        # No onboarding data yet — return neutral defaults
+        return _envelope(
+            {
+                "score": 75,
+                "risk_level": "Moderate",
+                "label": "Moderate",
+                "change_percent": 0.0,
+            },
+            status="fallback",
+            source="mock",
+        )
+
+    score = round(float(raw_score), 1)
+    risk_level = "Low" if score >= 80 else "Moderate" if score >= 60 else "High"
+    return _envelope(
+        {
+            "score": score,
+            "risk_level": risk_level,
+            "label": "Optimal" if score >= 80 else risk_level,
+            "change_percent": getattr(user, "score_change_percent", 0.0) or 0.0,
+        },
+        status="ready",
+        source="computed",
+    )
+
+
+async def get_health_history(user: User, db: Session) -> dict:
+    wearable = await _fetch_wearable_history(user)
+
+    if wearable is not None:
+        return _envelope(wearable, status="ready", source="wearable")
+
+    # ── Fallback: deterministic per-user synthetic history ────────────────────
+    rng = _user_rng(user)
+    time_labels = ["12 AM", "4 AM", "8 AM", "12 PM", "4 PM", "8 PM", "11 PM"]
+    base_values = [80, 60, 75, 40, 65, 30, 35]
+    hrv = [
+        {"time": lbl, "value": max(20, min(100, base + rng.randint(-5, 5)))}
+        for lbl, base in zip(time_labels, base_values)
+    ]
+    sleep_days = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+    sleep = [{"day": d, "hours": round(rng.uniform(4.0, 9.0), 1)} for d in sleep_days]
+    avg_sleep = round(sum(s["hours"] for s in sleep) / len(sleep), 1)
+
+    return _envelope(
+        {
+            "hrv": hrv,
+            "hrv_average_bpm": rng.randint(65, 85),
+            "sleep": sleep,
+            "sleep_average_hours": avg_sleep,
+        },
+        status="fallback",
+        source="mock",
+    )
+
+
+async def get_latest_prediction(user: User, db: Session) -> dict:
+    ml = await _fetch_ml_prediction(user)
+
+    if ml is not None:
+        return _envelope(ml, status="ready", source="ml")
+
+    # ── Fallback: compute from stored health score ────────────────────────────
+    raw_score = getattr(user, "health_score", None) or 75
+    score = float(raw_score)
+    risk_level = "Low" if score >= 80 else "Moderate" if score >= 60 else "High"
+    bio_offset = round((score - 75) / 10, 1)
+    bio_str = f"{'-' if bio_offset >= 0 else '+'}{abs(bio_offset)}y"
+
+    return _envelope(
+        {
+            "risk_score": round(100 - score, 1),
+            "risk_level": risk_level,
+            "biological_age_delta": bio_str,
+            "metabolic_rate": "High" if score >= 80 else "Moderate",
+            "trajectory_percentile": min(99, max(10, int(score))),
+            "recommendations": [
+                "Maintain current activity level",
+                "Schedule a routine check-up in 6 months",
+                "Focus on consistent sleep patterns",
+            ],
+        },
+        status="fallback",
+        source="computed",
+    )
+
+
+def get_user_profile(user: User, db: Session) -> dict:
+    return _envelope(
+        {
+            "id": str(user.id),
+            "full_name": user.full_name or "User",
+            "email": user.email,
+            "is_email_verified": user.is_email_verified,
+            "onboarding_done": user.is_onboarding_done,
+            "member_since": user.created_at.isoformat() if user.created_at else None,
+        },
+        status="ready",
+        source="computed",
+    )
+
+
+from services.alert_service import get_active_alerts
+
+async def get_alerts(user: User, db: Session) -> dict:
+    """
+    Returns dynamic alerts list via alert_service.
+    """
+    return await get_active_alerts(user, db)

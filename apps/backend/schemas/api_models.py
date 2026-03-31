@@ -9,6 +9,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     full_name: Optional[str] = None
+    dob: Optional[str] = None
 
 class TokenResponse(BaseModel):
     access_token: str

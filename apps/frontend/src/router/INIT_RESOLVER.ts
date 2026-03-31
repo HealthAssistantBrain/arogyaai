@@ -50,7 +50,7 @@ export async function INIT_RESOLVER(): Promise<InitResult> {
   ).replace(/\/$/, '');
 
   try {
-    const response = await fetch(`${baseUrl}/users/me`, {
+    const response = await fetch(`${baseUrl}/api/v1/users/me`, {
       headers: { Authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(5000),
     });

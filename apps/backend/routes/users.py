@@ -9,41 +9,21 @@ Exposes:
 
 import uuid
 from datetime import datetime, timezone
-
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Header as FastAPIHeader
 from sqlalchemy.orm import Session
 import jwt
 
 from database.session import get_db
 from models import User
 from core.config import settings
+from services.user_service import UserService
 
-router = APIRouter(prefix="/users", tags=["Users"])
-
-# ── JWT Bearer dependency ──────────────────────────────────────────────────────
-def get_current_user(
-    authorization: str = None,
-    db: Session = Depends(get_db),
-) -> User:
-    """
-    Parse the Authorization: Bearer <token> header, validate the JWT,
-    pull the user from the DB, and return it.
-    All guards forward here through FastAPI dependency injection.
-    """
-    raise HTTPException(status_code=401, detail="Not implemented — import from deps")
-
-
-# Use a proper Header dependency
-from fastapi import Header as FastAPIHeader
+router = APIRouter(prefix="/api/v1/users", tags=["Users"])
 
 def get_current_user_from_header(
     authorization: str = FastAPIHeader(None),
     db: Session = Depends(get_db),
 ) -> User:
-    """
-    Extracts Bearer token, validates JWT, and returns the DB User.
-    Raises 401 for any failure.
-    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -67,7 +47,7 @@ def get_current_user_from_header(
 
     user = db.query(User).filter(
         User.id == uuid.UUID(user_id),
-        User.is_deleted == False      # noqa: E712
+        User.is_deleted == False
     ).first()
 
     if not user:
@@ -76,24 +56,10 @@ def get_current_user_from_header(
     return user
 
 
-# ── Endpoints ──────────────────────────────────────────────────────────────────
-
 @router.get("/me")
 def get_me(current_user: User = Depends(get_current_user_from_header)):
-    """
-    Returns the authenticated user's core profile data.
-    The frontend `hydrateAuth()` calls this on every page load to sync Zustand.
-    """
-    return {
-        "id":                  str(current_user.id),
-        "email":               current_user.email,
-        "full_name":           current_user.full_name,
-        "is_email_verified":   current_user.is_email_verified,
-        "is_onboarding_done":  current_user.is_onboarding_done,
-        "onboarding_step":     current_user.onboarding_step,
-        "role":                "user",
-        "created_at":          current_user.created_at.isoformat() if current_user.created_at else None,
-    }
+    """Returns the authenticated user's core profile data via UserService."""
+    return UserService.get_user_me(current_user)
 
 
 @router.put("/me")
@@ -102,15 +68,8 @@ def update_me(
     current_user: User = Depends(get_current_user_from_header),
     db: Session = Depends(get_db),
 ):
-    """Update mutable profile fields (full_name, etc.)."""
-    allowed_fields = {"full_name", "is_onboarding_done", "onboarding_step"}
-    for field, value in updates.items():
-        if field in allowed_fields:
-            setattr(current_user, field, value)
-    current_user.updated_at = datetime.now(timezone.utc)
-    db.commit()
-    db.refresh(current_user)
-    return {"message": "Profile updated", "id": str(current_user.id)}
+    """Update mutable profile fields via UserService."""
+    return UserService.update_user_me(db, current_user, updates)
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
@@ -118,19 +77,5 @@ def delete_me(
     current_user: User = Depends(get_current_user_from_header),
     db: Session = Depends(get_db),
 ):
-    """Soft-delete the authenticated user and revoke all active sessions."""
-    from models import Session as DBSession
-
-    # 1. Soft-delete user
-    current_user.is_deleted = True
-    current_user.updated_at = datetime.now(timezone.utc)
-    db.add(current_user)
-    
-    # 2. Revoke all active sessions for this user
-    db.query(DBSession).filter(
-        DBSession.user_id == current_user.id,
-        DBSession.is_revoked == False
-    ).update({"is_revoked": True}, synchronize_session='fetch')
-
-    db.flush()
-    db.commit()
+    """Deactivate user via UserService."""
+    return UserService.delete_user_me(db, current_user)

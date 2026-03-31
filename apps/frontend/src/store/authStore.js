@@ -83,7 +83,7 @@ export const useAuthStore = create(
           try {
             const token = get().token;
             // Persist to backend so reload doesn't trigger recursion
-            await fetch('http://localhost:8000/users/me', {
+            await fetch('http://localhost:8000/api/v1/users/me', {
               method: 'PUT',
               headers: {
                 'Content-Type': 'application/json',
@@ -128,15 +128,16 @@ export const useAuthStore = create(
           }
 
           try {
-            // Hit the newly scaffolded backend /users/me endpoint
-            const res = await fetch('http://localhost:8000/users/me', {
+            // Hit the newly scaffolded backend /api/v1/users/me endpoint
+            const res = await fetch('http://localhost:8000/api/v1/users/me', {
               headers: { Authorization: `Bearer ${token}` },
               credentials: 'include'
             })
 
             if (!res.ok) throw new Error('Token rejected by server')
 
-            const dbUser = await res.json()
+            const envelope = await res.json()
+            const dbUser = envelope.data
 
             const normalizedOnboardingDone = dbUser?.is_onboarding_done ?? false
             const stepFromServerRaw = dbUser?.onboarding_step ?? dbUser?.onboardingStep
@@ -217,7 +218,7 @@ export const useAuthStore = create(
         },
 
         // ── Logout Fix ──────────────────────────────────────────────────
-        // requirements: Call POST /auth/logout with refresh_token, clear store,
+        // requirements: Call POST /api/v1/auth/logout with refresh_token, clear store,
         // remove localStorage key "arogyaai-auth", redirect to "/".
         // ─────────────────────────────────────────────────────────────────
         logout: async () => {
@@ -225,7 +226,7 @@ export const useAuthStore = create(
 
           try {
             if (refreshToken) {
-              await fetch('http://localhost:8000/auth/logout', {
+              await fetch('http://localhost:8000/api/v1/auth/logout', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ refresh_token: refreshToken })

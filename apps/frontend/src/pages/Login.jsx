@@ -13,6 +13,7 @@ import {
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { ROUTES } from '../router/routes';
+import api from '../lib/axios';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -48,19 +49,14 @@ const Login = () => {
   const onSubmit = async (data) => {
     try {
       // 1. Call standard backend Authentication workflow
-      const response = await fetch('http://localhost:8000/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
+      const response = await api.post('auth/login', data);
 
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData?.detail || 'Invalid email or password');
+      if (response.status !== 200) {
+        throw new Error(response.data?.detail || 'Invalid email or password');
       }
 
       // 2. Extract access token
-      const { access_token } = await response.json();
+      const { access_token } = response.data.data;
 
       // 3. Set token in store
       setToken(access_token);

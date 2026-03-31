@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
 import { Mail, CheckCircle, RefreshCcw, Loader2 } from 'lucide-react';
+import api from '../lib/axios';
 
 export default function EmailVerificationPage() {
   const navigate = useNavigate();
@@ -10,30 +11,19 @@ export default function EmailVerificationPage() {
   const [checking, setChecking] = useState(false);
   const [resending, setResending] = useState(false);
 
-  const baseUrl = (
-    (import.meta as any).env?.VITE_API_BASE_URL ||
-    (import.meta as any).env?.VITE_API_URL ||
-    'http://localhost:8000'
-  ).replace(/\/$/, '');
+
 
   // "I have verified" — hit /auth/me and check is_email_verified
   const handleCheckVerification = async () => {
     if (!token) { toast.error('No session token found. Please log in again.'); return; }
     setChecking(true);
     try {
-      const res = await fetch(`${baseUrl}/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-        signal: AbortSignal.timeout(6000),
-      });
-      if (!res.ok) throw new Error('Failed to reach server');
-      const data = await res.json();
+      const response = await api.get('auth/me');
+      const data = response.data.data;
 
       if (data.is_email_verified) {
         setEmailVerified();
         setUser(data);
-        // #region agent log (EmailVerification success route handoff)
-        fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fcf4a1'},body:JSON.stringify({sessionId:'fcf4a1',runId:'post-fix',hypothesisId:'H7',location:'src/pages/EmailVerification.tsx:handleCheckVerification',message:'Email verified navigating to home for INIT/guards decision',data:{is_email_verified:data?.is_email_verified,is_onboarding_done:data?.is_onboarding_done,onboarding_step:data?.onboarding_step},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         toast.success('Email verified! Redirecting…');
         navigate('/', { replace: true });
       } else {
@@ -51,18 +41,7 @@ export default function EmailVerificationPage() {
     if (!token) { toast.error('No session token found. Please log in again.'); return; }
     setResending(true);
     try {
-      const res = await fetch(`${baseUrl}/auth/resend-verification`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        signal: AbortSignal.timeout(6000),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err?.detail || 'Failed to resend email');
-      }
+      await api.post('auth/resend-verification');
       toast.success('Verification email sent! Please check your inbox.');
     } catch (err: any) {
       toast.error(err?.message || 'Could not resend email. Please try again.');

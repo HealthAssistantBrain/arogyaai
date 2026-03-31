@@ -3,7 +3,7 @@ User model — maps to the `users` table.
 """
 import enum
 
-from sqlalchemy import Column, String, Boolean, Enum, Integer
+from sqlalchemy import Column, String, Boolean, Enum, Integer, Numeric
 from sqlalchemy.orm import relationship
 
 from .base import Base, UUIDPrimaryKeyMixin, TimestampMixin
@@ -20,6 +20,10 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     is_onboarding_done = Column(Boolean, default=False, nullable=False)
     onboarding_step    = Column(Integer, default=1, nullable=False)
     is_deleted         = Column(Boolean, default=False, nullable=False)
+    
+    # ── Tracking ───────────────────────────────────────────────
+    health_score         = Column(Numeric(5, 2), default=0.0)
+    score_change_percent  = Column(Numeric(5, 2), default=0.0)
 
     # ── Relationships ──────────────────────────────────────────
     health_profile  = relationship("HealthProfile", back_populates="user", uselist=False)

@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 # Import modular routers
-from routes import auth, intelligence, users, prediction
+from routes import auth, intelligence, users, prediction, dashboard
 
 app = FastAPI(
     title="ArogyaAI Main Backend",
@@ -68,8 +68,9 @@ def health_check():
 
     return JSONResponse(status_code=http_status, content=body)
 
-# Mount modular routers
-app.include_router(auth.router)       # /auth/*
-app.include_router(users.router)      # /users/*  (includes /users/me)
+# Mount modular routers (prefixes now managed in routers)
+app.include_router(auth.router)
+app.include_router(users.router)
 app.include_router(intelligence.router)
 app.include_router(prediction.router)
+app.include_router(dashboard.router)
