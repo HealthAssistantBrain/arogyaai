@@ -5,6 +5,11 @@ from fastapi.responses import JSONResponse
 # Import modular routers
 from routes import auth, intelligence, users, prediction, dashboard
 
+from database.session import engine, Base
+
+# Auto-create tables for new deployments (safe for existing tables)
+Base.metadata.create_all(bind=engine)
+
 app = FastAPI(
     title="ArogyaAI Main Backend",
     description="Orchestrator API routing to specialized Microservices.",
@@ -56,15 +61,14 @@ def health_check():
     http_status = 200 if all_healthy else 503
 
     body = {
-        "status": "ok" if all_healthy else "degraded",
-        "db": db_status,
-        "services": {
+        "success": all_healthy,
+        "status": "ready" if all_healthy else "fallback",
+        "data": {
             "postgres": db_status,
-            "redis": redis_status,
+            "redis": redis_status
         },
+        "error": ", ".join(errors) if errors else None
     }
-    if errors:
-        body["errors"] = errors
 
     return JSONResponse(status_code=http_status, content=body)
 

@@ -44,14 +44,17 @@ const Signup = () => {
   const onSubmit = async (data) => {
     setApiError(null);
     try {
-      const response = await api.post('auth/signup', {
+      const response = await api.post('/auth/signup', {
         email: data.email,
         password: data.password,
         full_name: data.fullName,
         dob: data.dob
       });
 
-      const accessToken = response.data.data.access_token;
+      // 👇 ADD THIS LINE RIGHT HERE
+      console.log("SIGNUP RESPONSE:", response.data);
+
+      const accessToken = response.data.data.token || response.data.data.access_token;
 
       // ── HYDRATE STATE ─────────────────────────────────────────────────────
       // await hydrateAuth so that isAuthenticated=true + onboardingDone=false

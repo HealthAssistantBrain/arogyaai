@@ -29,12 +29,19 @@ const MAX_HEALTH_FAILURES = 2;
 
 async function checkAndTriggerMaintenance() {
   try {
-    await axios.get(`${BASE_URL}/health`, { timeout: 5000 });
+    const response = await axios.get(`${BASE_URL}/health`, { timeout: 5000 });
+    console.log("HEALTH CHECK RESULT:", response.data);
+
+    // Explicitly check the standard envelope format
+    if (response.status === 503 || !response.data?.success) {
+      throw new Error("Health check returned degraded status");
+    }
+
     consecutiveHealthFailures = 0; // reset on success
-  } catch {
+  } catch (err) {
     consecutiveHealthFailures += 1;
     if (consecutiveHealthFailures >= MAX_HEALTH_FAILURES) {
-      console.warn('[ArogyaAI] Health check failed twice — entering maintenance mode');
+      console.warn("MAINTENANCE TRIGGERED");
       window.location.href = '/maintenance';
     }
   }
@@ -49,11 +56,15 @@ api.interceptors.response.use(
   async (error) => {
     const config = error.config;
 
-    // 401 → hard logout (token dead)
-    if (error.response?.status === 401) {
-      useAuthStore.getState().hardReset();
-      window.location.href = '/';
-      return; // navigating; don't propagate
+    // DO NOT trigger maintenance on auth endpoints or 401s
+    const isAuthEndpoint = config.url?.includes('auth/login') || config.url?.includes('auth/signup') || config.url?.includes('auth/me');
+    if (isAuthEndpoint || error.response?.status === 401) {
+      if (error.response?.status === 401) {
+        useAuthStore.getState().hardReset();
+        window.location.href = '/';
+        return;
+      }
+      return Promise.reject(error);
     }
 
     // ── Classify error ────────────────────────────────────────────────────────
@@ -68,15 +79,12 @@ api.interceptors.response.use(
         return await api(config);
       } catch (retryErr) {
         // Retry also failed → check health to decide if maintenance is needed
-        // but do NOT redirect here — let the calling component handle the error.
         checkAndTriggerMaintenance(); // fire-and-forget
         return Promise.reject(retryErr);
       }
     }
 
     // ── Non-retried 5xx or network error that already retried ─────────────────
-    // Do NOT trigger maintenance — the caller (component) shows inline error.
-    // Maintenance is only triggered by the health check failing twice (above).
     return Promise.reject(error);
   }
 );
