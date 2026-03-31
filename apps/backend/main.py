@@ -1,10 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 # Import modular routers
 from routes import auth, intelligence, users, prediction
-
-from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
     title="ArogyaAI Main Backend",
@@ -22,8 +21,52 @@ app.add_middleware(
 
 @app.get("/health", tags=["System"])
 def health_check():
-    """Basic health check confirming the Orchestrator is alive."""
-    return {"status": "ok", "service": "backend", "message": "ArogyaAI Backend Active"}
+    """
+    Deep health check: verifies connectivity to Postgres and Redis.
+    Returns 200 if all services are healthy, 503 if any dependency is down.
+    Used by docker healthchecks and the frontend maintenance-mode logic.
+    """
+    from database.session import engine
+    from sqlalchemy import text
+    import os
+
+    db_status = "error"
+    redis_status = "error"
+    errors = []
+
+    # ─ Postgres check ────────────────────────────────────────────────────────
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        db_status = "connected"
+    except Exception as e:
+        errors.append(f"postgres: {str(e)[:80]}")
+
+    # ─ Redis check ──────────────────────────────────────────────────────────
+    try:
+        import redis as redis_lib
+        redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
+        r = redis_lib.from_url(redis_url, socket_timeout=2)
+        r.ping()
+        redis_status = "ok"
+    except Exception as e:
+        errors.append(f"redis: {str(e)[:80]}")
+
+    all_healthy = (db_status == "connected" and redis_status == "ok")
+    http_status = 200 if all_healthy else 503
+
+    body = {
+        "status": "ok" if all_healthy else "degraded",
+        "db": db_status,
+        "services": {
+            "postgres": db_status,
+            "redis": redis_status,
+        },
+    }
+    if errors:
+        body["errors"] = errors
+
+    return JSONResponse(status_code=http_status, content=body)
 
 # Mount modular routers
 app.include_router(auth.router)       # /auth/*

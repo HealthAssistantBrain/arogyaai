@@ -1,0 +1,142 @@
+name: ArogyaAI CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  # Secrets should be configured in GitHub repository settings.
+  # Fallback values are safe dummy values for CI only.
+  POSTGRES_USER: user
+  POSTGRES_PASSWORD: password
+  POSTGRES_DB: arogyaai
+  SECRET_KEY: ci-secret-key-not-for-production
+  ALGORITHM: HS256
+  REDIS_URL: redis://localhost:6379/0
+  DATABASE_URL: postgresql+psycopg2://user:password@localhost:5432/arogyaai
+  VITE_API_URL: http://localhost:8000
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # STAGE 1 + 2 — Install & Lint/Validate (fast feedback, no Docker needed)
+  # ─────────────────────────────────────────────────────────────────────────────
+  validate:
+    name: "Stage 1+2 — Install & Validate"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Python setup ────────────────────────────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: apps/backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: |
+          pip install -r apps/backend/requirements.txt
+
+      - name: Syntax check — backend
+        run: |
+          python -m py_compile apps/backend/main.py
+          echo "✅ Backend syntax OK"
+
+      # ── Node setup ──────────────────────────────────────────────────────────
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: apps/frontend
+        run: npm ci
+
+      - name: Frontend build check
+        working-directory: apps/frontend
+        run: npm run build
+        env:
+          VITE_API_URL: ${{ env.VITE_API_URL }}
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # STAGE 3 + 4 + 5 — Docker build, health check, cleanup
+  # ─────────────────────────────────────────────────────────────────────────────
+  docker:
+    name: "Stage 3-5 — Docker Build & Health Check"
+    runs-on: ubuntu-latest
+    needs: validate # only run if validate passes
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Write a minimal .env so docker-compose can resolve variables
+      - name: Create CI .env
+        run: |
+          cat > .env <<'EOF'
+          POSTGRES_USER=user
+          POSTGRES_PASSWORD=password
+          POSTGRES_DB=arogyaai
+          SECRET_KEY=ci-secret-key-not-for-production
+          ALGORITHM=HS256
+          REDIS_URL=redis://redis:6379/0
+          DATABASE_URL=postgresql+psycopg2://user:password@postgres:5432/arogyaai
+          VITE_API_URL=http://localhost:8000
+          PGADMIN_DEFAULT_EMAIL=admin@arogyaai.com
+          PGADMIN_DEFAULT_PASSWORD=admin
+          EOF
+
+      # ── STAGE 3: Docker Build ───────────────────────────────────────────────
+      - name: Stage 3 — Build all services
+        run: |
+          docker compose build \
+            backend \
+            frontend \
+            auth-service \
+            data-service \
+            prediction-service \
+            rag-service
+        # Build in parallel; fail on first error
+        env:
+          COMPOSE_PARALLEL_LIMIT: 6
+          DOCKER_BUILDKIT: 1
+
+      # ── STAGE 4: Start & Health Check ──────────────────────────────────────
+      - name: Stage 4 — Start core services
+        run: |
+          # Start infrastructure first (postgres, redis)
+          docker compose up -d postgres redis
+          echo "⏳ Waiting for postgres and redis to be healthy..."
+          timeout 60 bash -c \
+            'until docker compose ps postgres | grep -q "healthy"; do sleep 2; done'
+          timeout 30 bash -c \
+            'until docker compose ps redis | grep -q "healthy"; do sleep 2; done'
+
+          # Start backend (depends_on: service_healthy, so it waits internally)
+          docker compose up -d backend
+          echo "⏳ Waiting for backend to be ready..."
+          timeout 90 bash -c \
+            'until curl -sf http://localhost:8000/health; do sleep 3; done'
+
+      - name: Stage 4 — Health check validation
+        run: |
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health)
+          BODY=$(curl -s http://localhost:8000/health)
+          echo "Status: $RESPONSE"
+          echo "Body:   $BODY"
+          if [ "$RESPONSE" != "200" ]; then
+            echo "❌ Health check failed — HTTP $RESPONSE"
+            docker compose logs backend --tail=50
+            exit 1
+          fi
+          echo "✅ Health check passed"
+
+      # ── STAGE 5: Cleanup ────────────────────────────────────────────────────
+      - name: Stage 5 — Cleanup
+        if: always() # run even if previous steps fail
+        run: docker compose down -v --remove-orphans

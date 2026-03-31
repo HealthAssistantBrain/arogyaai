@@ -10,3 +10,4 @@ pydantic[email]
 pydantic-settings
 alembic
 psycopg2-binary
+redis

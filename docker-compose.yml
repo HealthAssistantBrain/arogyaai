@@ -19,8 +19,16 @@ services:
     networks:
       - arogyaai_net
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   auth-service:
     build: ./services/auth-service
@@ -64,6 +72,12 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - arogyaai_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-arogyaai}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   pgadmin:
     image: dpage/pgadmin4:latest
@@ -79,7 +93,8 @@ services:
     networks:
       - arogyaai_net
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
   redis:
     image: redis:7-alpine
@@ -89,6 +104,12 @@ services:
       - redis_data:/data
     networks:
       - arogyaai_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 
   qdrant:
     image: qdrant/qdrant:latest
@@ -120,3 +141,5 @@ volumes:
   pgadmin_data:
   redis_data:
   qdrant_data:
+
+
