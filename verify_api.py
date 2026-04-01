@@ -19,7 +19,7 @@ async def verify_envelope(name, url, method="GET", json=None, headers=None):
                 print(f"[OK] {name} payload incorporates envelope core fields.")
                 return True, data, resp.status_code
             else:
-                print(f"[FAIL] {name} payload mismatch! Got {keys}, Expected {expected}. Full: {data}")
+                print(f"[FAIL] {name} payload mismatch! Got {keys}, Expected minimum {required}. Full: {data}")
                 return False, data, resp.status_code
         except Exception as e:
             print(f"[ERROR] {name} failed: {e}")
@@ -57,8 +57,8 @@ async def main():
     # 3. Me
     await verify_envelope("Me", f"{BASE_URL}/users/me", "GET", headers=headers)
     
-    # 4. Dashboard
-    await verify_envelope("Dashboard", f"{BASE_URL}/dashboard/summary", "GET", headers=headers)
+    # 4. Dashboard Profile
+    await verify_envelope("Dashboard Profile", f"{BASE_URL}/user/profile", "GET", headers=headers)
     
     # 5. Prediction
     await verify_envelope("Prediction", f"{BASE_URL}/prediction/latest", "GET", headers=headers)

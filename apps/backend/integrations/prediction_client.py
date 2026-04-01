@@ -8,7 +8,7 @@ class PredictionClient(BaseIntegrationClient):
     Handles risk scores, disease projections, and biological age calculations.
     """
     def __init__(self):
-        base_url = os.getenv("PREDICTION_SERVICE_URL", "http://prediction-service:8001")
+        base_url = os.getenv("PREDICTION_SERVICE_URL", "http://prediction-service:8000")
         super().__init__(base_url=base_url)
 
     async def get_prediction(self, user_data: Dict[str, Any]) -> Dict[str, Any]:

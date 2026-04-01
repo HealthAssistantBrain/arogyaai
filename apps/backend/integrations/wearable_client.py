@@ -8,7 +8,7 @@ class WearableClient(BaseIntegrationClient):
     Handles syncing heart rate, sleep, and step data from third-party devices.
     """
     def __init__(self):
-        base_url = os.getenv("WEARABLE_SERVICE_URL", "http://wearable-service:8003")
+        base_url = os.getenv("WEARABLE_SERVICE_URL", "http://wearable-service:8000")
         super().__init__(base_url=base_url)
 
     async def sync_user_data(self, user_id: str) -> Dict[str, Any]:

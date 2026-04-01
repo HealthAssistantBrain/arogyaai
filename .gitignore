@@ -51,13 +51,19 @@ temp/
 .gemini/
 .gsd/
 adapters/
-docs/
 scripts/
 GSD-STYLE.md 
 model_capabilities.yaml
 PROJECT_RULES.md 
 .memory/
 gsd-template/
-
 package-lock.json
+
+# Files 
+verify_api.py
+verify_log.txt
+verify_pred_fail.txt
+verify_redis_fail.txt
+verify_final.txt
+GSD-STYLE.md
 

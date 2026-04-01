@@ -30,29 +30,31 @@ services:
       retries: 5
       start_period: 20s
 
-  auth-service:
-    build: ./services/auth-service
-    env_file:
-      - .env
-    networks:
-      - arogyaai_net
-
-  data-service:
-    build: ./services/data-service
-    env_file:
-      - .env
-    networks:
-      - arogyaai_net
-
   prediction-service:
-    build: ./services/prediction-service
+    build: ./pipelines/prediction-service
+    container_name: prediction-service
+    ports:
+      - "8001:8000"
     env_file:
       - .env
     networks:
       - arogyaai_net
 
   rag-service:
-    build: ./services/rag-service
+    build: ./pipelines/rag-service
+    container_name: rag-service
+    ports:
+      - "8002:8000"
+    env_file:
+      - .env
+    networks:
+      - arogyaai_net
+
+  wearable-service:
+    build: ./pipelines/wearable-service
+    container_name: wearable-service
+    ports:
+      - "8003:8000"
     env_file:
       - .env
     networks:
@@ -73,11 +75,11 @@ services:
     networks:
       - arogyaai_net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-arogyaai}"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 10s
+      retries: 3
+      
 
   pgadmin:
     image: dpage/pgadmin4:latest

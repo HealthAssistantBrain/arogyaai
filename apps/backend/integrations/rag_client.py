@@ -8,7 +8,7 @@ class RAGClient(BaseIntegrationClient):
     Provides medical context and AI-driven explanations for predictions.
     """
     def __init__(self):
-        base_url = os.getenv("RAG_SERVICE_URL", "http://rag-service:8002")
+        base_url = os.getenv("RAG_SERVICE_URL", "http://rag-service:8000")
         super().__init__(base_url=base_url)
 
     async def get_explanation(self, prediction_id: str) -> Dict[str, Any]:

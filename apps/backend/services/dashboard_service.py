@@ -197,7 +197,7 @@ async def get_latest_prediction(user: User, db: Session) -> dict:
     )
 
 
-def get_user_profile(user: User, db: Session) -> dict:
+async def get_user_profile(user: User, db: Session) -> dict:
     return _envelope(
         {
             "id": str(user.id),

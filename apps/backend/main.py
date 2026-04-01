@@ -24,6 +24,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "success": False,
+            "status": "fallback" if exc.status_code >= 500 else "ready",
+            "data": None,
+            "error": str(exc.detail)
+        }
+    )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=422,
+        content={
+            "success": False,
+            "status": "ready",
+            "data": None,
+            "error": "Validation error: " + str(exc.errors())
+        }
+    )
+
 @app.get("/health", tags=["System"])
 def health_check():
     """
