@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.routes import router
+# from app.routes import router
 
 app = FastAPI(
     title="Wearable Data Pipeline",
@@ -7,12 +7,8 @@ app = FastAPI(
     version="1.0.0"
 )
 
-app.include_router(router)
+# app.include_router(router)
 
-@app.get("/health", tags=["System"])
-def health_check():
-    """
-    Mandatory pipeline health check.
-    MUST return {"status": "ok"} or standard ArogyaAI envelope.
-    """
-    return {"status": "ok"}
+@app.get("/health")
+async def health_check():
+    return {"status": "ok", "service": "wearable-service"}
