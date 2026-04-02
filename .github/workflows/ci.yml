@@ -98,7 +98,6 @@ jobs:
           docker compose build \
             backend \
             frontend \
-            data-service \
             prediction-service \
             rag-service
         # Build in parallel; fail on first error
