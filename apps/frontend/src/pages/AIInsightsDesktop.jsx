@@ -73,50 +73,7 @@ const AIInsightsDesktop = () => {
     <div className="bg-[#EAEAEA] dark:bg-[#13082A] text-slate-900 dark:text-slate-100 min-h-screen font-display flex overflow-hidden">
       
       {/* Sidebar Navigation - Matched Stitch Research Intel v2.4 */}
-      <aside className="w-72 bg-[#13082A] text-slate-100 flex flex-col justify-between p-6 shrink-0 hidden lg:flex">
-        <div className="flex flex-col gap-8">
-          <div className="flex items-center gap-3 px-2 cursor-pointer" onClick={() => navigate(ROUTES.LANDING)}>
-            <div className="size-10 rounded-xl bg-[#6043F4] flex items-center justify-center shadow-lg shadow-[#6043F4]/20">
-              <Activity size={24} strokeWidth={2.5} className="text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight">ArogyaAI</h1>
-              <p className="text-[10px] text-slate-500 font-bold tracking-widest uppercase mt-0.5">Research Intel v2.4</p>
-            </div>
-          </div>
-          <nav className="flex flex-col gap-1">
-            {sidebarLinks.map((link) => (
-              <button
-                key={link.label}
-                onClick={() => navigate(link.path)}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group ${
-                  link.active 
-                  ? 'bg-[#6043F4] text-white shadow-lg shadow-[#6043F4]/20 font-bold' 
-                  : 'text-slate-400 hover:bg-slate-800'
-                }`}
-              >
-                {link.icon}
-                <span className="text-sm">{link.label}</span>
-              </button>
-            ))}
-          </nav>
-        </div>
-        
-        <div className="bg-slate-800/50 rounded-2xl p-4 flex items-center gap-3 border border-slate-700/50 group cursor-pointer hover:bg-slate-800 transition-colors">
-          <div className="size-10 rounded-full bg-slate-600 overflow-hidden border border-slate-700 shrink-0">
-            <img 
-              className="w-full h-full object-cover" 
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuCdRvWnhJuxJ9E8Dg_YMaRy3w6Ghpg0leUjSEFK1iqs5x5mIGwvlMJCtJzum3v9z-k1_EAj03z1j8qtKKlBKnyrBVulBAKN7N9xDmbKBb-BQKMlZGlxpQwAAN11AMF8-XYgUrTBKHo98jsFkO6ZR5xMrXaXBGnjfOyDX_mnYYSRrEoayMSJ8vyfZlpn2I4u2OEBuOgxN1ymx-wWy4T045VbTAzNVvRrhhIdh-0Fe4x-Jn-gRuTw3jwCkTmOL1HoD1dJn04dkIq4K6Jg" 
-              alt="Dr. Aris Thorne" 
-            />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold truncate">Dr. Aris Thorne</p>
-            <p className="text-[10px] text-slate-500 truncate font-semibold">Senior Pathologist</p>
-          </div>
-          <ChevronDown size={14} className="text-slate-500 group-hover:text-slate-300 transition-colors" />
-        </div>
-      </aside>
+
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col overflow-y-auto bg-slate-50/50 dark:bg-transparent custom-scrollbar">

@@ -51,11 +51,11 @@ const useDashboardStore = create(
 
                 try {
                     const [scoreRes, historyRes, predRes, profileRes, alertsRes] = await Promise.all([
-                        api.get('/api/v1/health/score'),
-                        api.get('/api/v1/health/history'),
-                        api.get('/api/v1/prediction/latest'),
-                        api.get('/api/v1/user/profile'),
-                        api.get('/api/v1/alerts'),
+                        api.get('/health/score'),
+                        api.get('/health/history'),
+                        api.get('/prediction/latest'),
+                        api.get('/user/profile'),
+                        api.get('/alerts'),
                     ]);
 
                     const toSlice = (res) => ({

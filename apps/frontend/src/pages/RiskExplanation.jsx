@@ -52,48 +52,7 @@ const RiskExplanation = () => {
         <div className="bg-[#eaeaea] dark:bg-[#131022] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex overflow-hidden antialiased">
             
             {/* Sidebar Navigation - Matched Stitch */}
-            <aside className="w-64 bg-white dark:bg-[#1C1136] border-r border-slate-200 dark:border-slate-800 flex flex-col shrink-0 hidden lg:flex z-40">
-                <div className="p-6">
-                    <div className="flex items-center gap-3 mb-10 group cursor-pointer" onClick={() => navigate(ROUTES.HOME)}>
-                        <div className="size-8 bg-[#6143f4] rounded-lg flex items-center justify-center text-white shadow-lg shadow-[#6143f4]/20 transition-transform group-hover:scale-110">
-                            <Activity size={18} strokeWidth={3} />
-                        </div>
-                        <h1 className="text-xl font-bold tracking-tight text-[#13082a] dark:text-white leading-none">ArogyaAI</h1>
-                    </div>
-                    
-                    <nav className="space-y-1">
-                        {sidebarLinks.map((link) => (
-                            <Link
-                                key={link.label}
-                                to={link.path}
-                                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 font-bold group ${
-                                    link.active 
-                                    ? 'bg-[#6143f4] text-white shadow-lg shadow-[#6143f4]/20' 
-                                    : 'text-slate-500 dark:text-slate-400 hover:bg-[#6143f4]/5 hover:text-[#6143f4]'
-                                }`}
-                            >
-                                <link.icon size={18} />
-                                <span className="text-sm">{link.label}</span>
-                            </Link>
-                        ))}
-                        <div className="pt-8 pb-2 px-4 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] opacity-60">System</div>
-                        <button className="w-full flex items-center gap-3 px-4 py-3 text-slate-500 dark:text-slate-400 hover:bg-[#6143f4]/5 hover:text-[#6143f4] rounded-xl transition-all font-bold group">
-                            <Settings size={18} className="group-hover:rotate-45 transition-transform" />
-                            <span className="text-sm">Settings</span>
-                        </button>
-                    </nav>
-                </div>
 
-                <div className="p-4 mt-auto">
-                    <div className="bg-[#6143f4]/5 dark:bg-[#6143f4]/10 rounded-2xl p-4 border border-[#6143f4]/10">
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-[10px] font-black text-[#6143f4] uppercase tracking-widest leading-none">AI ENGINE</span>
-                            <span className="text-[10px] bg-[#6143f4] text-white px-2 py-0.5 rounded-full font-black leading-none">v4.2</span>
-                        </div>
-                        <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed font-semibold">System is analyzing real-time biometric feeds.</p>
-                    </div>
-                </div>
-            </aside>
 
             {/* Main Content Area */}
             <main className="flex-1 flex flex-col overflow-hidden">

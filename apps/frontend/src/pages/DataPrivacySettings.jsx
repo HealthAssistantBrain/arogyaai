@@ -2,35 +2,35 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../router/routes';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  LayoutDashboard, 
-  Brain, 
-  FlaskConical, 
-  History, 
-  Activity, 
-  FileText, 
-  Settings, 
-  ShieldCheck, 
-  Bell, 
-  Search,
-  MoreVertical,
-  Waves,
-  Shield,
-  CheckCircle2,
-  CloudDownload,
-  PlusCircle,
-  HelpCircle,
-  RefreshCw,
-  Lock,
-  Smartphone,
-  Hospital,
-  Activity as VitalIcon,
-  Gavel,
-  ShieldAlert,
-  Archive,
-  ArrowRight,
-  Info,
-  Check
+import {
+    LayoutDashboard,
+    Brain,
+    FlaskConical,
+    History,
+    Activity,
+    FileText,
+    Settings,
+    ShieldCheck,
+    Bell,
+    Search,
+    MoreVertical,
+    Waves,
+    Shield,
+    CheckCircle2,
+    CloudDownload,
+    PlusCircle,
+    HelpCircle,
+    RefreshCw,
+    Lock,
+    Smartphone,
+    Hospital,
+    Activity as VitalIcon,
+    Gavel,
+    ShieldAlert,
+    Archive,
+    ArrowRight,
+    Info,
+    Check
 } from 'lucide-react';
 
 const DataPrivacySettings = () => {
@@ -71,9 +71,9 @@ const DataPrivacySettings = () => {
             onClick={onClick}
             className={`relative inline-flex h-8 w-14 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-4 focus:ring-[#6143f4]/10 ${active ? 'bg-[#6143f4]' : 'bg-slate-200 dark:bg-slate-700'}`}
         >
-            <motion.span 
+            <motion.span
                 animate={{ x: active ? 24 : 0 }}
-                className="pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow-lg ring-0 mt-0.5 ml-0.5" 
+                className="pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow-lg ring-0 mt-0.5 ml-0.5"
             />
         </button>
     );
@@ -82,60 +82,7 @@ const DataPrivacySettings = () => {
         <div className="bg-[#f6f5f8] dark:bg-[#0B0819] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased text-[14px]">
             <div className="flex flex-1 overflow-hidden">
                 {/* Sidebar - Standardized Branding */}
-                <aside className="w-72 bg-white dark:bg-[#131022] border-r border-[#6143f4]/5 dark:border-white/5 flex flex-col h-full overflow-y-auto no-scrollbar hidden lg:flex shrink-0">
-                    <div className="p-8 flex items-center gap-4 cursor-pointer group" onClick={() => navigate(ROUTES.DASHBOARD)}>
-                        <div className="size-11 bg-[#6143f4] rounded-xl flex items-center justify-center text-white shadow-lg shadow-[#6143f4]/20 transition-transform group-hover:scale-110">
-                            <Waves size={24} strokeWidth={2.5} />
-                        </div>
-                        <div>
-                            <h1 className="text-xl font-black tracking-tight leading-none uppercase">ArogyaAI</h1>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1">Healthcare OS</p>
-                        </div>
-                    </div>
-                    
-                    <nav className="flex-1 px-5 space-y-1.5 overflow-y-auto pb-6 custom-scrollbar">
-                        {['Intelligence', 'History & Labs', 'Management'].map((group) => (
-                            <div key={group} className="py-2">
-                                <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] px-4 mb-3 mt-4 leading-none">{group}</div>
-                                {sidebarLinks.filter(link => link.group === group).map((link) => (
-                                    <button
-                                        key={link.label}
-                                        onClick={() => navigate(link.path)}
-                                        className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-[1.25rem] transition-all group ${
-                                            link.active 
-                                            ? 'bg-[#6143f4] text-white shadow-2xl shadow-[#6143f4]/30 font-black' 
-                                            : 'text-slate-500 dark:text-slate-400 hover:bg-[#6143f4]/5 hover:text-[#6143f4] font-bold'
-                                        }`}
-                                    >
-                                        <link.icon size={18} className={link.active ? 'text-white' : 'text-slate-400 group-hover:text-[#6143f4]'} />
-                                        <span className="text-[11px] uppercase tracking-widest leading-none">{link.label}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        ))}
-                    </nav>
 
-                    <div className="p-6 border-t border-slate-100 dark:border-white/5">
-                        <div className="mb-6 px-4">
-                            <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-3">System Status</p>
-                            <div className="flex items-center gap-3">
-                                <div className="size-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                                <span className="text-xs font-black text-[#13082a] dark:text-white uppercase tracking-tighter mt-0.5">Encrypted</span>
-                            </div>
-                        </div>
-
-                        <div className="flex items-center gap-3 p-3 rounded-[1.5rem] bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 hover:border-[#6143f4]/30 transition-colors cursor-pointer group">
-                             <div className="size-11 rounded-xl bg-[#6143f4]/10 overflow-hidden flex items-center justify-center text-[#6143f4] text-xs font-black border-2 border-transparent group-hover:border-[#6143f4] transition-all">
-                                 SC
-                             </div>
-                             <div className="flex-1 min-w-0">
-                                 <p className="text-xs font-black truncate text-[#13082a] dark:text-white uppercase">Dr. Sarah Chen</p>
-                                 <p className="text-[9px] text-[#6143f4] uppercase tracking-widest font-black leading-none mt-1">Premium Member</p>
-                             </div>
-                             <MoreVertical size={14} className="text-slate-400" />
-                        </div>
-                    </div>
-                </aside>
 
                 {/* Main Content Area */}
                 <main className="flex-1 flex flex-col h-full relative overflow-y-auto no-scrollbar bg-[#f6f5f8] dark:bg-[#0B0819]">
@@ -144,7 +91,7 @@ const DataPrivacySettings = () => {
                         <div className="flex-1 max-w-xl">
                             <div className="relative group/search">
                                 <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within/search:text-[#6143f4] transition-colors" size={18} />
-                                <input className="w-full pl-14 pr-6 py-4 bg-slate-100 dark:bg-white/5 border border-transparent rounded-[1.5rem] focus:ring-4 focus:ring-[#6143f4]/10 focus:border-[#6143f4]/30 transition-all text-[13px] text-[#13082a] dark:text-white placeholder:text-slate-400 font-bold uppercase tracking-tight" placeholder="Search privacy settings..." type="text"/>
+                                <input className="w-full pl-14 pr-6 py-4 bg-slate-100 dark:bg-white/5 border border-transparent rounded-[1.5rem] focus:ring-4 focus:ring-[#6143f4]/10 focus:border-[#6143f4]/30 transition-all text-[13px] text-[#13082a] dark:text-white placeholder:text-slate-400 font-bold uppercase tracking-tight" placeholder="Search privacy settings..." type="text" />
                             </div>
                         </div>
                         <div className="flex items-center gap-5 ml-8">
@@ -161,7 +108,7 @@ const DataPrivacySettings = () => {
                                     <p className="text-[9px] text-[#6143f4] uppercase tracking-widest font-black leading-none mt-1">Premium Member</p>
                                 </div>
                                 <div className="size-12 rounded-2xl border-2 border-[#6143f4]/20 p-1 bg-white">
-                                    <img className="size-full rounded-xl object-cover" alt="Dr. Sarah Chen" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCmca7uoDE5AXEl5Lm8J0kNozFbXew2KmxjvbMH9Uxz6_puV-3M4e6vnlXT3lEb_5cr82WJlJpIhLxX0n3slwWbP57cryd-X1PYojJGyEJFIbxEi5GoRB7BAanTNFGumWZcuLVazL6mqrjhuvUC3gGRtjHZVA9j0pjweqT5KOzZfnYTmtLSNDWzJTJ0I2GNWutesIDE2flIJl8eYqrE_zQxMiy9H-ayg4LdE001a6UkDGckUUtZ533LriYErfK1okd7WRmFj5K6lXvB"/>
+                                    <img className="size-full rounded-xl object-cover" alt="Dr. Sarah Chen" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCmca7uoDE5AXEl5Lm8J0kNozFbXew2KmxjvbMH9Uxz6_puV-3M4e6vnlXT3lEb_5cr82WJlJpIhLxX0n3slwWbP57cryd-X1PYojJGyEJFIbxEi5GoRB7BAanTNFGumWZcuLVazL6mqrjhuvUC3gGRtjHZVA9j0pjweqT5KOzZfnYTmtLSNDWzJTJ0I2GNWutesIDE2flIJl8eYqrE_zQxMiy9H-ayg4LdE001a6UkDGckUUtZ533LriYErfK1okd7WRmFj5K6lXvB" />
                                 </div>
                             </div>
                         </div>
@@ -170,7 +117,7 @@ const DataPrivacySettings = () => {
                     {/* Scrollable Content Area */}
                     <div className="flex-1 p-10 lg:p-12 custom-scrollbar overflow-y-auto">
                         <div className="max-w-6xl mx-auto space-y-12 pb-16">
-                            
+
                             {/* Page Header */}
                             <div className="space-y-4 pb-4 border-b border-[#6143f4]/5">
                                 <h2 className="text-5xl font-black text-[#13082a] dark:text-white tracking-tighter uppercase italic leading-none">Privacy & Consent Controls</h2>
@@ -180,7 +127,7 @@ const DataPrivacySettings = () => {
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
                                 {/* Left Column: Detailed Settings */}
                                 <div className="lg:col-span-2 space-y-12">
-                                    
+
                                     {/* 1. Consent Settings */}
                                     <section className="space-y-8">
                                         <div className="flex items-center gap-4">
@@ -192,11 +139,11 @@ const DataPrivacySettings = () => {
                                                 { id: 'coreDiagnostic', title: 'Core Diagnostic Data', desc: 'Enable AI to analyze your lab results for diagnostic insights.', icon: ShieldCheck },
                                                 { id: 'anonymizedResearch', title: 'Anonymized Research Sharing', desc: 'Contribute de-identified data to global medical research.', icon: FlaskConical },
                                                 { id: 'predictiveAlerts', title: 'Predictive Health Alerts', desc: 'Receive proactive notifications based on pattern analysis.', icon: Brain }
-                                            ].map((item) => (
+                                            ].map(({ icon: ItemIcon, ...item }) => (
                                                 <div key={item.id} className={`flex items-center justify-between p-8 rounded-[2rem] border transition-all duration-300 ${consentData[item.id] ? 'bg-[#6143f4]/[0.02] border-[#6143f4]/15' : 'bg-transparent border-slate-100 dark:border-white/5 opacity-60'}`}>
                                                     <div className="flex items-center gap-6">
                                                         <div className={`size-14 rounded-2xl flex items-center justify-center ${consentData[item.id] ? 'bg-[#6143f4]/10 text-[#6143f4]' : 'bg-slate-100 text-slate-400'}`}>
-                                                            <item.icon size={28} />
+                                                            <ItemIcon size={28} />
                                                         </div>
                                                         <div>
                                                             <p className="text-xl font-black text-[#13082a] dark:text-white uppercase tracking-tighter italic leading-none mb-2">{item.title}</p>
@@ -216,18 +163,18 @@ const DataPrivacySettings = () => {
                                             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] leading-none">Authorized Clinical Data Nodes</h3>
                                         </div>
                                         <div className="grid grid-cols-1 gap-6">
-                                            {connectedProviders.map((provider) => (
+                                            {connectedProviders.map(({ icon: ProviderIcon, ...provider }) => (
                                                 <div key={provider.id} className="bg-white dark:bg-[#131022] rounded-[2.5rem] p-8 border border-[#6143f4]/5 flex items-center justify-between group/card transition-all hover:border-[#6143f4]/20 shadow-sm">
                                                     <div className="flex items-center gap-6">
                                                         <div className="size-16 rounded-[1.5rem] bg-slate-50 dark:bg-white/5 flex items-center justify-center text-slate-400 group-hover/card:scale-110 transition-transform shadow-inner">
-                                                            <provider.icon size={32} />
+                                                            <ProviderIcon size={32} />
                                                         </div>
                                                         <div>
                                                             <p className="text-2xl font-black text-[#13082a] dark:text-white uppercase tracking-tighter italic leading-none mb-2">{provider.name}</p>
                                                             <p className="text-[10px] text-slate-500 dark:text-slate-400 font-black uppercase tracking-[0.2em] opacity-60 leading-none">{provider.access}</p>
                                                         </div>
                                                     </div>
-                                                    <button 
+                                                    <button
                                                         onClick={() => revokeProvider(provider.id)}
                                                         className="px-8 py-4 bg-white dark:bg-[#131022] border-2 border-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-[1.25rem] font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 leading-none shrink-0"
                                                     >
@@ -245,7 +192,7 @@ const DataPrivacySettings = () => {
 
                                 {/* Right Column: Compliance & Actions */}
                                 <div className="space-y-10">
-                                    
+
                                     {/* 3. Export Data Card */}
                                     <section className="bg-gradient-to-br from-[#6143f4] via-[#009cde] to-[#6143f4] bg-[length:200%_200%] animate-gradient-flow rounded-[3.5rem] p-12 text-white shadow-[0_40px_100px_-20px_rgba(97,67,244,0.4)] space-y-8 relative overflow-hidden group">
                                         <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-[100px] -z-10 group-hover:scale-150 transition-transform duration-1000"></div>
@@ -274,9 +221,9 @@ const DataPrivacySettings = () => {
                                                 { icon: Gavel, label: 'GDPR READY', color: 'text-[#009cde]', bg: 'bg-[#009cde]/5' },
                                                 { icon: Shield, label: 'SOC2 TYPE II', color: 'text-emerald-500', bg: 'bg-emerald-500/5' },
                                                 { icon: Lock, label: 'ISO 27001', color: 'text-orange-500', bg: 'bg-orange-500/5' }
-                                            ].map((badge, idx) => (
+                                            ].map(({ icon: BadgeIcon, ...badge }, idx) => (
                                                 <div key={idx} className="flex flex-col items-center justify-center p-6 rounded-[2rem] bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 hover:bg-white dark:hover:bg-white/10 transition-all hover:scale-105 shadow-sm group">
-                                                    <badge.icon size={28} className={`${badge.color} mb-4 group-hover:scale-110 transition-transform`} strokeWidth={2.5} />
+                                                    <BadgeIcon size={28} className={`${badge.color} mb-4 group-hover:scale-110 transition-transform`} strokeWidth={2.5} />
                                                     <span className="text-[9px] font-black text-[#13082a] dark:text-white text-center leading-tight uppercase tracking-widest leading-none">{badge.label}</span>
                                                 </div>
                                             ))}
@@ -312,7 +259,8 @@ const DataPrivacySettings = () => {
                 </main>
             </div>
 
-            <style dangerouslySetInnerHTML={{ __html: `
+            <style dangerouslySetInnerHTML={{
+                __html: `
                 .no-scrollbar::-webkit-scrollbar { display: none; }
                 .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
                 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }

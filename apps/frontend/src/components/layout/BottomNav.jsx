@@ -1,14 +1,15 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { Home, Activity, Zap, FileText, User } from 'lucide-react';
+import { ROUTES } from '../../router/routes';
 
 const BottomNav = () => {
     const tabs = [
-        { name: "Home", path: "/dashboard", icon: Home },
-        { name: "Timeline", path: "/timeline", icon: Activity },
-        { name: "Simulate", path: "/simulate", icon: Zap },
-        { name: "Reports", path: "/reports", icon: FileText },
-        { name: "Profile", path: "/profile", icon: User },
+        { name: "Home", path: ROUTES.DASHBOARD, icon: Home },
+        { name: "Timeline", path: ROUTES.TIMELINE, icon: Activity },
+        { name: "Simulate", path: ROUTES.SIMULATOR, icon: Zap },
+        { name: "Reports", path: ROUTES.MEDICAL_REPORTS, icon: FileText },
+        { name: "Profile", path: ROUTES.SETTINGS_PROFILE, icon: User },
     ];
 
     return (

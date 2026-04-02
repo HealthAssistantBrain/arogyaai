@@ -2,41 +2,41 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../router/routes';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  LayoutDashboard, 
-  Brain, 
-  FlaskConical, 
-  History, 
-  Activity, 
-  FileText, 
-  Settings, 
-  Bell, 
-  Smartphone,
-  User,
-  Waves,
-  ShieldCheck,
-  CheckCircle2,
-  Lock,
-  ChevronRight,
-  HelpCircle,
-  Search,
-  MoreVertical,
-  Laptop,
-  Monitor,
-  Smartphone as PhoneIcon,
-  Download,
-  RefreshCw,
-  Key,
-  ShieldAlert,
-  ArrowRight,
-  Shield,
-  Eye,
-  LogOut,
-  Clock,
-  MapPin,
-  Cpu,
-  ArrowUpRight,
-  AlertCircle
+import {
+    LayoutDashboard,
+    Brain,
+    FlaskConical,
+    History,
+    Activity,
+    FileText,
+    Settings,
+    Bell,
+    Smartphone,
+    User,
+    Waves,
+    ShieldCheck,
+    CheckCircle2,
+    Lock,
+    ChevronRight,
+    HelpCircle,
+    Search,
+    MoreVertical,
+    Laptop,
+    Monitor,
+    Smartphone as PhoneIcon,
+    Download,
+    RefreshCw,
+    Key,
+    ShieldAlert,
+    ArrowRight,
+    Shield,
+    Eye,
+    LogOut,
+    Clock,
+    MapPin,
+    Cpu,
+    ArrowUpRight,
+    AlertCircle
 } from 'lucide-react';
 
 const SecurityAudit = () => {
@@ -92,9 +92,9 @@ const SecurityAudit = () => {
             onClick={onClick}
             className={`relative inline-flex h-8 w-14 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-4 focus:ring-[#6143f4]/10 ${active ? 'bg-[#6143f4]' : 'bg-slate-200 dark:bg-slate-700'}`}
         >
-            <motion.span 
+            <motion.span
                 animate={{ x: active ? 24 : 0 }}
-                className="pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow-lg ring-0 mt-0.5 ml-0.5" 
+                className="pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow-lg ring-0 mt-0.5 ml-0.5"
             />
         </button>
     );
@@ -108,52 +108,7 @@ const SecurityAudit = () => {
         <div className="bg-[#f6f5f8] dark:bg-[#0B0819] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased text-[14px]">
             <div className="flex flex-1 overflow-hidden">
                 {/* Sidebar - Standardized Branding */}
-                <aside className="w-72 bg-white dark:bg-[#131022] border-r border-[#6143f4]/5 dark:border-white/5 flex flex-col h-full overflow-y-auto no-scrollbar hidden lg:flex shrink-0">
-                    <div className="p-8 flex items-center gap-4 cursor-pointer group" onClick={() => navigate(ROUTES.DASHBOARD)}>
-                        <div className="size-11 bg-[#6143f4] rounded-xl flex items-center justify-center text-white shadow-lg shadow-[#6143f4]/20 transition-transform group-hover:scale-110">
-                            <Waves size={24} strokeWidth={2.5} />
-                        </div>
-                        <div>
-                            <h1 className="text-xl font-black tracking-tight leading-none uppercase">ArogyaAI</h1>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1">Healthcare OS</p>
-                        </div>
-                    </div>
-                    
-                    <nav className="flex-1 px-5 space-y-1.5 overflow-y-auto pb-6 custom-scrollbar">
-                        {['Intelligence', 'History & Labs', 'Management'].map((group) => (
-                            <div key={group} className="py-2">
-                                <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] px-4 mb-3 mt-4 leading-none">{group}</div>
-                                {sidebarLinks.filter(link => link.group === group).map((link) => (
-                                    <button
-                                        key={link.label}
-                                        onClick={() => navigate(link.path)}
-                                        className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-[1.25rem] transition-all group ${
-                                            link.active 
-                                            ? 'bg-[#6143f4] text-white shadow-2xl shadow-[#6143f4]/30 font-black' 
-                                            : 'text-slate-500 dark:text-slate-400 hover:bg-[#6143f4]/5 hover:text-[#6143f4] font-bold'
-                                        }`}
-                                    >
-                                        <link.icon size={18} className={link.active ? 'text-white' : 'text-slate-400 group-hover:text-[#6143f4]'} />
-                                        <span className="text-[11px] uppercase tracking-widest leading-none">{link.label}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        ))}
-                    </nav>
 
-                    <div className="p-6 border-t border-slate-100 dark:border-white/5">
-                        <div className="flex items-center gap-3 p-3 rounded-[1.5rem] bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 hover:border-[#6143f4]/30 transition-colors cursor-pointer group">
-                             <div className="size-11 rounded-xl bg-[#6143f4]/10 overflow-hidden flex items-center justify-center text-[#6143f4] text-xs font-black border-2 border-transparent group-hover:border-[#6143f4] transition-all">
-                                 AJ
-                             </div>
-                             <div className="flex-1 min-w-0">
-                                 <p className="text-xs font-black truncate text-[#13082a] dark:text-white uppercase">Alex Johnson</p>
-                                 <p className="text-[9px] text-[#6143f4] uppercase tracking-widest font-black leading-none mt-1">Premium Member</p>
-                             </div>
-                             <MoreVertical size={14} className="text-slate-400" />
-                        </div>
-                    </div>
-                </aside>
 
                 {/* Main Content Area */}
                 <main className="flex-1 flex flex-col h-full relative overflow-y-auto no-scrollbar bg-[#f6f5f8] dark:bg-[#0B0819]">
@@ -162,7 +117,7 @@ const SecurityAudit = () => {
                         <div className="flex-1 max-w-xl">
                             <div className="relative group/search">
                                 <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within/search:text-[#6143f4] transition-colors" size={18} />
-                                <input className="w-full pl-14 pr-6 py-4 bg-slate-100 dark:bg-white/5 border border-transparent rounded-[1.5rem] focus:ring-4 focus:ring-[#6143f4]/10 focus:border-[#6143f4]/30 transition-all text-[13px] text-[#13082a] dark:text-white placeholder:text-slate-400 font-bold uppercase tracking-tight" placeholder="Search security logs, devices, or IPs..." type="text"/>
+                                <input className="w-full pl-14 pr-6 py-4 bg-slate-100 dark:bg-white/5 border border-transparent rounded-[1.5rem] focus:ring-4 focus:ring-[#6143f4]/10 focus:border-[#6143f4]/30 transition-all text-[13px] text-[#13082a] dark:text-white placeholder:text-slate-400 font-bold uppercase tracking-tight" placeholder="Search security logs, devices, or IPs..." type="text" />
                             </div>
                         </div>
                         <div className="flex items-center gap-5 ml-8">
@@ -180,7 +135,7 @@ const SecurityAudit = () => {
                                     <p className="text-[9px] text-[#6143f4] uppercase tracking-widest font-black leading-none mt-1">Premium Member</p>
                                 </div>
                                 <div className="size-12 rounded-2xl border-2 border-[#6143f4]/20 p-1 bg-white">
-                                    <img className="size-full rounded-xl object-cover" alt="Alex Johnson" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtXYkq58bPS9sE42ldSn-06xk0ePdMg2b2AADGuUBVQEAJ3QcSa0U4ct-KBnUdoXlj2ebPDPo04apV9JoCZ8dSzXGyzNtalj5qC9vUfaWntbUmXdrGKqlUY8sYQVO6kjXPwOGLXTyhDLQXWviw-KKtvC-XPtjlhGOW77UtB__Qng4lIX16DjdLP2HA3uR-2eU3Z2ZaRbeGX_pfA7va16q0A8qRERK7Tib_1ZJAem6YIyzytz9cYnzi5qOY2vojjTG6_6T8ABXgH6ol"/>
+                                    <img className="size-full rounded-xl object-cover" alt="Alex Johnson" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtXYkq58bPS9sE42ldSn-06xk0ePdMg2b2AADGuUBVQEAJ3QcSa0U4ct-KBnUdoXlj2ebPDPo04apV9JoCZ8dSzXGyzNtalj5qC9vUfaWntbUmXdrGKqlUY8sYQVO6kjXPwOGLXTyhDLQXWviw-KKtvC-XPtjlhGOW77UtB__Qng4lIX16DjdLP2HA3uR-2eU3Z2ZaRbeGX_pfA7va16q0A8qRERK7Tib_1ZJAem6YIyzytz9cYnzi5qOY2vojjTG6_6T8ABXgH6ol" />
                                 </div>
                             </div>
                         </div>
@@ -189,7 +144,7 @@ const SecurityAudit = () => {
                     {/* Scrollable Content Area */}
                     <div className="flex-1 p-10 lg:p-12 custom-scrollbar overflow-y-auto">
                         <div className="max-w-6xl mx-auto space-y-12 pb-16">
-                            
+
                             {/* Page Header */}
                             <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 pb-4 border-b border-[#6143f4]/5">
                                 <div className="space-y-4">
@@ -200,7 +155,7 @@ const SecurityAudit = () => {
                                     <button className="px-8 py-5 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-[1.5rem] font-black text-xs uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-white/10 transition-all flex items-center gap-3 shadow-sm leading-none">
                                         <Download size={18} /> Export Security Logs
                                     </button>
-                                    <button 
+                                    <button
                                         onClick={handleRunScan}
                                         disabled={isScanning}
                                         className="bg-[#6143f4] hover:bg-[#4a34c1] text-white px-10 py-5 rounded-[1.5rem] font-black text-xs uppercase tracking-[0.2em] shadow-2xl shadow-[#6143f4]/30 transition-all flex items-center gap-4 active:scale-95 leading-none disabled:opacity-50"
@@ -216,12 +171,12 @@ const SecurityAudit = () => {
                                     <div className="size-1.5 bg-[#6143f4] rounded-full"></div>
                                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] leading-none">Authorized Active Sessions</h3>
                                 </div>
-                                
+
                                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                                    {activeSessions.map((session, idx) => (
+                                    {activeSessions.map(({ icon: SessionIcon, ...session }, idx) => (
                                         <div key={idx} className="bg-white dark:bg-[#131022] rounded-[3.5rem] p-10 shadow-[0_40px_80px_-20px_rgba(97,67,244,0.05)] border border-[#6143f4]/5 flex flex-col sm:flex-row items-center gap-10 hover:border-[#6143f4]/20 transition-all group/card relative overflow-hidden">
                                             <div className={`size-24 rounded-[2.5rem] ${session.bg} flex items-center justify-center shrink-0 shadow-inner border border-[#6143f4]/5 group-hover/card:scale-110 transition-transform duration-500`}>
-                                                <session.icon size={44} className={`${session.color} group-hover/card:rotate-6 transition-transform`} strokeWidth={2.5} />
+                                                <SessionIcon size={44} className={`${session.color} group-hover/card:rotate-6 transition-transform`} strokeWidth={2.5} />
                                             </div>
                                             <div className="flex-1 space-y-3 text-center sm:text-left">
                                                 <div className="flex flex-col sm:flex-row sm:items-center gap-4 justify-center sm:justify-start">
@@ -319,7 +274,7 @@ const SecurityAudit = () => {
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-50 dark:divide-white/5">
-                                                {loginHistory.map((log, lIdx) => (
+                                                {loginHistory.map(({ icon: LogIcon, ...log }, lIdx) => (
                                                     <tr key={lIdx} className="group/row transition-all hover:bg-[#6143f4]/[0.02]">
                                                         <td className="px-10 py-8 whitespace-nowrap">
                                                             <div className="text-base font-black text-[#13082a] dark:text-white uppercase tracking-tighter italic leading-none">{log.date}</div>
@@ -328,7 +283,7 @@ const SecurityAudit = () => {
                                                         <td className="px-10 py-8 whitespace-nowrap">
                                                             <div className="flex items-center gap-5">
                                                                 <div className="size-10 rounded-xl bg-slate-50 dark:bg-white/5 flex items-center justify-center text-slate-400 border border-slate-100 dark:border-white/5 group-hover/row:text-[#6143f4] group-hover/row:border-[#6143f4]/20 transition-all">
-                                                                    <log.icon size={20} />
+                                                                    <LogIcon size={20} />
                                                                 </div>
                                                                 <span className="text-sm font-black text-[#13082a] dark:text-white uppercase tracking-tight">{log.device}</span>
                                                             </div>
@@ -339,11 +294,10 @@ const SecurityAudit = () => {
                                                         </td>
                                                         <td className="px-10 py-8 whitespace-nowrap text-right">
                                                             <div className="flex justify-end">
-                                                                <span className={`inline-flex items-center gap-3 py-2 px-6 rounded-full text-[10px] font-black uppercase tracking-widest leading-none ${
-                                                                    log.statusColor === 'emerald' 
-                                                                    ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/10' 
-                                                                    : 'bg-red-500/10 text-red-500 border border-red-500/10'
-                                                                }`}>
+                                                                <span className={`inline-flex items-center gap-3 py-2 px-6 rounded-full text-[10px] font-black uppercase tracking-widest leading-none ${log.statusColor === 'emerald'
+                                                                        ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/10'
+                                                                        : 'bg-red-500/10 text-red-500 border border-red-500/10'
+                                                                    }`}>
                                                                     {log.status === 'Blocked' ? <AlertCircle size={14} /> : <CheckCircle2 size={14} />}
                                                                     {log.status}
                                                                 </span>
@@ -396,7 +350,8 @@ const SecurityAudit = () => {
                 </main>
             </div>
 
-            <style dangerouslySetInnerHTML={{ __html: `
+            <style dangerouslySetInnerHTML={{
+                __html: `
                 .no-scrollbar::-webkit-scrollbar { display: none; }
                 .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
                 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }

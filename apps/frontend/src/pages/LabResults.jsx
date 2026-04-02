@@ -87,39 +87,7 @@ const LabResults = () => {
         <div className="bg-[#f6f5f8] dark:bg-[#131022] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased">
             <div className="flex flex-1 overflow-hidden">
                 {/* Sidebar - Standardized Branding */}
-                <aside className="w-72 bg-white dark:bg-[#131022] border-r border-[#6143f4]/5 dark:border-slate-800 flex flex-col shrink-0 hidden lg:flex">
-                    <div className="p-8 flex items-center gap-4 cursor-pointer group" onClick={() => navigate(ROUTES.DASHBOARD)}>
-                        <div className="size-11 bg-[#6143f4] rounded-xl flex items-center justify-center text-white shadow-lg shadow-[#6143f4]/20 transition-transform group-hover:scale-110">
-                            <HeartPulse size={24} strokeWidth={2.5} />
-                        </div>
-                        <div>
-                            <h1 className="text-xl font-black tracking-tight leading-none uppercase">ArogyaAI</h1>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1">Health Intelligence</p>
-                        </div>
-                    </div>
-                    <nav className="flex-1 px-5 py-4 space-y-1.5 overflow-y-auto custom-scrollbar">
-                        {sidebarLinks.map((link) => (
-                            <button
-                                key={link.label}
-                                onClick={() => navigate(link.path)}
-                                className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-xl transition-all group ${
-                                    link.active 
-                                    ? 'bg-[#6143f4] text-white shadow-xl shadow-[#6143f4]/20 font-black' 
-                                    : 'text-slate-500 dark:text-slate-400 hover:bg-[#6143f4]/5 hover:text-[#6143f4] font-bold'
-                                }`}
-                            >
-                                <link.icon size={18} className={link.active ? 'text-white' : 'text-slate-400 group-hover:text-[#6143f4]'} />
-                                <span className="text-[11px] uppercase tracking-widest leading-none">{link.label}</span>
-                            </button>
-                        ))}
-                    </nav>
-                    <div className="p-6 border-t border-slate-100 dark:border-slate-800">
-                        <button className="w-full flex items-center gap-3.5 px-4 py-3.5 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl transition-all font-bold group">
-                            <Settings size={18} className="text-slate-400 group-hover:text-primary" />
-                            <span className="text-[11px] uppercase tracking-widest leading-none">Settings Hub</span>
-                        </button>
-                    </div>
-                </aside>
+
 
                 {/* Main Content Area */}
                 <div className="flex-1 flex flex-col min-w-0">

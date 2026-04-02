@@ -54,43 +54,7 @@ const Reports = () => {
         <div className="bg-[#f6f5f8] dark:bg-[#131022] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased">
             <div className="flex flex-1 overflow-hidden">
                 {/* Sidebar - Standardized Branding */}
-                <aside className="w-72 bg-white/80 dark:bg-[#131022]/80 backdrop-blur-xl border-r border-[#6143f4]/5 dark:border-slate-800 flex flex-col shrink-0 hidden lg:flex">
-                    <div className="p-8 flex items-center gap-4 cursor-pointer group" onClick={() => navigate(ROUTES.DASHBOARD)}>
-                        <div className="size-11 bg-[#6143f4] rounded-xl flex items-center justify-center text-white shadow-lg shadow-[#6143f4]/20 transition-transform group-hover:scale-110">
-                            <ClipboardList size={22} strokeWidth={2.5} />
-                        </div>
-                        <div>
-                            <h1 className="text-xl font-black tracking-tight leading-none uppercase">ArogyaAI</h1>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1">Healthcare OS</p>
-                        </div>
-                    </div>
-                    <nav className="flex-1 px-5 py-4 space-y-1.5 overflow-y-auto custom-scrollbar">
-                        {sidebarLinks.map((link) => (
-                            <button
-                                key={link.label}
-                                onClick={() => navigate(link.path)}
-                                className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-[1.25rem] transition-all group ${
-                                    link.active 
-                                    ? 'bg-[#6143f4] text-white shadow-2xl shadow-[#6143f4]/30 font-black' 
-                                    : 'text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-white/5 font-bold'
-                                }`}
-                            >
-                                <link.icon size={18} className={link.active ? 'text-white' : 'text-slate-400 group-hover:text-[#6143f4]'} />
-                                <span className="text-[11px] uppercase tracking-widest leading-none">{link.label}</span>
-                            </button>
-                        ))}
-                    </nav>
-                    <div className="p-6 mt-auto">
-                        <div className="bg-[#6143f4]/5 dark:bg-[#6143f4]/10 rounded-[2rem] p-6 border border-[#6143f4]/10 relative overflow-hidden group">
-                            <p className="text-[10px] font-black text-[#6143f4] uppercase tracking-[0.25em] mb-4 leading-none">STORAGE PERSISTENCE</p>
-                            <div className="h-2.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden shadow-inner relative">
-                                <div className="h-full bg-gradient-to-r from-[#6143f4] to-[#009cde] shadow-lg rounded-full transition-all duration-1000" style={{ width: '65%' }}></div>
-                            </div>
-                            <p className="text-[10px] mt-4 text-slate-500 font-bold uppercase tracking-widest leading-none">6.5 GB OF 10 GB SECURE CLOUD</p>
-                            <div className="absolute -bottom-10 -right-10 size-24 bg-[#6143f4]/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-1000"></div>
-                        </div>
-                    </div>
-                </aside>
+
 
                 {/* Main Content Area */}
                 <div className="flex-1 flex flex-col min-w-0">

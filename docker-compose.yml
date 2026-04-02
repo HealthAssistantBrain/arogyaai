@@ -7,6 +7,9 @@ services:
       - "5173:5173"
     environment:
       - VITE_API_URL=http://localhost:8000
+    volumes:
+      - ./apps/frontend:/app
+      - /app/node_modules
     networks:
       - arogyaai_net
 
@@ -18,13 +21,15 @@ services:
       - .env
     networks:
       - arogyaai_net
+    volumes:
+      - ./apps/backend:/app
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 15s
       timeout: 5s
       retries: 5

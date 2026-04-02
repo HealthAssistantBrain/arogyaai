@@ -133,50 +133,7 @@ const Timeline = () => {
     return (
         <div className="bg-[#f6f5f8] dark:bg-[#131022] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-row overflow-hidden antialiased">
             {/* Sidebar Navigation - Matched Stitch */}
-            <aside className="w-72 bg-white dark:bg-[#131022]/50 border-r border-slate-200 dark:border-slate-800 flex flex-col h-full shrink-0 hidden lg:flex">
-                <div className="p-8">
-                    <div className="flex items-center gap-3 mb-10 cursor-pointer" onClick={() => navigate(ROUTES.HOME)}>
-                        <div className="bg-[#6143f4] size-10 rounded-xl flex items-center justify-center text-white shadow-lg shadow-[#6143f4]/20">
-                            <Brain size={24} strokeWidth={2.5} />
-                        </div>
-                        <div>
-                            <h1 className="text-xl font-bold font-black leading-none tracking-tight">ArogyaAI</h1>
-                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">Health Intelligence</p>
-                        </div>
-                    </div>
-                    <nav className="space-y-1">
-                        {sidebarLinks.map((link) => (
-                            <Link
-                                key={link.label}
-                                to={link.path}
-                                className={`w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl transition-all duration-300 ${
-                                    link.active 
-                                    ? 'bg-[#6143f4] text-white shadow-xl shadow-[#6143f4]/20 font-bold' 
-                                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 font-semibold'
-                                }`}
-                            >
-                                <link.icon size={20} className={link.active ? 'text-white' : 'text-slate-400'} />
-                                <span className="text-sm">{link.label}</span>
-                            </Link>
-                        ))}
-                        <div className="pt-8 pb-4">
-                            <p className="px-5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Account</p>
-                        </div>
-                        <button className="w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 font-semibold transition-all">
-                            <Settings size={20} className="text-slate-400" />
-                            <span className="text-sm">Settings</span>
-                        </button>
-                    </nav>
-                </div>
-                <div className="mt-auto p-6">
-                    <div className="bg-[#6143f4]/10 dark:bg-[#6143f4]/15 rounded-[2rem] p-6 border border-[#6143f4]/20 relative overflow-hidden group">
-                        <div className="absolute -bottom-6 -right-6 size-20 bg-[#6143f4]/5 rounded-full group-hover:scale-150 transition-transform duration-700"></div>
-                        <p className="text-[10px] font-black text-[#6143f4] mb-2 uppercase tracking-widest leading-none">PRO PLAN</p>
-                        <p className="text-sm text-slate-600 dark:text-slate-400 mb-4 leading-relaxed font-semibold italic">Full access to diagnostic modeling tools.</p>
-                        <button className="w-full py-3 bg-[#6143f4] text-white text-xs font-black uppercase tracking-widest rounded-xl hover:scale-[1.02] transition-all shadow-xl shadow-[#6143f4]/20 active:scale-95 leading-none">Upgrade Now</button>
-                    </div>
-                </div>
-            </aside>
+
 
             {/* Main Content Area */}
             <main className="flex-1 flex flex-col min-w-0 bg-[#f6f5f8] dark:bg-[#0f0c1d] overflow-hidden">

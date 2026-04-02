@@ -60,56 +60,7 @@ const SystemStatus = () => {
   return (
     <div className="bg-[#EAEAEA] dark:bg-[#13082A] text-[#13082A] font-display min-h-screen flex h-screen overflow-hidden antialiased transition-colors duration-500">
       {/* Sidebar */}
-      <aside className="w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-white/5 flex flex-col shrink-0">
-        <div className="p-8 flex items-center gap-4 cursor-pointer" onClick={() => navigate(ROUTES.DASHBOARD)}>
-          <div className="bg-gradient-to-br from-[#6143f4] to-[#009CDE] size-11 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-[#6143f4]/20 transform hover:rotate-12 transition-transform">
-            <Activity size={24} strokeWidth={2.5} />
-          </div>
-          <div>
-            <h1 className="text-2xl font-black tracking-tighter text-[#13082A] dark:text-white uppercase leading-none">Arogya<span className="text-[#6143f4]">AI</span></h1>
-            <p className="text-[9px] font-black text-[#009CDE] uppercase tracking-widest mt-1 italic opacity-70">Healthcare SaaS</p>
-          </div>
-        </div>
 
-        <nav className="flex-1 px-5 space-y-2 mt-6">
-          {[
-            { icon: <LayoutDashboard size={20} />, label: 'Dashboard', path: ROUTES.DASHBOARD },
-            { icon: <BarChart3 size={20} />, label: 'Analytics', path: ROUTES.INSIGHTS },
-            { icon: <ShieldCheck size={20} />, label: 'System Status', active: true },
-            { icon: <Database size={20} />, label: 'Data Logs', path: ROUTES.SETTINGS_SECURITY },
-            { icon: <Settings size={20} />, label: 'Configuration', path: ROUTES.SETTINGS }
-          ].map((item, idx) => (
-            <button
-              key={idx}
-              onClick={() => item.path && navigate(item.path)}
-              className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all duration-300 text-[10px] font-black uppercase tracking-widest ${
-                item.active 
-                ? 'bg-[#6143f4] text-white shadow-2xl shadow-[#6143f4]/30 scale-[1.02]' 
-                : 'text-slate-500 hover:bg-[#6143f4]/10 hover:text-[#6143f4] dark:hover:bg-white/5'
-              }`}
-            >
-              {item.icon}
-              {item.label}
-            </button>
-          ))}
-        </nav>
-
-        <div className="p-6 mt-auto">
-          <div className="bg-[#6143f4]/5 dark:bg-white/5 p-6 rounded-[2.5rem] border border-[#6143f4]/10 dark:border-white/5 relative overflow-hidden group">
-            <p className="text-[9px] font-black text-[#6143f4] mb-3 uppercase tracking-widest italic">Storage Node</p>
-            <div className="w-full bg-slate-200 dark:bg-white/10 h-2 rounded-full overflow-hidden mb-3">
-              <motion.div 
-                initial={{ width: 0 }}
-                animate={{ width: '75%' }}
-                transition={{ duration: 1, ease: "easeOut" }}
-                className="bg-gradient-to-r from-[#6143f4] to-[#009CDE] h-full shadow-[0_0_10px_#6143f4]"
-              ></motion.div>
-            </div>
-            <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest opacity-60">7.5GB / 10GB Utilized</p>
-            <div className="absolute -right-4 -bottom-4 w-16 h-16 bg-[#6143f4]/10 rounded-full blur-xl group-hover:scale-150 transition-transform"></div>
-          </div>
-        </div>
-      </aside>
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-full overflow-hidden relative z-10 bg-[#F6F6F6] dark:bg-[#0F0D19]">

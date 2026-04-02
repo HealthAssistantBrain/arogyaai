@@ -132,48 +132,7 @@ const AQIMonitor = () => {
     <div className="bg-[#EAEAEA] dark:bg-[#13082A] text-[#13082A] dark:text-slate-100 min-h-screen font-display antialiased leading-normal flex">
       
       {/* Sidebar - Constant Aesthetic */}
-      <aside className="w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col h-screen sticky top-0 z-40 hidden lg:flex">
-        <div className="p-8">
-          <div className="flex items-center gap-3 mb-12 cursor-pointer" onClick={() => navigate(ROUTES.DASHBOARD)}>
-            <div className="bg-[#6143f4] size-11 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-[#6143f4]/20">
-              <Wind size={26} strokeWidth={2.5} />
-            </div>
-            <div>
-              <h1 className="text-2xl font-black tracking-tighter leading-none">ArogyaAI</h1>
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-1.5">Ecological Risk</p>
-            </div>
-          </div>
-          <nav className="space-y-1.5">
-            {sidebarLinks.map((link) => (
-              <Link
-                key={link.label}
-                to={link.path}
-                className={`flex items-center gap-3.5 px-5 py-4 rounded-2xl transition-all duration-300 font-bold ${
-                  link.active 
-                  ? 'bg-[#6143f4] text-white shadow-xl shadow-[#6143f4]/20' 
-                  : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'
-                }`}
-              >
-                <link.icon size={20} className={link.active ? 'text-white' : 'text-slate-400 group-hover:text-[#6143f4]'} />
-                <span className="text-sm tracking-tight">{link.label}</span>
-              </Link>
-            ))}
-          </nav>
-        </div>
-        <div className="mt-auto p-6">
-          <div className="bg-slate-50 dark:bg-slate-800 rounded-3xl p-6 border border-slate-200 dark:border-slate-700">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="size-10 rounded-full bg-green-500 shadow-lg shadow-green-500/20 flex items-center justify-center text-white">
-                <ShieldCheck size={20} />
-              </div>
-              <div>
-                <p className="text-xs font-black uppercase tracking-widest text-green-600">Secure Node</p>
-                <p className="text-[10px] text-slate-500 font-bold mt-0.5">End-to-End Encrypted</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </aside>
+
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto custom-scrollbar">

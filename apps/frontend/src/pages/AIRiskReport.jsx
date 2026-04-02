@@ -83,33 +83,7 @@ const AIRiskReport = () => {
 
             <div className="flex flex-1 overflow-hidden">
                 {/* Sidebar Navigation */}
-                <aside className="hidden lg:flex flex-col w-64 border-r border-[#6143f4]/5 dark:border-slate-800 p-6 bg-white dark:bg-[#131022] overflow-y-auto">
-                    <div className="space-y-1">
-                        {sidebarLinks.map((link) => (
-                            <button
-                                key={link.label}
-                                onClick={() => navigate(link.path)}
-                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all group ${
-                                    link.active 
-                                    ? 'bg-[#6143f4] text-white shadow-xl shadow-[#6143f4]/20 font-black' 
-                                    : 'text-slate-500 dark:text-slate-400 hover:bg-[#6143f4]/5 hover:text-[#6143f4] font-bold'
-                                }`}
-                            >
-                                <link.icon size={18} className={link.active ? 'text-white' : 'text-slate-400 group-hover:text-[#6143f4]'} />
-                                <span className="text-[11px] uppercase tracking-widest leading-none">{link.label}</span>
-                            </button>
-                        ))}
-                    </div>
-                    <div className="mt-auto pt-6 border-t border-slate-100 dark:border-slate-800">
-                        <div className="p-4 rounded-2xl bg-[#6143f4]/5 border border-[#6143f4]/10">
-                            <p className="text-[10px] font-black text-[#6143f4] uppercase tracking-widest mb-3 leading-none">SECURE Vault Storage</p>
-                            <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full mb-3 shadow-inner overflow-hidden">
-                                <div className="bg-gradient-to-r from-[#6143f4] to-[#009cde] h-full rounded-full shadow-lg" style={{ width: '65%' }}></div>
-                            </div>
-                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest leading-none">12.4GB / 20GB PERSISTED</p>
-                        </div>
-                    </div>
-                </aside>
+
 
                 {/* Main Content Scrollable Area */}
                 <main className="flex-1 overflow-y-auto p-6 lg:p-10 custom-scrollbar">

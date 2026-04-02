@@ -75,15 +75,7 @@ const EmergencyAlert = () => {
         {/* Background Layer - Dimmed/Blurred */}
         <div className="absolute inset-0 z-0 flex blur-[4px] opacity-40 pointer-events-none select-none">
             {/* Sidebar Mock */}
-            <aside className="w-72 bg-white dark:bg-[#131022] border-r border-[#6143f4]/5 dark:border-white/5 flex flex-col h-full overflow-hidden shrink-0">
-                <div className="p-8 flex items-center gap-4">
-                    <div className="size-11 bg-slate-200 rounded-xl"></div>
-                    <div className="h-4 w-32 bg-slate-200 rounded-full"></div>
-                </div>
-                <div className="flex-1 px-5 space-y-4 pt-4">
-                    {[1,2,3,4,5,6].map(i => <div key={i} className="h-10 w-full bg-slate-100 dark:bg-white/5 rounded-xl"></div>)}
-                </div>
-            </aside>
+
             {/* Context Mock */}
             <div className="flex-1 flex flex-col h-full bg-[#f6f5f8] dark:bg-[#0B0819]">
                 <header className="h-24 border-b border-slate-200 dark:border-white/5"></header>

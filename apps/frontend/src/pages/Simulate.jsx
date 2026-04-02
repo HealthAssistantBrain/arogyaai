@@ -72,42 +72,7 @@ const Simulate = () => {
     <div className="bg-[#EAEAEA] dark:bg-[#13082A] text-slate-900 dark:text-slate-100 min-h-screen font-display flex overflow-hidden antialiased">
       
       {/* Sidebar Navigation - Matched Stitch */}
-      <aside className="w-64 flex-shrink-0 bg-white dark:bg-[#1C1136] border-r border-slate-200 dark:border-slate-800 flex flex-col shrink-0 hidden lg:flex z-40">
-        <div className="p-6 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#6043F4] flex items-center justify-center text-white shadow-lg shadow-[#6043F4]/20">
-            <Sliders size={20} strokeWidth={2.5} />
-          </div>
-          <div>
-            <h1 className="font-bold text-xl tracking-tight text-slate-900 dark:text-white leading-none">ArogyaAI</h1>
-            <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 font-bold uppercase tracking-widest leading-none">Next-Gen Health</p>
-          </div>
-        </div>
-        
-        <nav className="flex-1 px-4 space-y-1 mt-4">
-          {sidebarLinks.map((link) => (
-            <Link
-              key={link.label}
-              to={link.path}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group ${
-                link.active 
-                ? 'bg-[#6043F4]/10 border-l-4 border-[#6043F4] text-[#6043F4] font-bold shadow-sm' 
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 font-semibold'
-              }`}
-            >
-              <link.icon size={18} className={link.active ? 'text-[#6043F4]' : 'text-slate-400 group-hover:text-slate-600 transition-colors'} />
-              <span className="text-sm">{link.label}</span>
-            </Link>
-          ))}
-        </nav>
 
-        <div className="p-4 mt-auto">
-          <div className="bg-[#6043F4]/10 dark:bg-[#6043F4]/20 p-5 rounded-2xl border border-[#6043F4]/20 shadow-inner group cursor-pointer hover:bg-[#6043F4]/15 transition-all">
-            <p className="text-[10px] font-bold text-[#6043F4] uppercase tracking-wider mb-2">Pro Plan</p>
-            <p className="text-sm text-slate-700 dark:text-slate-300 mb-4 leading-tight font-semibold">Unlock advanced genetic simulations.</p>
-            <button className="w-full py-2.5 bg-[#6043F4] text-white rounded-xl text-xs font-bold uppercase tracking-widest shadow-lg shadow-[#6043F4]/30 active:scale-95 transition-all">Upgrade Now</button>
-          </div>
-        </div>
-      </aside>
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col overflow-y-auto bg-mesh custom-scrollbar">

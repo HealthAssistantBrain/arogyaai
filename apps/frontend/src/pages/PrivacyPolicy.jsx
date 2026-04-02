@@ -147,33 +147,7 @@ const PrivacyPolicy = () => {
                 <div className="absolute top-0 right-0 w-[50rem] h-[50rem] bg-[#6143f4]/5 blur-[120px] rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none opacity-50"></div>
 
                 {/* Sidebar Navigation - Sticky */}
-                <aside className="hidden lg:block lg:col-span-3">
-                    <div className="sticky top-44 space-y-3">
-                        <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.25em] px-6 mb-6 italic opacity-60">Directory</p>
-                        {navLinks.map((link) => (
-                            <a
-                                key={link.id}
-                                href={`#${link.id}`}
-                                className={`flex items-center gap-4 px-6 py-4 rounded-2xl transition-all duration-300 text-[11px] font-black uppercase tracking-widest ${
-                                    activeSection === link.id
-                                    ? 'bg-[#6143f4] text-white shadow-2xl shadow-[#6143f4]/30 scale-[1.05] italic'
-                                    : 'text-slate-500 hover:bg-white dark:hover:bg-white/5 hover:text-[#6143f4] italic-hover'
-                                }`}
-                            >
-                                <ChevronRight size={14} className={activeSection === link.id ? 'opacity-100' : 'opacity-0'} />
-                                {link.label}
-                            </a>
-                        ))}
-                        
-                        <div className="mt-16 p-8 rounded-[2.5rem] bg-[#13082a] text-white shadow-2xl relative overflow-hidden group/support">
-                            <div className="absolute top-0 left-0 w-full h-full bg-[#6143f4]/10 blur-3xl rounded-full translate-y-1/2"></div>
-                            <Mail size={32} className="mb-6 text-[#6143f4]" strokeWidth={2.5} />
-                            <h4 className="text-lg font-black uppercase tracking-tight mb-3 italic">Legal Inbox</h4>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-relaxed mb-6 italic opacity-80">Direct channel for data privacy inquiries.</p>
-                            <button className="w-full py-4 bg-[#6143f4] text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:scale-105 active:scale-95 transition-all shadow-xl shadow-[#6143f4]/30">Email Privacy</button>
-                        </div>
-                    </div>
-                </aside>
+
 
                 {/* Main Content Area */}
                 <div className="lg:col-span-9 space-y-20 relative z-10 shrink-0">

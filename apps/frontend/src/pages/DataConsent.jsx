@@ -49,52 +49,7 @@ const DataConsent = () => {
     return (
         <div className="bg-[#f6f5f8] dark:bg-[#0B0819] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex h-screen overflow-hidden antialiased transition-colors duration-500">
             {/* Sidebar Navigation - Deep Navy Persona */}
-            <aside className="w-80 bg-[#13082a] text-white flex flex-col shrink-0 relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-full h-full bg-[#6143f4]/5 blur-3xl rounded-full translate-y-1/2"></div>
-                
-                <div className="p-10 flex items-center gap-4 cursor-pointer relative z-10 group" onClick={() => navigate(ROUTES.DASHBOARD)}>
-                    <div className="bg-[#6143f4] size-12 rounded-2xl flex items-center justify-center text-white shadow-2xl shadow-[#6143f4]/20 transition-transform group-hover:scale-110">
-                        <Activity size={24} strokeWidth={2.5} />
-                    </div>
-                    <h1 className="text-2xl font-black tracking-tighter uppercase leading-none italic">ArogyaAI</h1>
-                </div>
 
-                <nav className="flex-1 px-6 space-y-2 mt-12 relative z-10">
-                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] px-6 mb-6 italic opacity-50">Navigator</p>
-                    {menuItems.map((item) => (
-                        <button
-                            key={item.label}
-                            onClick={() => navigate(item.path)}
-                            className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all duration-300 text-[11px] font-black uppercase tracking-widest italic ${
-                                item.active 
-                                ? 'bg-[#6143f4] text-white shadow-2xl shadow-[#6143f4]/30 scale-[1.05]' 
-                                : 'text-slate-400 hover:bg-white/5 hover:text-white'
-                            }`}
-                        >
-                            <item.icon size={18} strokeWidth={2.5} className={item.active ? 'text-white' : 'text-slate-500'} />
-                            {item.label}
-                        </button>
-                    ))}
-                </nav>
-
-                <div className="p-8 relative z-10">
-                    <div className="bg-white/5 p-8 rounded-[2.5rem] border border-white/5 backdrop-blur-md shadow-2xl">
-                        <div className="flex items-center justify-between mb-4">
-                            <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest italic opacity-60">Storage Payload</p>
-                            <p className="text-[10px] font-black text-[#6143f4] italic">68%</p>
-                        </div>
-                        <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden mb-4">
-                            <motion.div 
-                                initial={{ width: 0 }}
-                                animate={{ width: '68%' }}
-                                transition={{ duration: 1.5, ease: "easeOut" }}
-                                className="bg-gradient-to-r from-[#6143f4] to-[#009CDE] h-full shadow-[0_0_15px_#6143f4]"
-                            ></motion.div>
-                        </div>
-                        <p className="text-[10px] font-black text-white uppercase tracking-widest leading-none">6.8GB / <span className="text-slate-500">10GB NODE</span></p>
-                    </div>
-                </div>
-            </aside>
 
             {/* Main Content Area */}
             <main className="flex-1 flex flex-col h-full overflow-hidden bg-[#f6f5f8] dark:bg-[#0B0819] relative">

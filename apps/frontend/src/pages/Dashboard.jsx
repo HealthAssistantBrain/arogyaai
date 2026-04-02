@@ -124,54 +124,7 @@ const Dashboard = () => {
     <div className="bg-[#f6f5f8] dark:bg-[#131022] font-display text-[#13082A] dark:text-slate-100 min-h-screen flex antialiased">
 
       {/* Left Sidebar - Matched Stitch */}
-      <aside className="w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col h-screen sticky top-0 z-30">
-        <div className="p-6 flex items-center gap-3">
-          <div className="bg-[#6143f4]/10 p-2 rounded-lg">
-            <ClipboardList size={30} className="text-[#6143f4]" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight">ArogyaAI</h1>
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest leading-none mt-1">Predictive Intelligence</p>
-          </div>
-        </div>
 
-        <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto custom-scrollbar">
-          {sidebarLinks.map((link) => (
-            <Link
-              key={link.label}
-              to={link.path}
-              onClick={() => setActiveTab(link.label)}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${activeTab === link.label
-                ? 'bg-[#6143f4] text-white font-bold shadow-lg shadow-[#6143f4]/20'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium'
-                }`}
-            >
-              <link.icon size={20} className={activeTab === link.label ? 'text-white' : 'text-slate-400 group-hover:text-[#6143f4]'} />
-              <span className="text-sm tracking-tight">{link.label}</span>
-            </Link>
-          ))}
-        </nav>
-
-        <div className="p-4 border-t border-slate-200 dark:border-slate-800">
-          <div
-            className="flex items-center gap-3 p-2 bg-slate-50 dark:bg-slate-800 rounded-xl cursor-pointer hover:shadow-sm transition-all group"
-            onClick={() => navigate(ROUTES.SETTINGS)}
-          >
-            <div className="size-10 rounded-full bg-slate-200 overflow-hidden border-2 border-white dark:border-slate-700">
-              <img
-                className="w-full h-full object-cover"
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuBPkHhB8aAs5Z1UwSyM_LdR-SyUEMtPS07vvYHxs9EMhVRFMGV8HTc5N6pRdsg7HVwQIbJDs1XXltwkD6GIPIr1IExxq456POx_gkPwKIlpr3Cxhe0-W1noATGc5LQUbo3H7vWJAJh_ZYrnt7OunVQptWY7NY4Lz3K058baTGYLspNX8CCtBRT9OHGE-Ja-cudI8XPxUDQTYoGMIqmY67CeBCo08e_M5jaIGFYWOxd7xml6Gj7DbaUOaW3YHjL1tXaKGdMPVnQIuJpb"
-                alt="User Profile"
-              />
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <p className="text-sm font-bold truncate">Dr. Aris Thorne</p>
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest truncate">Premium Member</p>
-            </div>
-            <Settings size={18} className="text-slate-400 group-hover:rotate-90 transition-transform duration-500" />
-          </div>
-        </div>
-      </aside>
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">

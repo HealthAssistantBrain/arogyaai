@@ -65,41 +65,7 @@ const AIInsights = () => {
       <div className="flex h-screen overflow-hidden">
         
         {/* Sidebar Navigation - Matched Stitch */}
-        <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col shrink-0 hidden md:flex z-40">
-          <div className="p-6 flex items-center gap-3">
-            <div className="bg-[#6043F4] size-10 rounded-lg flex items-center justify-center text-white shadow-lg shadow-[#6043F4]/20">
-              <Activity size={24} strokeWidth={2.5} />
-            </div>
-            <h1 className="text-xl font-bold tracking-tight text-[#6043F4]">ArogyaAI</h1>
-          </div>
-          
-          <nav className="flex-1 mt-4 px-3 space-y-1">
-            {sidebarLinks.map((link) => (
-              <Link
-                key={link.label}
-                to={link.path}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group ${
-                  link.active
-                  ? 'bg-[#6043F4]/10 text-[#6043F4] border-r-4 border-[#6043F4]' 
-                  : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'
-                }`}
-              >
-                <link.icon size={20} className={link.active ? 'text-[#6043F4]' : 'text-slate-400 group-hover:text-slate-600'} />
-                <span className="font-semibold text-sm">{link.label}</span>
-              </Link>
-            ))}
-          </nav>
 
-          <div className="p-4 border-t border-slate-100 dark:border-slate-800">
-            <Link 
-              to={ROUTES.SETTINGS}
-              className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors font-semibold text-sm"
-            >
-              <Settings size={20} />
-              <span>Settings</span>
-            </Link>
-          </div>
-        </aside>
 
         {/* Main Content Area */}
         <main className="flex-1 flex flex-col overflow-y-auto bg-mesh custom-scrollbar">

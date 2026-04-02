@@ -49,47 +49,7 @@ const WhatsNew = () => {
   return (
     <div className="bg-[#EAEAEA] dark:bg-[#13082A] text-[#13082A] font-display min-h-screen flex h-screen overflow-hidden antialiased transition-colors duration-500">
       {/* Sidebar */}
-      <aside className="w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-white/5 flex flex-col shrink-0">
-        <div className="p-8 flex items-center gap-4 cursor-pointer" onClick={() => navigate(ROUTES.DASHBOARD)}>
-          <div className="bg-gradient-to-br from-[#6143f4] to-[#009CDE] size-11 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-[#6143f4]/20 transform hover:rotate-12 transition-transform">
-            <Activity size={24} strokeWidth={2.5} />
-          </div>
-          <div>
-            <h1 className="text-2xl font-black tracking-tighter text-[#13082A] dark:text-white uppercase leading-none">Arogya<span className="text-[#6143f4]">AI</span></h1>
-            <p className="text-[9px] font-black text-[#009CDE] uppercase tracking-widest mt-1 italic opacity-70">Predictive Health</p>
-          </div>
-        </div>
 
-        <nav className="flex-1 px-5 space-y-1.5 mt-4 overflow-y-auto custom-scrollbar">
-          {menuItems.map((item, idx) => (
-            <button
-              key={idx}
-              onClick={() => navigate(item.path)}
-              className={`w-full flex items-center gap-4 px-6 py-3.5 rounded-2xl transition-all duration-300 text-[10px] font-black uppercase tracking-widest ${
-                item.active 
-                ? 'bg-[#6143f4] text-white shadow-2xl shadow-[#6143f4]/30 scale-[1.02]' 
-                : 'text-slate-500 hover:bg-[#6143f4]/10 hover:text-[#6143f4]'
-              }`}
-            >
-              {item.icon}
-              {item.label}
-            </button>
-          ))}
-        </nav>
-
-        <div className="p-4 mt-auto border-t border-slate-100 dark:border-white/5">
-          <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-white/5 cursor-pointer hover:bg-slate-100 dark:hover:bg-white/10 transition-colors group">
-            <div className="size-11 rounded-2xl bg-gradient-to-tr from-[#6143f4] to-[#009CDE] p-[2px] shadow-lg shadow-[#6143f4]/20 transform group-hover:scale-105 transition-transform">
-               <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtUF7rDszaKWnU4spXfT8-Qr3kMrRMSi601P0wbsVaRFaUw1wvLoQ11WFXLHECfRlS0AHBeeEWdgZCIMsDXI-RQhlQ2ADI8MYAwxDZtHGlIt1gMgcVWnKoH7MWh6C8LGzwzsmPEAIs30k82rc21e8g2HOmjfvnj45oImCcshimNh2J9Mb99JBkRjkXrDmF_IKfQw-BMQhlxmcLueluJHdA6Hvx4qsmEE1bcslk48rRb3AJmNmxNlhGsSwayHWKDkceETbHU3K0LObc" alt="User" className="size-full object-cover rounded-2xl border-2 border-white dark:border-white/10" />
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <p className="text-[11px] font-black text-[#13082A] dark:text-white uppercase tracking-widest truncate italic">Elena Smith</p>
-              <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest truncate italic opacity-60">Premium Plan</p>
-            </div>
-            <ChevronDown size={14} className="text-slate-400 group-hover:text-[#6143f4] transition-colors" />
-          </div>
-        </div>
-      </aside>
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-full overflow-hidden relative z-10 bg-[#F6F6F6] dark:bg-[#0F0D19]">
