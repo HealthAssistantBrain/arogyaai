@@ -98,7 +98,6 @@ jobs:
           docker compose build \
             backend \
             frontend \
-            auth-service \
             data-service \
             prediction-service \
             rag-service
