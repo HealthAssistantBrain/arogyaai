@@ -4,6 +4,8 @@ import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
 import { Mail, CheckCircle, RefreshCcw, Loader2 } from 'lucide-react';
 import api from '../lib/axios';
+import { lockSystem, unlockSystem } from '../lib/systemLock';
+import { triggerAuthRevalidation } from '../lib/authRevalidator';
 
 export default function EmailVerificationPage() {
   const navigate = useNavigate();
@@ -13,25 +15,26 @@ export default function EmailVerificationPage() {
 
 
 
-  // "I have verified" — hit /auth/me and check is_email_verified
   const handleCheckVerification = async () => {
     if (!token) { toast.error('No session token found. Please log in again.'); return; }
+    lockSystem();
     setChecking(true);
     try {
       const response = await api.get('auth/me');
       const data = response.data.data;
 
       if (data.is_email_verified) {
-        setEmailVerified();
-        setUser(data);
         toast.success('Email verified! Redirecting…');
-        navigate('/', { replace: true });
+        // Let guards route correctly based on organic backend truth
+        await useAuthStore.getState().hydrateAuth();
+        triggerAuthRevalidation();
       } else {
         toast.error('Email not verified yet. Please check your inbox and click the link.');
       }
     } catch (err: any) {
       toast.error(err?.message || 'Could not verify email. Please try again.');
     } finally {
+      unlockSystem();
       setChecking(false);
     }
   };

@@ -1,15 +1,19 @@
 """
 Shared declarative base for all SQLAlchemy models.
 Import Base and the reusable mixins from here.
+
+NOTE: Base is imported from database.session to ensure a single shared
+metadata instance. This is required so that Base.metadata.create_all()
+can discover all mapped tables.
 """
 import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, Boolean, func
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import declarative_base
 
-Base = declarative_base()
+# Single canonical Base — must match what database/session.py uses
+from database.session import Base
 
 
 class TimestampMixin:

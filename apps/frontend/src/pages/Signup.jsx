@@ -15,7 +15,9 @@ import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { ROUTES } from '../router/routes';
-import api from '../lib/axios';
+import api, { setAuthFlow } from '../lib/axios';
+import { lockSystem, unlockSystem } from '../lib/systemLock';
+import { triggerAuthRevalidation } from '../lib/authRevalidator';
 
 const signupSchema = z.object({
   fullName: z.string().min(2, 'Name must be at least 2 characters'),
@@ -43,6 +45,13 @@ const Signup = () => {
 
   const onSubmit = async (data) => {
     setApiError(null);
+
+    // ── STRICT EXECUTION BOUNDARY ───────────────────────────────────────────
+    // Lock ALL guards + bypass all interceptor logic before touching auth state.
+    // Guards now return <Outlet /> when locked, so this form stays visible!
+    lockSystem();
+    setAuthFlow(true);
+
     try {
       const response = await api.post('/auth/signup', {
         email: data.email,
@@ -51,57 +60,49 @@ const Signup = () => {
         dob: data.dob
       });
 
-      // 👇 ADD THIS LINE RIGHT HERE
       console.log("SIGNUP RESPONSE:", response.data);
 
       const accessToken = response.data.data.token || response.data.data.access_token;
 
-      // ── HYDRATE STATE ─────────────────────────────────────────────────────
-      // await hydrateAuth so that isAuthenticated=true + onboardingDone=false
-      // are written to Zustand BEFORE navigate() is called.
-      // This is critical: isAuthenticated is persisted in the Zustand store.
-      // If we navigate without hydrating, guards see isAuthenticated=false
-      // and redirect the user away from onboarding.
+      // ── 2. HYDRATE AUTH (INIT_RESOLVER) ────────────────────────────────────
+      // Fetch /users/me so Zustand has accurate backend state before navigate.
+      // Since hydrateAuth no longer has a lock check, this runs normally.
       await hydrateAuth(accessToken);
-      // ─────────────────────────────────────────────────────────────────────
+
+      // ── 2.5 FIRE REVALIDATION SIGNAL ──────────────────────────────────────
+      triggerAuthRevalidation();
+
+      // ── 3. LET GUARDS HANDLE NAVIGATION ──────────────────────────────────
+      // By NOT calling navigate() here, we let the GuestGuard naturally
+      // redirect the user to either Dashboard or Onboarding the moment
+      // we call `unlockSystem()`.
 
       toast.success('Account created successfully!');
 
-      // Read the now-stable state after hydration
-      const { isAuthenticated, onboardingDone } = useAuthStore.getState();
-
-      // ── EMAIL VERIFICATION ONCE-FLAG ──────────────────────────────────────
-      // New accounts are always unverified. Show page once as a UX nudge.
+      const { isEmailVerified } = useAuthStore.getState();
       const hasSeenEmailVerification = sessionStorage.getItem('hasSeenEmailVerification');
-      const { isEmailVerified = false } = useAuthStore.getState();
 
       if (!isEmailVerified && !hasSeenEmailVerification) {
         sessionStorage.setItem('hasSeenEmailVerification', 'true');
         navigate(ROUTES.EMAIL_VERIFICATION, { replace: true });
-        return;
+        // finally block handles unlockSystem()
       }
-      // ─────────────────────────────────────────────────────────────────────
 
-      // Deterministic routing after hydration
-      // New users always go to onboarding. Fallback to step-1 if hydration
-      // failed transiently (hydrateAuth's transient-fail path sets
-      // isAuthenticated=true so guards don't kick them out).
-      navigate(
-        (isAuthenticated && onboardingDone) ? ROUTES.DASHBOARD : ROUTES.ONBOARDING_STEP_1,
-        { replace: true }
-      );
     } catch (err) {
       console.error('[Signup] error:', err);
       const status = err.response?.status;
 
       if (status === 409) {
-        // Email already taken — show inline error, do NOT redirect
         setApiError('This email is already registered. Please sign in instead.');
       } else if (status === 422) {
         setApiError('Please check your details and try again.');
       } else {
         toast.error(err.response?.data?.detail || 'Failed to create account. Please try again.');
       }
+    } finally {
+      // Always release the lock and auth-flow flag
+      unlockSystem();
+      setAuthFlow(false);
     }
   };
 

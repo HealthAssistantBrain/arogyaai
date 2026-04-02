@@ -4,6 +4,8 @@ import { useAuthStore } from '../../store/authStore'
 import { ROUTES } from '../../router/routes'
 import LoadingScreen from '../../pages/LoadingScreen'
 import SafeNavigate from './SafeNavigate'
+import { useSyncExternalStore } from 'react'
+import { isSystemLocked, subscribeToSystemLock } from '../../lib/systemLock'
 
 const EMAIL_UNVERIFIED_ALLOWLIST = [
   ROUTES.EMAIL_VERIFICATION,
@@ -66,6 +68,10 @@ export default function AuthGuard() {
   const token = useAuthStore((s) => s.token)
   const logout = useAuthStore((s) => s.logout)
   const location = useLocation()
+
+  // ── SYSTEM LOCK ──
+  const locked = useSyncExternalStore(subscribeToSystemLock, isSystemLocked)
+  if (locked) return <Outlet />
 
   // ── HYDRATION LOCK: block ALL routing decisions until server sync is done ──
   // isHydrated + isHydratingAuth together guarantee we have fresh server state.

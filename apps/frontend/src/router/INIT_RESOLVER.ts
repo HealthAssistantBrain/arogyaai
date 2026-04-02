@@ -1,8 +1,21 @@
 import { useAuthStore } from '../store/authStore';
+import { isSystemLocked } from '../lib/systemLock';
+import { shouldRevalidate, consumeAuthRevalidation } from '../lib/authRevalidator';
 
 export type InitResult = { route: string | null; cause: string } | null;
 
 export async function INIT_RESOLVER(): Promise<InitResult> {
+  // FAILSAFE: If authRevalidator is triggered, INIT_RESOLVER must run even if normally skipped
+  if (isSystemLocked() && !shouldRevalidate()) {
+    console.log('[INIT_RESOLVER] Skipped — system is locked.');
+    return null;
+  }
+
+  if (shouldRevalidate()) {
+    console.log('[INIT_RESOLVER] Forced auth revalidation triggered.');
+    consumeAuthRevalidation();
+  }
+
   console.log('INIT START');
 
   // Ensure persisted auth is loaded before making INIT decisions.

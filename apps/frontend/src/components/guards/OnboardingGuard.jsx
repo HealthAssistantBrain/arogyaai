@@ -4,6 +4,8 @@ import { useAuthStore } from '../../store/authStore'
 import { ROUTES } from '../../router/routes'
 import LoadingScreen from '../../pages/LoadingScreen'
 import SafeNavigate from './SafeNavigate'
+import { useSyncExternalStore } from 'react'
+import { isSystemLocked, subscribeToSystemLock } from '../../lib/systemLock'
 
 const STEP_ROUTES = {
   0: ROUTES.ONBOARDING_STEP_1,
@@ -43,6 +45,10 @@ export default function OnboardingGuard() {
       isHydrated
     })
   }, [location.pathname, isAuthenticated, isEmailVerified, onboardingDone, isHydrated])
+
+  // ── SYSTEM LOCK ──
+  const locked = useSyncExternalStore(subscribeToSystemLock, isSystemLocked)
+  if (locked) return <Outlet />
 
   // ── SECTION 3: HYDRATION LOCK ──
   if (!isHydrated || isHydratingAuth) {

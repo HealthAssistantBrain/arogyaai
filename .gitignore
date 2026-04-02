@@ -58,6 +58,13 @@ PROJECT_RULES.md
 .memory/
 gsd-template/
 package-lock.json
+.agent/
+.agents/
+.gemini/
+.gsd/
+adapters/
+scripts/
+.pycache/
 
 # Files 
 verify_api.py

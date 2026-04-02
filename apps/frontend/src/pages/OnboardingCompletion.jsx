@@ -16,18 +16,24 @@ import {
   CheckCircle,
   Microscope
 } from 'lucide-react';
-import { useAuthStore } from '../store/authStore';
 import { ROUTES } from '../router/routes';
+import { lockSystem, unlockSystem } from '../lib/systemLock';
+import { triggerAuthRevalidation } from '../lib/authRevalidator';
+import { useAuthStore } from '../store/authStore';
 
 const OnboardingCompletion = () => {
-  const navigate = useNavigate();
   const completeOnboarding = useAuthStore((s) => s.completeOnboarding);
+  const hydrateAuth = useAuthStore((s) => s.hydrateAuth);
 
-  // BUG 1 FIX: completeOnboarding() MUST be called BEFORE navigate()
-  // Single shared handler wired to both CTA button and auto-redirect timer
   const handleGoToDashboard = async () => {
-    await completeOnboarding();                  // ① write to store and backend first
-    navigate(ROUTES.DASHBOARD, { replace: true }); // ② then navigate
+    lockSystem();
+    try {
+      await completeOnboarding();  // PUT over /users/me
+      await hydrateAuth();         // Fetch fresh state from backend
+      triggerAuthRevalidation();   // Signal INIT_RESOLVER to run
+    } finally {
+      unlockSystem();              // Release the global lock, triggering the flushed event
+    }
   };
 
   // Auto-redirect after 3 seconds

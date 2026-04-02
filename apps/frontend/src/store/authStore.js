@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist, devtools } from 'zustand/middleware'
+import { isSystemLocked } from '../lib/systemLock'
 
 // ── Patch 7: isHydrated prevents guard decisions before Zustand hydrates from localStorage
 // ── Patch 4: role field added for future role-based access control (no UI impact)
@@ -64,10 +65,14 @@ export const useAuthStore = create(
 
           const requestedStep = Number.isFinite(Number(step)) ? Number(step) : 1
           const safeStep = requestedStep >= 1 && requestedStep <= 6 ? requestedStep : 1
-          // #region agent log (setOnboardingStep clamp)
-          fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'fcf4a1' }, body: JSON.stringify({ sessionId: 'fcf4a1', runId: 'post-fix', hypothesisId: 'H9', location: 'src/store/authStore.js:setOnboardingStep', message: 'setOnboardingStep requested/clamped', data: { requestedStep, safeStep, currentOnboardingDone: get().onboardingDone, currentPath: window?.location?.pathname }, timestamp: Date.now() }) }).catch(() => { });
-          // #endregion
-          set({ onboardingStep: safeStep }, false, 'setOnboardingStep')
+
+          // PREVENT BACKWARD DOWNGRADES: if they are editing a previous step,
+          // do not overwrite their max progress.
+          const maxStep = Math.max(get().onboardingStep || 1, safeStep);
+
+          fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'fcf4a1' }, body: JSON.stringify({ sessionId: 'fcf4a1', runId: 'post-fix', hypothesisId: 'H9', location: 'src/store/authStore.js:setOnboardingStep', message: 'setOnboardingStep requested/clamped', data: { requestedStep, safeStep, maxStep, currentOnboardingDone: get().onboardingDone, currentPath: window?.location?.pathname }, timestamp: Date.now() }) }).catch(() => { });
+
+          set({ onboardingStep: maxStep }, false, 'setOnboardingStep')
         },
 
         setHydrated: () =>

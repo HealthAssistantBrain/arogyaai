@@ -306,6 +306,7 @@ erDiagram
 | `logs` | The immutable audit trail of every API interaction. | Linked to `users`. |
 
 ## ML & TIME-SERIES READY
+
 - **Scalability**: All time-series tables (`vitals_data`, `wearable_data`) include a `recorded_at` column with descending indexes, ready for **TimescaleDB** hypertable conversion.
 - **AI Integration**: `reports.parsed_text` and `health_profiles.allergies` are optimized for Vector storage or RAG pipelines.
 - **Microservices**: UUIDs are used throughout to ensure global uniqueness when splitting tables into separate service databases in the future.

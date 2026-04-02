@@ -13,7 +13,9 @@ import {
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { ROUTES } from '../router/routes';
-import api from '../lib/axios';
+import api, { setAuthFlow } from '../lib/axios';
+import { lockSystem, unlockSystem } from '../lib/systemLock';
+import { triggerAuthRevalidation } from '../lib/authRevalidator';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -47,6 +49,10 @@ const Login = () => {
   });
 
   const onSubmit = async (data) => {
+    // ── STRICT EXECUTION BOUNDARY ───────────────────────────────────────────
+    // Lock ALL guards + bypass all interceptor logic before touching auth state.
+    lockSystem();
+    setAuthFlow(true); // suppress maintenance redirects during login
     try {
       // 1. Call standard backend Authentication workflow
       const response = await api.post('auth/login', data);
@@ -64,35 +70,29 @@ const Login = () => {
       // 4. Sync with server state (blocks until /users/me resolves)
       await hydrateAuth();
 
-      // 5. Read resolved state and route deterministically
-      const { isAuthenticated, onboardingDone, isEmailVerified } = useAuthStore.getState();
+      // 5. Fire global revalidation signal to flush router correctly
+      triggerAuthRevalidation();
+
+      // 5. Read resolved state
+      const { isAuthenticated } = useAuthStore.getState();
 
       if (!isAuthenticated) {
         toast.error('Login failed, please try again.');
-        return;
+        return; // finally unlocks
       }
 
       toast.success('Welcome back!');
 
-      // ── EMAIL VERIFICATION ONCE-FLAG ───────────────────────────────────
-      // Phase 1: not enforced, but show the page ONCE per session as a UX nudge.
-      // sessionStorage is cleared on tab/browser close, so it triggers again on next session.
-      const hasSeenEmailVerification = sessionStorage.getItem('hasSeenEmailVerification');
-      if (!isEmailVerified && !hasSeenEmailVerification) {
-        sessionStorage.setItem('hasSeenEmailVerification', 'true');
-        navigate(ROUTES.EMAIL_VERIFICATION, { replace: true });
-        return;
-      }
-      // ─────────────────────────────────────────────────────────────────────
-
-      // 6. Route based on actual onboarding state (NEVER route to "/")
-      navigate(
-        onboardingDone ? ROUTES.DASHBOARD : ROUTES.ONBOARDING_STEP_1,
-        { replace: true }
-      );
+      // ── 6. LET GUARDS HANDLE NAVIGATION ──────────────────────────────────
+      // By NOT calling navigate() here, we let the GuestGuard naturally
+      // redirect the user to either Dashboard or Onboarding the moment
+      // we call `unlockSystem()`.
     } catch (err) {
       console.error('Login failed:', err);
       toast.error(err.message || 'Invalid email or password');
+    } finally {
+      unlockSystem();
+      setAuthFlow(false);
     }
   };
 

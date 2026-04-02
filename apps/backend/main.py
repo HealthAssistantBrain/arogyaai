@@ -7,14 +7,21 @@ from routes import auth, intelligence, users, prediction, dashboard
 
 from database.session import engine, Base
 
-# Auto-create tables for new deployments (safe for existing tables)
-Base.metadata.create_all(bind=engine)
+# ── Critical: import all models so they register on Base.metadata ──────────
+import models  # noqa: F401 — side-effect import required
 
 app = FastAPI(
     title="ArogyaAI Main Backend",
     description="Orchestrator API routing to specialized Microservices.",
     version="1.0.0"
 )
+
+@app.on_event("startup")
+def init_db():
+    """Create all tables on startup (safe / idempotent for existing tables)."""
+    print("🚀 Creating database tables...")
+    Base.metadata.create_all(bind=engine)
+    print("✅ Database tables ready.")
 
 app.add_middleware(
     CORSMiddleware,

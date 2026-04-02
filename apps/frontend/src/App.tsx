@@ -27,7 +27,19 @@ export default function App() {
         if (isMounted) setInitComplete(true); // fail-open so the app still loads
       });
 
-    return () => { isMounted = false; };
+    // Listen for forced routing evaluations from authRevalidator
+    // We intentionally ignore the return route here so that the SPA doesn't
+    // hard-reload. Instead, INIT_RESOLVER updates Zustand, and the React
+    // guards instantly react to the new state and gracefully route the user.
+    const handleRevalidation = () => {
+      INIT_RESOLVER().catch(console.error);
+    };
+    window.addEventListener('auth_reval_signal', handleRevalidation);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('auth_reval_signal', handleRevalidation);
+    };
   }, []);
 
   if (!initComplete) {
