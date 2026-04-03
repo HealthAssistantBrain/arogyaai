@@ -38,19 +38,6 @@ import {
 import api from '../lib/axios';
 import toast from 'react-hot-toast';
 import { ROUTES } from '../router/routes';
-import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
-import icon from 'leaflet/dist/images/marker-icon.png';
-import iconShadow from 'leaflet/dist/images/marker-shadow.png';
-
-let DefaultIcon = L.icon({
-    iconUrl: icon,
-    shadowUrl: iconShadow,
-    iconSize: [25, 41],
-    iconAnchor: [12, 41]
-});
-L.Marker.prototype.options.icon = DefaultIcon;
 
 const aqiTrendData = [
   { day: 'Mon', aqi: 42, cat: 'Good' },
@@ -66,48 +53,105 @@ const aqiTrendData = [
 const DELHI_LAT = 28.6139;
 const DELHI_LNG = 77.2090;
 
+const createOsmEmbedUrl = (lat, lng) => {
+  const delta = 0.12;
+  const left = (lng - delta).toFixed(6);
+  const right = (lng + delta).toFixed(6);
+  const top = (lat + delta).toFixed(6);
+  const bottom = (lat - delta).toFixed(6);
+
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${left}%2C${bottom}%2C${right}%2C${top}&layer=mapnik&marker=${lat}%2C${lng}`;
+};
+
 const AQIMonitor = () => {
   const navigate = useNavigate();
   const [activeLocation, setActiveLocation] = useState('New Delhi, DL');
   const [aqiValue, setAqiValue] = useState(156);
+  const [pollutantData, setPollutantData] = useState({
+    pm25: 25.0,
+    pm10: 45.0,
+    no2: 20.0,
+    o3: 50.0,
+    so2: 10.0,
+  });
+  const [aqiMeta, setAqiMeta] = useState({
+    dominantPollutant: 'PM2.5',
+    method: 'openweather_pm_epa_interp',
+  });
   const [alertThreshold, setAlertThreshold] = useState(100);
   const [isAlertEnabled, setIsAlertEnabled] = useState(true);
   const [coords, setCoords] = useState({ lat: DELHI_LAT, lng: DELHI_LNG });
+  const [isLoading, setIsLoading] = useState(false);
+  const osmMapEmbedUrl = createOsmEmbedUrl(coords.lat, coords.lng);
 
-  // BUG 2 FIX C — Geolocation with proper error handling + fallback
-  useEffect(() => {
-    if (!navigator.geolocation) {
-      toast.error('Geolocation not supported. Using default location.');
-      fetchAQIData(DELHI_LAT, DELHI_LNG);
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-        setCoords({ lat: latitude, lng: longitude });
-        fetchAQIData(latitude, longitude);
-      },
-      (error) => {
-        // BUG 2 FIX C (denial path) — fallback to Delhi, show toast
-        toast.error('Could not get your location. Using default.');
-        fetchAQIData(DELHI_LAT, DELHI_LNG);
-      },
-      { timeout: 8000, maximumAge: 60000 }
-    );
-  }, []);
-
+  // Location is fetched only when the user explicitly requests it.
   // BUG 2 FIX D — axios api instance with Bearer token (via interceptors)
   const fetchAQIData = async (lat, lng) => {
     try {
-      const { data } = await api.get('/health/aqi-risk', { params: { lat, lng } });
-      if (data?.aqi != null) setAqiValue(data.aqi);
-      if (data?.location) setActiveLocation(data.location);
+      setIsLoading(true);
+      const response = await api.get('/health/aqi-risk', { params: { lat, lng } });
+      
+      // Handle standard envelope response
+      if (response.data?.success && response.data?.data) {
+        const apiData = response.data.data;
+        setAqiValue(apiData.aqi || 156);
+        setActiveLocation(apiData.location || 'Unknown Location');
+        setPollutantData({
+          pm25: apiData.pm25 || 25.0,
+          pm10: apiData.pm10 || 45.0,
+          no2: apiData.no2 || 20.0,
+          o3: apiData.o3 || 50.0,
+          so2: apiData.so2 || 10.0,
+        });
+        setAqiMeta({
+          dominantPollutant: apiData.dominant_pollutant || 'PM2.5',
+          method: apiData.aqi_method || 'openweather_pm_epa_interp',
+        });
+        setCoords({ lat, lng });
+        toast.success(`AQI updated for ${apiData.location}`);
+      } else if (response.data?.data?.aqi) {
+        // Fallback: direct data property
+        setAqiValue(response.data.data.aqi);
+        setActiveLocation(response.data.data.location || 'Unknown Location');
+        setAqiMeta({
+          dominantPollutant: response.data.data.dominant_pollutant || 'PM2.5',
+          method: response.data.data.aqi_method || 'openweather_pm_epa_interp',
+        });
+        setCoords({ lat, lng });
+      }
     } catch (err) {
       // Backend offline → keep displayed mock data, don't crash
       console.warn('[AQIMonitor] Backend unavailable, using static data:', err?.message);
+      toast.error('Using offline data. Some features limited.');
+    } finally {
+      setIsLoading(false);
     }
   };
+
+  const handleLocationClick = () => {
+    if (!navigator.geolocation) {
+      toast.error('Geolocation not supported in this browser.');
+      return;
+    }
+
+    setIsLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      ({ coords: currentCoords }) => {
+        setCoords({ lat: currentCoords.latitude, lng: currentCoords.longitude });
+        fetchAQIData(currentCoords.latitude, currentCoords.longitude);
+      },
+      () => {
+        setIsLoading(false);
+        toast.error('Location permission denied or unavailable.');
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  };
+
+  // Load default AQI without prompting for location on page open.
+  useEffect(() => {
+    fetchAQIData(DELHI_LAT, DELHI_LNG);
+  }, []);
 
   const getAqiConfig = (val) => {
     if (val <= 50) return { label: 'Good', color: 'text-green-500', bg: 'bg-green-500', desc: 'Air quality is satisfactory, and air pollution poses little or no risk.', action: 'Safe for outdoor exercise' };
@@ -148,11 +192,35 @@ const AQIMonitor = () => {
             </button>
             <h2 className="text-xl font-black tracking-tight italic uppercase">Air Quality Risk Monitor</h2>
           </div>
-          <div className="flex items-center gap-6">
-             <div className="flex items-center gap-2 bg-[#6143f4]/10 px-4 py-2 rounded-xl border border-[#6143f4]/20">
+          <div className="flex items-center gap-4">
+             <button
+                type="button"
+                onClick={handleLocationClick}
+                disabled={isLoading}
+                className="flex items-center gap-2 bg-[#6143f4]/10 px-4 py-2 rounded-xl border border-[#6143f4]/20 transition-all hover:bg-[#6143f4]/15 disabled:opacity-60 disabled:cursor-not-allowed"
+             >
                 <Navigation size={14} className="text-[#6143f4]" />
-                <span className="text-xs font-black text-[#6143f4] uppercase tracking-widest">{activeLocation}</span>
-             </div>
+                <span className="text-xs font-black text-[#6143f4] uppercase tracking-widest">{isLoading ? 'Fetching...' : activeLocation}</span>
+             </button>
+              <button
+                type="button"
+                onClick={() => {
+                  window.open(`https://www.openstreetmap.org/?mlat=${coords.lat}&mlon=${coords.lng}#map=11/${coords.lat}/${coords.lng}`, '_blank', 'noopener,noreferrer');
+                }}
+               className="flex items-center gap-1 px-3 py-2 text-xs font-black uppercase tracking-widest rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/20"
+             >
+               <MapPin size={14} /> Open In OSM
+             </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCoords({ lat: DELHI_LAT, lng: DELHI_LNG });
+                  fetchAQIData(DELHI_LAT, DELHI_LNG);
+                }}
+                className="size-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 hover:bg-slate-200 transition-all active:scale-90"
+              >
+               <Navigation size={18} />
+             </button>
              <button className="size-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 relative active:scale-90 transition-all">
                 <Bell size={20} />
                 <span className="absolute top-2.5 right-2.5 size-2 bg-red-500 rounded-full ring-2 ring-white dark:ring-slate-900"></span>
@@ -196,6 +264,14 @@ const AQIMonitor = () => {
               <p className="mt-8 text-slate-500 font-medium text-xs px-4">
                 {aqiConfig.desc}
               </p>
+              <div className="mt-5 flex flex-wrap items-center justify-center gap-2 px-4">
+                <span className="rounded-full border border-[#6143f4]/20 bg-[#6143f4]/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-[#6143f4]">
+                  Driver: {aqiMeta.dominantPollutant}
+                </span>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                  Source: OpenWeather PM
+                </span>
+              </div>
               <div className="mt-6 flex gap-2">
                 <span className="size-2 rounded-full bg-green-500 animate-pulse"></span>
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Live Sensor Synchronized</span>
@@ -209,33 +285,20 @@ const AQIMonitor = () => {
                transition={{ delay: 0.1 }}
                className="lg:col-span-2 bg-[#13082A] rounded-3xl shadow-xl overflow-hidden relative border border-slate-800 group h-[400px]"
             >
-              <div className="absolute inset-0 opacity-80 z-0 select-none pointer-events-none">
-                 <MapContainer 
-                    center={[coords.lat, coords.lng]} 
-                    zoom={10} 
-                    style={{ height: '100%', width: '100%' }}
-                    zoomControl={false}
-                    scrollWheelZoom={false}
-                    dragging={false}
-                 >
-                    <TileLayer 
-                       url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" 
-                    />
-                    <Marker position={[coords.lat, coords.lng]}>
-                       <Popup>{activeLocation}</Popup>
-                    </Marker>
-                    <Circle 
-                       center={[coords.lat, coords.lng]} 
-                       radius={5000} 
-                       pathOptions={{ color: '#6143f4', fillColor: '#6143f4', fillOpacity: 0.1, weight: 1 }} 
-                    />
-                 </MapContainer>
+              <div className="absolute inset-0 z-0 overflow-hidden">
+                <iframe
+                  title="OpenStreetMap AQI Location"
+                  src={osmMapEmbedUrl}
+                  className="h-full w-full border-0 opacity-95"
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                />
               </div>
-              <div className="absolute inset-0 bg-gradient-to-t from-[#13082A] via-transparent to-transparent"></div>
+              <div className="absolute inset-0 bg-gradient-to-t from-[#13082A] via-transparent to-transparent pointer-events-none"></div>
               
-              <div className="relative z-10 p-8 h-full flex flex-col justify-between">
+              <div className="pointer-events-none relative z-10 p-8 h-full flex flex-col justify-between">
                 <div className="flex justify-between items-start">
-                   <div className="bg-white/10 backdrop-blur-md border border-white/20 p-4 rounded-2xl flex items-center gap-3">
+                   <div className="pointer-events-auto bg-white/10 backdrop-blur-md border border-white/20 p-4 rounded-2xl flex items-center gap-3">
                       <div className="size-10 bg-white/20 rounded-xl flex items-center justify-center">
                          <MapPin className="text-white" size={20} />
                       </div>
@@ -244,25 +307,60 @@ const AQIMonitor = () => {
                         <p className="text-white/50 text-[10px] font-bold uppercase tracking-widest">Lat: {coords.lat.toFixed(2)}, Lng: {coords.lng.toFixed(2)}</p>
                       </div>
                    </div>
-                   <div className="flex gap-2">
-                      <button className="size-10 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 text-white flex items-center justify-center hover:bg-white/20 transition-all"><Search size={18} /></button>
-                      <button className="size-10 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 text-white flex items-center justify-center hover:bg-white/20 transition-all"><Navigation size={18} /></button>
+                    <div className="pointer-events-auto flex gap-2">
+                       <a
+                        href={`https://www.openstreetmap.org/?mlat=${coords.lat}&mlon=${coords.lng}#map=11/${coords.lat}/${coords.lng}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="size-10 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 text-white flex items-center justify-center hover:bg-white/20 transition-all"
+                      >
+                        <Search size={18} />
+                      </a>
+                       <button
+                         type="button"
+                        onClick={handleLocationClick}
+                        disabled={isLoading}
+                        className="size-10 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 text-white flex items-center justify-center hover:bg-white/20 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        <Navigation size={18} className={isLoading ? 'animate-pulse' : ''} />
+                      </button>
                    </div>
                 </div>
 
                 <div className="flex items-end justify-between">
-                   <div className="space-y-4">
-                      <div className="flex gap-3">
-                         <div className="bg-white/10 backdrop-blur-md p-3 rounded-xl flex items-center gap-2 border border-white/10">
-                            <Thermometer size={14} className="text-orange-400" />
-                            <span className="text-white text-xs font-bold">28°C</span>
-                         </div>
-                         <div className="bg-white/10 backdrop-blur-md p-3 rounded-xl flex items-center gap-2 border border-white/10">
+                   <div className="pointer-events-none space-y-4">
+                      <div className="pointer-events-none inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/25 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.25em] text-white/70 backdrop-blur-md">
+                         <span className="size-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                         OpenStreetMap Live Visual
+                      </div>
+                      <div className="pointer-events-auto flex gap-3 flex-wrap max-w-md">
+                         <div className="bg-white/10 backdrop-blur-md p-3 rounded-xl flex items-center gap-2 border border-white/10 flex-col">
                             <Droplets size={14} className="text-blue-400" />
-                            <span className="text-white text-xs font-bold">64% Hum.</span>
+                            <span className="text-white text-xs font-bold">PM2.5</span>
+                            <span className="text-white/70 text-[10px] font-semibold">{pollutantData.pm25.toFixed(1)} μg/m³</span>
+                         </div>
+                         <div className="bg-white/10 backdrop-blur-md p-3 rounded-xl flex items-center gap-2 border border-white/10 flex-col">
+                            <Cloud size={14} className="text-gray-400" />
+                            <span className="text-white text-xs font-bold">PM10</span>
+                            <span className="text-white/70 text-[10px] font-semibold">{pollutantData.pm10.toFixed(1)} μg/m³</span>
+                         </div>
+                         <div className="bg-white/10 backdrop-blur-md p-3 rounded-xl flex items-center gap-2 border border-white/10 flex-col">
+                            <Zap size={14} className="text-yellow-400" />
+                            <span className="text-white text-xs font-bold">NO₂</span>
+                            <span className="text-white/70 text-[10px] font-semibold">{pollutantData.no2.toFixed(1)} ppb</span>
+                         </div>
+                         <div className="bg-white/10 backdrop-blur-md p-3 rounded-xl flex items-center gap-2 border border-white/10 flex-col">
+                            <Wind size={14} className="text-indigo-400" />
+                            <span className="text-white text-xs font-bold">O₃</span>
+                            <span className="text-white/70 text-[10px] font-semibold">{pollutantData.o3.toFixed(1)} ppb</span>
+                         </div>
+                         <div className="bg-white/10 backdrop-blur-md p-3 rounded-xl flex items-center gap-2 border border-white/10 flex-col">
+                            <AlertTriangle size={14} className="text-red-400" />
+                            <span className="text-white text-xs font-bold">SO₂</span>
+                            <span className="text-white/70 text-[10px] font-semibold">{pollutantData.so2.toFixed(1)} ppb</span>
                          </div>
                       </div>
-                      <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest leading-none max-w-[200px]">Interactive Environmental Mapping Terminal</p>
+                      <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest leading-none max-w-[300px]">Interactive Environmental Mapping Terminal • Live Pollutant Network</p>
                    </div>
                    <div className="size-32 relative">
                       <motion.div 

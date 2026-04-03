@@ -1,14 +1,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from alembic import command
+from alembic.config import Config
 
 # Import modular routers
 from routes import auth, intelligence, users, prediction, dashboard
 
 from database.session import engine, Base
 
-# ── Critical: import all models so they register on Base.metadata ──────────
-import models  # noqa: F401 — side-effect import required
+# Critical: import all models so they register on Base.metadata
+import models  # noqa: F401
 
 app = FastAPI(
     title="ArogyaAI Main Backend",
@@ -16,12 +18,19 @@ app = FastAPI(
     version="1.0.0"
 )
 
+
 @app.on_event("startup")
 def init_db():
-    """Create all tables on startup (safe / idempotent for existing tables)."""
-    print("🚀 Creating database tables...")
+    """Create tables for fresh DBs, then apply Alembic migrations for schema drift."""
+    print("Creating database tables...")
     Base.metadata.create_all(bind=engine)
-    print("✅ Database tables ready.")
+    print("Database tables ready.")
+
+    alembic_cfg = Config("alembic.ini")
+    print("Applying database migrations...")
+    command.upgrade(alembic_cfg, "head")
+    print("Database migrations applied.")
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -33,6 +42,7 @@ app.add_middleware(
 
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request, exc):
@@ -46,6 +56,7 @@ async def http_exception_handler(request, exc):
         }
     )
 
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc):
     return JSONResponse(
@@ -58,6 +69,7 @@ async def validation_exception_handler(request, exc):
         }
     )
 
+
 @app.get("/health", tags=["System"])
 def health_check():
     """
@@ -65,7 +77,6 @@ def health_check():
     Returns 200 if all services are healthy, 503 if any dependency is down.
     Used by docker healthchecks and the frontend maintenance-mode logic.
     """
-    from database.session import engine
     from sqlalchemy import text
     import os
 
@@ -73,7 +84,7 @@ def health_check():
     redis_status = "error"
     errors = []
 
-    # ─ Postgres check ────────────────────────────────────────────────────────
+    # Postgres check
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
@@ -81,7 +92,7 @@ def health_check():
     except Exception as e:
         errors.append(f"postgres: {str(e)[:80]}")
 
-    # ─ Redis check ──────────────────────────────────────────────────────────
+    # Redis check
     try:
         import redis as redis_lib
         redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
@@ -105,6 +116,7 @@ def health_check():
     }
 
     return JSONResponse(status_code=http_status, content=body)
+
 
 # Mount modular routers (prefixes now managed in routers)
 app.include_router(auth.router)
