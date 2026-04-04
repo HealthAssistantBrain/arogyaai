@@ -3,5 +3,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
-# Development server for Docker-Compose interoperability
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+# Remove any host node_modules that may have been copied in
+RUN rm -rf node_modules && npm install
+# Development server — bind to all interfaces so Docker can expose the port
+CMD ["npx", "vite", "--host", "0.0.0.0"]
