@@ -60,7 +60,7 @@ const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('Dashboard');
 
   // ── Store ─────────────────────────────────────────────────────────────────
-  const { healthScore, history, prediction, profile, alerts,
+  const { healthScore, history, prediction, profile, alerts, googleFit,
     loading, error, fetchDashboardData } = useDashboardStore();
   const authUser = useAuthStore((s) => s.user);
 
@@ -73,6 +73,7 @@ const Dashboard = () => {
   const predData = prediction?.data;
   const profData = profile?.data;
   const alertsData = alerts?.data?.alerts ?? [];
+  const gfData = googleFit?.data;
 
   // Status: 'ready' | 'processing' | 'fallback'
   const hsStatus = healthScore?.status ?? 'fallback';
@@ -97,6 +98,11 @@ const Dashboard = () => {
   const metabolicRate = predData?.metabolic_rate ?? '—';
   const trajectilePercentile = predData?.trajectory_percentile ?? '—';
   const predRecs = predData?.recommendations ?? [];
+
+  const gfSteps = (gfData?.connected && gfData?.stats?.latest_day?.steps !== undefined) ? gfData.stats.latest_day.steps : 8432;
+  const gfDistance = (gfSteps * 0.00073529).toFixed(1);
+  const gfCalories = Math.round(gfSteps * 0.050759);
+  const gfProgress = Math.min((gfSteps / 10000) * 100, 100).toFixed(2);
 
   const sidebarLinks = [
     { icon: LayoutDashboard, label: 'Dashboard', path: ROUTES.DASHBOARD },
@@ -390,14 +396,14 @@ const Dashboard = () => {
             <motion.div variants={itemVariants} className="bg-white dark:bg-slate-900 p-8 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
               <h3 className="text-slate-500 font-bold text-xs uppercase tracking-[0.2em] mb-4">Daily Steps</h3>
               <div className="flex items-end gap-2 mb-8">
-                <span className="text-3xl font-black text-[#13082A] dark:text-white">8,432</span>
+                <span className="text-3xl font-black text-[#13082A] dark:text-white">{gfSteps.toLocaleString()}</span>
                 <span className="text-slate-400 font-medium mb-1.5">/ 10,000</span>
               </div>
               <div className="space-y-6">
                 <div className="h-4 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden shadow-inner border border-white dark:border-slate-700">
                   <motion.div
                     initial={{ width: 0 }}
-                    animate={{ width: '84.32%' }}
+                    animate={{ width: `${gfProgress}%` }}
                     transition={{ duration: 1.5, ease: "easeOut" }}
                     className="h-full bg-gradient-to-r from-[#6143f4] to-[#009CDE] rounded-full"
                   ></motion.div>
@@ -405,11 +411,11 @@ const Dashboard = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 group hover:bg-[#6143f4]/5 hover:border-[#6143f4]/20 transition-all">
                     <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest leading-none mb-2">Distance</p>
-                    <p className="text-xl font-black text-[#13082A] dark:text-white">6.2 <span className="text-xs font-bold text-slate-400 ml-1">km</span></p>
+                    <p className="text-xl font-black text-[#13082A] dark:text-white">{gfDistance} <span className="text-xs font-bold text-slate-400 ml-1">km</span></p>
                   </div>
                   <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 group hover:bg-[#6143f4]/5 hover:border-[#6143f4]/20 transition-all">
                     <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest leading-none mb-2">Calories</p>
-                    <p className="text-xl font-black text-[#13082A] dark:text-white">428 <span className="text-xs font-bold text-slate-400 ml-1">kcal</span></p>
+                    <p className="text-xl font-black text-[#13082A] dark:text-white">{gfCalories} <span className="text-xs font-bold text-slate-400 ml-1">kcal</span></p>
                   </div>
                 </div>
               </div>

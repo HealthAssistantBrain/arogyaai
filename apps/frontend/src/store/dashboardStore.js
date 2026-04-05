@@ -30,6 +30,7 @@ const useDashboardStore = create(
             prediction: emptySlice(),
             profile: emptySlice(),
             alerts: emptySlice(),
+            googleFit: emptySlice(),
 
             // ── Global loading/error ───────────────────────────────────────────────
             loading: false,
@@ -50,12 +51,13 @@ const useDashboardStore = create(
                 set({ loading: true, error: null }, false, 'fetch/start');
 
                 try {
-                    const [scoreRes, historyRes, predRes, profileRes, alertsRes] = await Promise.all([
+                    const [scoreRes, historyRes, predRes, profileRes, alertsRes, googleFitRes] = await Promise.all([
                         api.get('/health/score'),
                         api.get('/health/history'),
                         api.get('/prediction/latest'),
                         api.get('/user/profile'),
                         api.get('/alerts'),
+                        api.get('/google-fit/status').catch(() => ({ data: { data: null, status: 'fallback', source: 'mock' } }))
                     ]);
 
                     const toSlice = (res) => ({
@@ -71,6 +73,7 @@ const useDashboardStore = create(
                         prediction: toSlice(predRes),
                         profile: toSlice(profileRes),
                         alerts: toSlice(alertsRes),
+                        googleFit: toSlice(googleFitRes),
                         loading: false,
                         error: null,
                         lastFetched: Date.now(),
@@ -96,7 +99,7 @@ const useDashboardStore = create(
             // ─────────────────────────────────────────────────────────────────────
             _managePoll: (slices) => {
                 const state = get();
-                const modules = ['healthScore', 'history', 'prediction', 'alerts'];
+                const modules = ['healthScore', 'history', 'prediction', 'alerts', 'googleFit'];
                 const anyProcessing = modules.some((k) => (slices[k]?.status ?? state[k]?.status) === 'processing');
 
                 if (anyProcessing && !state._pollTimer) {
@@ -122,7 +125,7 @@ const useDashboardStore = create(
                     {
                         healthScore: emptySlice(), history: emptySlice(),
                         prediction: emptySlice(), profile: emptySlice(),
-                        alerts: emptySlice(),
+                        alerts: emptySlice(), googleFit: emptySlice(),
                         loading: false, error: null, lastFetched: null, _pollTimer: null,
                     },
                     false,
