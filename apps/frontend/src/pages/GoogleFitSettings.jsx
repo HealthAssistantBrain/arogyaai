@@ -29,18 +29,18 @@ const GoogleFitSettings = () => {
                 <div className="max-w-6xl w-full space-y-10">
                     
                     {/* Header */}
-                    <header className="flex flex-col gap-2">
+                    <header className="flex flex-col mb-8 mt-2">
                         <button 
                             onClick={() => navigate(ROUTES.DEVICES)}
-                            className="flex items-center gap-2 text-slate-500 hover:text-[#6143f4] dark:hover:text-[#6143f4] text-xs font-bold uppercase tracking-widest transition-colors w-fit group"
+                            className="flex items-center gap-2 text-slate-500 hover:text-[#6143f4] dark:hover:text-[#6143f4] text-[11px] font-bold uppercase tracking-widest transition-colors w-fit group mb-6"
                         >
                             <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
                             Back to Device Manager
                         </button>
-                        <h1 className="text-3xl font-black tracking-tight text-[#13082a] dark:text-white uppercase transition-colors">
+                        <h1 className="text-[28px] font-black tracking-tight text-[#13082a] dark:text-white uppercase transition-colors mb-2 leading-tight">
                             Google Fit Integration
                         </h1>
-                        <p className="text-slate-500 dark:text-slate-400 font-medium max-w-xl text-sm leading-relaxed">
+                        <p className="text-slate-400 font-medium max-w-xl text-[13px] leading-relaxed">
                             Manage your connected wearable devices and health data synchronization across the architecture.
                         </p>
                     </header>
@@ -52,15 +52,8 @@ const GoogleFitSettings = () => {
                             
                             {/* HERO CARD */}
                             <section className="bg-white dark:bg-white/[0.03] backdrop-blur-xl rounded-3xl p-8 border border-slate-200 dark:border-white/5 relative overflow-hidden shadow-xl shadow-slate-200/50 dark:shadow-none transition-colors group">
-                                <div className="absolute top-0 right-0 p-5">
-                                    <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-black px-3 py-1.5 rounded-full border border-emerald-500/20 uppercase tracking-widest flex items-center gap-2 shadow-sm">
-                                        <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
-                                        Live Status
-                                    </span>
-                                </div>
-                                
-                                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-8">
-                                    <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-[#6143f4] to-[#009cde] flex items-center justify-center shadow-lg shadow-[#6143f4]/30 shrink-0 group-hover:scale-105 transition-transform">
+                                <div className="flex flex-col sm:flex-row items-start gap-6">
+                                    <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-[#6143f4] to-[#009cde] flex items-center justify-center shadow-lg shadow-[#6143f4]/30 shrink-0 group-hover:scale-105 transition-transform">
                                         <div className="bg-white rounded-full p-2.5">
                                             {/* Minimal GFit Icon mockup */}
                                             <svg className="w-10 h-10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -76,29 +69,35 @@ const GoogleFitSettings = () => {
                                             </svg>
                                         </div>
                                     </div>
-                                    <div className="flex-1">
-                                        <h3 className="text-xl font-black text-[#13082a] dark:text-white mb-5 uppercase tracking-tight">Google Fit Platform</h3>
-                                        <div className="grid grid-cols-2 gap-y-5 gap-x-8">
+                                    <div className="flex-1 min-w-0 space-y-6">
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                            <h3 className="text-[22px] font-black text-[#13082a] dark:text-white uppercase tracking-tight leading-none">Google Fit Integration</h3>
+                                            <span className="w-fit bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-black px-3 py-1.5 rounded-full border border-emerald-500/20 uppercase tracking-widest flex items-center gap-2 shadow-sm shrink-0">
+                                                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
+                                                CONNECTED
+                                            </span>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-x-8 gap-y-4">
                                             <div>
-                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Source Node</p>
+                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Active Device</p>
                                                 <p className="text-sm font-black text-[#13082a] dark:text-slate-200">Pixel Watch 2</p>
                                             </div>
                                             <div>
-                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">State Config</p>
+                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Battery</p>
                                                 <p className="text-sm font-black text-[#13082a] dark:text-slate-200">Cloud Sync API</p>
                                             </div>
                                             <div>
-                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Last Payload</p>
+                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Last Synced</p>
                                                 <p className="text-sm font-black text-[#13082a] dark:text-slate-200">2 mins ago</p>
                                             </div>
                                             <div>
-                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Registry</p>
+                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Account</p>
                                                 <p className="text-sm font-black text-[#13082a] dark:text-slate-200">m.chen@nexus.ai</p>
                                             </div>
                                         </div>
-                                        <div className="mt-8">
+                                        <div className="mt-6 md:mt-8">
                                             <button className="bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 border border-transparent dark:border-white/10 text-[#13082a] dark:text-white text-xs font-black uppercase tracking-widest py-3 px-6 rounded-xl transition-all shadow-sm active:scale-95">
-                                                Reconnect Engine
+                                                Reconnect / Manage
                                             </button>
                                         </div>
                                     </div>
@@ -129,7 +128,7 @@ const GoogleFitSettings = () => {
                                                 <p className="text-3xl font-black text-[#13082a] dark:text-white">8,432 <span className="text-xs font-bold text-slate-400 uppercase">/ 10k</span></p>
                                             </div>
                                         </div>
-                                        <button className="text-[10px] bg-[#6143f4]/10 text-[#6143f4] font-black uppercase tracking-widest px-4 py-2 rounded-xl border border-[#6143f4]/20 hover:bg-[#6143f4] hover:text-white transition-all w-full leading-none group-hover:shadow-md group-hover:shadow-[#6143f4]/20">Fetch Live Steps</button>
+                                        <button className="text-[10px] bg-[#6143f4]/10 text-[#6143f4] font-black uppercase tracking-widest px-4 py-2 rounded-xl border border-[#6143f4]/20 hover:bg-[#6143f4] hover:text-white transition-all w-full leading-none group-hover:shadow-md group-hover:shadow-[#6143f4]/20">Fetch Steps</button>
                                     </div>
                                     
                                     {/* Heart Rate Card */}
@@ -143,7 +142,7 @@ const GoogleFitSettings = () => {
                                                 <p className="text-3xl font-black text-[#13082a] dark:text-[#009cde]">72 <span className="text-xs font-bold text-slate-400 uppercase">BPM</span></p>
                                             </div>
                                         </div>
-                                        <button className="text-[10px] bg-[#009cde]/10 text-[#009cde] font-black uppercase tracking-widest px-4 py-2 rounded-xl border border-[#009cde]/20 hover:bg-[#009cde] hover:text-white transition-all w-full leading-none group-hover:shadow-md group-hover:shadow-[#009cde]/20">Sync HR Sensor</button>
+                                        <button className="text-[10px] bg-[#009cde]/10 text-[#009cde] font-black uppercase tracking-widest px-4 py-2 rounded-xl border border-[#009cde]/20 hover:bg-[#009cde] hover:text-white transition-all w-full leading-none group-hover:shadow-md group-hover:shadow-[#009cde]/20">Fetch Pulse</button>
                                     </div>
                                 </div>
                                 
@@ -158,12 +157,12 @@ const GoogleFitSettings = () => {
                                             <p className="text-base font-black text-[#13082a] dark:text-white">6.2 <span className="text-[10px] text-slate-400 opacity-80">km</span></p>
                                         </div>
                                         <div>
-                                            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest mb-1">Deep Sleep</p>
+                                            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest mb-1">Sleep</p>
                                             <p className="text-base font-black text-[#13082a] dark:text-white">7h 42m</p>
                                         </div>
                                     </div>
                                     <button className="bg-slate-900 dark:bg-[#6143f4] hover:bg-slate-800 dark:hover:bg-[#4a34c1] text-white text-xs font-black uppercase tracking-widest py-3 px-6 rounded-xl shadow-lg shadow-black/10 dark:shadow-[#6143f4]/20 transition-all active:scale-95 whitespace-nowrap">
-                                        Process Archival
+                                        Fetch Sleep Data
                                     </button>
                                 </div>
                             </section>
@@ -172,14 +171,14 @@ const GoogleFitSettings = () => {
                             <section className="bg-white dark:bg-white/[0.03] backdrop-blur-xl rounded-3xl p-8 border border-slate-200 dark:border-white/5 shadow-xl shadow-slate-200/50 dark:shadow-none transition-colors">
                                 <h4 className="text-sm font-black text-[#13082a] dark:text-white uppercase tracking-widest mb-8 flex items-center gap-3">
                                     <Database size={18} className="text-[#009cde]" />
-                                    Transmission Route
+                                    DATA TRANSMISSION ARCHITECTURE
                                 </h4>
                                 <div className="flex items-center justify-between px-2 sm:px-6">
                                     <div className="flex flex-col items-center gap-3 relative group">
                                         <div className="w-14 h-14 rounded-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center text-[#ea4335] shadow-lg group-hover:scale-110 transition-transform">
                                             <Activity size={24} />
                                         </div>
-                                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#13082a] dark:text-slate-400 text-center">Protocol<br/>Origin</span>
+                                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#13082a] dark:text-slate-400 text-center">G-Fit</span>
                                     </div>
                                     <div className="flex-1 flex justify-center items-center px-4 relative">
                                         <div className="h-1 w-full bg-slate-200 dark:bg-[#131022] rounded-full overflow-hidden relative">
@@ -190,7 +189,7 @@ const GoogleFitSettings = () => {
                                         <div className="w-14 h-14 rounded-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center text-[#6143f4] shadow-lg group-hover:scale-110 transition-transform">
                                             <Cpu size={24} />
                                         </div>
-                                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#13082a] dark:text-slate-400 text-center">Backend<br/>Gateway</span>
+                                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#13082a] dark:text-slate-400 text-center">Backend<br/>API</span>
                                     </div>
                                     <div className="flex-1 flex justify-center items-center px-4 relative">
                                         <div className="h-1 w-full bg-slate-200 dark:bg-[#131022] rounded-full overflow-hidden relative">
@@ -201,7 +200,7 @@ const GoogleFitSettings = () => {
                                         <div className="w-14 h-14 rounded-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center text-[#009cde] shadow-lg group-hover:scale-110 transition-transform">
                                             <Database size={24} />
                                         </div>
-                                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#13082a] dark:text-slate-400 text-center">Cloud<br/>Vault</span>
+                                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#13082a] dark:text-slate-400 text-center">Health<br/>Engine</span>
                                     </div>
                                 </div>
                             </section>
@@ -212,12 +211,12 @@ const GoogleFitSettings = () => {
                             
                             {/* SYNC CONFIGURATION */}
                             <section className="bg-white dark:bg-white/[0.03] backdrop-blur-xl rounded-3xl p-8 border border-slate-200 dark:border-white/5 shadow-xl shadow-slate-200/50 dark:shadow-none transition-colors">
-                                <h4 className="text-sm font-black text-[#13082a] dark:text-white uppercase tracking-widest mb-6">Synchronization Rhythm</h4>
+                                <h4 className="text-sm font-black text-[#13082a] dark:text-white uppercase tracking-widest mb-6">ARCHIVAL SYNC PROTOCOL</h4>
                                 <div className="space-y-4">
                                     {[
-                                        { id: 'realtime', label: 'Continuous Pipeline', activeColor: 'bg-[#6143f4]' },
-                                        { id: 'hourly', label: 'Hourly Interval', activeColor: 'bg-[#009cde]' },
-                                        { id: 'daily', label: 'Daily Archival Dump', activeColor: 'bg-emerald-500' }
+                                        { id: 'realtime', label: 'Real-time Stream', activeColor: 'bg-[#6143f4]' },
+                                        { id: 'hourly', label: 'Hourly Batch', activeColor: 'bg-[#009cde]' },
+                                        { id: 'daily', label: 'Daily Archive', activeColor: 'bg-emerald-500' }
                                     ].map(mode => (
                                         <label key={mode.id} onClick={() => setSyncMode(mode.id)} className={`flex items-center justify-between p-5 rounded-2xl border-2 cursor-pointer transition-all ${syncMode === mode.id ? 'border-slate-300 dark:border-white/20 bg-slate-50 dark:bg-white/5 shadow-inner' : 'border-transparent bg-transparent hover:bg-slate-50 dark:hover:bg-white/5'}`}>
                                             <div className="flex items-center gap-4">
@@ -231,18 +230,18 @@ const GoogleFitSettings = () => {
                                     ))}
                                 </div>
                                 <button className="w-full mt-8 bg-slate-100 hover:bg-slate-200 dark:bg-[#6143f4]/10 dark:hover:bg-[#6143f4]/20 text-[#13082a] dark:text-[#6143f4] text-xs font-black uppercase tracking-widest py-4 rounded-xl border border-transparent dark:border-[#6143f4]/20 transition-all flex items-center justify-center gap-3">
-                                    <RefreshCw size={16} className={syncMode === 'realtime' ? 'animate-spin-slow' : ''} /> Execute Pull Trigger
+                                    <RefreshCw size={16} className={syncMode === 'realtime' ? 'animate-spin-slow' : ''} /> Trigger Manual Sync
                                 </button>
                             </section>
 
                             {/* PERMISSIONS */}
                             <section className="bg-white dark:bg-white/[0.03] backdrop-blur-xl rounded-3xl p-8 border border-slate-200 dark:border-white/5 shadow-xl shadow-slate-200/50 dark:shadow-none transition-colors">
-                                <h4 className="text-sm font-black text-[#13082a] dark:text-white uppercase tracking-widest mb-6">Packet Routing Rules</h4>
+                                <h4 className="text-sm font-black text-[#13082a] dark:text-white uppercase tracking-widest mb-6">ACCESS PERMISSIONS</h4>
                                 <div className="grid grid-cols-1 gap-2">
                                     {Object.entries({
-                                        steps: { label: 'Motion Vector', icon: Footprints, color: 'text-emerald-500', desc: 'Step count / active physics' },
-                                        heartRate: { label: 'Cardiac Sensors', icon: Heart, color: 'text-rose-500', desc: 'BPM & pulse intervals' },
-                                        sleep: { label: 'REM Metrics', icon: Moon, color: 'text-indigo-500', desc: 'Deep/light sleep states' }
+                                        steps: { label: 'Daily Steps', icon: Footprints, color: 'text-emerald-500', desc: 'Activity and movement patterns' },
+                                        heartRate: { label: 'Heart Rate', icon: Heart, color: 'text-rose-500', desc: 'Live pulse and historical trends' },
+                                        sleep: { label: 'Sleep Analysis', icon: Moon, color: 'text-indigo-500', desc: 'Deep, REM, and light sleep stages' }
                                     }).map(([key, config]) => {
                                         const IconComponent = config.icon;
                                         return (
@@ -275,7 +274,7 @@ const GoogleFitSettings = () => {
 
                             {/* RECENT WORKOUTS */}
                             <section className="bg-white dark:bg-white/[0.03] backdrop-blur-xl rounded-3xl p-8 border border-slate-200 dark:border-white/5 shadow-xl shadow-slate-200/50 dark:shadow-none transition-colors">
-                                <h4 className="text-sm font-black text-[#13082a] dark:text-white uppercase tracking-widest mb-6 border-b border-slate-100 dark:border-white/10 pb-4">Activity Log</h4>
+                                <h4 className="text-sm font-black text-[#13082a] dark:text-white uppercase tracking-widest mb-6 border-b border-slate-100 dark:border-white/10 pb-4">RECENT WORKOUTS</h4>
                                 <div className="space-y-4 pt-2">
                                     <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 dark:bg-white/[0.02] dark:border-white/5 flex items-center justify-between">
                                         <div className="flex items-center gap-4">
@@ -304,10 +303,10 @@ const GoogleFitSettings = () => {
 
                             {/* ALERTS */}
                             <section className="bg-white dark:bg-white/[0.03] backdrop-blur-xl rounded-3xl p-8 border border-slate-200 dark:border-white/5 shadow-xl shadow-slate-200/50 dark:shadow-none transition-colors">
-                                <h4 className="text-sm font-black text-[#13082a] dark:text-white uppercase tracking-widest mb-6">Anomaly Watchdogs</h4>
+                                <h4 className="text-sm font-black text-[#13082a] dark:text-white uppercase tracking-widest mb-6">ANOMALY ALERTS</h4>
                                 <div className="space-y-5">
                                     <div className="flex items-center justify-between">
-                                        <p className="text-xs font-black text-slate-600 dark:text-slate-300 uppercase tracking-widest">Abnormal HR Vectors</p>
+                                        <p className="text-xs font-black text-slate-600 dark:text-slate-300 uppercase tracking-widest">Abnormal Heart Rate</p>
                                         <button 
                                             role="switch"
                                             onClick={() => toggleAlert('heartRate')}
@@ -317,7 +316,7 @@ const GoogleFitSettings = () => {
                                         </button>
                                     </div>
                                     <div className="flex items-center justify-between">
-                                        <p className="text-xs font-black text-slate-600 dark:text-slate-300 uppercase tracking-widest">Sedentary Timeout</p>
+                                        <p className="text-xs font-black text-slate-600 dark:text-slate-300 uppercase tracking-widest">Low Activity Threshold</p>
                                         <button 
                                             role="switch"
                                             onClick={() => toggleAlert('lowActivity')}
@@ -339,10 +338,10 @@ const GoogleFitSettings = () => {
                                     <h4 className="text-base font-black text-rose-700 dark:text-rose-400 uppercase tracking-tight">Danger Zone</h4>
                                 </div>
                                 <p className="text-xs text-rose-600/80 dark:text-rose-300 font-bold uppercase tracking-wider leading-relaxed mb-6 relative z-10">
-                                    Ceasing authorization terminates dynamic health data collection pipeline securely.
+                                    Disconnecting will immediately stop all health data synchronization. Historical data will be retained but no longer updated.
                                 </p>
                                 <button className="w-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-black uppercase tracking-widest py-4 rounded-xl border border-transparent transition-all shadow-lg shadow-rose-600/30 relative z-10 font-display">
-                                    Terminate Channel
+                                    Disconnect Google Fit
                                 </button>
                             </section>
 
