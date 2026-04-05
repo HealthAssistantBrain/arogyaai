@@ -63,7 +63,7 @@ const sidebarConfig = [
   {
     section: 'Management',
     items: [
-      { label: 'Devices',            icon: Smartphone,      path: ROUTES.DEVICES },
+      { label: 'Device Manager',     icon: Smartphone,      path: ROUTES.DEVICES },
       { label: 'Consultation',       icon: User,            path: ROUTES.CONSULTATION },
     ],
   },
