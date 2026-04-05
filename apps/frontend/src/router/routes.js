@@ -26,7 +26,7 @@ export const ROUTES = {
   MEDICAL_REPORTS:        '/medical-reports',
   SLEEP:                  '/sleep',
   DEVICES:                '/devices',
-  DEVICE_SETTINGS:        '/devices/settings/:id',
+  DEVICE_SETTINGS:        '/device-settings/:deviceId',
   UPLOAD:                 '/upload',
   REPORT_PROCESSING:      '/report-processing',
   UPLOAD_SUCCESS:         '/upload-success',

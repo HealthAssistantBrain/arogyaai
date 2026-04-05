@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   Brain, 
@@ -35,6 +35,43 @@ import { ROUTES } from '../router/routes';
 
 const DeviceSettings = () => {
     const navigate = useNavigate();
+    const { deviceId } = useParams();
+    const location = useLocation();
+
+    const MOCK_DEVICES = {
+        'google-pixel-watch-3': {
+            name: 'Google Pixel Watch 3',
+            battery: '95%',
+            lastSynced: 'Last synced 5m ago',
+            statusLabel: 'Connected',
+        },
+        'oura-ring-gen-3': {
+            name: 'Oura Ring Gen 3',
+            battery: '22%',
+            lastSynced: 'Syncing data...',
+            statusLabel: 'Syncing',
+        },
+        'withings-body-scan': {
+            name: 'Withings Body Scan',
+            battery: '62%',
+            lastSynced: 'Last synced 2h ago',
+            statusLabel: 'Connected',
+        },
+        'google-fit': {
+            name: 'Google Fit',
+            battery: '100% Battery',
+            lastSynced: 'Last synced 12m ago',
+            statusLabel: 'Connected',
+        }
+    };
+
+    const passedDevice = location.state?.device;
+    const fallbackDevice = MOCK_DEVICES[deviceId] || MOCK_DEVICES['google-pixel-watch-3'];
+    
+    const activeDeviceName = passedDevice?.name || fallbackDevice?.name || 'Unknown Device';
+    const activeBattery = passedDevice?.battery || fallbackDevice?.battery || 'Unknown';
+    const activeLastSynced = passedDevice?.lastSynced || fallbackDevice?.lastSynced || 'Unknown';
+    const isStatusActive = (passedDevice?.statusLabel || fallbackDevice?.statusLabel) === 'Connected';
 
     const [syncMode, setSyncMode] = useState('realtime');
     const [permissions, setPermissions] = useState({
@@ -144,9 +181,9 @@ const DeviceSettings = () => {
                                     <div className="flex-1 flex flex-col justify-between">
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-10">
                                             {[
-                                                { label: 'Active Device Identity', value: 'Apple Watch Series 9', icon: Watch },
-                                                { label: 'Battery Capacity / State', value: '84% Charge', icon: Battery, isStatus: true, statusColor: 'emerald' },
-                                                { label: 'Last Cloud Synchronization', value: 'Today, 09:42 AM', icon: Clock },
+                                                { label: 'Active Device Identity', value: activeDeviceName, icon: Watch },
+                                                { label: 'Battery Capacity / State', value: activeBattery, icon: Battery, isStatus: true, statusColor: isStatusActive ? 'emerald' : 'amber' },
+                                                { label: 'Last Cloud Synchronization', value: activeLastSynced, icon: Clock },
                                                 { label: 'Associated Service Account', value: 'alex.r@icloud.com', icon: User }
                                             ].map((item, i) => (
                                                 <div key={i} className="p-7 rounded-[2.25rem] bg-slate-50 dark:bg-white/5 border-2 border-slate-100/50 dark:border-white/5 hover:border-[#6143f4]/10 transition-all group/item shadow-sm">
@@ -154,8 +191,8 @@ const DeviceSettings = () => {
                                                         <item.icon size={14} className="group-hover/item:text-[#6143f4] transition-colors" />
                                                         {item.label}
                                                     </p>
-                                                    <p className={`text-xl font-black dark:text-white tracking-tight uppercase italic leading-none ${item.isStatus ? 'text-emerald-600 dark:text-emerald-400 flex items-center gap-3' : 'text-[#13082a]'}`}>
-                                                        {item.isStatus && <span className="size-2.5 bg-emerald-500 rounded-full animate-pulse"></span>}
+                                                    <p className={`text-xl font-black dark:text-white tracking-tight uppercase italic leading-none ${item.isStatus ? `text-${item.statusColor}-600 dark:text-${item.statusColor}-400 flex items-center gap-3` : 'text-[#13082a]'}`}>
+                                                        {item.isStatus && <span className={`size-2.5 bg-${item.statusColor}-500 rounded-full animate-pulse`}></span>}
                                                         {item.value}
                                                     </p>
                                                 </div>

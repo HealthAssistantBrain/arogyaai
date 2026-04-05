@@ -21,6 +21,7 @@ import { ROUTES } from '../router/routes';
    DeviceCard — Rectangular card with settings gear icon
    ═══════════════════════════════════════════════════════════════ */
 function DeviceCard({ device }) {
+  const navigate = useNavigate();
   return (
     <div className="bg-white dark:bg-[#131022] rounded-xl p-5 border border-slate-200/60 dark:border-white/5 hover:shadow-md transition-all relative flex flex-col min-h-[240px]">
       {/* Row 1: Icon + Status badge */}
@@ -81,6 +82,10 @@ function DeviceCard({ device }) {
         <button
           className="w-10 h-10 rounded-lg border border-slate-200 dark:border-white/10 flex items-center justify-center text-slate-400 hover:text-[#6143f4] hover:border-[#6143f4]/30 transition-all shrink-0"
           title="Device Settings"
+          onClick={() => {
+            const { iconElement, ...serializableDevice } = device;
+            navigate(`/device-settings/${device.id}`, { state: { device: serializableDevice } });
+          }}
         >
           <Settings size={16} />
         </button>
@@ -279,6 +284,7 @@ const DeviceManagement = () => {
 
   const devices = [
     {
+      id: 'google-pixel-watch-3',
       name: 'Google Pixel Watch 3',
       iconElement: <Watch size={22} className="text-[#6143f4]" />,
       iconBg: 'rgba(97,67,244,0.08)',
@@ -291,6 +297,7 @@ const DeviceManagement = () => {
       actionVariant: 'lightBlue',
     },
     {
+      id: 'oura-ring-gen-3',
       name: 'Oura Ring Gen 3',
       iconElement: <Circle size={22} className="text-[#6143f4]" />,
       iconBg: 'rgba(97,67,244,0.08)',
@@ -303,6 +310,7 @@ const DeviceManagement = () => {
       actionVariant: 'lightBlue',
     },
     {
+      id: 'withings-body-scan',
       name: 'Withings Body Scan',
       iconElement: <Monitor size={22} className="text-slate-500" />,
       iconBg: 'rgba(100,116,139,0.08)',
@@ -315,6 +323,7 @@ const DeviceManagement = () => {
       actionVariant: 'lightBlue',
     },
     {
+      id: 'google-fit',
       name: 'Google Fit',
       iconElement: <Activity size={22} className="text-[#22c55e]" />,
       iconBg: 'rgba(34,197,94,0.08)',
