@@ -1,356 +1,454 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ROUTES } from '../router/routes';
-import { 
-  ArrowLeft, RefreshCw, Heart, Moon, Footprints,
-  Dumbbell, Activity, Cpu, Database, AlertTriangle, Play
+import React, { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  ArrowLeft,
+  RefreshCw,
+  Footprints,
+  TrendingUp,
+  CalendarDays,
+  Flame,
+  Link2,
+  Unplug,
+  Bug,
+  AlertTriangle,
+  CheckCircle2,
 } from 'lucide-react';
 
-const GoogleFitSettings = () => {
-    const navigate = useNavigate();
+import { ROUTES } from '../router/routes';
+import {
+  disconnectGoogleFit,
+  fetchGoogleFitStatus,
+  startGoogleFitConnect,
+  syncGoogleFit,
+} from '../lib/googleFitApi';
 
-    const [syncMode, setSyncMode] = useState('realtime');
-    const [permissions, setPermissions] = useState({
-        steps: true,
-        heartRate: true,
-        sleep: true
-    });
-    const [alerts, setAlerts] = useState({
-        heartRate: true,
-        lowActivity: false
-    });
+const DEFAULT_TIMEZONE = import.meta.env.VITE_GOOGLE_FIT_DEFAULT_TIMEZONE || 'Asia/Kolkata';
+const DEFAULT_WINDOW_DAYS = 30;
 
-    const togglePermission = (key) => setPermissions(prev => ({ ...prev, [key]: !prev[key] }));
-    const toggleAlert = (key) => setAlerts(prev => ({ ...prev, [key]: !prev[key] }));
+function formatNumber(value) {
+  return new Intl.NumberFormat('en-IN').format(Number(value || 0));
+}
 
-    return (
-        <div className="bg-[#f6f5f8] dark:bg-[#0B0819] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-col h-full overflow-hidden antialiased">
-            <main className="flex-1 flex flex-col items-center overflow-y-auto custom-scrollbar p-6 md:p-10 pb-20">
-                <div className="max-w-6xl w-full space-y-10">
-                    
-                    {/* Header */}
-                    <header className="flex flex-col mb-8 mt-2">
-                        <button 
-                            onClick={() => navigate(ROUTES.DEVICES)}
-                            className="flex items-center gap-2 text-slate-500 hover:text-[#6143f4] dark:hover:text-[#6143f4] text-[11px] font-bold uppercase tracking-widest transition-colors w-fit group mb-6"
-                        >
-                            <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
-                            Back to Device Manager
-                        </button>
-                        <h1 className="text-[28px] font-black tracking-tight text-[#13082a] dark:text-white uppercase transition-colors mb-2 leading-tight">
-                            Google Fit Integration
-                        </h1>
-                        <p className="text-slate-400 font-medium max-w-xl text-[13px] leading-relaxed">
-                            Manage your connected wearable devices and health data synchronization across the architecture.
-                        </p>
-                    </header>
+function formatDate(value, timezone = DEFAULT_TIMEZONE) {
+  if (!value) return 'No data';
+  return new Intl.DateTimeFormat('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    timeZone: timezone,
+  }).format(new Date(value));
+}
 
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                        
-                        {/* LEFT COLUMN */}
-                        <div className="lg:col-span-7 space-y-8">
-                            
-                            {/* HERO CARD */}
-                            <section className="bg-white dark:bg-white/[0.03] backdrop-blur-xl rounded-3xl p-8 border border-slate-200 dark:border-white/5 relative overflow-hidden shadow-xl shadow-slate-200/50 dark:shadow-none transition-colors group">
-                                <div className="flex flex-col sm:flex-row items-start gap-6">
-                                    <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-[#6143f4] to-[#009cde] flex items-center justify-center shadow-lg shadow-[#6143f4]/30 shrink-0 group-hover:scale-105 transition-transform">
-                                        <div className="bg-white rounded-full p-2.5">
-                                            {/* Minimal GFit Icon mockup */}
-                                            <svg className="w-10 h-10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" fill="url(#fit)" />
-                                                <defs>
-                                                    <linearGradient id="fit" x1="2" y1="3" x2="22" y2="21" gradientUnits="userSpaceOnUse">
-                                                        <stop stopColor="#ea4335"/>
-                                                        <stop offset="0.33" stopColor="#fbbc04"/>
-                                                        <stop offset="0.67" stopColor="#34a853"/>
-                                                        <stop offset="1" stopColor="#4285f4"/>
-                                                    </linearGradient>
-                                                </defs>
-                                            </svg>
-                                        </div>
-                                    </div>
-                                    <div className="flex-1 min-w-0 space-y-6">
-                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                                            <h3 className="text-[22px] font-black text-[#13082a] dark:text-white uppercase tracking-tight leading-none">Google Fit Integration</h3>
-                                            <span className="w-fit bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-black px-3 py-1.5 rounded-full border border-emerald-500/20 uppercase tracking-widest flex items-center gap-2 shadow-sm shrink-0">
-                                                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
-                                                CONNECTED
-                                            </span>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-x-8 gap-y-4">
-                                            <div>
-                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Active Device</p>
-                                                <p className="text-sm font-black text-[#13082a] dark:text-slate-200">Pixel Watch 2</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Battery</p>
-                                                <p className="text-sm font-black text-[#13082a] dark:text-slate-200">Cloud Sync API</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Last Synced</p>
-                                                <p className="text-sm font-black text-[#13082a] dark:text-slate-200">2 mins ago</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Account</p>
-                                                <p className="text-sm font-black text-[#13082a] dark:text-slate-200">m.chen@nexus.ai</p>
-                                            </div>
-                                        </div>
-                                        <div className="mt-6 md:mt-8">
-                                            <button className="bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 border border-transparent dark:border-white/10 text-[#13082a] dark:text-white text-xs font-black uppercase tracking-widest py-3 px-6 rounded-xl transition-all shadow-sm active:scale-95">
-                                                Reconnect / Manage
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </section>
+function formatLocalDay(value) {
+  if (!value) return 'No data';
+  return new Intl.DateTimeFormat('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(new Date(`${value}T00:00:00`));
+}
 
-                            {/* DATA PREVIEW/FETCH */}
-                            <section className="bg-white dark:bg-white/[0.03] backdrop-blur-xl rounded-3xl p-8 border border-slate-200 dark:border-white/5 shadow-xl shadow-slate-200/50 dark:shadow-none transition-colors">
-                                <div className="flex justify-between items-center mb-8">
-                                    <h4 className="text-sm font-black text-[#13082a] dark:text-white uppercase tracking-widest flex items-center gap-3">
-                                        <Activity size={18} className="text-[#6143f4]" />
-                                        Metric Explorer
-                                    </h4>
-                                    <button className="w-10 h-10 rounded-xl bg-slate-50 hover:bg-slate-100 dark:bg-white/5 dark:hover:bg-white/10 text-slate-500 hover:text-[#6143f4] dark:hover:text-[#6143f4] transition-all flex items-center justify-center border border-slate-200 dark:border-transparent">
-                                        <RefreshCw size={16} />
-                                    </button>
-                                </div>
-                                
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
-                                    {/* Steps Card */}
-                                    <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 dark:bg-white/[0.02] dark:border-white/5 flex flex-col justify-between hover:border-[#6143f4]/30 transition-colors group">
-                                        <div className="flex justify-between items-start mb-4">
-                                            <div>
-                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1 flex items-center gap-2">
-                                                    <Footprints size={12} className="text-[#6143f4]" />
-                                                    Daily Steps
-                                                </p>
-                                                <p className="text-3xl font-black text-[#13082a] dark:text-white">8,432 <span className="text-xs font-bold text-slate-400 uppercase">/ 10k</span></p>
-                                            </div>
-                                        </div>
-                                        <button className="text-[10px] bg-[#6143f4]/10 text-[#6143f4] font-black uppercase tracking-widest px-4 py-2 rounded-xl border border-[#6143f4]/20 hover:bg-[#6143f4] hover:text-white transition-all w-full leading-none group-hover:shadow-md group-hover:shadow-[#6143f4]/20">Fetch Steps</button>
-                                    </div>
-                                    
-                                    {/* Heart Rate Card */}
-                                    <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 dark:bg-white/[0.02] dark:border-white/5 flex flex-col justify-between hover:border-[#009cde]/30 transition-colors group">
-                                        <div className="flex justify-between items-start mb-4">
-                                            <div>
-                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1 flex items-center gap-2">
-                                                    <Heart size={12} className="text-[#009cde]" />
-                                                    Avg Heart Rate
-                                                </p>
-                                                <p className="text-3xl font-black text-[#13082a] dark:text-[#009cde]">72 <span className="text-xs font-bold text-slate-400 uppercase">BPM</span></p>
-                                            </div>
-                                        </div>
-                                        <button className="text-[10px] bg-[#009cde]/10 text-[#009cde] font-black uppercase tracking-widest px-4 py-2 rounded-xl border border-[#009cde]/20 hover:bg-[#009cde] hover:text-white transition-all w-full leading-none group-hover:shadow-md group-hover:shadow-[#009cde]/20">Fetch Pulse</button>
-                                    </div>
-                                </div>
-                                
-                                <div className="flex flex-col sm:flex-row gap-5 items-center justify-between p-6 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 dark:bg-[#6143f4]/5 dark:border-[#6143f4]/20">
-                                    <div className="flex gap-8 lg:gap-10">
-                                        <div>
-                                            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest mb-1">Calories</p>
-                                            <p className="text-base font-black text-[#13082a] dark:text-white">1,840 <span className="text-[10px] text-slate-400 opacity-80">kcal</span></p>
-                                        </div>
-                                        <div>
-                                            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest mb-1">Distance</p>
-                                            <p className="text-base font-black text-[#13082a] dark:text-white">6.2 <span className="text-[10px] text-slate-400 opacity-80">km</span></p>
-                                        </div>
-                                        <div>
-                                            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest mb-1">Sleep</p>
-                                            <p className="text-base font-black text-[#13082a] dark:text-white">7h 42m</p>
-                                        </div>
-                                    </div>
-                                    <button className="bg-slate-900 dark:bg-[#6143f4] hover:bg-slate-800 dark:hover:bg-[#4a34c1] text-white text-xs font-black uppercase tracking-widest py-3 px-6 rounded-xl shadow-lg shadow-black/10 dark:shadow-[#6143f4]/20 transition-all active:scale-95 whitespace-nowrap">
-                                        Fetch Sleep Data
-                                    </button>
-                                </div>
-                            </section>
+function extractApiError(error, fallback) {
+  return error?.response?.data?.error || error?.response?.data?.detail || error?.message || fallback;
+}
 
-                            {/* PIPELINE VISUAL */}
-                            <section className="bg-white dark:bg-white/[0.03] backdrop-blur-xl rounded-3xl p-8 border border-slate-200 dark:border-white/5 shadow-xl shadow-slate-200/50 dark:shadow-none transition-colors">
-                                <h4 className="text-sm font-black text-[#13082a] dark:text-white uppercase tracking-widest mb-8 flex items-center gap-3">
-                                    <Database size={18} className="text-[#009cde]" />
-                                    DATA TRANSMISSION ARCHITECTURE
-                                </h4>
-                                <div className="flex items-center justify-between px-2 sm:px-6">
-                                    <div className="flex flex-col items-center gap-3 relative group">
-                                        <div className="w-14 h-14 rounded-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center text-[#ea4335] shadow-lg group-hover:scale-110 transition-transform">
-                                            <Activity size={24} />
-                                        </div>
-                                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#13082a] dark:text-slate-400 text-center">G-Fit</span>
-                                    </div>
-                                    <div className="flex-1 flex justify-center items-center px-4 relative">
-                                        <div className="h-1 w-full bg-slate-200 dark:bg-[#131022] rounded-full overflow-hidden relative">
-                                           <div className="absolute inset-0 bg-gradient-to-r from-[#ea4335] via-[#fbbc04] to-[#6143f4] animate-pulse"></div>
-                                        </div>
-                                    </div>
-                                    <div className="flex flex-col items-center gap-3 relative group">
-                                        <div className="w-14 h-14 rounded-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center text-[#6143f4] shadow-lg group-hover:scale-110 transition-transform">
-                                            <Cpu size={24} />
-                                        </div>
-                                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#13082a] dark:text-slate-400 text-center">Backend<br/>API</span>
-                                    </div>
-                                    <div className="flex-1 flex justify-center items-center px-4 relative">
-                                        <div className="h-1 w-full bg-slate-200 dark:bg-[#131022] rounded-full overflow-hidden relative">
-                                           <div className="absolute inset-0 bg-gradient-to-r from-[#6143f4] to-[#009cde] w-[60%] shadow-[0_0_10px_#6143f4]"></div>
-                                        </div>
-                                    </div>
-                                    <div className="flex flex-col items-center gap-3 relative group">
-                                        <div className="w-14 h-14 rounded-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center text-[#009cde] shadow-lg group-hover:scale-110 transition-transform">
-                                            <Database size={24} />
-                                        </div>
-                                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#13082a] dark:text-slate-400 text-center">Health<br/>Engine</span>
-                                    </div>
-                                </div>
-                            </section>
-                        </div>
-
-                        {/* RIGHT COLUMN */}
-                        <div className="lg:col-span-5 space-y-8">
-                            
-                            {/* SYNC CONFIGURATION */}
-                            <section className="bg-white dark:bg-white/[0.03] backdrop-blur-xl rounded-3xl p-8 border border-slate-200 dark:border-white/5 shadow-xl shadow-slate-200/50 dark:shadow-none transition-colors">
-                                <h4 className="text-sm font-black text-[#13082a] dark:text-white uppercase tracking-widest mb-6">ARCHIVAL SYNC PROTOCOL</h4>
-                                <div className="space-y-4">
-                                    {[
-                                        { id: 'realtime', label: 'Real-time Stream', activeColor: 'bg-[#6143f4]' },
-                                        { id: 'hourly', label: 'Hourly Batch', activeColor: 'bg-[#009cde]' },
-                                        { id: 'daily', label: 'Daily Archive', activeColor: 'bg-emerald-500' }
-                                    ].map(mode => (
-                                        <label key={mode.id} onClick={() => setSyncMode(mode.id)} className={`flex items-center justify-between p-5 rounded-2xl border-2 cursor-pointer transition-all ${syncMode === mode.id ? 'border-slate-300 dark:border-white/20 bg-slate-50 dark:bg-white/5 shadow-inner' : 'border-transparent bg-transparent hover:bg-slate-50 dark:hover:bg-white/5'}`}>
-                                            <div className="flex items-center gap-4">
-                                                <div className={`w-3 h-3 rounded-full shadow-sm ${syncMode === mode.id ? mode.activeColor + (mode.id === 'realtime' ? ' shadow-[#6143f4]/50 animate-pulse' : '') : 'bg-slate-300 dark:bg-slate-700'}`}></div>
-                                                <span className={`text-xs font-black uppercase tracking-widest ${syncMode === mode.id ? 'text-[#13082a] dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>{mode.label}</span>
-                                            </div>
-                                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${syncMode === mode.id ? 'border-[#6143f4] bg-[#6143f4]' : 'border-slate-300 dark:border-slate-600'}`}>
-                                                {syncMode === mode.id && <div className="w-2 h-2 bg-white rounded-full"></div>}
-                                            </div>
-                                        </label>
-                                    ))}
-                                </div>
-                                <button className="w-full mt-8 bg-slate-100 hover:bg-slate-200 dark:bg-[#6143f4]/10 dark:hover:bg-[#6143f4]/20 text-[#13082a] dark:text-[#6143f4] text-xs font-black uppercase tracking-widest py-4 rounded-xl border border-transparent dark:border-[#6143f4]/20 transition-all flex items-center justify-center gap-3">
-                                    <RefreshCw size={16} className={syncMode === 'realtime' ? 'animate-spin-slow' : ''} /> Trigger Manual Sync
-                                </button>
-                            </section>
-
-                            {/* PERMISSIONS */}
-                            <section className="bg-white dark:bg-white/[0.03] backdrop-blur-xl rounded-3xl p-8 border border-slate-200 dark:border-white/5 shadow-xl shadow-slate-200/50 dark:shadow-none transition-colors">
-                                <h4 className="text-sm font-black text-[#13082a] dark:text-white uppercase tracking-widest mb-6">ACCESS PERMISSIONS</h4>
-                                <div className="grid grid-cols-1 gap-2">
-                                    {Object.entries({
-                                        steps: { label: 'Daily Steps', icon: Footprints, color: 'text-emerald-500', desc: 'Activity and movement patterns' },
-                                        heartRate: { label: 'Heart Rate', icon: Heart, color: 'text-rose-500', desc: 'Live pulse and historical trends' },
-                                        sleep: { label: 'Sleep Analysis', icon: Moon, color: 'text-indigo-500', desc: 'Deep, REM, and light sleep stages' }
-                                    }).map(([key, config]) => {
-                                        const IconComponent = config.icon;
-                                        return (
-                                        <div key={key} className="flex items-center justify-between p-4 rounded-2xl hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
-                                            <div className="flex items-center gap-4">
-                                                <div className={`w-10 h-10 rounded-xl bg-slate-100 dark:bg-white/5 flex items-center justify-center border border-slate-200 dark:border-white/10 shadow-sm ${config.color}`}>
-                                                    <IconComponent size={18} />
-                                                </div>
-                                                <div>
-                                                    <p className="text-xs font-black text-[#13082a] dark:text-white uppercase tracking-widest">{config.label}</p>
-                                                    <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">{config.desc}</p>
-                                                </div>
-                                            </div>
-                                            <button 
-                                                role="switch"
-                                                onClick={() => togglePermission(key)}
-                                                className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-all border-2 ${permissions[key] ? 'bg-[#13082a] border-[#13082a] dark:bg-[#6143f4] dark:border-[#6143f4]' : 'bg-slate-200 dark:bg-slate-800 border-transparent'}`}
-                                            >
-                                                <span className={`inline-block size-4 transform rounded-full bg-white transition-transform shadow-sm ${permissions[key] ? 'translate-x-6' : 'translate-x-1'}`} />
-                                            </button>
-                                        </div>
-                                        );
-                                    })}
-                                </div>
-                            </section>
-
-                            <div className="grid md:hidden grid-cols-1">
-                              {/* WORKOUTS FOR MOBILE ONLY OR COMBINED IF WE HAD SPACE. WE ADD IT BELOW UNCONDITIONALLY */}
-                            </div>
-
-                            {/* RECENT WORKOUTS */}
-                            <section className="bg-white dark:bg-white/[0.03] backdrop-blur-xl rounded-3xl p-8 border border-slate-200 dark:border-white/5 shadow-xl shadow-slate-200/50 dark:shadow-none transition-colors">
-                                <h4 className="text-sm font-black text-[#13082a] dark:text-white uppercase tracking-widest mb-6 border-b border-slate-100 dark:border-white/10 pb-4">RECENT WORKOUTS</h4>
-                                <div className="space-y-4 pt-2">
-                                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 dark:bg-white/[0.02] dark:border-white/5 flex items-center justify-between">
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-12 h-12 rounded-xl bg-orange-500/10 text-orange-500 flex items-center justify-center border border-orange-500/20">
-                                                <Activity size={20} />
-                                            </div>
-                                            <div>
-                                                <p className="text-xs font-black text-[#13082a] dark:text-white uppercase tracking-widest">Outdoor Run</p>
-                                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">42m • 450 kcal • 5.2 km</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 dark:bg-white/[0.02] dark:border-white/5 flex items-center justify-between">
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-12 h-12 rounded-xl bg-[#009cde]/10 text-[#009cde] flex items-center justify-center border border-[#009cde]/20">
-                                                <Dumbbell size={20} />
-                                            </div>
-                                            <div>
-                                                <p className="text-xs font-black text-[#13082a] dark:text-white uppercase tracking-widest">Weight Training</p>
-                                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">55m • 320 kcal</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </section>
-
-                            {/* ALERTS */}
-                            <section className="bg-white dark:bg-white/[0.03] backdrop-blur-xl rounded-3xl p-8 border border-slate-200 dark:border-white/5 shadow-xl shadow-slate-200/50 dark:shadow-none transition-colors">
-                                <h4 className="text-sm font-black text-[#13082a] dark:text-white uppercase tracking-widest mb-6">ANOMALY ALERTS</h4>
-                                <div className="space-y-5">
-                                    <div className="flex items-center justify-between">
-                                        <p className="text-xs font-black text-slate-600 dark:text-slate-300 uppercase tracking-widest">Abnormal Heart Rate</p>
-                                        <button 
-                                            role="switch"
-                                            onClick={() => toggleAlert('heartRate')}
-                                            className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-all border-2 ${alerts.heartRate ? 'bg-rose-500 border-rose-500' : 'bg-slate-200 dark:bg-slate-800 border-transparent'}`}
-                                        >
-                                            <span className={`inline-block size-4 transform rounded-full bg-white transition-transform ${alerts.heartRate ? 'translate-x-6' : 'translate-x-1'}`} />
-                                        </button>
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <p className="text-xs font-black text-slate-600 dark:text-slate-300 uppercase tracking-widest">Low Activity Threshold</p>
-                                        <button 
-                                            role="switch"
-                                            onClick={() => toggleAlert('lowActivity')}
-                                            className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-all border-2 ${alerts.lowActivity ? 'bg-[#6143f4] border-[#6143f4]' : 'bg-slate-200 dark:bg-slate-800 border-transparent'}`}
-                                        >
-                                            <span className={`inline-block size-4 transform rounded-full bg-white transition-transform ${alerts.lowActivity ? 'translate-x-6' : 'translate-x-1'}`} />
-                                        </button>
-                                    </div>
-                                </div>
-                            </section>
-
-                            {/* DANGER ZONE */}
-                            <section className="bg-rose-50 dark:bg-rose-500/10 rounded-3xl p-8 border-2 border-rose-200 dark:border-rose-500/30 overflow-hidden relative group">
-                                <div className="absolute -right-10 -bottom-10 w-32 h-32 bg-rose-500/20 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-500 pointer-events-none"></div>
-                                <div className="flex items-center gap-4 mb-4 relative z-10">
-                                    <div className="p-3 bg-rose-500 text-white rounded-xl shadow-lg shadow-rose-500/30">
-                                        <AlertTriangle size={24} />
-                                    </div>
-                                    <h4 className="text-base font-black text-rose-700 dark:text-rose-400 uppercase tracking-tight">Danger Zone</h4>
-                                </div>
-                                <p className="text-xs text-rose-600/80 dark:text-rose-300 font-bold uppercase tracking-wider leading-relaxed mb-6 relative z-10">
-                                    Disconnecting will immediately stop all health data synchronization. Historical data will be retained but no longer updated.
-                                </p>
-                                <button className="w-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-black uppercase tracking-widest py-4 rounded-xl border border-transparent transition-all shadow-lg shadow-rose-600/30 relative z-10 font-display">
-                                    Disconnect Google Fit
-                                </button>
-                            </section>
-
-                        </div>
-                    </div>
-                </div>
-            </main>
+function StatCard({ label, value, helper, icon: Icon, accent }) {
+  return (
+    <div className="rounded-3xl border border-slate-200/70 dark:border-white/10 bg-white dark:bg-white/[0.03] p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">{label}</p>
+          <p className="text-[26px] font-black tracking-tight text-[#13082a] dark:text-white">{value}</p>
+          <p className="text-[12px] text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">{helper}</p>
         </div>
-    );
+        <div
+          className="flex h-12 w-12 items-center justify-center rounded-2xl border"
+          style={{ backgroundColor: `${accent}12`, borderColor: `${accent}30`, color: accent }}
+        >
+          <Icon size={22} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const GoogleFitSettings = () => {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
+  const [data, setData] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
+
+  async function loadStatus(nextTimezone = timezone, { silent = false } = {}) {
+    if (!silent) {
+      setIsLoading(true);
+    }
+    setError('');
+
+    try {
+      const response = await fetchGoogleFitStatus(nextTimezone);
+      setData(response);
+      if (response?.timezone) {
+        setTimezone(response.timezone);
+      }
+    } catch (apiError) {
+      setError(extractApiError(apiError, 'Unable to load Google Fit status right now.'));
+    } finally {
+      if (!silent) {
+        setIsLoading(false);
+      }
+    }
+  }
+
+  async function handleSync(showSuccessMessage = true) {
+    setIsSyncing(true);
+    setError('');
+
+    try {
+      const response = await syncGoogleFit({ timezone, days: DEFAULT_WINDOW_DAYS });
+      setData(response);
+      if (showSuccessMessage) {
+        setNotice(`Google Fit steps synced for the last ${DEFAULT_WINDOW_DAYS} local days.`);
+      }
+    } catch (apiError) {
+      setError(extractApiError(apiError, 'Google Fit sync failed.'));
+    } finally {
+      setIsSyncing(false);
+    }
+  }
+
+  async function handleConnect() {
+    setIsConnecting(true);
+    setError('');
+
+    try {
+      const response = await startGoogleFitConnect({
+        timezone,
+        redirectPath: ROUTES.GOOGLE_FIT_SETTINGS,
+      });
+      window.location.assign(response.auth_url);
+    } catch (apiError) {
+      setIsConnecting(false);
+      setError(extractApiError(apiError, 'Unable to start Google Fit connection.'));
+    }
+  }
+
+  async function handleDisconnect() {
+    setIsDisconnecting(true);
+    setError('');
+
+    try {
+      await disconnectGoogleFit();
+      setData({
+        connected: false,
+        timezone,
+        last_synced_at: null,
+        stats: {
+          daily_steps: [],
+          total_steps: 0,
+          average_daily_steps: 0,
+          average_steps_on_active_days: 0,
+          best_day: null,
+          latest_day: null,
+          active_day_count: 0,
+        },
+        raw_json: null,
+        google_email: null,
+      });
+      setNotice('Google Fit disconnected. Existing cached summaries stay available only until the next refresh.');
+    } catch (apiError) {
+      setError(extractApiError(apiError, 'Unable to disconnect Google Fit.'));
+    } finally {
+      setIsDisconnecting(false);
+    }
+  }
+
+  useEffect(() => {
+    loadStatus(DEFAULT_TIMEZONE);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const oauthState = searchParams.get('googleFit');
+    const message = searchParams.get('message');
+
+    if (!oauthState && !message) {
+      return;
+    }
+
+    if (oauthState === 'connected') {
+      setNotice('Google account connected. Pulling your latest Google Fit steps now.');
+      (async () => {
+        try {
+          await loadStatus(timezone, { silent: true });
+          await handleSync(false);
+        } catch (syncError) {
+          setError(extractApiError(syncError, 'Google Fit sync failed after connection.'));
+        }
+      })();
+    } else if (oauthState === 'error') {
+      setError(message || 'Google Fit connection failed.');
+    } else if (message) {
+      setNotice(message);
+    }
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('googleFit');
+    nextParams.delete('message');
+    setSearchParams(nextParams, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, setSearchParams]);
+
+  const stats = data?.stats || {
+    daily_steps: [],
+    total_steps: 0,
+    average_daily_steps: 0,
+    average_steps_on_active_days: 0,
+    best_day: null,
+    latest_day: null,
+    active_day_count: 0,
+  };
+
+  return (
+    <div className="min-h-screen bg-[#f6f5f8] text-[#13082a] dark:bg-[#0B0819] dark:text-slate-100">
+      <main className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-6 py-8 md:px-10">
+        <header className="rounded-[2rem] border border-slate-200/70 bg-white px-6 py-6 shadow-sm dark:border-white/10 dark:bg-white/[0.03]">
+          <button
+            onClick={() => navigate(ROUTES.DEVICES)}
+            className="mb-5 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 transition-colors hover:text-[#6143f4]"
+          >
+            <ArrowLeft size={16} />
+            Back To Device Manager
+          </button>
+
+          <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
+            <div>
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400">
+                <CheckCircle2 size={14} />
+                Google Fit Estimated Steps
+              </div>
+              <h1 className="text-[30px] font-black leading-tight tracking-tight text-[#13082a] dark:text-white">
+                Google Fit steps inside ArogyaAI Device Manager
+              </h1>
+              <p className="mt-3 max-w-3xl text-[14px] leading-relaxed text-slate-500 dark:text-slate-400">
+                This page uses the Google Fit estimated steps datasource with timezone-aware daily buckets so the
+                numbers stay as close as possible to the Google Fit app for your selected local timezone.
+              </p>
+            </div>
+
+            <div className="rounded-[1.75rem] border border-slate-200/70 bg-slate-50/80 p-5 dark:border-white/10 dark:bg-[#131022]">
+              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Connection</p>
+              <p className="mt-3 text-[22px] font-black tracking-tight text-[#13082a] dark:text-white">
+                {data?.connected ? 'Connected' : 'Not connected'}
+              </p>
+              <p className="mt-2 text-[13px] text-slate-500 dark:text-slate-400">
+                {data?.google_email || 'Connect your Google account to fetch steps.'}
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2 text-[12px] text-slate-500 dark:text-slate-400">
+                <span className="rounded-full bg-white px-3 py-1 dark:bg-white/5">Timezone: {data?.timezone || timezone}</span>
+                <span className="rounded-full bg-white px-3 py-1 dark:bg-white/5">
+                  Last sync: {data?.last_synced_at ? formatDate(data.last_synced_at, data?.timezone || timezone) : 'Never'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {(notice || error) && (
+          <div
+            className={`rounded-2xl border px-4 py-3 text-[13px] font-medium ${
+              error
+                ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300'
+                : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300'
+            }`}
+          >
+            {error || notice}
+          </div>
+        )}
+
+        <section className="grid gap-4 lg:grid-cols-[1.45fr_0.95fr]">
+          <div className="rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.03]">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Actions</p>
+                <h2 className="mt-2 text-[22px] font-black tracking-tight text-[#13082a] dark:text-white">
+                  Sync and manage Google Fit
+                </h2>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={handleConnect}
+                  disabled={isConnecting}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-[#6143f4] px-5 py-3 text-[12px] font-black uppercase tracking-[0.16em] text-white transition hover:bg-[#5235dc] disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  <Link2 size={16} />
+                  {data?.connected ? 'Reconnect Google' : isConnecting ? 'Opening Google...' : 'Connect Google'}
+                </button>
+                <button
+                  onClick={() => handleSync(true)}
+                  disabled={!data?.connected || isSyncing}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-3 text-[12px] font-black uppercase tracking-[0.16em] text-[#13082a] transition hover:border-[#6143f4]/30 hover:text-[#6143f4] disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                >
+                  <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
+                  {isSyncing ? 'Syncing Steps...' : 'Sync 30 Days'}
+                </button>
+                <button
+                  onClick={handleDisconnect}
+                  disabled={!data?.connected || isDisconnecting}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-5 py-3 text-[12px] font-black uppercase tracking-[0.16em] text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300"
+                >
+                  <Unplug size={16} />
+                  {isDisconnecting ? 'Disconnecting...' : 'Disconnect'}
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <StatCard
+                label="Daily Steps"
+                value={formatNumber(stats.latest_day?.steps || 0)}
+                helper={`Latest local day: ${stats.latest_day?.date ? formatLocalDay(stats.latest_day.date) : 'No sync yet'}`}
+                icon={Footprints}
+                accent="#22c55e"
+              />
+              <StatCard
+                label="Total Steps"
+                value={formatNumber(stats.total_steps)}
+                helper={`Total across the last ${DEFAULT_WINDOW_DAYS} local days`}
+                icon={TrendingUp}
+                accent="#6143f4"
+              />
+              <StatCard
+                label="Average Daily"
+                value={formatNumber(stats.average_daily_steps)}
+                helper="Average across every bucket in the synced window"
+                icon={CalendarDays}
+                accent="#009cde"
+              />
+              <StatCard
+                label="Active-Day Average"
+                value={formatNumber(stats.average_steps_on_active_days)}
+                helper={`${formatNumber(stats.active_day_count)} days had more than 0 recorded steps`}
+                icon={Flame}
+                accent="#f97316"
+              />
+              <StatCard
+                label="Best Day"
+                value={formatNumber(stats.best_day?.steps || 0)}
+                helper={stats.best_day?.date ? formatLocalDay(stats.best_day.date) : 'No synced history yet'}
+                icon={TrendingUp}
+                accent="#eab308"
+              />
+              <StatCard
+                label="Latest Day"
+                value={formatNumber(stats.latest_day?.steps || 0)}
+                helper={stats.latest_day?.date ? formatLocalDay(stats.latest_day.date) : 'No synced history yet'}
+                icon={CalendarDays}
+                accent="#14b8a6"
+              />
+            </div>
+          </div>
+
+          <div className="rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.03]">
+            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Implementation notes</p>
+            <ul className="mt-4 space-y-3 text-[13px] leading-relaxed text-slate-600 dark:text-slate-400">
+              <li>The server handles OAuth code exchange and token refresh so Google secrets stay server-side.</li>
+              <li>Daily buckets are generated from local-midnight boundaries using your configured timezone.</li>
+              <li>Fetched daily steps are cached in the existing wearable data model, tied to the Google Fit device record.</li>
+              <li>The raw Google aggregate response is preserved for debugging in the panel below.</li>
+            </ul>
+
+            <div className="mt-6 rounded-[1.5rem] border border-slate-200/70 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-[#131022]">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 text-amber-500" size={18} />
+                <div>
+                  <p className="text-[12px] font-black uppercase tracking-[0.14em] text-[#13082a] dark:text-white">
+                    Google Fit status
+                  </p>
+                  <p className="mt-2 text-[13px] leading-relaxed text-slate-500 dark:text-slate-400">
+                    Google Fit APIs are being deprecated by Google in favor of Health Connect. This integration keeps
+                    your current flow working, but future migration planning is recommended.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+          <div className="rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.03]">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Daily buckets</p>
+                <h2 className="mt-2 text-[22px] font-black tracking-tight text-[#13082a] dark:text-white">
+                  Last {DEFAULT_WINDOW_DAYS} local days
+                </h2>
+              </div>
+              {isLoading && <RefreshCw className="animate-spin text-slate-400" size={18} />}
+            </div>
+
+            <div className="mt-6 overflow-hidden rounded-[1.5rem] border border-slate-200/70 dark:border-white/10">
+              <div className="grid grid-cols-[1.2fr_0.8fr] bg-slate-50 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400 dark:bg-white/5">
+                <span>Date</span>
+                <span className="text-right">Steps</span>
+              </div>
+              {stats.daily_steps.length > 0 ? (
+                <div className="max-h-[420px] overflow-y-auto">
+                  {stats.daily_steps
+                    .slice()
+                    .reverse()
+                    .map((item) => (
+                      <div
+                        key={item.date}
+                        className="grid grid-cols-[1.2fr_0.8fr] border-t border-slate-100 px-4 py-3 text-[13px] dark:border-white/5"
+                      >
+                        <span className="font-semibold text-[#13082a] dark:text-white">{formatLocalDay(item.date)}</span>
+                        <span className="text-right font-black text-[#6143f4]">{formatNumber(item.steps)}</span>
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <div className="flex min-h-[220px] flex-col items-center justify-center px-6 py-10 text-center">
+                  <Footprints size={28} className="text-slate-300 dark:text-slate-600" />
+                  <p className="mt-4 text-[14px] font-semibold text-slate-500 dark:text-slate-400">
+                    Connect Google Fit and run a sync to populate local daily step buckets.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.03]">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-[#6143f4] dark:border-white/10 dark:bg-white/5">
+                <Bug size={20} />
+              </div>
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Developer Debug</p>
+                <h2 className="mt-1 text-[22px] font-black tracking-tight text-[#13082a] dark:text-white">
+                  Raw aggregate response
+                </h2>
+              </div>
+            </div>
+
+            <details className="mt-5 rounded-[1.5rem] border border-slate-200/70 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-[#131022]" open={Boolean(data?.raw_json)}>
+              <summary className="cursor-pointer list-none text-[12px] font-black uppercase tracking-[0.16em] text-slate-500">
+                {data?.raw_json ? 'Show cached Google Fit JSON' : 'No raw JSON cached yet'}
+              </summary>
+              <pre className="mt-4 max-h-[460px] overflow-auto rounded-2xl bg-[#13082a] p-4 text-[11px] leading-relaxed text-slate-100">
+                {JSON.stringify(data?.raw_json || { message: 'Connect and sync Google Fit to inspect the raw payload.' }, null, 2)}
+              </pre>
+            </details>
+          </div>
+        </section>
+      </main>
+    </div>
+  );
 };
 
 export default GoogleFitSettings;

@@ -22,6 +22,10 @@ import { ROUTES } from '../router/routes';
    ═══════════════════════════════════════════════════════════════ */
 function DeviceCard({ device }) {
   const navigate = useNavigate();
+  const targetRoute = device.id === 'google-fit'
+    ? ROUTES.GOOGLE_FIT_SETTINGS
+    : `/device-settings/${device.id}`;
+
   return (
     <div className="bg-white dark:bg-[#131022] rounded-xl p-5 border border-slate-200/60 dark:border-white/5 hover:shadow-md transition-all relative flex flex-col min-h-[240px]">
       {/* Row 1: Icon + Status badge */}
@@ -76,6 +80,10 @@ function DeviceCard({ device }) {
               ? 'bg-[#0ea5a8] text-white hover:bg-[#0d9496]'
               : 'bg-[#e8f4f8] text-[#0ea5a8] hover:bg-[#d5eef3]'
           }`}
+          onClick={() => {
+            const { iconElement, ...serializableDevice } = device;
+            navigate(targetRoute, { state: { device: serializableDevice } });
+          }}
         >
           {device.actionLabel}
         </button>
@@ -84,7 +92,7 @@ function DeviceCard({ device }) {
           title="Device Settings"
           onClick={() => {
             const { iconElement, ...serializableDevice } = device;
-            navigate(`/device-settings/${device.id}`, { state: { device: serializableDevice } });
+            navigate(targetRoute, { state: { device: serializableDevice } });
           }}
         >
           <Settings size={16} />
@@ -332,7 +340,7 @@ const DeviceManagement = () => {
       statusTextColor: '#22c55e',
       battery: '100% Battery',
       lastSynced: 'Last synced 12m ago',
-      actionLabel: 'Sync Now',
+      actionLabel: 'Open Fit',
       actionVariant: 'lightBlue',
     },
   ];

@@ -26,6 +26,7 @@ export const ROUTES = {
   MEDICAL_REPORTS:        '/medical-reports',
   SLEEP:                  '/sleep',
   DEVICES:                '/devices',
+  GOOGLE_FIT_SETTINGS:    '/device-settings/google-fit',
   DEVICE_SETTINGS:        '/device-settings/:deviceId',
   UPLOAD:                 '/upload',
   REPORT_PROCESSING:      '/report-processing',

@@ -22,6 +22,7 @@ from .recommendation  import Recommendation, RecCategoryEnum, PriorityEnum
 from .alert           import Alert, AlertTypeEnum, SeverityEnum
 from .session         import Session
 from .log             import Log
+from .google_fit_connection import GoogleFitConnection
 
 __all__ = [
     # Core Base
@@ -39,6 +40,7 @@ __all__ = [
     "Alert",
     "Session",
     "Log",
+    "GoogleFitConnection",
     # Enums
     "GenderEnum",
     "DeviceTypeEnum",

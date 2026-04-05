@@ -39,3 +39,13 @@ class ExplanationRequest(BaseModel):
 class ExplanationResponse(BaseModel):
     factors: list[dict]
     summary: str
+
+
+class GoogleFitConnectRequest(BaseModel):
+    timezone: Optional[str] = None
+    redirect_path: Optional[str] = "/device-settings/google-fit"
+
+
+class GoogleFitSyncRequest(BaseModel):
+    timezone: Optional[str] = None
+    days: int = 30

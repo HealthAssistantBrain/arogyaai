@@ -36,6 +36,7 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     alerts          = relationship("Alert", back_populates="user")
     sessions        = relationship("Session", back_populates="user")
     logs            = relationship("Log", back_populates="user")
+    google_fit_connection = relationship("GoogleFitConnection", back_populates="user", uselist=False)
 
     def __repr__(self):
         return f"<User id={self.id} email={self.email}>"

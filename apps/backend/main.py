@@ -5,9 +5,10 @@ from alembic import command
 from alembic.config import Config
 
 # Import modular routers
-from routes import auth, intelligence, users, prediction, dashboard
+from routes import auth, intelligence, users, prediction, dashboard, google_fit
 
 from database.session import engine, Base
+from core.config import settings
 
 # Critical: import all models so they register on Base.metadata
 import models  # noqa: F401
@@ -34,7 +35,7 @@ def init_db():
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[settings.FRONTEND_APP_URL, "http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -124,3 +125,4 @@ app.include_router(users.router)
 app.include_router(intelligence.router)
 app.include_router(prediction.router)
 app.include_router(dashboard.router)
+app.include_router(google_fit.router)
