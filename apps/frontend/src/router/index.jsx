@@ -41,6 +41,7 @@ const MedicalReports = lazy(() => import('../pages/Reports'))
 const SleepAnalysis = lazy(() => import('../pages/SleepAnalysis'))
 const DeviceManager = lazy(() => import('../pages/DeviceManagement'))
 const DeviceSettings = lazy(() => import('../pages/DeviceSettings'))
+const GoogleFitSettings = lazy(() => import('../pages/GoogleFitSettings'))
 const UploadMedicalReport = lazy(() => import('../pages/UploadReport'))
 const ReportProcessing = lazy(() => import('../pages/ReportProcessing'))
 const UploadSuccess = lazy(() => import('../pages/UploadSuccess'))
@@ -133,6 +134,7 @@ export default function AppRouter() {
                 <Route path={ROUTES.MEDICAL_REPORTS} element={<MedicalReports />} />
                 <Route path={ROUTES.SLEEP} element={<SleepAnalysis />} />
                 <Route path={ROUTES.DEVICES} element={<DeviceManager />} />
+                <Route path="/device-settings/google-fit" element={<GoogleFitSettings />} />
                 <Route path={ROUTES.DEVICE_SETTINGS} element={<DeviceSettings />} />
                 <Route path={ROUTES.UPLOAD} element={<UploadMedicalReport />} />
                 <Route path={ROUTES.REPORT_PROCESSING} element={<ReportProcessing />} />
