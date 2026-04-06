@@ -1,8 +1,9 @@
 import uuid
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from urllib.parse import urlencode
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from urllib.parse import quote, urlencode
+from zoneinfo import ZoneInfo
 
 import httpx
 import jwt
@@ -15,12 +16,21 @@ from models import Device, DeviceTypeEnum, GoogleFitConnection, User, VitalsData
 
 GOOGLE_FIT_ACTIVITY_SCOPE = "https://www.googleapis.com/auth/fitness.activity.read"
 GOOGLE_FIT_HEART_RATE_SCOPE = "https://www.googleapis.com/auth/fitness.heart_rate.read"
-GOOGLE_FIT_SCOPE_SET = ["openid", "email", "profile", GOOGLE_FIT_ACTIVITY_SCOPE, GOOGLE_FIT_HEART_RATE_SCOPE]
+GOOGLE_FIT_SLEEP_SCOPE = "https://www.googleapis.com/auth/fitness.sleep.read"
+GOOGLE_FIT_SCOPE_SET = [
+    "openid",
+    "email",
+    "profile",
+    GOOGLE_FIT_ACTIVITY_SCOPE,
+    GOOGLE_FIT_HEART_RATE_SCOPE,
+    GOOGLE_FIT_SLEEP_SCOPE,
+]
 GOOGLE_FIT_DATASOURCE_ID = "derived:com.google.step_count.delta:com.google.android.gms:estimated_steps"
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 GOOGLE_FIT_AGGREGATE_URL = "https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate"
+logger = logging.getLogger("google_fit_service")
 
 
 class GoogleFitService:
@@ -38,21 +48,44 @@ class GoogleFitService:
         try:
             ZoneInfo(candidate)
             return candidate
-        except ZoneInfoNotFoundError as exc:
-            raise HTTPException(status_code=400, detail=f"Unsupported timezone: {candidate}") from exc
+        except Exception:
+            logger.warning("[GFit] Unsupported timezone '%s'; falling back to UTC", candidate)
+            return "UTC"
+
+    @staticmethod
+    def _safe_timezone_info(timezone_name: str | None):
+        candidate = timezone_name or "UTC"
+        try:
+            return ZoneInfo(candidate)
+        except Exception:
+            logger.warning("[GFit] ZoneInfo unavailable for '%s'; using UTC fallback", candidate)
+            try:
+                return ZoneInfo("UTC")
+            except Exception:
+                return timezone.utc
 
     @staticmethod
     def _redirect_uri() -> str:
+        configured_redirect_uri = settings.GOOGLE_FIT_REDIRECT_URI.strip()
+        if configured_redirect_uri:
+            return configured_redirect_uri
         return f"{settings.BACKEND_PUBLIC_URL.rstrip('/')}/api/v1/google-fit/oauth/callback"
 
     @staticmethod
-    def _build_state_token(user: User, redirect_path: str, timezone_name: str) -> str:
+    def _build_state_token(
+        user: User,
+        redirect_path: str,
+        timezone_name: str,
+        onboarding_step: int | None = None,
+    ) -> str:
         safe_redirect = redirect_path if redirect_path and redirect_path.startswith("/") else "/device-settings/google-fit"
         payload = {
             "sub": str(user.id),
             "purpose": "google_fit_oauth",
             "redirect_path": safe_redirect,
             "timezone": timezone_name,
+            "onboarding_step": onboarding_step,
+            "oauth_state": f"onboarding_step_{onboarding_step}" if onboarding_step else None,
             "exp": datetime.now(timezone.utc) + timedelta(minutes=15),
         }
         return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
@@ -93,6 +126,9 @@ class GoogleFitService:
 
     @staticmethod
     async def _exchange_code_for_tokens(code: str) -> dict[str, Any]:
+        redirect_uri = GoogleFitService._redirect_uri()
+        logger.info(f"[GFit] Token exchange start | redirect_uri={redirect_uri}")
+
         async with httpx.AsyncClient(timeout=20.0) as client:
             response = await client.post(
                 GOOGLE_TOKEN_URL,
@@ -100,14 +136,25 @@ class GoogleFitService:
                     "code": code,
                     "client_id": settings.GOOGLE_FIT_CLIENT_ID,
                     "client_secret": settings.GOOGLE_FIT_CLIENT_SECRET,
-                    "redirect_uri": GoogleFitService._redirect_uri(),
+                    "redirect_uri": redirect_uri,
                     "grant_type": "authorization_code",
                 },
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
 
         if response.is_error:
-            raise HTTPException(status_code=400, detail="Google token exchange failed")
+            try:
+                error_body = response.json()
+            except Exception:
+                error_body = response.text
+            logger.error(
+                f"[GFit] Token exchange FAILED | status={response.status_code} "
+                f"| redirect_uri={redirect_uri} | google_response={error_body}"
+            )
+            raise HTTPException(
+                status_code=400,
+                detail=f"Google token exchange failed: {error_body}",
+            )
         return response.json()
 
     @staticmethod
@@ -174,7 +221,7 @@ class GoogleFitService:
 
     @staticmethod
     def _build_bucket_window(timezone_name: str, days: int) -> tuple[int, int]:
-        tzinfo = ZoneInfo(timezone_name)
+        tzinfo = GoogleFitService._safe_timezone_info(timezone_name)
         local_now = datetime.now(tzinfo)
         local_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=max(days - 1, 0))
         local_end = local_now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
@@ -335,7 +382,7 @@ class GoogleFitService:
 
     @staticmethod
     def _serialize_heart_rate(rows: list[VitalsData], timezone_name: str) -> list[dict[str, Any]]:
-        tzinfo = ZoneInfo(timezone_name)
+        tzinfo = GoogleFitService._safe_timezone_info(timezone_name)
         payload: list[dict[str, Any]] = []
 
         for row in rows:
@@ -355,7 +402,7 @@ class GoogleFitService:
 
     @staticmethod
     def _daily_payload_from_rows(rows: list[WearableData], timezone_name: str) -> list[dict[str, Any]]:
-        tzinfo = ZoneInfo(timezone_name)
+        tzinfo = GoogleFitService._safe_timezone_info(timezone_name)
         payload = []
         for row in sorted(rows, key=lambda item: item.recorded_at or datetime.now(timezone.utc)):
             local_date = (row.recorded_at or datetime.now(timezone.utc)).astimezone(tzinfo).date().isoformat()
@@ -450,30 +497,51 @@ class GoogleFitService:
         }
 
     @staticmethod
-    def build_connect_url(user: User, timezone_name: str | None = None, redirect_path: str | None = None) -> dict[str, Any]:
+    def build_connect_url(
+        user: User,
+        timezone_name: str | None = None,
+        redirect_path: str | None = None,
+        onboarding_step: int | None = None,
+    ) -> dict[str, Any]:
         GoogleFitService._ensure_configured()
         resolved_timezone = GoogleFitService._resolve_timezone(timezone_name)
+        redirect_uri = GoogleFitService._redirect_uri()
+        scopes = " ".join(GOOGLE_FIT_SCOPE_SET)
         state = GoogleFitService._build_state_token(
             user=user,
             redirect_path=redirect_path or "/device-settings/google-fit",
             timezone_name=resolved_timezone,
+            onboarding_step=onboarding_step,
         )
-        query = urlencode(
-            {
-                "client_id": settings.GOOGLE_FIT_CLIENT_ID,
-                "redirect_uri": GoogleFitService._redirect_uri(),
-                "response_type": "code",
-                "access_type": "offline",
-                "include_granted_scopes": "true",
-                "prompt": "consent",
-                "scope": " ".join(GOOGLE_FIT_SCOPE_SET),
-                "state": state,
-            }
+        query_params = {
+            "client_id": settings.GOOGLE_FIT_CLIENT_ID,
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "scope": scopes,
+            "access_type": "offline",
+            "prompt": "consent",
+            "include_granted_scopes": "true",
+            "state": state,
+        }
+        query = urlencode(query_params, quote_via=quote, safe="")
+        auth_url = f"{GOOGLE_AUTH_URL}?{query}"
+        logger.info(
+            "[GFit] OAuth init | client_id=%s | redirect_uri=%s | scopes=%s | state=%s | onboarding_step=%s",
+            settings.GOOGLE_FIT_CLIENT_ID,
+            redirect_uri,
+            scopes,
+            state,
+            onboarding_step,
         )
+        logger.info("[GFit] OAuth URL: %s", auth_url)
         return {
-            "auth_url": f"{GOOGLE_AUTH_URL}?{query}",
-            "redirect_uri": GoogleFitService._redirect_uri(),
+            "auth_url": auth_url,
+            "redirect_uri": redirect_uri,
             "timezone": resolved_timezone,
+            "client_id": settings.GOOGLE_FIT_CLIENT_ID,
+            "scopes": scopes,
+            "state": state,
+            "oauth_state": f"onboarding_step_{onboarding_step}" if onboarding_step else None,
         }
 
     @staticmethod
@@ -494,11 +562,9 @@ class GoogleFitService:
         device.is_active = True
 
         refresh_token = token_data.get("refresh_token") or decrypt_secret(connection.refresh_token_encrypted)
-        google_email = await GoogleFitService._fetch_google_email(access_token)
         expires_in = token_data.get("expires_in") or 3600
 
         connection.device_id = device.id
-        connection.google_email = google_email
         connection.default_timezone = GoogleFitService._resolve_timezone(state_payload.get("timezone"))
         connection.scopes = token_data.get("scope") or " ".join(GOOGLE_FIT_SCOPE_SET)
         connection.access_token_encrypted = encrypt_secret(access_token)
@@ -508,6 +574,14 @@ class GoogleFitService:
 
         db.add(connection)
         db.commit()
+
+        onboarding_step = state_payload.get("onboarding_step")
+        if onboarding_step is not None:
+            try:
+                step_value = max(1, min(int(onboarding_step), 6))
+            except (TypeError, ValueError):
+                step_value = 1
+            return f"{settings.FRONTEND_APP_URL.rstrip('/')}/onboarding/step-{step_value}?{urlencode({'googleFit': 'connected'})}"
 
         return GoogleFitService._build_frontend_redirect(
             redirect_path=state_payload.get("redirect_path") or "/device-settings/google-fit",
@@ -549,7 +623,7 @@ class GoogleFitService:
         device = GoogleFitService._get_or_create_device(db, user)
         device.is_active = True
 
-        tzinfo = ZoneInfo(resolved_timezone)
+        tzinfo = GoogleFitService._safe_timezone_info(resolved_timezone)
         daily_steps: list[dict[str, Any]] = []
 
         for bucket in payload.get("bucket", []):

@@ -7,6 +7,7 @@ export const ROUTES = {
   EMAIL_VERIFICATION:     '/email-verification',
   RESET_PASSWORD:         '/reset-password',
   ACCOUNT_CREATED:        '/account-created',
+  ONBOARDING:             '/onboarding',
   ONBOARDING_STEP_1:      '/onboarding/step-1',
   ONBOARDING_STEP_2:      '/onboarding/step-2',
   ONBOARDING_STEP_3:      '/onboarding/step-3',

@@ -42,12 +42,36 @@ const Onboarding = () => {
   });
 
   const selectedGender = watch('gender');
+  const stepFromUrl = searchParams.get('step');
+  const stepFromStorage = typeof window !== 'undefined' ? window.localStorage.getItem('onboarding_step') : null;
+  const stepSource = stepFromUrl || stepFromStorage || '1';
+  const parsedStep = Number(stepSource);
+  const restoredStep = Number.isFinite(parsedStep) && parsedStep >= 1 && parsedStep <= 6 ? parsedStep : 1;
 
   useEffect(() => {
     setValue('fullName', user?.full_name || user?.name || '');
     setValue('height', healthProfile?.height || '');
     setValue('weight', healthProfile?.weight || '');
   }, [healthProfile?.height, healthProfile?.weight, setValue, user?.full_name, user?.name]);
+
+  useEffect(() => {
+    if (!stepFromUrl && !stepFromStorage) {
+      return;
+    }
+
+    setOnboardingStep(restoredStep);
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem('onboarding_step');
+    }
+
+    if (restoredStep !== 1) {
+      navigate(ROUTES[`ONBOARDING_STEP_${restoredStep}`] || ROUTES.ONBOARDING_STEP_1, { replace: true });
+    }
+  }, [navigate, restoredStep, setOnboardingStep, stepFromStorage, stepFromUrl]);
+
+  if (restoredStep !== 1) {
+    return null;
+  }
 
   const onSubmit = async (data) => {
     if (!data.fullName || !data.dob || !data.height || !data.weight) {

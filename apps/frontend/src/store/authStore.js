@@ -219,6 +219,11 @@ export const useAuthStore = create(
         // ────────────────────────────────────────────────────────────────────
         hydrateAuth: async (tokenOverride = null) => {
           const token = tokenOverride !== null ? tokenOverride : get().token
+          const onboardingStepOverrideRaw =
+            typeof window !== 'undefined' ? window.localStorage.getItem('onboarding_step') : null
+          const onboardingStepOverride = Number.isFinite(Number(onboardingStepOverrideRaw))
+            ? Number(onboardingStepOverrideRaw)
+            : null
 
           if (!token) {
             set({ isHydrated: true, isHydratingAuth: false })
@@ -254,17 +259,25 @@ export const useAuthStore = create(
             const persistedStep = Number.isFinite(Number(persistedStepRaw))
               ? Number(persistedStepRaw)
               : null
+            const overrideStep =
+              onboardingStepOverride !== null && onboardingStepOverride >= 1 && onboardingStepOverride <= 6
+                ? onboardingStepOverride
+                : null
             // Incomplete onboarding must stay inside steps 1..5; never hydrate as step 6.
             const fallbackIncompleteStep =
-              persistedStep !== null && persistedStep >= 1 && persistedStep <= 5
+              overrideStep !== null
+                ? overrideStep
+                : (persistedStep !== null && persistedStep >= 1 && persistedStep <= 5
                 ? persistedStep
-                : 1
+                : 1)
             const normalizedOnboardingStep = normalizedOnboardingDone
               ? 6
               : (
-                stepFromServer !== null && stepFromServer >= 1 && stepFromServer <= 5
+                overrideStep !== null
+                  ? overrideStep
+                  : (stepFromServer !== null && stepFromServer >= 1 && stepFromServer <= 5
                   ? stepFromServer
-                  : fallbackIncompleteStep
+                  : fallbackIncompleteStep)
               )
 
             // #region agent log (authStore hydrateAuth normalization)
@@ -283,6 +296,10 @@ export const useAuthStore = create(
               isHydrated: true,
               isHydratingAuth: false
             }, false, 'hydrateAuth_SUCCESS')
+
+            if (overrideStep !== null && typeof window !== 'undefined') {
+              window.localStorage.removeItem('onboarding_step')
+            }
 
             await get().fetchProfile()
 

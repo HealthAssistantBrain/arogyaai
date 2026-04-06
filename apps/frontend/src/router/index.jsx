@@ -109,6 +109,7 @@ export default function AppRouter() {
 
             {/* ── ACTIVE ONBOARDING REQUIRED (AND NOT FINISHED) ─ */}
             <Route element={<ActiveOnboardingGuard />}>
+              <Route path={ROUTES.ONBOARDING} element={<Step1BasicProfile />} />
               <Route path={ROUTES.ONBOARDING_STEP_1} element={<Step1BasicProfile />} />
               <Route path={ROUTES.ONBOARDING_STEP_2} element={<Step2MedHistory />} />
               <Route path={ROUTES.ONBOARDING_STEP_3} element={<Step3Lifestyle />} />

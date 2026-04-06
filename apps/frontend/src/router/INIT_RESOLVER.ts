@@ -44,6 +44,11 @@ export async function INIT_RESOLVER(): Promise<InitResult> {
   // localStorage. We read it from the live store (already rehydrated above).
   const store = useAuthStore.getState();
   const token: string | null = store.token ?? null;
+  const onboardingStepOverrideRaw =
+    typeof window !== 'undefined' ? window.localStorage.getItem('onboarding_step') : null;
+  const onboardingStepOverride = Number.isFinite(Number(onboardingStepOverrideRaw))
+    ? Number(onboardingStepOverrideRaw)
+    : null;
 
   console.log('TOKEN:', token ? `${token.slice(0, 20)}…` : null);
 
@@ -94,13 +99,17 @@ export async function INIT_RESOLVER(): Promise<InitResult> {
     store.setUser(data);
     store.setOnboardingStatus({
       onboardingDone: data?.onboardingDone ?? data?.is_onboarding_done ?? false,
-      onboardingStep: data?.onboardingStep ?? data?.onboarding_step ?? 1,
+      onboardingStep: onboardingStepOverride !== null && onboardingStepOverride >= 1 && onboardingStepOverride <= 6
+        ? onboardingStepOverride
+        : (data?.onboardingStep ?? data?.onboarding_step ?? 1),
     });
 
     const isEmailVerified = data?.isEmailVerified ?? data?.is_email_verified ?? false;
     const onboardingDone = data?.onboardingDone ?? data?.is_onboarding_done ?? false;
     const onboardingStepRaw = data?.onboardingStep ?? data?.onboarding_step ?? store.onboardingStep ?? 1;
-    const onboardingStep = Number.isFinite(Number(onboardingStepRaw)) ? Number(onboardingStepRaw) : 1;
+    const onboardingStep = onboardingStepOverride !== null && onboardingStepOverride >= 1 && onboardingStepOverride <= 6
+      ? onboardingStepOverride
+      : (Number.isFinite(Number(onboardingStepRaw)) ? Number(onboardingStepRaw) : 1);
 
     // ── PHASE 1: Email verification NOT enforced ──────────────────────────
     // Re-enable in Phase 2:

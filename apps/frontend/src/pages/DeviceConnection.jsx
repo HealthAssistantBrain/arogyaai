@@ -1,11 +1,12 @@
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  BarChart3, 
-  User, 
-  HelpCircle, 
-  Link as LinkIcon, 
-  ArrowLeft, 
+import { motion } from 'framer-motion';
+import { useEffect } from 'react';
+import {
+  BarChart3,
+  User,
+  HelpCircle,
+  Link as LinkIcon,
+  ArrowLeft,
   ArrowRight,
   CheckCircle,
   Smartphone,
@@ -19,6 +20,7 @@ import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { ROUTES } from '../router/routes';
 import googleFitLogo from '../assets/google-fit.png';
+import { connectGoogleFit } from '../services/deviceService';
 
 const DeviceConnection = () => {
   const navigate = useNavigate();
@@ -33,6 +35,27 @@ const DeviceConnection = () => {
     } else {
       navigate(ROUTES.ONBOARDING_SUMMARY);
     }
+  };
+
+  const googleFitStatus = searchParams.get('googleFit');
+  const googleFitMessage = searchParams.get('message');
+  const isGoogleFitConnected = googleFitStatus === 'connected';
+  const connectionBanner = googleFitStatus === 'connected' ? 'Google Fit Connected ✅' : null;
+
+  useEffect(() => {
+    if (googleFitStatus === 'connected') {
+      toast.success('Successfully connected to Google Fit!');
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (googleFitStatus === 'error') {
+      toast.error(googleFitMessage || 'Failed to connect Google Fit');
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [googleFitStatus, googleFitMessage]);
+
+  const handleConnectGoogleFit = () => {
+    setOnboardingStep(4);
+    window.localStorage.setItem('onboarding_step', '4');
+    connectGoogleFit({ redirectPath: window.location.pathname });
   };
 
   // Animation variants
@@ -50,10 +73,11 @@ const DeviceConnection = () => {
     {
       id: 'google-fit',
       name: 'Google Fit',
-      status: 'Not Connected',
+      status: isGoogleFitConnected ? 'Connected' : 'Not Connected',
       logo: googleFitLogo,
-      color: 'text-red-500',
-      bgColor: 'bg-red-50 dark:bg-red-500/10'
+      color: isGoogleFitConnected ? 'text-green-500' : 'text-red-500',
+      bgColor: isGoogleFitConnected ? 'bg-green-50 dark:bg-green-500/10' : 'bg-red-50 dark:bg-red-500/10',
+      action: handleConnectGoogleFit
     },
     {
       id: 'apple-health',
@@ -90,14 +114,14 @@ const DeviceConnection = () => {
           </div>
           <div className="bg-[#6143f4]/10 rounded-full p-1 border border-[#6143f4]/20">
             <div className="h-10 w-10 rounded-full bg-[#6143f4]/10 flex items-center justify-center overflow-hidden">
-               <User size={20} className="text-[#6143f4]" />
+              <User size={20} className="text-[#6143f4]" />
             </div>
           </div>
         </div>
       </header>
 
       <main className="flex-1 flex items-center justify-center p-6 md:p-12">
-        <motion.div 
+        <motion.div
           variants={containerVariants}
           initial="initial"
           animate="animate"
@@ -116,11 +140,11 @@ const DeviceConnection = () => {
                 </div>
               </div>
               <div className="h-2 w-full bg-[#6143f4]/10 rounded-full overflow-hidden">
-                <motion.div 
-                   initial={{ width: '75%' }}
-                   animate={{ width: '100%' }}
-                   transition={{ duration: 1, ease: "easeOut" }}
-                   className="h-full bg-[#6143f4] rounded-full"
+                <motion.div
+                  initial={{ width: '75%' }}
+                  animate={{ width: '100%' }}
+                  transition={{ duration: 1, ease: "easeOut" }}
+                  className="h-full bg-[#6143f4] rounded-full"
                 ></motion.div>
               </div>
             </div>
@@ -136,24 +160,33 @@ const DeviceConnection = () => {
             </div>
 
             {/* Integration Grid */}
+            {connectionBanner ? (
+              <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-sm font-bold text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
+                {connectionBanner}
+              </div>
+            ) : null}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
               {devices.map((device) => (
-                <div 
+                <div
                   key={device.id}
                   className="group bg-slate-50 dark:bg-slate-800/50 border-2 border-slate-100 dark:border-slate-800 p-6 rounded-xl flex flex-col items-center text-center transition-all hover:bg-[#6143f4]/5 hover:border-[#6143f4]/20"
                 >
                   <div className="size-20 bg-white dark:bg-slate-700 rounded-2xl mb-6 flex items-center justify-center overflow-hidden shadow-sm border border-slate-100 dark:border-white/5 p-4">
                     <img src={device.logo} alt={device.name} className="w-full h-full object-contain" />
                   </div>
-                  
+
                   <h3 className="text-lg font-bold text-[#13082A] dark:text-white mb-1">{device.name}</h3>
                   <p className="text-[10px] font-bold text-slate-500 mb-6 uppercase tracking-widest">
                     {device.status}
                   </p>
-                  
-                  <button className="w-full py-3 bg-[#6143f4] text-white rounded-lg font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#6143f4]/20 hover:bg-[#6143f4]/90 active:scale-95 transition-all">
-                    <LinkIcon size={16} />
-                    Connect Now
+
+                  <button
+                    onClick={device.action}
+                    disabled={device.status === 'Connected'}
+                    className={`w-full py-3 ${device.status === 'Connected' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-[#6143f4] hover:bg-[#6143f4]/90'} text-white rounded-lg font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#6143f4]/20 active:scale-95 transition-all`}
+                  >
+                    {device.status === 'Connected' ? <CheckCircle size={16} /> : <LinkIcon size={16} />}
+                    {device.status === 'Connected' ? 'Connected' : 'Connect Now'}
                   </button>
                 </div>
               ))}
@@ -161,7 +194,7 @@ const DeviceConnection = () => {
 
             {/* Secondary Action */}
             <div className="text-center mb-12">
-              <button 
+              <button
                 onClick={handleFinish}
                 className="text-slate-400 hover:text-[#6143f4] font-bold text-xs uppercase tracking-widest transition-all flex items-center gap-2 mx-auto"
               >
@@ -172,14 +205,14 @@ const DeviceConnection = () => {
 
             {/* Navigation Controls */}
             <div className="pt-8 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-4 justify-between items-center">
-              <button 
+              <button
                 onClick={() => navigate(ROUTES.ONBOARDING_STEP_3)}
                 className="w-full sm:w-auto px-8 py-3 rounded-lg border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
               >
                 <ArrowLeft size={16} />
                 Back
               </button>
-              <button 
+              <button
                 onClick={handleFinish}
                 className="w-full sm:w-auto px-10 py-3 rounded-lg bg-[#6143f4] text-white font-bold hover:bg-[#6143f4]/90 shadow-lg shadow-[#6143f4]/25 transition-all flex items-center justify-center gap-2"
               >
@@ -192,7 +225,7 @@ const DeviceConnection = () => {
       </main>
 
       <footer className="py-8 px-10 text-center text-slate-400 text-xs mt-auto">
-         © 2024 ArogyaAI Health Systems. All data is encrypted and HIPAA compliant.
+        © 2024 ArogyaAI Health Systems. All data is encrypted and HIPAA compliant.
       </footer>
       {/* Footer Decoration */}
       <div className="fixed bottom-0 left-0 w-full h-1 bg-gradient-to-r from-[#6143f4] via-[#009CDE] to-[#6143f4] opacity-50 z-50"></div>
