@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { motion } from 'framer-motion';
@@ -20,6 +21,8 @@ const Onboarding = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const setOnboardingStep = useAuthStore((state) => state.setOnboardingStep);
+  const healthProfile = useAuthStore((state) => state.healthProfile);
+  const updateProfile = useAuthStore((state) => state.updateProfile);
   const user = useAuthStore((state) => state.user);
 
   const {
@@ -30,22 +33,36 @@ const Onboarding = () => {
     formState: { errors },
   } = useForm({
     defaultValues: {
-      fullName: user?.name || '',
+      fullName: user?.full_name || user?.name || '',
       gender: 'male',
       dob: '',
-      height: '',
-      weight: '',
+      height: healthProfile?.height || '',
+      weight: healthProfile?.weight || '',
     },
   });
 
   const selectedGender = watch('gender');
 
-  const onSubmit = (data) => {
+  useEffect(() => {
+    setValue('fullName', user?.full_name || user?.name || '');
+    setValue('height', healthProfile?.height || '');
+    setValue('weight', healthProfile?.weight || '');
+  }, [healthProfile?.height, healthProfile?.weight, setValue, user?.full_name, user?.name]);
+
+  const onSubmit = async (data) => {
     if (!data.fullName || !data.dob || !data.height || !data.weight) {
       toast.error('Please fill in all basic profile fields to continue.');
       return;
     }
-    console.log("Saving basic profile:", data);
+    const saved = await updateProfile({
+      full_name: data.fullName,
+      height: data.height,
+      weight: data.weight,
+    });
+    if (!saved) {
+      toast.error('Unable to save your profile right now.');
+      return;
+    }
     setOnboardingStep(2);
     toast.success('Profile updated!');
     // If editing from summary page, return there instead of advancing

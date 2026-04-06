@@ -55,8 +55,6 @@ import useDashboardStore from '../store/dashboardStore';
 import { useAuthStore } from '../store/authStore';
 import HeartRateCard from '../components/HeartRateCard';
 import UserProfileBadge from '../components/UserProfileBadge';
-
-
 const Dashboard = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('Dashboard');

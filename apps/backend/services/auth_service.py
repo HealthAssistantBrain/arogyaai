@@ -6,7 +6,7 @@ from typing import Optional, Tuple
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 
-from models import User, Session as DBSession
+from models import User, UserProfile, Session as DBSession
 from schemas.api_models import UserCreate, UserLogin, TokenResponse
 from core.security import verify_password, get_password_hash, create_access_token, create_refresh_token
 from core.utils import safe_input
@@ -30,6 +30,14 @@ class AuthService:
         db.add(new_user)
         db.commit()
         db.refresh(new_user)
+
+        db.add(
+            UserProfile(
+                user_id=new_user.id,
+                full_name=safe_input(user_data.full_name) if user_data.full_name else None,
+            )
+        )
+        db.commit()
 
         # ── Link Initial Profile if DOB provided ──
         if user_data.dob:

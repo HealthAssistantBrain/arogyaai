@@ -49,3 +49,12 @@ class GoogleFitConnectRequest(BaseModel):
 class GoogleFitSyncRequest(BaseModel):
     timezone: Optional[str] = None
     days: int = 30
+
+
+class UserProfileUpdate(BaseModel):
+    full_name: Optional[str] = None
+    avatar_url: Optional[str] = None
+    height: Optional[float] = None
+    weight: Optional[float] = None
+    blood_group: Optional[str] = None
+    allergies: Optional[str] = None

@@ -113,15 +113,7 @@ const ChangePassword = () => {
                             <button className="size-12 flex items-center justify-center rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 hover:bg-[#6143f4]/10 hover:text-[#6143f4] transition-all active:scale-95 group shadow-sm">
                                 <HelpCircle size={20} />
                             </button>
-                            <div className="flex items-center gap-4 ml-2">
-                                <div className="text-right hidden sm:block">
-                                    <p className="text-xs font-black text-[#13082a] dark:text-white uppercase leading-none">Dr. Sarah Chen</p>
-                                    <p className="text-[9px] text-[#6143f4] uppercase tracking-widest font-black leading-none mt-1">Chief Surgeon</p>
-                                </div>
-                                <div className="size-12 rounded-2xl border-2 border-[#6143f4]/20 p-1 bg-white">
-                                    <img className="size-full rounded-xl object-cover" alt="Dr. Sarah Chen" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCmca7uoDE5AXEl5Lm8J0kNozFbXew2KmxjvbMH9Uxz6_puV-3M4e6vnlXT3lEb_5cr82WJlJpIhLxX0n3slwWbP57cryd-X1PYojJGyEJFIbxEi5GoRB7BAanTNFGumWZcuLVazL6mqrjhuvUC3gGRtjHZVA9j0pjweqT5KOzZfnYTmtLSNDWzJTJ0I2GNWutesIDE2flIJl8eYqrE_zQxMiy9H-ayg4LdE001a6UkDGckUUtZ533LriYErfK1okd7WRmFj5K6lXvB"/>
-                                </div>
-                            </div>
+                            
                         </div>
                     </header>
 

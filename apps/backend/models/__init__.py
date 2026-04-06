@@ -11,6 +11,7 @@ Usage:
 from .base import Base
 
 from .user            import User
+from .user_profile    import UserProfile
 from .health_profile  import HealthProfile, GenderEnum
 from .device          import Device, DeviceTypeEnum
 from .vitals_data     import VitalsData
@@ -29,6 +30,7 @@ __all__ = [
     "Base",
     # Domain Models
     "User",
+    "UserProfile",
     "HealthProfile",
     "Device",
     "VitalsData",

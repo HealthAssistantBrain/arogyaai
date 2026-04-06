@@ -17,24 +17,14 @@ const firstNonEmpty = (...values) => {
   return '';
 };
 
-const toRoleLabel = (role) => {
-  if (!role || role === 'user') {
-    return '';
-  }
-
-  return role
-    .toString()
-    .replace(/[_-]+/g, ' ')
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-};
-
-export function getUserProfile(user, role = 'user') {
+export function getUserProfile(user, _role = 'user') {
   const fullNameFromParts = [user?.first_name, user?.last_name]
     .filter((value) => typeof value === 'string' && value.trim())
     .join(' ')
     .trim();
 
   const name = firstNonEmpty(
+    user?.profile?.full_name,
     user?.full_name,
     user?.name,
     fullNameFromParts,
@@ -42,6 +32,7 @@ export function getUserProfile(user, role = 'user') {
   ) || 'User';
 
   const patientId = firstNonEmpty(
+    user?.profile?.patient_id,
     user?.patient_id,
     user?.patientId,
     user?.patientID,
@@ -50,6 +41,7 @@ export function getUserProfile(user, role = 'user') {
   );
 
   const avatar = firstNonEmpty(
+    user?.profile?.avatar_url,
     user?.avatar,
     user?.avatar_url,
     user?.avatarUrl,
@@ -67,7 +59,7 @@ export function getUserProfile(user, role = 'user') {
     name,
     patientId,
     avatar,
-    subtitle: patientId ? `ID: ${patientId}` : toRoleLabel(role) || 'ID: N/A',
+    subtitle: patientId ? `ID: ${patientId}` : '',
     fallbackAvatar: DEFAULT_AVATAR,
   };
 }

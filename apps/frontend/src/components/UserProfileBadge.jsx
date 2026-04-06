@@ -73,7 +73,7 @@ export default function UserProfileBadge({
     >
       <div className={config.textWrap}>
         <p className={config.name}>{profile.name}</p>
-        <p className={config.subtitle}>{profile.subtitle}</p>
+        {profile.subtitle ? <p className={config.subtitle}>{profile.subtitle}</p> : null}
       </div>
       <div className={config.avatarWrap}>
         <img

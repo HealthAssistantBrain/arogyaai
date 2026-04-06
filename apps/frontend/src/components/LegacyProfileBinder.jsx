@@ -37,6 +37,7 @@ function bindProfileWrapper(wrapper, profile, navigate) {
   }
   if (lines[1]) {
     lines[1].textContent = profile.subtitle;
+    lines[1].style.display = profile.subtitle ? '' : 'none';
   }
 
   updateAvatar(wrapper, profile);

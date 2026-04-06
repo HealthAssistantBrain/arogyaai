@@ -2,6 +2,18 @@ import { create } from 'zustand'
 import { persist, devtools } from 'zustand/middleware'
 import { isSystemLocked } from '../lib/systemLock'
 
+const API_BASE_URL = `${(import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '')}/api/v1`
+
+const normalizeProfileState = (profile) => ({
+  full_name: profile?.full_name ?? null,
+  avatar_url: profile?.avatar_url ?? null,
+  patient_id: profile?.patient_id ?? null,
+  height: profile?.height ?? '',
+  weight: profile?.weight ?? '',
+  blood_group: profile?.blood_group ?? '',
+  allergies: profile?.allergies ?? '',
+})
+
 // ── Patch 7: isHydrated prevents guard decisions before Zustand hydrates from localStorage
 // ── Patch 4: role field added for future role-based access control (no UI impact)
 // ── Bug Fix: logout() must NOT wipe onboarding state. onboardingDone / onboardingStep
@@ -14,6 +26,9 @@ export const useAuthStore = create(
         // Trace state for debugging
         logOnboardingState: () => console.log("ONBOARDING STATE:", get()),
         user: null,
+        healthProfile: null,
+        profileLoading: false,
+        profileError: null,
         token: null,
         refreshToken: null,      // ← Added for session revocation
         isAuthenticated: false,
@@ -78,6 +93,89 @@ export const useAuthStore = create(
         setHydrated: () =>
           set({ isHydrated: true }, false, 'setHydrated'),
 
+        // ── PROFILE MANAGEMENT ──────────────────────────────────────────────
+        fetchProfile: async () => {
+          const token = get().token;
+          if (!token) return false;
+
+          set({ profileLoading: true, profileError: null });
+          try {
+            const res = await fetch(`${API_BASE_URL}/user/profile`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            if (!res.ok) throw new Error('Failed to fetch profile');
+            const envelope = await res.json();
+            const data = envelope.data || envelope || {};
+            const normalizedProfile = normalizeProfileState(data);
+
+            set({
+              user: {
+                ...(get().user || {}),
+                full_name: data.full_name ?? get().user?.full_name ?? null,
+                avatar_url: data.avatar_url ?? get().user?.avatar_url ?? null,
+                patient_id: data.patient_id ?? get().user?.patient_id ?? null,
+              },
+              healthProfile: normalizedProfile,
+              profileLoading: false
+            });
+            return true;
+          } catch (err) {
+            console.error("fetchProfile error:", err);
+            set({ profileError: err.message, profileLoading: false });
+            return false;
+          }
+        },
+
+        updateProfile: async (newHealthProfile) => {
+          const token = get().token;
+          if (!token) return false;
+
+          // Optimistic UI Update
+          const previousUser = get().user;
+          const previousProfile = get().healthProfile;
+          set({
+            user: {
+              ...(previousUser || {}),
+              full_name: newHealthProfile.full_name ?? previousUser?.full_name ?? null,
+              avatar_url: newHealthProfile.avatar_url ?? previousUser?.avatar_url ?? null,
+            },
+            healthProfile: { ...previousProfile, ...newHealthProfile },
+            profileError: null,
+            profileLoading: true,
+          });
+
+          try {
+            const res = await fetch(`${API_BASE_URL}/user/profile`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`
+              },
+              body: JSON.stringify(newHealthProfile)
+            });
+            if (!res.ok) throw new Error('Failed to update profile');
+            const envelope = await res.json();
+            const data = envelope.data || envelope || {};
+            const normalizedProfile = normalizeProfileState(data);
+            set({
+              user: {
+                ...(get().user || {}),
+                full_name: data.full_name ?? get().user?.full_name ?? null,
+                avatar_url: data.avatar_url ?? get().user?.avatar_url ?? null,
+                patient_id: data.patient_id ?? get().user?.patient_id ?? null,
+              },
+              healthProfile: normalizedProfile,
+              profileLoading: false,
+            });
+            return true;
+          } catch (err) {
+            console.error("updateProfile error:", err);
+            // Rollback on failure
+            set({ user: previousUser, healthProfile: previousProfile, profileError: err.message, profileLoading: false });
+            return false;
+          }
+        },
+
         // ── CRITICAL ────────────────────────────────────────────────────────
         // completeOnboarding MUST be called BEFORE navigate()
         // in OnboardingCompletion.jsx — if navigate() fires first
@@ -134,7 +232,7 @@ export const useAuthStore = create(
 
           try {
             // Hit the newly scaffolded backend /api/v1/users/me endpoint
-            const res = await fetch('http://localhost:8000/api/v1/users/me', {
+            const res = await fetch(`${API_BASE_URL}/users/me`, {
               headers: { Authorization: `Bearer ${token}` },
               credentials: 'include'
             })
@@ -173,6 +271,7 @@ export const useAuthStore = create(
             // Sync Zustand precisely to the Postgres reality
             set({
               user: dbUser,
+              healthProfile: normalizeProfileState(dbUser),
               isAuthenticated: true,
               isEmailVerified: dbUser.is_email_verified ?? true, // Fallback if backend doesn't implement yet
               onboardingDone: normalizedOnboardingDone,
@@ -181,6 +280,8 @@ export const useAuthStore = create(
               isHydrated: true,
               isHydratingAuth: false
             }, false, 'hydrateAuth_SUCCESS')
+
+            await get().fetchProfile()
 
             // #region agent log (authStore final state snapshot)
             const s = get();
@@ -246,6 +347,9 @@ export const useAuthStore = create(
           set(
             {
               user: null,
+              healthProfile: null,
+              profileLoading: false,
+              profileError: null,
               token: null,
               refreshToken: null,
               isAuthenticated: false,
@@ -279,6 +383,9 @@ export const useAuthStore = create(
           set(
             {
               user: null,
+              healthProfile: null,
+              profileLoading: false,
+              profileError: null,
               token: null,
               refreshToken: null,
               isAuthenticated: false,
@@ -329,6 +436,7 @@ export const useAuthStore = create(
           token: state.token,
           refreshToken: state.refreshToken,
           user: state.user,
+          healthProfile: state.healthProfile,
           isAuthenticated: state.isAuthenticated,
           isEmailVerified: state.isEmailVerified,
           onboardingDone: state.onboardingDone,

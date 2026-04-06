@@ -57,9 +57,12 @@ def get_current_user_from_header(
 
 
 @router.get("/me")
-def get_me(current_user: User = Depends(get_current_user_from_header)):
+def get_me(
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
     """Returns the authenticated user's core profile data via UserService."""
-    return UserService.get_user_me(current_user)
+    return UserService.get_user_me(db, current_user)
 
 
 @router.put("/me")

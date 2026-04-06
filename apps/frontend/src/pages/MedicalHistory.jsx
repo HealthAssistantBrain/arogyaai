@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -25,10 +25,24 @@ const MedicalHistory = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const setOnboardingStep = useAuthStore((state) => state.setOnboardingStep);
+  const healthProfile = useAuthStore((state) => state.healthProfile);
+  const updateProfile = useAuthStore((state) => state.updateProfile);
 
   const [conditions, setConditions] = useState(['Diabetes', 'Thyroid']);
-  const [allergies, setAllergies] = useState(['None']);
+  const [allergies, setAllergies] = useState(
+    healthProfile?.allergies
+      ? healthProfile.allergies.split(',').map((item) => item.trim()).filter(Boolean)
+      : ['None']
+  );
   const [familyHistory, setFamilyHistory] = useState(['Type 2 Diabetes']);
+
+  useEffect(() => {
+    setAllergies(
+      healthProfile?.allergies
+        ? healthProfile.allergies.split(',').map((item) => item.trim()).filter(Boolean)
+        : ['None']
+    );
+  }, [healthProfile?.allergies]);
 
   const toggleSelection = (item, list, setList) => {
     if (list.includes(item)) {
@@ -42,7 +56,13 @@ const MedicalHistory = () => {
     }
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
+    const normalizedAllergies = allergies.includes('None') ? '' : allergies.join(', ');
+    const saved = await updateProfile({ allergies: normalizedAllergies });
+    if (!saved) {
+      toast.error('Unable to save your medical history right now.');
+      return;
+    }
     setOnboardingStep(3);
     toast.success('Medical history saved');
     if (searchParams.get('return') === 'summary') {

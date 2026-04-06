@@ -26,10 +26,14 @@ import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { ROUTES } from '../router/routes';
 import api from '../lib/axios';
+import { getUserProfile } from '../lib/userProfile';
 
 const OnboardingSummary = () => {
   const navigate = useNavigate();
   const setOnboardingStep = useAuthStore((state) => state.setOnboardingStep);
+  const user = useAuthStore((state) => state.user);
+  const healthProfile = useAuthStore((state) => state.healthProfile);
+  const profileData = getUserProfile(user);
 
   const handleConfirm = async () => {
     try {
@@ -137,9 +141,9 @@ const OnboardingSummary = () => {
                 </div>
                 <div className="space-y-3">
                   {[
-                    { label: 'Full Name', value: 'Alex Johnson' },
+                    { label: 'Full Name', value: profileData.name },
                     { label: 'Gender', value: 'Non-binary' },
-                    { label: 'Height/Weight', value: '178cm / 72kg' }
+                    { label: 'Height/Weight', value: `${healthProfile?.height || '—'}cm / ${healthProfile?.weight || '—'}kg` }
                   ].map((field) => (
                     <div key={field.label} className="flex justify-between text-sm">
                       <span className="text-slate-500 font-medium">{field.label}</span>
@@ -163,7 +167,7 @@ const OnboardingSummary = () => {
                 <div className="space-y-3">
                   {[
                     { label: 'Conditions', value: 'Hypertension' },
-                    { label: 'Allergies', value: 'Penicillin' },
+                    { label: 'Allergies', value: healthProfile?.allergies || 'None' },
                     { label: 'Family History', value: 'Type 2 Diabetes' }
                   ].map((field) => (
                     <div key={field.label} className="flex justify-between text-sm">

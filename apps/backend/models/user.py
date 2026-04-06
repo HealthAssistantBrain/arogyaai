@@ -27,6 +27,7 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     # ── Relationships ──────────────────────────────────────────
     health_profile  = relationship("HealthProfile", back_populates="user", uselist=False)
+    user_profile    = relationship("UserProfile", back_populates="user", uselist=False)
     devices         = relationship("Device", back_populates="user")
     vitals_data     = relationship("VitalsData", back_populates="user")
     wearable_data   = relationship("WearableData", back_populates="user")

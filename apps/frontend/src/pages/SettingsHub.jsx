@@ -178,15 +178,7 @@ const SettingsHub = () => {
                             <button onClick={() => navigate(ROUTES.HELP)} className="size-12 flex items-center justify-center rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 hover:bg-[#6143f4]/10 hover:text-[#6143f4] transition-all active:scale-95 group shadow-sm">
                                 <HelpCircle size={20} />
                             </button>
-                            <div className="flex items-center gap-4 ml-2">
-                                <div className="text-right hidden sm:block">
-                                    <p className="text-xs font-black text-[#13082a] dark:text-white uppercase leading-none">Alex Johnson</p>
-                                    <p className="text-[9px] text-[#6143f4] uppercase tracking-widest font-black leading-none mt-1">Premium Member</p>
-                                </div>
-                                <div className="size-12 rounded-2xl border-2 border-[#6143f4]/20 p-1 bg-white">
-                                    <img className="size-full rounded-xl object-cover" alt="Alex Johnson" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtXYkq58bPS9sE42ldSn-06xk0ePdMg2b2AADGuUBVQEAJ3QcSa0U4ct-KBnUdoXlj2ebPDPo04apV9JoCZ8dSzXGyzNtalj5qC9vUfaWntbUmXdrGKqlUY8sYQVO6kjXPwOGLXTyhDLQXWviw-KKtvC-XPtjlhGOW77UtB__Qng4lIX16DjdLP2HA3uR-2eU3Z2ZaRbeGX_pfA7va16q0A8qRERK7Tib_1ZJAem6YIyzytz9cYnzi5qOY2vojjTG6_6T8ABXgH6ol"/>
-                                </div>
-                            </div>
+                            
                         </div>
                     </header>
 
