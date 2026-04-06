@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ROUTES } from '../router/routes';
 import { motion } from 'framer-motion';
+import axios from 'axios';
+import toast from 'react-hot-toast';
 import { 
   LayoutDashboard, 
   Brain, 
@@ -25,28 +27,192 @@ import {
   Sparkles,
   SearchCode,
   CheckCircle2,
-  Info
+  Info,
+  Moon
 } from 'lucide-react';
+
+const PIPELINE_STAGES = [
+    { key: 'uploading', label: 'Uploading file', target: 20, detail: 'Sending the PDF securely to ArogyaAI.' },
+    { key: 'extracting', label: 'Extracting text', target: 40, detail: 'Parsing the document and extracting readable medical text.' },
+    { key: 'processing', label: 'AI processing', target: 70, detail: 'Prediction service is analysing clinical markers and patterns.' },
+    { key: 'insights', label: 'Generating insights', target: 100, detail: 'Preparing the final summary, risks, and recommendations.' },
+];
+
+const STAGE_TARGETS = Object.fromEntries(PIPELINE_STAGES.map((stage) => [stage.key, stage.target]));
 
 const ReportProcessing = () => {
     const navigate = useNavigate();
-    const [progress, setProgress] = useState(65); // Set to 65% as per Stitch snapshot
+    const location = useLocation();
+    const file = location.state?.file;
+    const [progress, setProgress] = useState(0); 
+    const [stageKey, setStageKey] = useState('uploading');
+    const [errorMessage, setErrorMessage] = useState('');
+    const isProcessing = useRef(false);
+    const stageKeyRef = useRef('uploading');
+    const errorMessageRef = useRef('');
 
-    // Simulate progress but keep it close to 65% for verification consistency
     useEffect(() => {
-        const interval = setInterval(() => {
-            setProgress(prev => {
-                if (prev >= 100) {
-                    clearInterval(interval);
-                    setTimeout(() => navigate(ROUTES.MEDICAL_REPORTS), 2000); // Navigate when done
-                    return 100;
-                }
-                return prev + Math.floor(Math.random() * 2) + 1;
-            });
-        }, 1500);
+        stageKeyRef.current = stageKey;
+    }, [stageKey]);
 
-        return () => clearInterval(interval);
-    }, [navigate]);
+    useEffect(() => {
+        errorMessageRef.current = errorMessage;
+    }, [errorMessage]);
+
+    useEffect(() => {
+        if (!file) {
+            navigate(ROUTES.UPLOAD);
+            return;
+        }
+
+        if (isProcessing.current) return;
+        isProcessing.current = true;
+
+        let isMounted = true;
+        const controller = new AbortController();
+        let uploadFallbackTimeout;
+        let extractingStageTimeout;
+        let processingStageTimeout;
+        let insightStageTimeout;
+        const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
+
+        const interval = setInterval(() => {
+            if (!isMounted) return;
+
+            setProgress((prev) => {
+                if (errorMessageRef.current) {
+                    return prev;
+                }
+
+                const cap = STAGE_TARGETS[stageKeyRef.current] ?? 100;
+                if (prev >= cap) {
+                    return prev;
+                }
+
+                const remaining = cap - prev;
+                const increment = cap === 100 ? Math.min(remaining, 4) : Math.max(1, Math.ceil(remaining / 10));
+                return Math.min(prev + increment, cap);
+            });
+        }, 250);
+
+        const analyzeReport = async () => {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                setProgress(0);
+                setStageKey('uploading');
+                setErrorMessage('');
+
+                // Some browsers don't emit reliable multipart upload progress totals.
+                // Move the UI forward from 0 even when onUploadProgress is sparse.
+                uploadFallbackTimeout = setTimeout(() => {
+                    if (!isMounted) return;
+                    setProgress((prev) => Math.max(prev, 8));
+                }, 150);
+
+                extractingStageTimeout = setTimeout(() => {
+                    if (!isMounted) return;
+                    setStageKey((current) => current === 'uploading' ? 'extracting' : current);
+                    setProgress((prev) => Math.max(prev, 24));
+                }, 600);
+
+                processingStageTimeout = setTimeout(() => {
+                    if (!isMounted) return;
+                    setStageKey((current) => (
+                        current === 'uploading' || current === 'extracting' ? 'processing' : current
+                    ));
+                    setProgress((prev) => Math.max(prev, 45));
+                }, 1400);
+
+                const response = await axios.post(`${apiBaseUrl}/api/v1/reports/analyze`, formData, {
+                    signal: controller.signal,
+                    onUploadProgress: (event) => {
+                        if (!isMounted || !event.total) return;
+
+                        const uploadPercent = Math.min(20, Math.round((event.loaded / event.total) * 20));
+                        setProgress((prev) => Math.max(prev, uploadPercent));
+
+                        if (event.loaded >= event.total) {
+                            setStageKey('extracting');
+                            clearTimeout(uploadFallbackTimeout);
+                            clearTimeout(extractingStageTimeout);
+                            clearTimeout(processingStageTimeout);
+                            clearTimeout(insightStageTimeout);
+                            extractingStageTimeout = setTimeout(() => {
+                                if (isMounted) {
+                                    setProgress((prev) => Math.max(prev, STAGE_TARGETS.extracting));
+                                }
+                            }, 250);
+                            processingStageTimeout = setTimeout(() => {
+                                if (isMounted) {
+                                    setStageKey('processing');
+                                    setProgress((prev) => Math.max(prev, 45));
+                                }
+                            }, 700);
+                        }
+                    },
+                });
+
+                if (!isMounted) return;
+
+                clearTimeout(uploadFallbackTimeout);
+                clearTimeout(extractingStageTimeout);
+                clearTimeout(processingStageTimeout);
+                setStageKey('insights');
+                setProgress((prev) => Math.max(prev, 72));
+                insightStageTimeout = setTimeout(() => {
+                    if (isMounted) {
+                        setProgress((prev) => Math.max(prev, 90));
+                    }
+                }, 250);
+
+                if (response.data?.success) {
+                    setTimeout(() => {
+                        if (!isMounted) return;
+                        setProgress(100);
+                    }, 250);
+
+                    setTimeout(() => {
+                        if (!isMounted) return;
+                        navigate(ROUTES.UPLOAD_SUCCESS, { 
+                            state: { reportData: response.data.data, fileName: file.name }
+                        });
+                    }, 900);
+                } else {
+                    throw new Error(response.data?.error || 'Processing failed');
+                }
+            } catch (err) {
+                if (!isMounted) return;
+
+                if (axios.isCancel(err) || err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') {
+                    return;
+                }
+
+                clearTimeout(uploadFallbackTimeout);
+                clearTimeout(extractingStageTimeout);
+                clearTimeout(processingStageTimeout);
+                clearTimeout(insightStageTimeout);
+                const message = err?.response?.data?.error || err?.response?.data?.detail || err?.message || 'Processing failed';
+                setStageKey('failed');
+                setErrorMessage(message);
+                toast.error(message);
+            }
+        };
+
+        analyzeReport();
+
+        return () => {
+            isMounted = false;
+            controller.abort();
+            isProcessing.current = false;
+            clearTimeout(uploadFallbackTimeout);
+            clearTimeout(extractingStageTimeout);
+            clearTimeout(processingStageTimeout);
+            clearTimeout(insightStageTimeout);
+            clearInterval(interval);
+        };
+    }, [file, navigate]);
 
     const sidebarLinks = [
         { icon: LayoutDashboard, label: 'Dashboard', path: ROUTES.DASHBOARD, group: 'Intelligence' },
@@ -62,11 +228,13 @@ const ReportProcessing = () => {
     ];
 
     // Helper to determine stage status
-    const getStageStatus = (stageProgress) => {
-        if (progress > stageProgress + 30) return 'done';
-        if (progress > stageProgress) return 'active';
+    const getStageStatus = (stageTarget) => {
+        if (progress >= stageTarget) return 'done';
+        if (progress >= Math.max(0, stageTarget - 20)) return 'active';
         return 'pending';
     };
+
+    const activeStage = PIPELINE_STAGES.find((stage) => stage.key === stageKey) || PIPELINE_STAGES[0];
 
     return (
         <div className="bg-[#f6f5f8] dark:bg-[#0B0819] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased text-[14px]">
@@ -161,7 +329,7 @@ const ReportProcessing = () => {
                                         {progress}%
                                     </motion.span>
                                     <div className="mt-4 px-4 py-1.5 bg-[#6143f4]/10 text-[#6143f4] text-[10px] font-black uppercase tracking-[0.25em] rounded-full border border-[#6143f4]/20 shadow-sm leading-none">
-                                        PROCESSING
+                                        {errorMessage ? 'PROCESSING FAILED' : activeStage.label}
                                     </div>
                                 </div>
                             </div>
@@ -192,7 +360,7 @@ const ReportProcessing = () => {
                         {/* Headlines */}
                         <div className="text-center mb-16 relative z-10 space-y-4">
                             <h2 className="text-5xl font-black tracking-tighter text-[#13082a] dark:text-white leading-none uppercase italic">Analyzing your medical report</h2>
-                            <p className="text-slate-400 font-bold uppercase tracking-widest text-[11px] opacity-80 leading-relaxed max-w-xl mx-auto">Our specialized AI models are processing your document to extract clinical biomarkers via neural mapping.</p>
+                            <p className="text-slate-400 font-bold uppercase tracking-widest text-[11px] opacity-80 leading-relaxed max-w-xl mx-auto">{errorMessage ? 'Processing failed. Please retry the upload or check the backend logs for the failing stage.' : activeStage.detail}</p>
                         </div>
 
                         {/* Analysis Card with Stages */}
@@ -205,9 +373,10 @@ const ReportProcessing = () => {
                                 
                                 <div className="space-y-8 relative z-10">
                                     {[
-                                        { icon: RotateCw, text: 'Extracting biomarkers using OCR...', trigger: 10, stage: 'ocr' },
-                                        { icon: Database, text: 'Cross-referencing with clinical models...', trigger: 40, stage: 'clinical' },
-                                        { icon: ShieldCheck, text: 'Generating health score prediction...', trigger: 80, stage: 'prediction' }
+                                        { icon: RotateCw, text: 'Uploading file', trigger: 20 },
+                                        { icon: SearchCode, text: 'Extracting text', trigger: 40 },
+                                        { icon: Database, text: 'AI processing', trigger: 70 },
+                                        { icon: ShieldCheck, text: 'Generating insights', trigger: 100 }
                                     ].map((step, idx) => {
                                         const status = getStageStatus(step.trigger);
                                         return (
@@ -225,12 +394,12 @@ const ReportProcessing = () => {
                                                     </span>
                                                     <div className="flex items-center gap-2 mt-1">
                                                         <span className={`text-[9px] font-bold uppercase tracking-[0.2em] ${status === 'done' ? 'text-emerald-500' : status === 'active' ? 'text-[#6143f4]' : 'text-slate-400'}`}>
-                                                            {status === 'done' ? 'COMPLETED' : status === 'active' ? 'ACTIVE PIPELINE' : 'QUEUED'}
+                                                            {errorMessage ? (status === 'done' ? 'COMPLETED' : 'STOPPED') : status === 'done' ? 'COMPLETED' : status === 'active' ? 'ACTIVE PIPELINE' : 'QUEUED'}
                                                         </span>
                                                         {status === 'active' && <motion.span animate={{ opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 1.5 }} className="size-1.5 bg-[#6143f4] rounded-full"></motion.span>}
                                                     </div>
                                                 </div>
-                                                {status === 'active' && <div className="text-[10px] font-black text-[#6143f4] uppercase tracking-widest bg-[#6143f4]/5 px-3 py-1 rounded-full animate-pulse leading-none italic">Inference Running</div>}
+                                                {status === 'active' && <div className="text-[10px] font-black text-[#6143f4] uppercase tracking-widest bg-[#6143f4]/5 px-3 py-1 rounded-full animate-pulse leading-none italic">{errorMessage ? 'Stopped' : 'Running'}</div>}
                                             </div>
                                         );
                                     })}
@@ -241,7 +410,7 @@ const ReportProcessing = () => {
                                     <div className="flex justify-between items-end mb-2">
                                         <div className="flex flex-col gap-1">
                                             <span className="text-[10px] font-black tracking-[0.3em] uppercase text-slate-400 leading-none">ANALYSIS STATUS</span>
-                                            <p className="text-[9px] font-bold text-[#6143f4] uppercase tracking-widest opacity-60">Real-time health telemetry</p>
+                                            <p className="text-[9px] font-bold text-[#6143f4] uppercase tracking-widest opacity-60">{errorMessage ? 'Processing failed' : activeStage.label}</p>
                                         </div>
                                         <span className="text-2xl font-black text-[#6143f4] italic tracking-tighter leading-none">{progress}% COMPLETE</span>
                                     </div>
@@ -259,6 +428,23 @@ const ReportProcessing = () => {
                             </div>
                         </div>
 
+                        {errorMessage && (
+                            <div className="mt-8 w-full max-w-2xl">
+                                <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-[2rem] p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                    <div>
+                                        <h4 className="text-lg font-black text-red-600 dark:text-red-300 uppercase tracking-tight leading-none mb-2">Processing failed</h4>
+                                        <p className="text-[12px] text-red-500 dark:text-red-200 font-bold leading-relaxed">{errorMessage}</p>
+                                    </div>
+                                    <button
+                                        onClick={() => navigate(ROUTES.UPLOAD, { state: { retryFileName: file?.name } })}
+                                        className="px-5 py-3 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] transition-all"
+                                    >
+                                        Try Again
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Information Section - What's Happening? */}
                         <div className="mt-12 w-full max-w-2xl">
                             <div className="bg-white/50 dark:bg-[#131022]/50 backdrop-blur-3xl rounded-[2rem] p-8 border border-white dark:border-white/5 flex gap-8 items-center group/info hover:border-[#6143f4]/20 transition-all shadow-sm">
@@ -268,7 +454,7 @@ const ReportProcessing = () => {
                                 <div>
                                     <h4 className="text-lg font-black text-[#13082a] dark:text-white mb-2 uppercase tracking-tight italic">What's happening?</h4>
                                     <p className="text-[11px] text-slate-500 font-bold leading-relaxed uppercase tracking-[0.05em] opacity-80">
-                                        Our inference engine typically takes less than 60 seconds to cross-reference identified health markers with over 4,500 clinical studies to provide deep longitudinal insights.
+                                        {errorMessage ? 'The workflow stopped before final insight generation. The progress bar has been halted until the upload is retried.' : 'The progress bar tracks the live upload lifecycle: file transfer, text extraction, AI processing, and final insight generation.'}
                                     </p>
                                 </div>
                             </div>

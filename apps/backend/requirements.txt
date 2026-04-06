@@ -13,4 +13,9 @@ psycopg2-binary
 redis
 httpx
 cryptography
+<<<<<<< HEAD
 APScheduler
+=======
+PyPDF2
+python-multipart
+>>>>>>> Report_Gen

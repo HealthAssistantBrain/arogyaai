@@ -65,10 +65,25 @@ const UploadReport = () => {
         setIsDragging(false);
     };
 
+    const processFile = (file) => {
+        const isPdf = file && (file.type === 'application/pdf' || file.name?.toLowerCase().endsWith('.pdf'));
+        if (isPdf) {
+            navigate(ROUTES.REPORT_PROCESSING, { state: { file } });
+        } else {
+            alert('Please upload a valid PDF document.');
+        }
+    };
+
     const handleDrop = (e) => {
         e.preventDefault();
         setIsDragging(false);
-        // Add file processing logic here
+        const file = e.dataTransfer?.files?.[0];
+        processFile(file);
+    };
+
+    const handleFileChange = (e) => {
+        const file = e.target.files?.[0];
+        processFile(file);
     };
 
     return (
@@ -159,7 +174,7 @@ const UploadReport = () => {
                                     </div>
                                 ))}
                             </div>
-                            <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" />
+                            <input type="file" className="hidden" accept=".pdf" onChange={handleFileChange} />
                         </label>
 
                         {/* Processing Progress & Preview Layout */}
@@ -337,4 +352,3 @@ const UploadReport = () => {
 };
 
 export default UploadReport;
-
