@@ -26,6 +26,9 @@ def _serialize_profile(user: User, profile: Optional[UserProfile]) -> dict:
         "full_name": profile.full_name if profile and profile.full_name else user.full_name,
         "avatar_url": profile.avatar_url if profile else None,
         "patient_id": None,
+        "phone": profile.phone if profile else None,
+        "date_of_birth": profile.date_of_birth.isoformat() if profile and profile.date_of_birth else None,
+        "gender": profile.gender if profile else None,
         "height": _to_float(profile.height) if profile else None,
         "weight": _to_float(profile.weight) if profile else None,
         "blood_group": profile.blood_group if profile else None,
@@ -124,6 +127,24 @@ class UserService:
         if "avatar_url" in updates:
             avatar_url = safe_input(updates.get("avatar_url"), max_chars=4000)
             profile.avatar_url = avatar_url or None
+
+        if "phone" in updates:
+            phone = safe_input(updates.get("phone"), max_chars=20)
+            profile.phone = phone or None
+
+        if "date_of_birth" in updates:
+            dob_str = safe_input(updates.get("date_of_birth"), max_chars=20)
+            if dob_str:
+                try:
+                    profile.date_of_birth = datetime.strptime(dob_str, "%Y-%m-%d").date()
+                except ValueError:
+                    pass
+            else:
+                profile.date_of_birth = None
+
+        if "gender" in updates:
+            gender = safe_input(updates.get("gender"), max_chars=20)
+            profile.gender = gender or None
 
         if "height" in updates:
             profile.height = _to_float(updates.get("height"))

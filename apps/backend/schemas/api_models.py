@@ -58,3 +58,6 @@ class UserProfileUpdate(BaseModel):
     weight: Optional[float] = None
     blood_group: Optional[str] = None
     allergies: Optional[str] = None
+    phone: Optional[str] = None
+    date_of_birth: Optional[str] = None
+    gender: Optional[str] = None

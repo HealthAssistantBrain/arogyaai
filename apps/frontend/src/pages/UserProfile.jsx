@@ -55,19 +55,25 @@ const UserProfile = () => {
 
     const [isEditing, setIsEditing] = useState(false);
     const [editForm, setEditForm] = useState({
-        height: '', weight: '', blood_group: '', allergies: ''
+        full_name: '', phone: '', date_of_birth: '', height: '', weight: '', blood_group: '', allergies: ''
     });
 
     useEffect(() => {
-        if (healthProfile) {
+        if (healthProfile || user) {
             setEditForm({
-                height: healthProfile.height || '',
-                weight: healthProfile.weight || '',
-                blood_group: healthProfile.blood_group || '',
-                allergies: healthProfile.allergies || ''
+                full_name: healthProfile?.full_name || user?.full_name || '',
+                phone: healthProfile?.phone || user?.phone || '',
+                date_of_birth: healthProfile?.date_of_birth || user?.date_of_birth || '',
+                height: healthProfile?.height || '',
+                weight: healthProfile?.weight || '',
+                blood_group: healthProfile?.blood_group || '',
+                allergies: healthProfile?.allergies || ''
             });
+            if (healthProfile?.gender) {
+                setGender(healthProfile.gender);
+            }
         }
-    }, [healthProfile]);
+    }, [healthProfile, user]);
 
     const handleSaveProfile = async () => {
         const h = Number(editForm.height);
@@ -88,6 +94,10 @@ const UserProfile = () => {
         const sanitizedAllergies = editForm.allergies.replace(/[<>]/g, '');
 
         const saved = await updateProfile({
+            full_name: editForm.full_name,
+            phone: editForm.phone,
+            date_of_birth: editForm.date_of_birth,
+            gender: gender,
             height: editForm.height,
             weight: editForm.weight,
             blood_group: editForm.blood_group,
@@ -153,7 +163,7 @@ const UserProfile = () => {
                                     <h2 className="text-5xl font-black text-[#13082a] dark:text-white tracking-tighter uppercase italic leading-none">User Profile</h2>
                                     <p className="text-lg text-slate-500 dark:text-slate-400 font-bold uppercase tracking-tight opacity-80 leading-none">Manage your identity and health records securely.</p>
                                 </div>
-                                <button className="bg-[#6143f4] hover:bg-[#4a34c1] text-white px-10 py-5 rounded-[1.5rem] font-black text-xs uppercase tracking-[0.2em] shadow-2xl shadow-[#6143f4]/30 transition-all flex items-center gap-4 active:scale-95 leading-none">
+                                <button onClick={handleSaveProfile} disabled={profileLoading} className="bg-[#6143f4] disabled:opacity-50 hover:bg-[#4a34c1] text-white px-10 py-5 rounded-[1.5rem] font-black text-xs uppercase tracking-[0.2em] shadow-2xl shadow-[#6143f4]/30 transition-all flex items-center gap-4 active:scale-95 leading-none">
                                     Save Profile Changes
                                 </button>
                             </div>
@@ -191,11 +201,15 @@ const UserProfile = () => {
                                                 <div className="flex items-center gap-2">
                                                     <button onClick={() => {
                                                         setEditForm({
+                                                            full_name: healthProfile?.full_name || user?.full_name || '',
+                                                            phone: healthProfile?.phone || user?.phone || '',
+                                                            date_of_birth: healthProfile?.date_of_birth || user?.date_of_birth || '',
                                                             height: healthProfile?.height || '',
                                                             weight: healthProfile?.weight || '',
                                                             blood_group: healthProfile?.blood_group || '',
                                                             allergies: healthProfile?.allergies || '',
                                                         });
+                                                        setGender(healthProfile?.gender || 'non-binary');
                                                         setIsEditing(false);
                                                     }} className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] border border-slate-200 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/5 active:scale-95 px-4 py-2 rounded-full transition-all">
                                                         Cancel
@@ -280,7 +294,7 @@ const UserProfile = () => {
                                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-2 leading-none">Full Legal Name</label>
                                                     <div className="relative group">
                                                         <User className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#6143f4] transition-colors" size={18} />
-                                                        <input className="w-full pl-14 pr-6 py-5 bg-slate-50 dark:bg-white/5 border border-transparent rounded-[1.5rem] focus:ring-4 focus:ring-[#6143f4]/10 focus:border-[#6143f4]/20-all text-sm text-[#13082a] dark:text-white font-black uppercase tracking-tight transition-all" defaultValue={profileData.name} type="text" />
+                                                        <input className="w-full pl-14 pr-6 py-5 bg-slate-50 dark:bg-white/5 border border-transparent rounded-[1.5rem] focus:ring-4 focus:ring-[#6143f4]/10 focus:border-[#6143f4]/20-all text-sm text-[#13082a] dark:text-white font-black uppercase tracking-tight transition-all disabled:opacity-70 disabled:cursor-not-allowed" value={isEditing ? editForm.full_name : (healthProfile?.full_name || user?.full_name || '')} onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })} disabled={!isEditing} type="text" />
                                                     </div>
                                                 </div>
                                                 <div className="space-y-4">
@@ -294,14 +308,14 @@ const UserProfile = () => {
                                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-2 leading-none">Mobile Intel Line</label>
                                                     <div className="relative group">
                                                         <Phone className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#6143f4] transition-colors" size={18} />
-                                                        <input className="w-full pl-14 pr-6 py-5 bg-slate-50 dark:bg-white/5 border border-transparent rounded-[1.5rem] focus:ring-4 focus:ring-[#6143f4]/10 focus:border-[#6143f4]/20 text-sm text-[#13082a] dark:text-white font-black uppercase tracking-tight transition-all" defaultValue={user?.phone || ''} type="text" />
+                                                        <input className="w-full pl-14 pr-6 py-5 bg-slate-50 dark:bg-white/5 border border-transparent rounded-[1.5rem] focus:ring-4 focus:ring-[#6143f4]/10 focus:border-[#6143f4]/20 text-sm text-[#13082a] dark:text-white font-black uppercase tracking-tight transition-all disabled:opacity-70 disabled:cursor-not-allowed" value={isEditing ? editForm.phone : (healthProfile?.phone || user?.phone || '')} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} disabled={!isEditing} type="text" />
                                                     </div>
                                                 </div>
                                                 <div className="space-y-4">
                                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-2 leading-none">Chronological Birth</label>
                                                     <div className="relative group">
                                                         <Calendar className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#6143f4] transition-colors" size={18} />
-                                                        <input className="w-full pl-14 pr-6 py-5 bg-slate-50 dark:bg-white/5 border border-transparent rounded-[1.5rem] focus:ring-4 focus:ring-[#6143f4]/10 focus:border-[#6143f4]/20 text-sm text-[#13082a] dark:text-white font-black uppercase tracking-tight transition-all" defaultValue={user?.date_of_birth || ''} type="date" />
+                                                        <input className="w-full pl-14 pr-6 py-5 bg-slate-50 dark:bg-white/5 border border-transparent rounded-[1.5rem] focus:ring-4 focus:ring-[#6143f4]/10 focus:border-[#6143f4]/20 text-sm text-[#13082a] dark:text-white font-black uppercase tracking-tight transition-all disabled:opacity-70 disabled:cursor-not-allowed" value={isEditing ? editForm.date_of_birth : (healthProfile?.date_of_birth || user?.date_of_birth || '')} onChange={(e) => setEditForm({ ...editForm, date_of_birth: e.target.value })} disabled={!isEditing} type="date" />
                                                     </div>
                                                 </div>
 
@@ -315,8 +329,9 @@ const UserProfile = () => {
                                                             return (
                                                                 <button
                                                                     key={opt}
+                                                                    disabled={!isEditing}
                                                                     onClick={() => setGender(val)}
-                                                                    className="flex items-center gap-4 group/radio active:scale-95 transition-all outline-none"
+                                                                    className={`flex items-center gap-4 group/radio transition-all outline-none ${!isEditing ? 'opacity-70 cursor-not-allowed' : 'active:scale-95'}`}
                                                                 >
                                                                     <div className={`size-6 rounded-full border-4 flex items-center justify-center transition-all ${isActive ? 'border-[#6143f4] bg-white' : 'border-slate-200 dark:border-slate-700 bg-transparent group-hover/radio:border-[#6143f4]/50'}`}>
                                                                         {isActive && <motion.div layoutId="radio-inner" className="size-2 rounded-full bg-[#6143f4]" />}

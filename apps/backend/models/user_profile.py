@@ -3,7 +3,7 @@ UserProfile model — maps to the `user_profile` table.
 Stores editable identity/profile fields separate from auth/session data.
 """
 
-from sqlalchemy import Column, ForeignKey, Numeric, String, Text
+from sqlalchemy import Column, ForeignKey, Numeric, String, Text, Date
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -22,6 +22,9 @@ class UserProfile(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     full_name = Column(String(150))
     avatar_url = Column(Text)
+    phone = Column(String(20))
+    date_of_birth = Column(Date)
+    gender = Column(String(20))
     height = Column(Numeric(5, 2))
     weight = Column(Numeric(5, 2))
     blood_group = Column(String(5))
