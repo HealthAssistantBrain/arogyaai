@@ -18,6 +18,7 @@ import {
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { ROUTES } from '../router/routes';
+import googleFitLogo from '../assets/google-fit.png';
 
 const DeviceConnection = () => {
   const navigate = useNavigate();
@@ -50,7 +51,7 @@ const DeviceConnection = () => {
       id: 'google-fit',
       name: 'Google Fit',
       status: 'Not Connected',
-      logo: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCS25j_dy3JfF0ITunb_0Wf4v33FuI_CT4ptVocPAe-Sp0XHyQjFPMdPAD-3ElS_tk_nrb0FOQHcB007rgTKpZht-aRsArkTXJErBXkPLmUTf8yG99KvBQVpJyXvD9Gibnm6SH2rrEJoFKStTMiM9WuSap8_nLUBmACz_Wd2FWSI-QCLAQd97xUTsz7bWwRknr1AmofRNGKrm7uP2Cln1Y4NdLy8lzs5pps_qCpeS5xl2ip7tBwAcwC2apm0Q1gn58TY7NMpJDJZFFp',
+      logo: googleFitLogo,
       color: 'text-red-500',
       bgColor: 'bg-red-50 dark:bg-red-500/10'
     },

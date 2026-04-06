@@ -16,6 +16,7 @@ import {
   Wifi,
 } from 'lucide-react';
 import { ROUTES } from '../router/routes';
+import googleFitLogo from '../assets/google-fit.png';
 
 /* ═══════════════════════════════════════════════════════════════
    DeviceCard — Rectangular card with settings gear icon
@@ -333,7 +334,7 @@ const DeviceManagement = () => {
     {
       id: 'google-fit',
       name: 'Google Fit',
-      iconElement: <Activity size={22} className="text-[#22c55e]" />,
+      iconElement: <img src={googleFitLogo} alt="Google Fit" className="w-[22px] h-[22px] object-contain" />,
       iconBg: 'rgba(34,197,94,0.08)',
       statusLabel: 'Connected',
       statusDotColor: '#22c55e',
