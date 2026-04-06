@@ -1,13 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from alembic import command
-from alembic.config import Config
 
 # Import modular routers
 from routes import auth, intelligence, users, prediction, dashboard, google_fit
 
-from database.session import engine, Base
+from database.session import engine
 from core.config import settings
 
 # Critical: import all models so they register on Base.metadata
@@ -18,19 +16,6 @@ app = FastAPI(
     description="Orchestrator API routing to specialized Microservices.",
     version="1.0.0"
 )
-
-
-@app.on_event("startup")
-def init_db():
-    """Create tables for fresh DBs, then apply Alembic migrations for schema drift."""
-    print("Creating database tables...")
-    Base.metadata.create_all(bind=engine)
-    print("Database tables ready.")
-
-    alembic_cfg = Config("alembic.ini")
-    print("Applying database migrations...")
-    command.upgrade(alembic_cfg, "head")
-    print("Database migrations applied.")
 
 
 app.add_middleware(

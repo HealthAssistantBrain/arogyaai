@@ -13,6 +13,9 @@ services:
 
   backend:
     build: ./apps/backend
+    command: >
+      sh -c "alembic upgrade head &&
+      uvicorn main:app --host 0.0.0.0 --port 8000"
     ports:
       - "8000:8000"
     env_file:
@@ -147,4 +150,3 @@ volumes:
   pgadmin_data:
   redis_data:
   qdrant_data:
-

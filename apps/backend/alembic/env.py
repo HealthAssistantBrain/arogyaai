@@ -7,6 +7,7 @@ from alembic import context
 
 # Import your app DB + models
 from database.session import DATABASE_URL
+import models  # noqa: F401
 from models.base import Base  # adjust if Base is elsewhere
 
 # Alembic Config
