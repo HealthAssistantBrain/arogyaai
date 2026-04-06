@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 # Import modular routers
-from routes import auth, intelligence, users, prediction, dashboard, google_fit
+from routes import auth, intelligence, users, prediction, dashboard, google_fit, reports
 
 from database.session import engine
 from core.config import settings
@@ -111,3 +111,4 @@ app.include_router(intelligence.router)
 app.include_router(prediction.router)
 app.include_router(dashboard.router)
 app.include_router(google_fit.router)
+app.include_router(reports.router)

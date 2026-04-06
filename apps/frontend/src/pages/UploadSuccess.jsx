@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ROUTES } from '../router/routes';
 import { motion } from 'framer-motion';
 import React from 'react';
@@ -33,26 +33,15 @@ import {
 
 const UploadSuccess = () => {
     const navigate = useNavigate();
+    const location = useLocation();
 
-    const sidebarLinks = [
-        { icon: LayoutDashboard, label: 'Dashboard', path: ROUTES.DASHBOARD, group: 'Intelligence' },
-        { icon: Brain, label: 'AI Insights', path: ROUTES.INSIGHTS, group: 'Intelligence' },
-        { icon: FlaskConical, label: 'Disease Simulator', path: ROUTES.SIMULATOR, group: 'Intelligence' },
-        { icon: History, label: 'Health Timeline', path: ROUTES.TIMELINE, group: 'History & Labs' },
-        { icon: Activity, label: 'Lab Results', path: ROUTES.LAB_RESULTS, group: 'History & Labs' },
-        { icon: FileText, label: 'Medical Reports', path: ROUTES.MEDICAL_REPORTS, group: 'History & Labs', active: true },
-        { icon: Moon, label: 'Sleep Analysis', path: ROUTES.SLEEP, group: 'History & Labs' },
-        { icon: Smartphone, label: 'Device Manager', path: ROUTES.DEVICES, group: 'Management' },
-        { icon: User, label: 'Consultation', path: ROUTES.CONSULTATION, group: 'Management' },
-        { icon: Settings, label: 'Settings', path: ROUTES.SETTINGS, group: 'Management' },
-    ];
-
-    const extractedValues = [
-        { label: 'Glucose (Fasting)', value: '98', unit: 'mg/dL', status: 'optimal' },
-        { label: 'HbA1c', value: '5.4', unit: '%', status: 'optimal' },
-        { label: 'Total Cholesterol', value: '185', unit: 'mg/dL', status: 'optimal' },
-        { label: 'Creatinine', value: '0.9', unit: 'mg/dL', status: 'optimal' }
-    ];
+    const reportData = location.state?.reportData || {};
+    
+    const fileName = location.state?.fileName || 'Extracted_Report.pdf';
+    const extractedValues = reportData.abnormal_values || [];
+    const summary = reportData.summary || reportData.patient_summary || 'No report summary was returned.';
+    const risks = reportData.risks || [];
+    const recommendations = reportData.recommendations || [];
 
     return (
         <div className="bg-[#f6f5f8] dark:bg-[#0B0819] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased text-[14px]">
@@ -130,11 +119,11 @@ const UploadSuccess = () => {
                                         <FileText size={32} strokeWidth={1.5} />
                                     </div>
                                     <div className="flex-1 text-center sm:text-left min-w-0">
-                                        <h3 className="font-black text-xl text-[#13082a] dark:text-white tracking-tight truncate leading-none mb-3 italic">Blood_Panel_Q3_2024.pdf</h3>
+                                        <h3 className="font-black text-xl text-[#13082a] dark:text-white tracking-tight truncate leading-none mb-3 italic">{fileName}</h3>
                                         <div className="flex items-center justify-center sm:justify-start gap-3">
-                                            <span className="text-[10px] uppercase font-black text-slate-400 tracking-widest opacity-60">Payload: Oct 24, 2024</span>
+                                            <span className="text-[10px] uppercase font-black text-slate-400 tracking-widest opacity-60">Status: Parsed by AI</span>
                                             <div className="size-1 bg-slate-200 rounded-full"></div>
-                                            <span className="text-[10px] uppercase font-black text-slate-400 tracking-widest opacity-60">Process Time: 1.2s</span>
+                                            <span className="text-[10px] uppercase font-black text-[#6143f4] tracking-widest">Risk Level: {reportData.risk_level}</span>
                                         </div>
                                     </div>
                                     <div className="px-5 py-2.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-black rounded-xl uppercase tracking-[0.2em] border border-emerald-500/20 flex items-center gap-2 shrink-0 shadow-sm">
@@ -163,26 +152,61 @@ const UploadSuccess = () => {
                                     </div>
                                     
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                                        {extractedValues.map((item, i) => (
+                                        {extractedValues.slice(0, 4).map((item, i) => (
                                             <div key={i} className="p-8 rounded-[2.5rem] bg-slate-50 dark:bg-[#131022]/80 border border-slate-100 dark:border-white/10 hover:border-[#6143f4]/30 dark:hover:border-[#6143f4]/50 hover:bg-white dark:hover:bg-white/[0.05] hover:shadow-[0_15px_40px_-20px_rgba(97,67,244,0.15)] transition-all group flex flex-col justify-between relative overflow-hidden">
                                                 <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity">
                                                      <Sparkles size={16} className="text-[#6143f4]/30" />
                                                 </div>
                                                 <div className="space-y-1">
-                                                    <p className="text-[10px] text-slate-400 dark:text-slate-500 group-hover:text-[#6143f4] transition-colors uppercase font-black tracking-[0.25em] leading-none mb-3">{item.label}</p>
+                                                    <p className="text-[10px] text-slate-400 dark:text-slate-500 group-hover:text-[#6143f4] transition-colors uppercase font-black tracking-[0.25em] leading-none mb-3">{item.name}</p>
                                                     <div className="flex items-baseline gap-3">
                                                         <span className="text-4xl font-black tracking-tighter text-[#13082a] dark:text-white italic">{item.value}</span>
-                                                        <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{item.unit}</span>
                                                     </div>
                                                 </div>
                                                 <div className="mt-6 flex items-center gap-2">
                                                     <div className="h-1 flex-1 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                                                        <div className="h-full bg-emerald-500 w-[92%]"></div>
+                                                        <div className={`h-full w-[92%] ${item.status?.toLowerCase().includes('high') ? 'bg-red-500' : item.status?.toLowerCase().includes('low') ? 'bg-[#009cde]' : 'bg-emerald-500'}`}></div>
                                                     </div>
-                                                    <span className="text-[8px] font-black text-emerald-500 uppercase tracking-widest leading-none">Optimal</span>
+                                                    <span className={`text-[8px] font-black uppercase tracking-widest leading-none ${item.status?.toLowerCase().includes('high') ? 'text-red-500' : item.status?.toLowerCase().includes('low') ? 'text-[#009cde]' : 'text-emerald-500'}`}>{item.status}</span>
                                                 </div>
+                                                {item.normal_range && <p className="text-[10px] text-slate-400 mt-2">Range: {item.normal_range}</p>}
                                             </div>
                                         ))}
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 gap-6">
+                                    <div className="p-8 rounded-[2.5rem] bg-slate-50 dark:bg-[#131022]/80 border border-slate-100 dark:border-white/10">
+                                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.25em] mb-3">Summary</p>
+                                        <p className="text-[14px] text-[#13082a] dark:text-white font-medium leading-7">{summary}</p>
+                                    </div>
+
+                                    <div className="p-8 rounded-[2.5rem] bg-slate-50 dark:bg-[#131022]/80 border border-slate-100 dark:border-white/10">
+                                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.25em] mb-4">Risk Analysis</p>
+                                        <div className="space-y-3">
+                                            {risks.length ? risks.map((risk, index) => (
+                                                <div key={index} className="flex items-start gap-3 text-[13px] text-[#13082a] dark:text-white">
+                                                    <div className="mt-1.5 size-2 rounded-full bg-[#6143f4] shrink-0"></div>
+                                                    <p className="leading-6">{risk}</p>
+                                                </div>
+                                            )) : (
+                                                <p className="text-[13px] text-slate-500 dark:text-slate-300">No risk statements were returned for this report.</p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="p-8 rounded-[2.5rem] bg-slate-50 dark:bg-[#131022]/80 border border-slate-100 dark:border-white/10">
+                                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.25em] mb-4">Recommendations</p>
+                                        <div className="space-y-3">
+                                            {recommendations.length ? recommendations.map((recommendation, index) => (
+                                                <div key={index} className="flex items-start gap-3 text-[13px] text-[#13082a] dark:text-white">
+                                                    <div className="mt-1.5 size-2 rounded-full bg-emerald-500 shrink-0"></div>
+                                                    <p className="leading-6">{recommendation}</p>
+                                                </div>
+                                            )) : (
+                                                <p className="text-[13px] text-slate-500 dark:text-slate-300">No recommendations were returned for this report.</p>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             </div>

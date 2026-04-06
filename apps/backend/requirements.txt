@@ -13,3 +13,5 @@ psycopg2-binary
 redis
 httpx
 cryptography
+PyPDF2
+python-multipart
