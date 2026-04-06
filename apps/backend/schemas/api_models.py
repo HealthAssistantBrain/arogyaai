@@ -54,10 +54,28 @@ class GoogleFitSyncRequest(BaseModel):
 class UserProfileUpdate(BaseModel):
     full_name: Optional[str] = None
     avatar_url: Optional[str] = None
-    height: Optional[float] = None
-    weight: Optional[float] = None
+    height_cm: Optional[float] = None
+    weight_kg: Optional[float] = None
     blood_group: Optional[str] = None
     allergies: Optional[str] = None
-    phone: Optional[str] = None
+    phone_number: Optional[str] = None
     date_of_birth: Optional[str] = None
     gender: Optional[str] = None
+
+
+class UserOnboardingSave(BaseModel):
+    full_name: Optional[str] = None
+    date_of_birth: Optional[str] = None
+    gender: Optional[str] = None
+    phone_number: Optional[str] = None
+    height_cm: Optional[float] = None
+    weight_kg: Optional[float] = None
+    blood_group: Optional[str] = None
+    allergies: Optional[str] = None
+    is_onboarding_done: Optional[bool] = None
+    onboarding_step: Optional[int] = None
+
+
+class UserSettingsUpdate(BaseModel):
+    auto_fetch_enabled: bool
+    fetch_interval_minutes: int

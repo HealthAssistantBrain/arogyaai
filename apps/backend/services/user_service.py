@@ -26,11 +26,14 @@ def _serialize_profile(user: User, profile: Optional[UserProfile]) -> dict:
         "full_name": profile.full_name if profile and profile.full_name else user.full_name,
         "avatar_url": profile.avatar_url if profile else None,
         "patient_id": None,
-        "phone": profile.phone if profile else None,
+        "phone_number": profile.phone_number if profile else None,
+        "phone": profile.phone_number if profile else None,
         "date_of_birth": profile.date_of_birth.isoformat() if profile and profile.date_of_birth else None,
         "gender": profile.gender if profile else None,
-        "height": _to_float(profile.height) if profile else None,
-        "weight": _to_float(profile.weight) if profile else None,
+        "height_cm": _to_float(profile.height_cm) if profile else None,
+        "height": _to_float(profile.height_cm) if profile else None,
+        "weight_kg": _to_float(profile.weight_kg) if profile else None,
+        "weight": _to_float(profile.weight_kg) if profile else None,
         "blood_group": profile.blood_group if profile else None,
         "allergies": profile.allergies if profile else None,
         "is_email_verified": user.is_email_verified,
@@ -128,9 +131,10 @@ class UserService:
             avatar_url = safe_input(updates.get("avatar_url"), max_chars=4000)
             profile.avatar_url = avatar_url or None
 
-        if "phone" in updates:
-            phone = safe_input(updates.get("phone"), max_chars=20)
-            profile.phone = phone or None
+        phone_value = updates.get("phone_number", updates.get("phone"))
+        if phone_value is not None:
+            phone = safe_input(phone_value, max_chars=20)
+            profile.phone_number = phone or None
 
         if "date_of_birth" in updates:
             dob_str = safe_input(updates.get("date_of_birth"), max_chars=20)
@@ -146,11 +150,11 @@ class UserService:
             gender = safe_input(updates.get("gender"), max_chars=20)
             profile.gender = gender or None
 
-        if "height" in updates:
-            profile.height = _to_float(updates.get("height"))
+        if "height_cm" in updates or "height" in updates:
+            profile.height_cm = _to_float(updates.get("height_cm", updates.get("height")))
 
-        if "weight" in updates:
-            profile.weight = _to_float(updates.get("weight"))
+        if "weight_kg" in updates or "weight" in updates:
+            profile.weight_kg = _to_float(updates.get("weight_kg", updates.get("weight")))
 
         if "blood_group" in updates:
             blood_group = safe_input(updates.get("blood_group"), max_chars=10).upper()

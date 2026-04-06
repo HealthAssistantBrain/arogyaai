@@ -3,10 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 # Import modular routers
-from routes import auth, intelligence, users, prediction, dashboard, google_fit, vitals
+from routes import auth, intelligence, users, prediction, dashboard, google_fit, vitals, notifications, user_data
 
 from database.session import engine
 from core.config import settings
+from services.auto_fetch_scheduler import start_auto_fetch_scheduler, stop_auto_fetch_scheduler
 
 # Critical: import all models so they register on Base.metadata
 import models  # noqa: F401
@@ -112,3 +113,15 @@ app.include_router(prediction.router)
 app.include_router(dashboard.router)
 app.include_router(google_fit.router)
 app.include_router(vitals.router)
+app.include_router(notifications.router)
+app.include_router(user_data.router)
+
+
+@app.on_event("startup")
+def _startup_scheduler():
+    start_auto_fetch_scheduler()
+
+
+@app.on_event("shutdown")
+def _shutdown_scheduler():
+    stop_auto_fetch_scheduler()

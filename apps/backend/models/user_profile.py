@@ -22,12 +22,36 @@ class UserProfile(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     full_name = Column(String(150))
     avatar_url = Column(Text)
-    phone = Column(String(20))
+    phone_number = Column(String(20))
     date_of_birth = Column(Date)
     gender = Column(String(20))
-    height = Column(Numeric(5, 2))
-    weight = Column(Numeric(5, 2))
+    height_cm = Column(Numeric(5, 2))
+    weight_kg = Column(Numeric(5, 2))
     blood_group = Column(String(5))
     allergies = Column(Text)
 
     user = relationship("User", back_populates="user_profile")
+
+    @property
+    def phone(self):
+        return self.phone_number
+
+    @phone.setter
+    def phone(self, value):
+        self.phone_number = value
+
+    @property
+    def height(self):
+        return self.height_cm
+
+    @height.setter
+    def height(self, value):
+        self.height_cm = value
+
+    @property
+    def weight(self):
+        return self.weight_kg
+
+    @weight.setter
+    def weight(self, value):
+        self.weight_kg = value

@@ -21,6 +21,10 @@ from .report          import Report, ReportTypeEnum, ReportStatusEnum
 from .risk_score      import RiskScore, RiskLevelEnum
 from .recommendation  import Recommendation, RecCategoryEnum, PriorityEnum
 from .alert           import Alert, AlertTypeEnum, SeverityEnum
+from .notification    import Notification, NotificationTypeEnum, NotificationSeverityEnum
+from .user_device     import UserDevice, UserDeviceProviderEnum
+from .user_vital      import UserVital, UserVitalTypeEnum, UserVitalSourceEnum
+from .user_setting    import UserSetting
 from .session         import Session
 from .log             import Log
 from .google_fit_connection import GoogleFitConnection
@@ -40,6 +44,10 @@ __all__ = [
     "RiskScore",
     "Recommendation",
     "Alert",
+    "Notification",
+    "UserDevice",
+    "UserVital",
+    "UserSetting",
     "Session",
     "Log",
     "GoogleFitConnection",
@@ -53,4 +61,9 @@ __all__ = [
     "PriorityEnum",
     "AlertTypeEnum",
     "SeverityEnum",
+    "NotificationTypeEnum",
+    "NotificationSeverityEnum",
+    "UserDeviceProviderEnum",
+    "UserVitalTypeEnum",
+    "UserVitalSourceEnum",
 ]

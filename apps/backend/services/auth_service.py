@@ -6,7 +6,7 @@ from typing import Optional, Tuple
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 
-from models import User, UserProfile, Session as DBSession
+from models import User, UserProfile, UserSetting, Session as DBSession
 from schemas.api_models import UserCreate, UserLogin, TokenResponse
 from core.security import verify_password, get_password_hash, create_access_token, create_refresh_token
 from core.utils import safe_input
@@ -35,6 +35,15 @@ class AuthService:
             UserProfile(
                 user_id=new_user.id,
                 full_name=safe_input(user_data.full_name) if user_data.full_name else None,
+            )
+        )
+        db.commit()
+
+        db.add(
+            UserSetting(
+                user_id=new_user.id,
+                auto_fetch_enabled=False,
+                fetch_interval_minutes=15,
             )
         )
         db.commit()
