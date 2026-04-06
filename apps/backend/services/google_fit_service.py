@@ -11,10 +11,11 @@ from sqlalchemy.orm import Session
 
 from core.config import settings
 from core.security import decrypt_secret, encrypt_secret
-from models import Device, DeviceTypeEnum, GoogleFitConnection, User, WearableData
+from models import Device, DeviceTypeEnum, GoogleFitConnection, User, VitalsData, WearableData
 
-GOOGLE_FIT_SCOPE = "https://www.googleapis.com/auth/fitness.activity.read"
-GOOGLE_FIT_SCOPE_SET = ["openid", "email", "profile", GOOGLE_FIT_SCOPE]
+GOOGLE_FIT_ACTIVITY_SCOPE = "https://www.googleapis.com/auth/fitness.activity.read"
+GOOGLE_FIT_HEART_RATE_SCOPE = "https://www.googleapis.com/auth/fitness.heart_rate.read"
+GOOGLE_FIT_SCOPE_SET = ["openid", "email", "profile", GOOGLE_FIT_ACTIVITY_SCOPE, GOOGLE_FIT_HEART_RATE_SCOPE]
 GOOGLE_FIT_DATASOURCE_ID = "derived:com.google.step_count.delta:com.google.android.gms:estimated_steps"
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -113,7 +114,10 @@ class GoogleFitService:
     async def _refresh_access_token(connection: GoogleFitConnection) -> str:
         refresh_token = decrypt_secret(connection.refresh_token_encrypted)
         if not refresh_token:
-            raise HTTPException(status_code=400, detail="Google Fit refresh token is missing")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Google Fit authorization expired. Please reconnect Google Fit.",
+            )
 
         async with httpx.AsyncClient(timeout=20.0) as client:
             response = await client.post(
@@ -128,12 +132,18 @@ class GoogleFitService:
             )
 
         if response.is_error:
-            raise HTTPException(status_code=400, detail="Google Fit token refresh failed")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Google Fit authorization expired. Please reconnect Google Fit.",
+            )
 
         token_data = response.json()
         access_token = token_data.get("access_token")
         if not access_token:
-            raise HTTPException(status_code=400, detail="Google Fit token refresh returned no access token")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Google Fit authorization expired. Please reconnect Google Fit.",
+            )
 
         connection.access_token_encrypted = encrypt_secret(access_token)
         expires_in = token_data.get("expires_in") or 3600
@@ -185,6 +195,165 @@ class GoogleFitService:
         return total
 
     @staticmethod
+    def _build_last_24h_window() -> tuple[int, int]:
+        now = datetime.now(timezone.utc)
+        start = now - timedelta(hours=24)
+        return int(start.timestamp() * 1000), int(now.timestamp() * 1000)
+
+    @staticmethod
+    def _extract_bucket_start_millis(bucket: dict[str, Any]) -> int | None:
+        start_value = bucket.get("startTimeMillis")
+        if start_value is not None:
+            return int(start_value)
+
+        start_nanos = bucket.get("startTimeNanos")
+        if start_nanos is not None:
+            return int(start_nanos) // 1_000_000
+
+        return None
+
+    @staticmethod
+    def _extract_heart_rate_value(bucket: dict[str, Any]) -> float | None:
+        values: list[float] = []
+
+        for dataset in bucket.get("dataset", []):
+            for point in dataset.get("point", []):
+                for value in point.get("value", []):
+                    fp_val = value.get("fpVal")
+                    if fp_val is not None:
+                        values.append(float(fp_val))
+
+        if not values:
+            return None
+
+        return round(sum(values) / len(values), 1)
+
+    @staticmethod
+    def normalize_heart_rate_payload(payload: dict[str, Any]) -> list[dict[str, Any]]:
+        normalized: list[dict[str, Any]] = []
+
+        for bucket in payload.get("bucket", []):
+            timestamp = GoogleFitService._extract_bucket_start_millis(bucket)
+            heart_rate = GoogleFitService._extract_heart_rate_value(bucket)
+
+            if timestamp is None or heart_rate is None:
+                continue
+
+            normalized.append(
+                {
+                    "timestamp": timestamp,
+                    "heart_rate": heart_rate,
+                }
+            )
+
+        return sorted(normalized, key=lambda item: item["timestamp"])
+
+    @staticmethod
+    async def fetch_heart_rate(access_token: str) -> dict[str, Any]:
+        start_millis, end_millis = GoogleFitService._build_last_24h_window()
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                GOOGLE_FIT_AGGREGATE_URL,
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "aggregateBy": [{"dataTypeName": "com.google.heart_rate.bpm"}],
+                    "bucketByTime": {"durationMillis": 3600000},
+                    "startTimeMillis": start_millis,
+                    "endTimeMillis": end_millis,
+                },
+            )
+
+        if response.status_code in (401, 403):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Google Fit authorization expired. Please reconnect Google Fit.",
+            )
+
+        if response.is_error:
+            raise HTTPException(status_code=400, detail="Failed to fetch Google Fit heart rate")
+
+        return response.json()
+
+    @staticmethod
+    def save_heart_rate(db: Session, user_id: uuid.UUID, data_list: list[dict[str, Any]]) -> list[VitalsData]:
+        if not data_list:
+            return []
+
+        timestamps = [
+            datetime.fromtimestamp(item["timestamp"] / 1000, tz=timezone.utc).replace(minute=0, second=0, microsecond=0)
+            for item in data_list
+        ]
+        min_recorded_at = min(timestamps)
+        max_recorded_at = max(timestamps)
+
+        existing_rows = (
+            db.query(VitalsData)
+            .filter(
+                VitalsData.user_id == user_id,
+                VitalsData.recorded_at >= min_recorded_at,
+                VitalsData.recorded_at <= max_recorded_at,
+            )
+            .all()
+        )
+
+        rows_by_timestamp = {
+            int(row.recorded_at.astimezone(timezone.utc).timestamp() * 1000): row
+            for row in existing_rows
+            if row.recorded_at is not None
+        }
+
+        saved_rows: list[VitalsData] = []
+        for item in data_list:
+            recorded_at = datetime.fromtimestamp(item["timestamp"] / 1000, tz=timezone.utc).replace(
+                minute=0,
+                second=0,
+                microsecond=0,
+            )
+            timestamp_key = int(recorded_at.timestamp() * 1000)
+            heart_rate_bpm = int(round(float(item["heart_rate"])))
+
+            row = rows_by_timestamp.get(timestamp_key)
+            if row:
+                row.heart_rate_bpm = heart_rate_bpm
+            else:
+                row = VitalsData(
+                    user_id=user_id,
+                    recorded_at=recorded_at,
+                    heart_rate_bpm=heart_rate_bpm,
+                )
+                db.add(row)
+                rows_by_timestamp[timestamp_key] = row
+
+            saved_rows.append(row)
+
+        db.commit()
+        return sorted(saved_rows, key=lambda item: item.recorded_at or datetime.now(timezone.utc))
+
+    @staticmethod
+    def _serialize_heart_rate(rows: list[VitalsData], timezone_name: str) -> list[dict[str, Any]]:
+        tzinfo = ZoneInfo(timezone_name)
+        payload: list[dict[str, Any]] = []
+
+        for row in rows:
+            if row.recorded_at is None or row.heart_rate_bpm is None:
+                continue
+
+            local_timestamp = row.recorded_at.astimezone(tzinfo)
+            payload.append(
+                {
+                    "timestamp": row.recorded_at.isoformat(),
+                    "time": local_timestamp.strftime("%I %p").lstrip("0"),
+                    "bpm": int(row.heart_rate_bpm),
+                }
+            )
+
+        return payload
+
+    @staticmethod
     def _daily_payload_from_rows(rows: list[WearableData], timezone_name: str) -> list[dict[str, Any]]:
         tzinfo = ZoneInfo(timezone_name)
         payload = []
@@ -228,6 +397,11 @@ class GoogleFitService:
         if message:
             params["message"] = message
         return f"{target}?{urlencode(params)}"
+
+    @staticmethod
+    def _has_scope(connection: GoogleFitConnection, scope: str) -> bool:
+        granted_scopes = (connection.scopes or "").split()
+        return scope in granted_scopes
 
     @staticmethod
     def get_connection(db: Session, user: User) -> GoogleFitConnection | None:
@@ -427,6 +601,46 @@ class GoogleFitService:
             "google_email": connection.google_email,
             "last_sync_status": connection.last_sync_status,
             "data_source_id": GOOGLE_FIT_DATASOURCE_ID,
+        }
+
+    @staticmethod
+    async def sync_heart_rate(db: Session, user: User, timezone_name: str | None = None) -> dict[str, Any]:
+        connection = GoogleFitService.get_connection(db, user)
+        if not connection:
+            return {
+                "connected": False,
+                "message": "Connect Google Fit to sync heart rate data.",
+                "data": [],
+            }
+
+        if not GoogleFitService._has_scope(connection, GOOGLE_FIT_HEART_RATE_SCOPE):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Google Fit heart rate permission is missing. Please reconnect Google Fit.",
+            )
+
+        resolved_timezone = GoogleFitService._resolve_timezone(timezone_name or connection.default_timezone)
+        access_token = await GoogleFitService._get_valid_access_token(db, connection)
+        payload = await GoogleFitService.fetch_heart_rate(access_token)
+        normalized = GoogleFitService.normalize_heart_rate_payload(payload)
+        saved_rows = GoogleFitService.save_heart_rate(db, user.id, normalized)
+
+        connection.last_synced_at = datetime.now(timezone.utc)
+        connection.last_sync_status = "ready"
+        db.add(connection)
+        db.commit()
+
+        if not saved_rows:
+            return {
+                "connected": True,
+                "message": "No heart rate data available",
+                "data": [],
+            }
+
+        return {
+            "connected": True,
+            "message": None,
+            "data": GoogleFitService._serialize_heart_rate(saved_rows, resolved_timezone),
         }
 
     @staticmethod

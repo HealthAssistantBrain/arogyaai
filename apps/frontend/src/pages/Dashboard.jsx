@@ -53,6 +53,7 @@ import {
 import { ROUTES } from '../router/routes';
 import useDashboardStore from '../store/dashboardStore';
 import { useAuthStore } from '../store/authStore';
+import HeartRateCard from '../components/HeartRateCard';
 
 
 const Dashboard = () => {
@@ -193,7 +194,7 @@ const Dashboard = () => {
           </AnimatePresence>
 
           {/* Section 1: Hero Stats Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
             {/* Health Risk Gauge - Matched Stitch */}
             <motion.div variants={itemVariants} className="lg:col-span-1 bg-white dark:bg-slate-900 p-8 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col items-center justify-center text-center relative overflow-hidden group">
@@ -254,55 +255,11 @@ const Dashboard = () => {
                 Check Risk Node <ChevronRight size={14} />
               </div>
             </motion.div>
-
-            {/* HRV Chart */}
-            <motion.div variants={itemVariants} className="lg:col-span-2 bg-white dark:bg-slate-900 p-8 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col group">
-              <div className="flex justify-between items-start mb-8">
-                <div>
-                  <h3 className="text-slate-500 font-bold text-xs uppercase tracking-[0.2em] mb-1">Heart Rate Variability</h3>
-                  <p className="text-3xl font-black text-[#13082A] dark:text-white">{avgBpm} <span className="text-sm font-medium text-slate-400 ml-1">bpm average</span></p>
-                </div>
-                <div className="flex gap-2">
-                  <span className="px-3 py-1 bg-[#6143f4]/10 text-[#6143f4] rounded-full text-[10px] font-black uppercase tracking-widest border border-[#6143f4]/20">Live</span>
-                  <span className="px-3 py-1 bg-slate-50 dark:bg-slate-800 text-slate-500 rounded-full text-[10px] font-black uppercase tracking-widest border border-slate-100 dark:border-slate-700">24h</span>
-                </div>
-              </div>
-
-              <div className="flex-1 min-h-[180px] w-full mt-2">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={hrvData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="hrvGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#6143f4" stopOpacity={0.15} />
-                        <stop offset="95%" stopColor="#6143f4" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.03)" />
-                    <Tooltip
-                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 40px rgba(0,0,0,0.05)', fontWeight: 'bold' }}
-                      itemStyle={{ color: '#6143f4' }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="value"
-                      stroke="#6143f4"
-                      strokeWidth={3}
-                      fillOpacity={1}
-                      fill="url(#hrvGradient)"
-                      animationDuration={2000}
-                    />
-                    <XAxis
-                      dataKey="time"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 9, fontWeight: 'bold', fill: '#94a3b8' }}
-                      dy={10}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </motion.div>
           </div>
+
+          <motion.div variants={itemVariants}>
+            <HeartRateCard />
+          </motion.div>
 
           {/* Section 2: AI Prediction */}
           <motion.div variants={itemVariants} className="relative overflow-hidden rounded-xl p-8 bg-gradient-to-br from-[#6143f4] via-[#6143f4]/90 to-[#009CDE] shadow-xl group border border-white/10">
