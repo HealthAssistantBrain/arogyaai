@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 
 class UserLogin(BaseModel):
@@ -79,3 +79,22 @@ class UserOnboardingSave(BaseModel):
 class UserSettingsUpdate(BaseModel):
     auto_fetch_enabled: bool
     fetch_interval_minutes: int
+
+
+class SimulatorInput(BaseModel):
+    sleep_hours: Optional[float] = None
+    daily_steps: Optional[int] = None
+    weight_kg: Optional[float] = None
+    stress_level: Optional[int] = None
+    weekly_exercise_hours: Optional[float] = None
+    heart_rate_bpm: Optional[int] = None
+    systolic_bp: Optional[int] = None
+    diastolic_bp: Optional[int] = None
+    spo2: Optional[float] = None
+    fasting_glucose: Optional[float] = None
+
+
+class DiseaseSimulationRequest(BaseModel):
+    focus_condition: str = "cardiovascular"
+    timeframe_months: int = 6
+    simulation: SimulatorInput = Field(default_factory=SimulatorInput)
