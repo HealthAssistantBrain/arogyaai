@@ -120,3 +120,14 @@ async def get_aqi_risk(
     }
     """
     return await aqi_service.get_aqi_data(lat, lng)
+
+
+@router.get("/health/aqi-locations")
+async def get_aqi_locations(
+    query: str = Query(..., min_length=2, description="City name search"),
+    limit: int = Query(5, ge=1, le=8, description="Maximum suggestions"),
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
+    """Return inline city suggestions for the AQI monitor search UI."""
+    return await aqi_service.search_locations(query, limit)

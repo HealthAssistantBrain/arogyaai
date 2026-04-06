@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "")
 OPENWEATHER_AQI_URL = "https://api.openweathermap.org/data/2.5/air_pollution"
 OPENWEATHER_REVERSE_GEO_URL = "https://api.openweathermap.org/geo/1.0/reverse"
+OPENWEATHER_DIRECT_GEO_URL = "https://api.openweathermap.org/geo/1.0/direct"
 
 
 def _now() -> str:
@@ -196,6 +197,104 @@ async def _fetch_location_name(lat: float, lng: float) -> str:
         logger.warning(f"[AQI Service] Reverse geocoding failed: {str(e)}")
     
     return f"Lat: {lat:.2f}, Lng: {lng:.2f}"
+
+
+async def search_locations(query: str, limit: int = 5) -> Dict[str, Any]:
+    """
+    Search city suggestions using OpenWeather direct geocoding.
+
+    Returns a small normalized list the frontend can render directly.
+    """
+    normalized_query = query.strip()
+    capped_limit = max(1, min(limit, 8))
+
+    if len(normalized_query) < 2:
+        return _envelope(
+            data={"query": normalized_query, "suggestions": []},
+            status="ready",
+            source="mock" if not OPENWEATHER_API_KEY else "openweather",
+        )
+
+    if not OPENWEATHER_API_KEY:
+        logger.error("[AQI Service] OPENWEATHER_API_KEY not configured for city search")
+        return _envelope(
+            data={"query": normalized_query, "suggestions": []},
+            status="fallback",
+            source="mock",
+            error="API key not configured",
+        )
+
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            response = await client.get(
+                OPENWEATHER_DIRECT_GEO_URL,
+                params={
+                    "q": normalized_query,
+                    "limit": capped_limit,
+                    "appid": OPENWEATHER_API_KEY,
+                }
+            )
+
+        if response.status_code != 200:
+            logger.error(f"[AQI Service] City search API error: {response.status_code}")
+            return _envelope(
+                data={"query": normalized_query, "suggestions": []},
+                status="fallback",
+                source="mock",
+                error=f"OpenWeather API returned {response.status_code}",
+            )
+
+        raw_locations = response.json() or []
+        suggestions = []
+        seen_keys = set()
+
+        for item in raw_locations:
+            city = item.get("name", "").strip()
+            state = item.get("state", "").strip()
+            country = item.get("country", "").strip()
+            lat = item.get("lat")
+            lng = item.get("lon")
+
+            if not city or lat is None or lng is None:
+                continue
+
+            key = (city.lower(), state.lower(), country.lower(), round(lat, 4), round(lng, 4))
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+
+            parts = [part for part in [city, state, country] if part]
+            suggestions.append({
+                "name": city,
+                "state": state,
+                "country": country,
+                "label": ", ".join(parts),
+                "lat": round(float(lat), 6),
+                "lng": round(float(lng), 6),
+            })
+
+        return _envelope(
+            data={"query": normalized_query, "suggestions": suggestions},
+            status="ready",
+            source="openweather",
+        )
+
+    except httpx.RequestError as e:
+        logger.error(f"[AQI Service] City search network error: {str(e)}")
+        return _envelope(
+            data={"query": normalized_query, "suggestions": []},
+            status="fallback",
+            source="mock",
+            error=str(e),
+        )
+    except Exception as e:
+        logger.error(f"[AQI Service] City search unexpected error: {str(e)}")
+        return _envelope(
+            data={"query": normalized_query, "suggestions": []},
+            status="fallback",
+            source="mock",
+            error="Failed to search cities",
+        )
 
 
 async def get_aqi_data(lat: float, lng: float) -> Dict[str, Any]:

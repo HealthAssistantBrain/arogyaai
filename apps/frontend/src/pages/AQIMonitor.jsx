@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -65,6 +65,7 @@ const createOsmEmbedUrl = (lat, lng) => {
 
 const AQIMonitor = () => {
   const navigate = useNavigate();
+  const searchContainerRef = useRef(null);
   const [activeLocation, setActiveLocation] = useState('New Delhi, DL');
   const [aqiValue, setAqiValue] = useState(156);
   const [pollutantData, setPollutantData] = useState({
@@ -82,7 +83,32 @@ const AQIMonitor = () => {
   const [isAlertEnabled, setIsAlertEnabled] = useState(true);
   const [coords, setCoords] = useState({ lat: DELHI_LAT, lng: DELHI_LNG });
   const [isLoading, setIsLoading] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchSuggestions, setSearchSuggestions] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
   const osmMapEmbedUrl = createOsmEmbedUrl(coords.lat, coords.lng);
+
+  const applyAqiResponse = (apiData, fallbackLat, fallbackLng) => {
+    setAqiValue(apiData.aqi || 156);
+    setActiveLocation(apiData.location || 'Unknown Location');
+    setPollutantData({
+      pm25: apiData.pm25 || 25.0,
+      pm10: apiData.pm10 || 45.0,
+      no2: apiData.no2 || 20.0,
+      o3: apiData.o3 || 50.0,
+      so2: apiData.so2 || 10.0,
+    });
+    setAqiMeta({
+      dominantPollutant: apiData.dominant_pollutant || 'PM2.5',
+      method: apiData.aqi_method || 'openweather_pm_epa_interp',
+    });
+    setCoords({
+      lat: apiData.lat ?? fallbackLat,
+      lng: apiData.lng ?? fallbackLng,
+    });
+  };
 
   // Location is fetched only when the user explicitly requests it.
   // BUG 2 FIX D — axios api instance with Bearer token (via interceptors)
@@ -94,30 +120,11 @@ const AQIMonitor = () => {
       // Handle standard envelope response
       if (response.data?.success && response.data?.data) {
         const apiData = response.data.data;
-        setAqiValue(apiData.aqi || 156);
-        setActiveLocation(apiData.location || 'Unknown Location');
-        setPollutantData({
-          pm25: apiData.pm25 || 25.0,
-          pm10: apiData.pm10 || 45.0,
-          no2: apiData.no2 || 20.0,
-          o3: apiData.o3 || 50.0,
-          so2: apiData.so2 || 10.0,
-        });
-        setAqiMeta({
-          dominantPollutant: apiData.dominant_pollutant || 'PM2.5',
-          method: apiData.aqi_method || 'openweather_pm_epa_interp',
-        });
-        setCoords({ lat, lng });
+        applyAqiResponse(apiData, lat, lng);
         toast.success(`AQI updated for ${apiData.location}`);
       } else if (response.data?.data?.aqi) {
         // Fallback: direct data property
-        setAqiValue(response.data.data.aqi);
-        setActiveLocation(response.data.data.location || 'Unknown Location');
-        setAqiMeta({
-          dominantPollutant: response.data.data.dominant_pollutant || 'PM2.5',
-          method: response.data.data.aqi_method || 'openweather_pm_epa_interp',
-        });
-        setCoords({ lat, lng });
+        applyAqiResponse(response.data.data, lat, lng);
       }
     } catch (err) {
       // Backend offline → keep displayed mock data, don't crash
@@ -126,6 +133,44 @@ const AQIMonitor = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const fetchCitySuggestions = async (query) => {
+    const trimmedQuery = query.trim();
+    if (trimmedQuery.length < 2) {
+      setSearchSuggestions([]);
+      setHighlightedIndex(0);
+      return;
+    }
+
+    try {
+      setIsSearching(true);
+      const response = await api.get('/health/aqi-locations', {
+        params: { query: trimmedQuery, limit: 6 },
+      });
+      const suggestions = response.data?.data?.suggestions || [];
+      setSearchSuggestions(suggestions);
+      setHighlightedIndex(0);
+    } catch (err) {
+      console.warn('[AQIMonitor] Failed to fetch city suggestions:', err?.message);
+      setSearchSuggestions([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const submitCitySearch = async (suggestionOverride) => {
+    const chosenSuggestion = suggestionOverride || searchSuggestions[highlightedIndex] || searchSuggestions[0];
+
+    if (!chosenSuggestion) {
+      toast.error('Please select a city suggestion first.');
+      return;
+    }
+
+    setSearchQuery(chosenSuggestion.label);
+    setSearchSuggestions([]);
+    setIsSearchOpen(false);
+    await fetchAQIData(chosenSuggestion.lat, chosenSuggestion.lng);
   };
 
   const handleLocationClick = () => {
@@ -151,6 +196,26 @@ const AQIMonitor = () => {
   // Load default AQI without prompting for location on page open.
   useEffect(() => {
     fetchAQIData(DELHI_LAT, DELHI_LNG);
+  }, []);
+
+  useEffect(() => {
+    const trimmedQuery = searchQuery.trim();
+    const timeoutId = setTimeout(() => {
+      fetchCitySuggestions(trimmedQuery);
+    }, 250);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target)) {
+        setIsSearchOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const getAqiConfig = (val) => {
@@ -307,15 +372,98 @@ const AQIMonitor = () => {
                         <p className="text-white/50 text-[10px] font-bold uppercase tracking-widest">Lat: {coords.lat.toFixed(2)}, Lng: {coords.lng.toFixed(2)}</p>
                       </div>
                    </div>
-                    <div className="pointer-events-auto flex gap-2">
-                       <a
-                        href={`https://www.openstreetmap.org/?mlat=${coords.lat}&mlon=${coords.lng}#map=11/${coords.lat}/${coords.lng}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="size-10 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 text-white flex items-center justify-center hover:bg-white/20 transition-all"
-                      >
-                        <Search size={18} />
-                      </a>
+                    <div className="pointer-events-auto flex gap-2 items-start">
+                       <div ref={searchContainerRef} className="relative">
+                         <button
+                           type="button"
+                           onClick={() => {
+                             setIsSearchOpen((prev) => !prev);
+                             setHighlightedIndex(0);
+                           }}
+                           className="size-10 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 text-white flex items-center justify-center hover:bg-white/20 transition-all"
+                         >
+                           <Search size={18} />
+                         </button>
+                         <AnimatePresence>
+                           {isSearchOpen && (
+                             <motion.div
+                               initial={{ opacity: 0, y: -8 }}
+                               animate={{ opacity: 1, y: 0 }}
+                               exit={{ opacity: 0, y: -8 }}
+                               className="absolute right-0 top-14 w-80 rounded-2xl border border-white/15 bg-[#13082A]/95 p-3 shadow-2xl backdrop-blur-xl"
+                             >
+                               <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/10 px-3">
+                                 <Search size={16} className="text-white/60" />
+                                 <input
+                                   type="text"
+                                   value={searchQuery}
+                                   onChange={(e) => {
+                                     setSearchQuery(e.target.value);
+                                     setHighlightedIndex(0);
+                                   }}
+                                   onKeyDown={(e) => {
+                                     if (e.key === 'ArrowDown') {
+                                       e.preventDefault();
+                                       setHighlightedIndex((prev) => (
+                                         Math.min(prev + 1, Math.max(searchSuggestions.length - 1, 0))
+                                       ));
+                                     }
+                                     if (e.key === 'ArrowUp') {
+                                       e.preventDefault();
+                                       setHighlightedIndex((prev) => Math.max(prev - 1, 0));
+                                     }
+                                     if (e.key === 'Enter') {
+                                       e.preventDefault();
+                                       submitCitySearch();
+                                     }
+                                     if (e.key === 'Escape') {
+                                       setIsSearchOpen(false);
+                                     }
+                                   }}
+                                   placeholder="Search city name"
+                                   className="h-11 w-full bg-transparent text-sm text-white placeholder:text-white/45 outline-none"
+                                   autoFocus
+                                 />
+                               </div>
+                               <div className="mt-3 max-h-64 overflow-y-auto rounded-xl border border-white/10 bg-black/10">
+                                 {isSearching ? (
+                                   <div className="px-4 py-3 text-xs font-bold uppercase tracking-widest text-white/60">
+                                     Searching cities...
+                                   </div>
+                                 ) : searchQuery.trim().length < 2 ? (
+                                   <div className="px-4 py-3 text-xs font-bold uppercase tracking-widest text-white/40">
+                                     Type at least 2 letters
+                                   </div>
+                                 ) : searchSuggestions.length === 0 ? (
+                                   <div className="px-4 py-3 text-xs font-bold uppercase tracking-widest text-white/40">
+                                     No matching city found
+                                   </div>
+                                 ) : (
+                                   searchSuggestions.map((suggestion, index) => (
+                                     <button
+                                       key={`${suggestion.label}-${suggestion.lat}-${suggestion.lng}`}
+                                       type="button"
+                                       onMouseEnter={() => setHighlightedIndex(index)}
+                                       onClick={() => submitCitySearch(suggestion)}
+                                       className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-all ${
+                                         highlightedIndex === index ? 'bg-white/12' : 'hover:bg-white/8'
+                                       }`}
+                                     >
+                                       <MapPin size={14} className="mt-0.5 shrink-0 text-white/70" />
+                                       <div>
+                                         <p className="text-sm font-bold text-white">{suggestion.name}</p>
+                                         <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">
+                                           {suggestion.state || suggestion.country}
+                                         </p>
+                                       </div>
+                                     </button>
+                                   ))
+                                 )}
+                               </div>
+                             </motion.div>
+                           )}
+                         </AnimatePresence>
+                       </div>
                        <button
                          type="button"
                         onClick={handleLocationClick}
@@ -327,41 +475,7 @@ const AQIMonitor = () => {
                    </div>
                 </div>
 
-                <div className="flex items-end justify-between">
-                   <div className="pointer-events-none space-y-4">
-                      <div className="pointer-events-none inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/25 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.25em] text-white/70 backdrop-blur-md">
-                         <span className="size-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                         OpenStreetMap Live Visual
-                      </div>
-                      <div className="pointer-events-auto flex gap-3 flex-wrap max-w-md">
-                         <div className="bg-white/10 backdrop-blur-md p-3 rounded-xl flex items-center gap-2 border border-white/10 flex-col">
-                            <Droplets size={14} className="text-blue-400" />
-                            <span className="text-white text-xs font-bold">PM2.5</span>
-                            <span className="text-white/70 text-[10px] font-semibold">{pollutantData.pm25.toFixed(1)} μg/m³</span>
-                         </div>
-                         <div className="bg-white/10 backdrop-blur-md p-3 rounded-xl flex items-center gap-2 border border-white/10 flex-col">
-                            <Cloud size={14} className="text-gray-400" />
-                            <span className="text-white text-xs font-bold">PM10</span>
-                            <span className="text-white/70 text-[10px] font-semibold">{pollutantData.pm10.toFixed(1)} μg/m³</span>
-                         </div>
-                         <div className="bg-white/10 backdrop-blur-md p-3 rounded-xl flex items-center gap-2 border border-white/10 flex-col">
-                            <Zap size={14} className="text-yellow-400" />
-                            <span className="text-white text-xs font-bold">NO₂</span>
-                            <span className="text-white/70 text-[10px] font-semibold">{pollutantData.no2.toFixed(1)} ppb</span>
-                         </div>
-                         <div className="bg-white/10 backdrop-blur-md p-3 rounded-xl flex items-center gap-2 border border-white/10 flex-col">
-                            <Wind size={14} className="text-indigo-400" />
-                            <span className="text-white text-xs font-bold">O₃</span>
-                            <span className="text-white/70 text-[10px] font-semibold">{pollutantData.o3.toFixed(1)} ppb</span>
-                         </div>
-                         <div className="bg-white/10 backdrop-blur-md p-3 rounded-xl flex items-center gap-2 border border-white/10 flex-col">
-                            <AlertTriangle size={14} className="text-red-400" />
-                            <span className="text-white text-xs font-bold">SO₂</span>
-                            <span className="text-white/70 text-[10px] font-semibold">{pollutantData.so2.toFixed(1)} ppb</span>
-                         </div>
-                      </div>
-                      <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest leading-none max-w-[300px]">Interactive Environmental Mapping Terminal • Live Pollutant Network</p>
-                   </div>
+                <div className="flex items-end justify-end">
                    <div className="size-32 relative">
                       <motion.div 
                         animate={{ rotate: 360 }} 
