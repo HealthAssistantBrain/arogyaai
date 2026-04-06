@@ -2,11 +2,7 @@ import { create } from 'zustand';
 
 export const useAppStore = create((set) => ({
     // User state
-    user: {
-        id: "arjun-sharma-001",
-        name: "Arjun Sharma",
-        avatar: null,
-    },
+    user: null,
 
     // Onboarding state
     hasOnboarded: false,

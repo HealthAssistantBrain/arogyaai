@@ -1,11 +1,13 @@
 import AppRouter             from './router'
 import { Toaster }           from 'react-hot-toast'
 import GlobalStateValidator  from './components/guards/GlobalStateValidator'
+import LegacyProfileBinder   from './components/LegacyProfileBinder'
 
 export default function App() {
   return (
     <>
       <GlobalStateValidator />
+      <LegacyProfileBinder />
       <AppRouter />
       <Toaster
         position="top-right"

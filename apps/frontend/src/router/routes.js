@@ -65,6 +65,6 @@ export const ROUTES = {
   LANDING:                '/',                       // alias for HOME
   DEVICE_MANAGER:         '/devices',                // alias for DEVICES
   SLEEP_ANALYSIS:         '/sleep',                  // alias for SLEEP
-  PROFILE:                '/settings/profile',       // alias for SETTINGS_PROFILE
+  PROFILE:                '/profile',
   REPORTS:                '/medical-reports',        // alias for MEDICAL_REPORTS
 };

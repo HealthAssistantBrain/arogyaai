@@ -144,6 +144,7 @@ export default function AppRouter() {
                 <Route path={ROUTES.APPOINTMENT_CONFIRM} element={<AppointmentConfirm />} />
                 <Route path={ROUTES.CONSULTATION_HISTORY} element={<ConsultationHistory />} />
                 <Route path={ROUTES.SETTINGS} element={<SettingsHub />} />
+                <Route path={ROUTES.PROFILE} element={<UserProfile />} />
                 <Route path={ROUTES.SETTINGS_PROFILE} element={<UserProfile />} />
                 <Route path={ROUTES.SETTINGS_SECURITY} element={<SecurityAudit />} />
                 <Route path={ROUTES.SETTINGS_PRIVACY} element={<DataPrivacy />} />

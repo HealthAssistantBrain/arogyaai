@@ -54,6 +54,7 @@ import { ROUTES } from '../router/routes';
 import useDashboardStore from '../store/dashboardStore';
 import { useAuthStore } from '../store/authStore';
 import HeartRateCard from '../components/HeartRateCard';
+import UserProfileBadge from '../components/UserProfileBadge';
 
 
 const Dashboard = () => {
@@ -476,6 +477,13 @@ const Dashboard = () => {
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #6143f422; border-radius: 20px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #6143f444; }
       `}} />
+
+      <div className="hidden lg:block fixed left-6 bottom-6 z-30">
+        <UserProfileBadge
+          variant="sidebar"
+          userOverride={profData ?? authUser}
+        />
+      </div>
     </div >
   );
 };

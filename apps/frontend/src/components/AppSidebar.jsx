@@ -7,6 +7,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { Waves, MoreVertical }       from 'lucide-react'
 import { ROUTES }                    from '../router/routes'
 import sidebarConfig                 from '../config/sidebarConfig'
+import UserProfileBadge              from './UserProfileBadge'
 
 export default function AppSidebar({ activePath }) {
   const navigate = useNavigate()
@@ -67,16 +68,9 @@ export default function AppSidebar({ activePath }) {
 
       {/* Profile Bottom Card — FIX: clicking navigates to ROUTES.SETTINGS_PROFILE */}
       <div className="p-6 border-t border-slate-100 dark:border-white/5">
-        <div
-          onClick={() => navigate(ROUTES.SETTINGS_PROFILE)}
-          className="flex items-center gap-3 p-3 rounded-[1.5rem] bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 hover:border-[#6143f4]/30 transition-colors cursor-pointer group"
-        >
-          <div className="size-11 rounded-xl bg-[#6143f4]/10 overflow-hidden flex items-center justify-center text-[#6143f4] text-xs font-black border-2 border-transparent group-hover:border-[#6143f4] transition-all">
-            AJ
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-black truncate text-[#13082a] dark:text-white uppercase">Alex Johnson</p>
-            <p className="text-[9px] text-[#6143f4] uppercase tracking-widest font-black leading-none mt-1">Premium Member</p>
+        <div className="flex items-center gap-2">
+          <div data-app-sidebar-profile>
+            <UserProfileBadge variant="sidebar" />
           </div>
           <MoreVertical size={14} className="text-slate-400" />
         </div>
