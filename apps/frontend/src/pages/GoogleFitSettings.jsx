@@ -111,9 +111,9 @@ const GoogleFitSettings = () => {
 
     try {
       const response = await syncGoogleFit({ timezone, days: DEFAULT_WINDOW_DAYS });
-      setData(response);
+      await loadStatus(timezone, { silent: true });
       if (showSuccessMessage) {
-        setNotice(`Google Fit steps synced for the last ${DEFAULT_WINDOW_DAYS} local days.`);
+        setNotice(response?.message || `Google Fit steps synced for the last ${DEFAULT_WINDOW_DAYS} local days.`);
       }
     } catch (apiError) {
       setError(extractApiError(apiError, 'Google Fit sync failed.'));

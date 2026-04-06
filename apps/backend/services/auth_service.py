@@ -1,5 +1,6 @@
 import uuid
 import secrets
+import logging
 from datetime import datetime, timezone
 from typing import Optional, Tuple
 
@@ -10,6 +11,9 @@ from models import User, UserProfile, UserSetting, Session as DBSession
 from schemas.api_models import UserCreate, UserLogin, TokenResponse
 from core.security import verify_password, get_password_hash, create_access_token, create_refresh_token
 from core.utils import safe_input
+from services.event_service import emit_event
+
+logger = logging.getLogger("auth_service")
 
 class AuthService:
     @staticmethod
@@ -113,6 +117,10 @@ class AuthService:
         )
         db.add(session)
         db.commit()
+        try:
+            emit_event("USER_LOGIN", user.id, {"email": user.email})
+        except Exception:
+            logger.exception("[Auth] Failed to emit login notification for user=%s", user.id)
         
         return {
             "success": True,

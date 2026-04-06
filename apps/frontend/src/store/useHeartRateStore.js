@@ -12,11 +12,18 @@ const useHeartRateStore = create((set) => ({
     set({ loading: true, error: null });
 
     try {
-      const response = await api.get('/vitals/heart-rate');
+      const response = await api.get('/vitals', {
+        params: { type: 'heart_rate', range: '24h' },
+      });
+      const records = Array.isArray(response.data?.data) ? response.data.data : [];
       set({
-        heartRateData: response.data?.data ?? [],
-        connected: Boolean(response.data?.connected),
-        message: response.data?.message ?? null,
+        heartRateData: records.map((item) => ({
+          bpm: Number(item.value ?? 0),
+          time: item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '--',
+          timestamp: item.timestamp,
+        })),
+        connected: true,
+        message: records.length === 0 ? 'No data yet. Connect your device or wait for sync.' : null,
         loading: false,
         error: null,
       });

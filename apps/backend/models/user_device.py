@@ -10,10 +10,15 @@ from sqlalchemy.orm import relationship
 from .base import Base, UUIDPrimaryKeyMixin
 
 
+PROVIDER_GOOGLE_FIT = "google_fit"
+PROVIDER_APPLE_HEALTH = "apple_health"
+PROVIDER_FITBIT = "fitbit"
+
+
 class UserDeviceProviderEnum(str, enum.Enum):
-    GOOGLE_FIT = "google_fit"
-    APPLE_HEALTH = "apple_health"
-    FITBIT = "fitbit"
+    GOOGLE_FIT = PROVIDER_GOOGLE_FIT
+    APPLE_HEALTH = PROVIDER_APPLE_HEALTH
+    FITBIT = PROVIDER_FITBIT
 
 
 class UserDevice(UUIDPrimaryKeyMixin, Base):
@@ -23,7 +28,16 @@ class UserDevice(UUIDPrimaryKeyMixin, Base):
     )
 
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    provider = Column(Enum(UserDeviceProviderEnum, name="user_device_provider_enum"), nullable=False, index=True)
+    provider = Column(
+        Enum(
+            UserDeviceProviderEnum,
+            name="user_device_provider_enum",
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+            validate_strings=True,
+        ),
+        nullable=False,
+        index=True,
+    )
     access_token = Column(Text)
     refresh_token = Column(Text)
     token_expiry = Column(DateTime(timezone=True))

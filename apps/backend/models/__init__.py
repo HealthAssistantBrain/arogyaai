@@ -22,7 +22,13 @@ from .risk_score      import RiskScore, RiskLevelEnum
 from .recommendation  import Recommendation, RecCategoryEnum, PriorityEnum
 from .alert           import Alert, AlertTypeEnum, SeverityEnum
 from .notification    import Notification, NotificationTypeEnum, NotificationSeverityEnum
-from .user_device     import UserDevice, UserDeviceProviderEnum
+from .user_device     import (
+    PROVIDER_APPLE_HEALTH,
+    PROVIDER_FITBIT,
+    PROVIDER_GOOGLE_FIT,
+    UserDevice,
+    UserDeviceProviderEnum,
+)
 from .user_vital      import UserVital, UserVitalTypeEnum, UserVitalSourceEnum
 from .user_setting    import UserSetting
 from .session         import Session
@@ -64,6 +70,9 @@ __all__ = [
     "NotificationTypeEnum",
     "NotificationSeverityEnum",
     "UserDeviceProviderEnum",
+    "PROVIDER_GOOGLE_FIT",
+    "PROVIDER_APPLE_HEALTH",
+    "PROVIDER_FITBIT",
     "UserVitalTypeEnum",
     "UserVitalSourceEnum",
 ]

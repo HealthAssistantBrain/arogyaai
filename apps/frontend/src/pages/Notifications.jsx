@@ -7,11 +7,20 @@ import Button from '../components/ui/Button';
 import useNotificationStore from '../store/notificationStore';
 
 const Notifications = () => {
-  const { notifications, fetchNotifications } = useNotificationStore();
+  const { notifications, fetchNotifications, loading } = useNotificationStore();
+  const notificationList = Array.isArray(notifications) ? notifications : [];
 
   useEffect(() => {
-    fetchNotifications();
+    void fetchNotifications().catch(() => {});
   }, [fetchNotifications]);
+
+  if (loading && notificationList.length === 0) {
+    return (
+      <PageWrapper>
+        <div className="py-12 text-center text-sm font-medium text-text-secondary">Loading...</div>
+      </PageWrapper>
+    );
+  }
 
   return (
     <PageWrapper>
@@ -20,7 +29,7 @@ const Notifications = () => {
         <Button variant="ghost" size="sm" className="text-primary font-bold">Mark all as read</Button>
       </div>
       <div className="space-y-3">
-        {notifications.map((n) => (
+        {notificationList.map((n) => (
           <Card key={n.id} className="hover:border-primary/20 cursor-pointer group">
             <div className="flex items-start gap-4">
               <IconBox icon={Bell} color="bg-primary" />

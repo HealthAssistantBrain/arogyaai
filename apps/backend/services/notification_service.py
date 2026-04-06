@@ -3,6 +3,7 @@ Notification service — persistence and read-state management.
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 import uuid
 from typing import Optional
 
@@ -10,7 +11,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from models import Notification, NotificationTypeEnum, User
+from models import Notification, NotificationSeverityEnum, NotificationTypeEnum, User
 
 
 def _serialize_notification(notification: Notification) -> dict:
@@ -21,6 +22,7 @@ def _serialize_notification(notification: Notification) -> dict:
         "title": notification.title,
         "description": notification.description,
         "severity": notification.severity.value,
+        "metadata": notification.event_metadata or {},
         "is_read": bool(notification.is_read),
         "created_at": notification.created_at.isoformat() if notification.created_at else None,
     }
@@ -35,10 +37,90 @@ def _notification_counts(db: Session, user: User) -> dict:
         NotificationTypeEnum.HEALTH_ALERT.value: base.filter(Notification.notification_type == NotificationTypeEnum.HEALTH_ALERT).count(),
         NotificationTypeEnum.APPOINTMENT.value: base.filter(Notification.notification_type == NotificationTypeEnum.APPOINTMENT).count(),
         NotificationTypeEnum.SYSTEM.value: base.filter(Notification.notification_type == NotificationTypeEnum.SYSTEM).count(),
+        NotificationTypeEnum.ACTIVITY.value: base.filter(Notification.notification_type == NotificationTypeEnum.ACTIVITY).count(),
     }
 
 
 class NotificationService:
+    @staticmethod
+    def create_notification(
+        db: Session,
+        user_id,
+        notification_type,
+        title: str,
+        description: str,
+        severity,
+        metadata: Optional[dict] = None,
+    ) -> dict:
+        try:
+            notification_type_enum = notification_type if isinstance(notification_type, NotificationTypeEnum) else NotificationTypeEnum(str(notification_type).strip().lower())
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid notification type") from exc
+
+        try:
+            severity_enum = severity if isinstance(severity, NotificationSeverityEnum) else NotificationSeverityEnum(str(severity).strip().lower())
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid notification severity") from exc
+
+        try:
+            user_uuid = user_id if isinstance(user_id, uuid.UUID) else uuid.UUID(str(user_id))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid user id") from exc
+
+        now = datetime.now(timezone.utc)
+        dedupe_window = now - timedelta(minutes=30)
+
+        similar_notification = (
+            db.query(Notification)
+            .filter(
+                Notification.user_id == user_uuid,
+                Notification.notification_type == notification_type_enum,
+                Notification.title == title,
+                Notification.created_at >= dedupe_window,
+            )
+            .order_by(Notification.created_at.desc())
+            .first()
+        )
+
+        if similar_notification:
+            return {
+                "success": True,
+                "status": "ready",
+                "source": "db",
+                "error": None,
+                "data": {
+                    "notification": _serialize_notification(similar_notification),
+                    "created": False,
+                    "deduped": True,
+                },
+                "last_updated": similar_notification.created_at.isoformat() if similar_notification.created_at else None,
+            }
+
+        notification = Notification(
+            user_id=user_uuid,
+            notification_type=notification_type_enum,
+            title=title,
+            description=description,
+            severity=severity_enum,
+            event_metadata=metadata or {},
+        )
+        db.add(notification)
+        db.commit()
+        db.refresh(notification)
+
+        return {
+            "success": True,
+            "status": "ready",
+            "source": "db",
+            "error": None,
+            "data": {
+                "notification": _serialize_notification(notification),
+                "created": True,
+                "deduped": False,
+            },
+            "last_updated": notification.created_at.isoformat() if notification.created_at else None,
+        }
+
     @staticmethod
     def list_notifications(
         db: Session,

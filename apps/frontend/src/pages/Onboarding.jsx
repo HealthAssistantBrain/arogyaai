@@ -21,9 +21,12 @@ const Onboarding = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const setOnboardingStep = useAuthStore((state) => state.setOnboardingStep);
+  const profile = useAuthStore((state) => state.profile);
   const healthProfile = useAuthStore((state) => state.healthProfile);
-  const updateProfile = useAuthStore((state) => state.updateProfile);
+  const saveOnboarding = useAuthStore((state) => state.saveOnboarding);
   const user = useAuthStore((state) => state.user);
+  const normalizedProfileGender = profile?.gender === 'non-binary' ? 'other' : profile?.gender;
+  const normalizedHealthGender = healthProfile?.gender === 'non-binary' ? 'other' : healthProfile?.gender;
 
   const {
     register,
@@ -33,11 +36,11 @@ const Onboarding = () => {
     formState: { errors },
   } = useForm({
     defaultValues: {
-      fullName: user?.full_name || user?.name || '',
-      gender: 'male',
-      dob: '',
-      height: healthProfile?.height || '',
-      weight: healthProfile?.weight || '',
+      fullName: profile?.full_name || user?.full_name || user?.name || '',
+      gender: normalizedProfileGender || normalizedHealthGender || '',
+      dob: profile?.date_of_birth || profile?.dob || healthProfile?.date_of_birth || '',
+      height: profile?.height_cm || healthProfile?.height || '',
+      weight: profile?.weight_kg || healthProfile?.weight || '',
     },
   });
 
@@ -49,10 +52,12 @@ const Onboarding = () => {
   const restoredStep = Number.isFinite(parsedStep) && parsedStep >= 1 && parsedStep <= 6 ? parsedStep : 1;
 
   useEffect(() => {
-    setValue('fullName', user?.full_name || user?.name || '');
-    setValue('height', healthProfile?.height || '');
-    setValue('weight', healthProfile?.weight || '');
-  }, [healthProfile?.height, healthProfile?.weight, setValue, user?.full_name, user?.name]);
+    setValue('fullName', profile?.full_name || user?.full_name || user?.name || '');
+    setValue('gender', normalizedProfileGender || normalizedHealthGender || '');
+    setValue('dob', profile?.date_of_birth || profile?.dob || '');
+    setValue('height', profile?.height_cm || healthProfile?.height || '');
+    setValue('weight', profile?.weight_kg || healthProfile?.weight || '');
+  }, [healthProfile?.height, healthProfile?.weight, normalizedHealthGender, normalizedProfileGender, profile?.date_of_birth, profile?.dob, profile?.full_name, profile?.height_cm, profile?.weight_kg, setValue, user?.full_name, user?.name]);
 
   useEffect(() => {
     if (!stepFromUrl && !stepFromStorage) {
@@ -74,14 +79,17 @@ const Onboarding = () => {
   }
 
   const onSubmit = async (data) => {
-    if (!data.fullName || !data.dob || !data.height || !data.weight) {
+    if (!data.fullName || !data.gender || !data.dob || !data.height || !data.weight) {
       toast.error('Please fill in all basic profile fields to continue.');
       return;
     }
-    const saved = await updateProfile({
+    const saved = await saveOnboarding({
       full_name: data.fullName,
-      height: data.height,
-      weight: data.weight,
+      date_of_birth: data.dob,
+      gender: data.gender === 'other' ? 'non-binary' : data.gender,
+      height_cm: Number(data.height),
+      weight_kg: Number(data.weight),
+      onboarding_step: 2,
     });
     if (!saved) {
       toast.error('Unable to save your profile right now.');

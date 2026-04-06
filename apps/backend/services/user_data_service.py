@@ -58,6 +58,7 @@ def _serialize_profile(user: User, profile: Optional[UserProfile]) -> dict:
     base = UserService._serialize_profile(user, profile)  # noqa: SLF001 - shared serialization contract
     return {
         **base,
+        "dob": base.get("dob") or base.get("date_of_birth"),
         "phone_number": base.get("phone_number"),
         "height_cm": base.get("height_cm"),
         "weight_kg": base.get("weight_kg"),
@@ -124,6 +125,8 @@ class UserDataService:
     @staticmethod
     def update_profile(db: Session, user: User, updates: dict) -> dict:
         normalized = dict(updates or {})
+        if "date_of_birth" not in normalized and "dob" in normalized:
+            normalized["date_of_birth"] = normalized["dob"]
         if "phone_number" not in normalized and "phone" in normalized:
             normalized["phone_number"] = normalized["phone"]
         if "height_cm" not in normalized and "height" in normalized:
@@ -154,18 +157,28 @@ class UserDataService:
 
     @staticmethod
     def save_onboarding(db: Session, user: User, payload: dict) -> dict:
+        normalized = dict(payload or {})
+        if "date_of_birth" not in normalized and "dob" in normalized:
+            normalized["date_of_birth"] = normalized["dob"]
+        if "phone_number" not in normalized and "phone" in normalized:
+            normalized["phone_number"] = normalized["phone"]
+        if "height_cm" not in normalized and "height" in normalized:
+            normalized["height_cm"] = normalized["height"]
+        if "weight_kg" not in normalized and "weight" in normalized:
+            normalized["weight_kg"] = normalized["weight"]
+
         profile_payload = {
-            key: payload.get(key)
+            key: normalized.get(key)
             for key in ("full_name", "date_of_birth", "gender", "phone_number", "height_cm", "weight_kg", "blood_group", "allergies")
-            if key in payload and payload.get(key) is not None
+            if key in normalized and normalized.get(key) is not None
         }
         result = UserDataService.update_profile(db, user, profile_payload)
 
         user_updates = {}
-        if payload.get("is_onboarding_done") is not None:
-            user_updates["is_onboarding_done"] = bool(payload.get("is_onboarding_done"))
-        if payload.get("onboarding_step") is not None:
-            user_updates["onboarding_step"] = int(payload.get("onboarding_step"))
+        if normalized.get("is_onboarding_done") is not None:
+            user_updates["is_onboarding_done"] = bool(normalized.get("is_onboarding_done"))
+        if normalized.get("onboarding_step") is not None:
+            user_updates["onboarding_step"] = int(normalized.get("onboarding_step"))
 
         if user_updates:
             UserService.update_user_me(db, user, user_updates)

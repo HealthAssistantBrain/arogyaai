@@ -32,8 +32,10 @@ export const useNotificationStore = create((set, get) => ({
         return payload;
       }
 
-      const currentById = new Map(get().notifications.map((notification) => [notification.id, notification]));
-      const nextNotifications = (payload.notifications || []).map((notification) => {
+      const currentNotifications = Array.isArray(get().notifications) ? get().notifications : [];
+      const currentById = new Map(currentNotifications.map((notification) => [notification.id, notification]));
+      const incomingNotifications = Array.isArray(payload.notifications) ? payload.notifications : [];
+      const nextNotifications = incomingNotifications.map((notification) => {
         const existing = currentById.get(notification.id);
         if (!existing) return notification;
         return {
@@ -57,6 +59,7 @@ export const useNotificationStore = create((set, get) => ({
       }
 
       set({
+        notifications: [],
         loading: false,
         error: error?.response?.data?.error || error?.message || 'Unable to load notifications',
         activeRequestId: requestId,
@@ -66,7 +69,7 @@ export const useNotificationStore = create((set, get) => ({
   },
 
   markAsRead: async (id) => {
-    const previousNotifications = get().notifications;
+    const previousNotifications = Array.isArray(get().notifications) ? get().notifications : [];
     const previousCounts = get().counts;
     const previous = previousNotifications.find((notification) => notification.id === id);
     const mutationRequestId = Date.now() + Math.random();
@@ -74,7 +77,7 @@ export const useNotificationStore = create((set, get) => ({
     set((state) => ({
       activeRequestId: mutationRequestId,
       loading: false,
-      notifications: state.notifications.map((notification) =>
+      notifications: (Array.isArray(state.notifications) ? state.notifications : []).map((notification) =>
         notification.id === id ? { ...notification, is_read: true } : notification
       ),
       counts: previous && !previous.is_read
@@ -97,7 +100,7 @@ export const useNotificationStore = create((set, get) => ({
   },
 
   markAllAsRead: async () => {
-    const previousNotifications = get().notifications;
+    const previousNotifications = Array.isArray(get().notifications) ? get().notifications : [];
     const previousCounts = get().counts;
     const unreadBefore = previousCounts.unread;
     const mutationRequestId = Date.now() + Math.random();
@@ -105,7 +108,7 @@ export const useNotificationStore = create((set, get) => ({
     set((state) => ({
       activeRequestId: mutationRequestId,
       loading: false,
-      notifications: state.notifications.map((notification) => ({ ...notification, is_read: true })),
+      notifications: (Array.isArray(state.notifications) ? state.notifications : []).map((notification) => ({ ...notification, is_read: true })),
       counts: { ...state.counts, unread: 0 },
     }));
 

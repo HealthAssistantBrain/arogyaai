@@ -32,8 +32,10 @@ const OnboardingSummary = () => {
   const navigate = useNavigate();
   const setOnboardingStep = useAuthStore((state) => state.setOnboardingStep);
   const user = useAuthStore((state) => state.user);
+  const profile = useAuthStore((state) => state.profile);
   const healthProfile = useAuthStore((state) => state.healthProfile);
-  const profileData = getUserProfile(user);
+  const profileData = getUserProfile({ ...user, profile: profile || healthProfile });
+  const profileRecord = profile || healthProfile || {};
 
   const handleConfirm = async () => {
     try {
@@ -142,8 +144,8 @@ const OnboardingSummary = () => {
                 <div className="space-y-3">
                   {[
                     { label: 'Full Name', value: profileData.name },
-                    { label: 'Gender', value: 'Non-binary' },
-                    { label: 'Height/Weight', value: `${healthProfile?.height || '—'}cm / ${healthProfile?.weight || '—'}kg` }
+                    { label: 'Gender', value: profileRecord?.gender || 'Not provided' },
+                    { label: 'Height/Weight', value: `${profileRecord?.height || profileRecord?.height_cm || '—'}cm / ${profileRecord?.weight || profileRecord?.weight_kg || '—'}kg` }
                   ].map((field) => (
                     <div key={field.label} className="flex justify-between text-sm">
                       <span className="text-slate-500 font-medium">{field.label}</span>
@@ -166,9 +168,9 @@ const OnboardingSummary = () => {
                 </div>
                 <div className="space-y-3">
                   {[
-                    { label: 'Conditions', value: 'Hypertension' },
-                    { label: 'Allergies', value: healthProfile?.allergies || 'None' },
-                    { label: 'Family History', value: 'Type 2 Diabetes' }
+                    { label: 'Conditions', value: profileRecord?.conditions || 'Not provided' },
+                    { label: 'Allergies', value: profileRecord?.allergies || 'Not provided' },
+                    { label: 'Family History', value: profileRecord?.family_history || 'Not provided' }
                   ].map((field) => (
                     <div key={field.label} className="flex justify-between text-sm">
                       <span className="text-slate-500 font-medium">{field.label}</span>
@@ -191,9 +193,9 @@ const OnboardingSummary = () => {
                 </div>
                 <div className="space-y-3">
                   {[
-                    { label: 'Activity', value: 'Active' },
-                    { label: 'Sleep', value: '7.5 hours' },
-                    { label: 'Stress', value: 'Moderate' }
+                    { label: 'Activity', value: profileRecord?.activity || 'Not provided' },
+                    { label: 'Sleep', value: profileRecord?.sleep || 'Not provided' },
+                    { label: 'Stress', value: profileRecord?.stress || 'Not provided' }
                   ].map((field) => (
                     <div key={field.label} className="flex justify-between text-sm">
                       <span className="text-slate-500 font-medium">{field.label}</span>
@@ -216,7 +218,7 @@ const OnboardingSummary = () => {
                 </div>
                 <div className="space-y-3">
                   {[
-                    { label: 'Google Fit', value: 'Connected', connected: true },
+                    { label: 'Google Fit', value: profileRecord?.google_fit || 'Connected', connected: true },
                     { label: 'Apple Health', value: 'Not Active', connected: false }
                   ].map((field) => (
                     <div key={field.label} className="flex justify-between text-sm">

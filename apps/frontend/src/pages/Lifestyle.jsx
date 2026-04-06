@@ -32,6 +32,7 @@ const Lifestyle = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const setOnboardingStep = useAuthStore((state) => state.setOnboardingStep);
+  const saveOnboarding = useAuthStore((state) => state.saveOnboarding);
   const [selectedDiets, setSelectedDiets] = useState(['Plant-based', 'Gluten-Free']);
 
   const { register, handleSubmit, watch, setValue } = useForm({
@@ -56,13 +57,20 @@ const Lifestyle = () => {
 
   const onSubmit = (data) => {
     console.log("Saving lifestyle profile:", { ...data, selectedDiets });
-    setOnboardingStep(4);
-    toast.success('Lifestyle assessment saved');
-    if (searchParams.get('return') === 'summary') {
-      navigate(ROUTES.ONBOARDING_SUMMARY);
-    } else {
-      navigate(ROUTES.ONBOARDING_STEP_4);
-    }
+    saveOnboarding({ onboarding_step: 4 })
+      .then((saved) => {
+        if (!saved) {
+          toast.error('Unable to save your lifestyle assessment right now.');
+          return;
+        }
+        setOnboardingStep(4);
+        toast.success('Lifestyle assessment saved');
+        if (searchParams.get('return') === 'summary') {
+          navigate(ROUTES.ONBOARDING_SUMMARY);
+        } else {
+          navigate(ROUTES.ONBOARDING_STEP_4);
+        }
+      });
   };
 
   const getStressText = (val) => {

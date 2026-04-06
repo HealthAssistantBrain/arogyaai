@@ -1,31 +1,27 @@
-import { useEffect } from 'react';
 import { Heart, RefreshCw, Activity, Link2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import HeartRateChart from './charts/HeartRateChart';
 import { ROUTES } from '../router/routes';
-import useHeartRateStore from '../store/useHeartRateStore';
+import useDashboardStore from '../store/dashboardStore';
 
 const HeartRateCard = () => {
   const navigate = useNavigate();
-  const {
-    heartRateData,
-    loading,
-    error,
-    message,
-    connected,
-    fetchHeartRate,
-  } = useHeartRateStore();
+  const heartRateSlice = useDashboardStore((s) => s.vitals?.['heart_rate:24h']);
+  const googleFitSlice = useDashboardStore((s) => s.googleFit);
+  const fetchVitals = useDashboardStore((s) => s.fetchVitals);
 
-  useEffect(() => {
-    fetchHeartRate();
-  }, [fetchHeartRate]);
-
+  const heartRateData = Array.isArray(heartRateSlice?.data) ? heartRateSlice.data : [];
+  const loading = heartRateSlice?.status === 'processing';
+  const error = heartRateSlice?.error ?? null;
+  const message = heartRateSlice?.message ?? null;
+  const connected = Boolean(googleFitSlice?.data?.connected);
   const latestReading = heartRateData.length > 0 ? heartRateData[heartRateData.length - 1] : null;
   const chartData = heartRateData.map((item) => ({
-    t: item.time,
-    v: item.bpm,
+    t: new Date(item.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+    v: item.value,
   }));
+  const emptyMessage = 'No data yet. Connect your device or wait for sync.';
 
   return (
     <section className="rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.03]">
@@ -41,7 +37,7 @@ const HeartRateCard = () => {
 
         <div className="flex flex-wrap gap-3">
           <button
-            onClick={() => fetchHeartRate()}
+            onClick={() => fetchVitals('heart_rate', '24h', { force: true })}
             disabled={loading}
             className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-[12px] font-black uppercase tracking-[0.16em] text-[#13082a] transition hover:border-rose-500/30 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/5 dark:text-white"
           >
@@ -65,7 +61,7 @@ const HeartRateCard = () => {
           <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Latest BPM</p>
           <div className="mt-5 flex items-end gap-3">
             <span className="text-[48px] font-black leading-none tracking-tight text-[#13082a] dark:text-white">
-              {latestReading?.bpm ?? '--'}
+              {latestReading?.value ?? '--'}
             </span>
             <span className="mb-1 text-[13px] font-bold uppercase tracking-[0.18em] text-slate-400">BPM</span>
           </div>
@@ -76,7 +72,7 @@ const HeartRateCard = () => {
             <div>
               <p className="text-[12px] font-black uppercase tracking-[0.16em] text-slate-400">Reading time</p>
               <p className="mt-1 text-[14px] font-semibold text-[#13082a] dark:text-white">
-                {latestReading?.time || 'Waiting for heart rate data'}
+                {latestReading?.timestamp ? new Date(latestReading.timestamp).toLocaleString() : 'Waiting for heart rate data'}
               </p>
             </div>
           </div>
@@ -118,10 +114,10 @@ const HeartRateCard = () => {
               <div className="flex h-[220px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 px-6 text-center dark:border-white/10">
                 <Heart size={26} className="text-slate-300 dark:text-slate-600" />
                 <p className="mt-4 text-[14px] font-semibold text-slate-500 dark:text-slate-400">
-                  No data available
+                  No data yet
                 </p>
                 <p className="mt-2 text-[13px] leading-relaxed text-slate-400 dark:text-slate-500">
-                  Connect Google Fit and sync your latest heart rate to populate this chart.
+                  {error || emptyMessage}
                 </p>
               </div>
             )}

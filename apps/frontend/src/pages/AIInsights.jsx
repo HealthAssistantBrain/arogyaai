@@ -1,5 +1,6 @@
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useAuthStore } from '../store/authStore';
 import { 
   Brain, 
   Activity, 
@@ -26,6 +27,7 @@ import { ROUTES } from '../router/routes';
 
 const AIInsights = () => {
   const navigate = useNavigate();
+  const profileLoading = useAuthStore((state) => state.profileLoading);
 
   const riskFactors = [
     { label: 'Type 2 Diabetes Risk', value: '12%', status: 'Low', statusColor: 'bg-green-100 text-green-600', trend: '- 2.4%', trendIcon: <ArrowDown size={12} />, trendColor: 'text-green-500', progress: 30, color: 'bg-[#009CDE]' },
@@ -59,6 +61,14 @@ const AIInsights = () => {
     initial: { opacity: 0, y: 20 },
     animate: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } }
   };
+
+  if (profileLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#EAEAEA] dark:bg-[#13082A] text-sm font-bold text-slate-500">
+        Loading...
+      </div>
+    );
+  }
 
   return (
     <div className="bg-[#EAEAEA] dark:bg-[#13082A] text-[#13082A] dark:text-slate-100 min-h-screen font-display antialiased leading-normal">

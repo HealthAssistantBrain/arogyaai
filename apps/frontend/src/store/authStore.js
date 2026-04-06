@@ -8,14 +8,38 @@ const normalizeProfileState = (profile) => ({
   full_name: profile?.full_name ?? null,
   avatar_url: profile?.avatar_url ?? null,
   patient_id: profile?.patient_id ?? null,
-  phone: profile?.phone ?? '',
-  date_of_birth: profile?.date_of_birth ?? '',
-  gender: profile?.gender ?? 'non-binary',
-  height: profile?.height ?? '',
-  weight: profile?.weight ?? '',
+  phone: profile?.phone_number ?? profile?.phone ?? '',
+  phone_number: profile?.phone_number ?? profile?.phone ?? '',
+  date_of_birth: profile?.date_of_birth ?? profile?.dob ?? '',
+  dob: profile?.date_of_birth ?? profile?.dob ?? '',
+  gender: profile?.gender ?? '',
+  height: profile?.height_cm ?? profile?.height ?? '',
+  height_cm: profile?.height_cm ?? profile?.height ?? '',
+  weight: profile?.weight_kg ?? profile?.weight ?? '',
+  weight_kg: profile?.weight_kg ?? profile?.weight ?? '',
   blood_group: profile?.blood_group ?? '',
   allergies: profile?.allergies ?? '',
 })
+
+const normalizeProfilePayload = (profile = {}) => {
+  const payload = {
+    full_name: profile.full_name ?? profile.fullName ?? null,
+    avatar_url: profile.avatar_url ?? profile.avatarUrl ?? null,
+    phone_number: profile.phone_number ?? profile.phone ?? null,
+    date_of_birth: profile.date_of_birth ?? profile.dob ?? null,
+    gender: profile.gender ?? null,
+    height_cm: profile.height_cm ?? profile.height ?? null,
+    weight_kg: profile.weight_kg ?? profile.weight ?? null,
+    blood_group: profile.blood_group ?? null,
+    allergies: profile.allergies ?? null,
+    is_onboarding_done: profile.is_onboarding_done,
+    onboarding_step: profile.onboarding_step,
+  }
+
+  return Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined && value !== null && value !== '')
+  )
+}
 
 // ── Patch 7: isHydrated prevents guard decisions before Zustand hydrates from localStorage
 // ── Patch 4: role field added for future role-based access control (no UI impact)
@@ -28,8 +52,11 @@ export const useAuthStore = create(
       (set, get) => ({
         // Trace state for debugging
         logOnboardingState: () => console.log("ONBOARDING STATE:", get()),
-        user: null,
-        healthProfile: null,
+        user: {},
+        profile: {},
+        healthProfile: {},
+        vitals: [],
+        notifications: [],
         profileLoading: false,
         profileError: null,
         token: null,
@@ -43,7 +70,7 @@ export const useAuthStore = create(
         isHydratingAuth: false,   // ← network fetching lock
 
         setUser: (user) =>
-          set({ user, isAuthenticated: true }, false, 'setUser'),
+          set({ user: user || {}, isAuthenticated: true }, false, 'setUser'),
 
         setToken: (token) => {
           // ── SECTION 5: TOKEN VALIDATION ──
@@ -117,14 +144,21 @@ export const useAuthStore = create(
                 full_name: data.full_name ?? get().user?.full_name ?? null,
                 avatar_url: data.avatar_url ?? get().user?.avatar_url ?? null,
                 patient_id: data.patient_id ?? get().user?.patient_id ?? null,
+                profile: data,
               },
+              profile: data,
               healthProfile: normalizedProfile,
               profileLoading: false
             });
             return true;
           } catch (err) {
             console.error("fetchProfile error:", err);
-            set({ profileError: err.message, profileLoading: false });
+            set({
+              profile: {},
+              healthProfile: {},
+              profileError: err.message,
+              profileLoading: false,
+            });
             return false;
           }
         },
@@ -132,17 +166,21 @@ export const useAuthStore = create(
         updateProfile: async (newHealthProfile) => {
           const token = get().token;
           if (!token) return false;
+          const payload = normalizeProfilePayload(newHealthProfile);
 
           // Optimistic UI Update
           const previousUser = get().user;
           const previousProfile = get().healthProfile;
+          const previousCanonicalProfile = get().profile;
           set({
             user: {
               ...(previousUser || {}),
-              full_name: newHealthProfile.full_name ?? previousUser?.full_name ?? null,
-              avatar_url: newHealthProfile.avatar_url ?? previousUser?.avatar_url ?? null,
+              full_name: payload.full_name ?? previousUser?.full_name ?? null,
+              avatar_url: payload.avatar_url ?? previousUser?.avatar_url ?? null,
+              profile: { ...(previousCanonicalProfile || {}), ...payload },
             },
-            healthProfile: { ...previousProfile, ...newHealthProfile },
+            profile: { ...(previousCanonicalProfile || {}), ...payload },
+            healthProfile: { ...previousProfile, ...normalizeProfileState(payload) },
             profileError: null,
             profileLoading: true,
           });
@@ -154,7 +192,7 @@ export const useAuthStore = create(
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${token}`
               },
-              body: JSON.stringify(newHealthProfile)
+              body: JSON.stringify(payload)
             });
             if (!res.ok) throw new Error('Failed to update profile');
             const envelope = await res.json();
@@ -166,7 +204,9 @@ export const useAuthStore = create(
                 full_name: data.full_name ?? get().user?.full_name ?? null,
                 avatar_url: data.avatar_url ?? get().user?.avatar_url ?? null,
                 patient_id: data.patient_id ?? get().user?.patient_id ?? null,
+                profile: data,
               },
+              profile: data,
               healthProfile: normalizedProfile,
               profileLoading: false,
             });
@@ -174,7 +214,73 @@ export const useAuthStore = create(
           } catch (err) {
             console.error("updateProfile error:", err);
             // Rollback on failure
-            set({ user: previousUser, healthProfile: previousProfile, profileError: err.message, profileLoading: false });
+            set({
+              user: previousUser,
+              profile: previousCanonicalProfile || {},
+              healthProfile: previousProfile || {},
+              profileError: err.message,
+              profileLoading: false
+            });
+            return false;
+          }
+        },
+
+        saveOnboarding: async (onboardingData) => {
+          const token = get().token;
+          if (!token) return false;
+
+          const payload = normalizeProfilePayload(onboardingData);
+          const previousUser = get().user;
+          const previousProfile = get().healthProfile;
+          const previousCanonicalProfile = get().profile;
+
+          set({ profileLoading: true, profileError: null });
+
+          try {
+            const res = await fetch(`${API_BASE_URL}/user/onboarding`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`
+              },
+              body: JSON.stringify(payload)
+            });
+
+            if (!res.ok) throw new Error('Failed to save onboarding data');
+
+            const envelope = await res.json();
+            const data = envelope.data || envelope || {};
+            const normalizedProfile = normalizeProfileState(data);
+
+            set({
+              user: {
+                ...(get().user || {}),
+                full_name: data.full_name ?? get().user?.full_name ?? null,
+                avatar_url: data.avatar_url ?? get().user?.avatar_url ?? null,
+                profile: data,
+              },
+              profile: data,
+              healthProfile: normalizedProfile,
+              profileLoading: false,
+            });
+
+            if (typeof payload.is_onboarding_done === 'boolean') {
+              set({ onboardingDone: payload.is_onboarding_done }, false, 'saveOnboarding:onboardingDone');
+            }
+            if (Number.isFinite(Number(payload.onboarding_step))) {
+              set({ onboardingStep: Number(payload.onboarding_step) }, false, 'saveOnboarding:onboardingStep');
+            }
+
+            return true;
+          } catch (err) {
+            console.error("saveOnboarding error:", err);
+            set({
+              user: previousUser,
+              profile: previousCanonicalProfile || {},
+              healthProfile: previousProfile || {},
+              profileError: err.message,
+              profileLoading: false,
+            });
             return false;
           }
         },
@@ -187,16 +293,11 @@ export const useAuthStore = create(
         // ────────────────────────────────────────────────────────────────────
         completeOnboarding: async () => {
           try {
-            const token = get().token;
-            // Persist to backend so reload doesn't trigger recursion
-            await fetch('http://localhost:8000/api/v1/users/me', {
-              method: 'PUT',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-              },
-              body: JSON.stringify({ is_onboarding_done: true, onboarding_step: 6 })
+            const saved = await get().saveOnboarding({
+              is_onboarding_done: true,
+              onboarding_step: 6,
             });
+            if (!saved) throw new Error('Failed to persist onboarding completion');
 
             set(
               { onboardingDone: true, onboardingStep: 6 },
@@ -317,7 +418,11 @@ export const useAuthStore = create(
               // 401/403: token is dead → wipe everything, user must re-login
               set(
                 {
-                  user: null, token: null, refreshToken: null,
+                  user: {}, token: null, refreshToken: null,
+                  profile: {},
+                  healthProfile: {},
+                  vitals: [],
+                  notifications: [],
                   isAuthenticated: false, isEmailVerified: false,
                   onboardingStep: 1, onboardingDone: false, role: 'user',
                   isHydrated: true, isHydratingAuth: false,
@@ -364,13 +469,16 @@ export const useAuthStore = create(
           }
 
           // 1. Wipe all Zustand state back to absolute zero (No stale state remains)
-          set(
-            {
-              user: null,
-              healthProfile: null,
-              profileLoading: false,
-              profileError: null,
-              token: null,
+              set(
+                {
+                  user: {},
+                  profile: {},
+                  healthProfile: {},
+                  vitals: [],
+                  notifications: [],
+                  profileLoading: false,
+                  profileError: null,
+                  token: null,
               refreshToken: null,
               isAuthenticated: false,
               isEmailVerified: false,
@@ -400,13 +508,16 @@ export const useAuthStore = create(
         // ────────────────────────────────────────────────────────────────────
         hardReset: () => {
           // 1. Wipe all Zustand state back to absolute zero
-          set(
-            {
-              user: null,
-              healthProfile: null,
-              profileLoading: false,
-              profileError: null,
-              token: null,
+              set(
+              {
+                user: {},
+                profile: {},
+                healthProfile: {},
+                vitals: [],
+                notifications: [],
+                profileLoading: false,
+                profileError: null,
+                token: null,
               refreshToken: null,
               isAuthenticated: false,
               isEmailVerified: false,
@@ -456,6 +567,7 @@ export const useAuthStore = create(
           token: state.token,
           refreshToken: state.refreshToken,
           user: state.user,
+          profile: state.profile,
           healthProfile: state.healthProfile,
           isAuthenticated: state.isAuthenticated,
           isEmailVerified: state.isEmailVerified,

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuthStore } from '../store/authStore';
 import { 
   LayoutDashboard, 
   Brain, 
@@ -28,6 +29,7 @@ import { ROUTES } from '../router/routes';
 
 const Timeline = () => {
     const navigate = useNavigate();
+    const profileLoading = useAuthStore((state) => state.profileLoading);
     const [activeFilter, setActiveFilter] = useState('All');
     const [expandedEvents, setExpandedEvents] = useState({ 2: true });
 
@@ -129,6 +131,14 @@ const Timeline = () => {
         { icon: FlaskConical, label: 'Lab Results', path: ROUTES.LAB_RESULTS },
         { icon: Settings, label: 'Settings', path: ROUTES.SETTINGS },
     ];
+
+    if (profileLoading) {
+        return (
+            <div className="flex min-h-screen items-center justify-center bg-[#f6f5f8] dark:bg-[#131022] text-sm font-bold text-slate-500">
+                Loading...
+            </div>
+        );
+    }
 
     return (
         <div className="bg-[#f6f5f8] dark:bg-[#131022] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-row overflow-hidden antialiased">

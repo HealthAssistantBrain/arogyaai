@@ -147,17 +147,12 @@ async def sync_google_fit(
     current_user=Depends(get_current_user_from_header),
     db: Session = Depends(get_db),
 ):
-    return {
-        "success": True,
-        "status": "ready",
-        "error": None,
-        "data": await GoogleFitService.sync_steps(
-            db,
-            current_user,
-            timezone_name=payload.timezone,
-            days=payload.days,
-        ),
-    }
+    return await GoogleFitService.sync_steps(
+        db,
+        current_user,
+        timezone_name=payload.timezone,
+        days=payload.days,
+    )
 
 
 @router.delete("/disconnect")

@@ -46,43 +46,61 @@ import {
 
 const UserProfile = () => {
     const navigate = useNavigate();
-    const { user, role, healthProfile, updateProfile, profileLoading } = useAuthStore();
-    const profileData = getUserProfile(user, role);
+    const { user, role, profile, healthProfile, fetchProfile, updateProfile, profileLoading, token } = useAuthStore();
+    const profileRecord = (profile && Object.keys(profile).length > 0)
+        ? profile
+        : ((healthProfile && Object.keys(healthProfile).length > 0) ? healthProfile : null);
+    const profileData = getUserProfile({ ...user, profile: profileRecord }, role);
+    const hasLoadedProfile = Boolean(profileRecord || (user && Object.keys(user).length > 0));
 
     const [emailNotif, setEmailNotif] = useState(true);
     const [smsNotif, setSmsNotif] = useState(false);
-    const [gender, setGender] = useState('non-binary');
+    const [gender, setGender] = useState(profileRecord?.gender || '');
 
     const [isEditing, setIsEditing] = useState(false);
     const [editForm, setEditForm] = useState({
-        full_name: '', phone: '', date_of_birth: '', height: '', weight: '', blood_group: '', allergies: ''
+        full_name: '', phone_number: '', date_of_birth: '', height_cm: '', weight_kg: '', blood_group: '', allergies: ''
     });
 
     useEffect(() => {
-        if (healthProfile || user) {
+        if (hasLoadedProfile) {
             setEditForm({
-                full_name: healthProfile?.full_name || user?.full_name || '',
-                phone: healthProfile?.phone || user?.phone || '',
-                date_of_birth: healthProfile?.date_of_birth || user?.date_of_birth || '',
-                height: healthProfile?.height || '',
-                weight: healthProfile?.weight || '',
-                blood_group: healthProfile?.blood_group || '',
-                allergies: healthProfile?.allergies || ''
+                full_name: profileRecord?.full_name || user?.full_name || '',
+                phone_number: profileRecord?.phone_number || profileRecord?.phone || user?.phone || '',
+                date_of_birth: profileRecord?.date_of_birth || profileRecord?.dob || user?.date_of_birth || '',
+                height_cm: profileRecord?.height_cm || profileRecord?.height || '',
+                weight_kg: profileRecord?.weight_kg || profileRecord?.weight || '',
+                blood_group: profileRecord?.blood_group || '',
+                allergies: profileRecord?.allergies || ''
             });
-            if (healthProfile?.gender) {
-                setGender(healthProfile.gender);
+            if (profileRecord?.gender) {
+                setGender(profileRecord.gender);
             }
         }
-    }, [healthProfile, user]);
+    }, [hasLoadedProfile, profileRecord, user]);
+
+    useEffect(() => {
+        if (token) {
+            fetchProfile();
+        }
+    }, [fetchProfile, token]);
+
+    if (profileLoading && !hasLoadedProfile) {
+        return (
+            <div className="flex min-h-screen items-center justify-center bg-[#f6f5f8] dark:bg-[#0B0819] text-sm font-bold text-slate-500">
+                Loading...
+            </div>
+        );
+    }
 
     const handleSaveProfile = async () => {
-        const h = Number(editForm.height);
-        const w = Number(editForm.weight);
+        const h = Number(editForm.height_cm);
+        const w = Number(editForm.weight_kg);
 
-        if (editForm.height && (isNaN(h) || h < 50 || h > 300)) {
+        if (editForm.height_cm && (isNaN(h) || h < 50 || h > 300)) {
             return toast.error("Height must be between 50 and 300 cm");
         }
-        if (editForm.weight && (isNaN(w) || w < 20 || w > 300)) {
+        if (editForm.weight_kg && (isNaN(w) || w < 20 || w > 300)) {
             return toast.error("Weight must be between 20 and 300 kg");
         }
 
@@ -95,11 +113,11 @@ const UserProfile = () => {
 
         const saved = await updateProfile({
             full_name: editForm.full_name,
-            phone: editForm.phone,
+            phone_number: editForm.phone_number,
             date_of_birth: editForm.date_of_birth,
             gender: gender,
-            height: editForm.height,
-            weight: editForm.weight,
+            height_cm: editForm.height_cm,
+            weight_kg: editForm.weight_kg,
             blood_group: editForm.blood_group,
             allergies: sanitizedAllergies
         });
@@ -201,15 +219,15 @@ const UserProfile = () => {
                                                 <div className="flex items-center gap-2">
                                                     <button onClick={() => {
                                                         setEditForm({
-                                                            full_name: healthProfile?.full_name || user?.full_name || '',
-                                                            phone: healthProfile?.phone || user?.phone || '',
-                                                            date_of_birth: healthProfile?.date_of_birth || user?.date_of_birth || '',
-                                                            height: healthProfile?.height || '',
-                                                            weight: healthProfile?.weight || '',
-                                                            blood_group: healthProfile?.blood_group || '',
-                                                            allergies: healthProfile?.allergies || '',
+                                                            full_name: profileRecord?.full_name || user?.full_name || '',
+                                                            phone_number: profileRecord?.phone_number || profileRecord?.phone || user?.phone || '',
+                                                            date_of_birth: profileRecord?.date_of_birth || profileRecord?.dob || user?.date_of_birth || '',
+                                                            height_cm: profileRecord?.height_cm || profileRecord?.height || '',
+                                                            weight_kg: profileRecord?.weight_kg || profileRecord?.weight || '',
+                                                            blood_group: profileRecord?.blood_group || '',
+                                                            allergies: profileRecord?.allergies || '',
                                                         });
-                                                        setGender(healthProfile?.gender || 'non-binary');
+                                                        setGender(profileRecord?.gender || '');
                                                         setIsEditing(false);
                                                     }} className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] border border-slate-200 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/5 active:scale-95 px-4 py-2 rounded-full transition-all">
                                                         Cancel
@@ -249,8 +267,8 @@ const UserProfile = () => {
                                                             <div className="flex items-center mt-2 group">
                                                                 <input
                                                                     type={stat.id === 'allergies' ? "text" : "number"}
-                                                                    value={editForm[stat.id]}
-                                                                    onChange={(e) => setEditForm({ ...editForm, [stat.id]: e.target.value })}
+                                                                    value={editForm[stat.id === 'height' ? 'height_cm' : stat.id === 'weight' ? 'weight_kg' : stat.id]}
+                                                                    onChange={(e) => setEditForm({ ...editForm, [stat.id === 'height' ? 'height_cm' : stat.id === 'weight' ? 'weight_kg' : stat.id]: e.target.value })}
                                                                     className="w-full bg-transparent border-b border-[#6143f4]/30 focus:outline-none focus:border-[#6143f4] text-[#13082a] dark:text-white font-black text-xs md:text-sm pb-1 placeholder:text-slate-300"
                                                                     placeholder={`Enter ${stat.label}`}
                                                                 />
@@ -258,9 +276,9 @@ const UserProfile = () => {
                                                             </div>
                                                         )
                                                     ) : (
-                                                        <p className={`font-black text-[#13082a] dark:text-white mt-2 leading-none italic ${stat.small && healthProfile?.[stat.id]?.length > 10 ? 'text-xs' : 'text-xl md:text-2xl uppercase tracking-tighter'}`}>
-                                                            {healthProfile?.[stat.id] ? `${healthProfile[stat.id]} ` : '— '}
-                                                            {healthProfile?.[stat.id] && stat.suffix && <span className="text-sm tracking-normal not-italic opacity-60 ml-1">{stat.suffix}</span>}
+                                                        <p className={`font-black text-[#13082a] dark:text-white mt-2 leading-none italic ${stat.small && String(profileRecord?.[stat.id] ?? healthProfile?.[stat.id] ?? '').length > 10 ? 'text-xs' : 'text-xl md:text-2xl uppercase tracking-tighter'}`}>
+                                                            {profileRecord?.[stat.id] ?? healthProfile?.[stat.id] ? `${profileRecord?.[stat.id] ?? healthProfile?.[stat.id]} ` : '— '}
+                                                            {(profileRecord?.[stat.id] ?? healthProfile?.[stat.id]) && stat.suffix && <span className="text-sm tracking-normal not-italic opacity-60 ml-1">{stat.suffix}</span>}
                                                         </p>
                                                     )}
                                                 </div>
@@ -294,7 +312,7 @@ const UserProfile = () => {
                                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-2 leading-none">Full Legal Name</label>
                                                     <div className="relative group">
                                                         <User className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#6143f4] transition-colors" size={18} />
-                                                        <input className="w-full pl-14 pr-6 py-5 bg-slate-50 dark:bg-white/5 border border-transparent rounded-[1.5rem] focus:ring-4 focus:ring-[#6143f4]/10 focus:border-[#6143f4]/20-all text-sm text-[#13082a] dark:text-white font-black uppercase tracking-tight transition-all disabled:opacity-70 disabled:cursor-not-allowed" value={isEditing ? editForm.full_name : (healthProfile?.full_name || user?.full_name || '')} onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })} disabled={!isEditing} type="text" />
+                                                        <input className="w-full pl-14 pr-6 py-5 bg-slate-50 dark:bg-white/5 border border-transparent rounded-[1.5rem] focus:ring-4 focus:ring-[#6143f4]/10 focus:border-[#6143f4]/20-all text-sm text-[#13082a] dark:text-white font-black uppercase tracking-tight transition-all disabled:opacity-70 disabled:cursor-not-allowed" value={isEditing ? editForm.full_name : (profileRecord?.full_name || user?.full_name || '')} onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })} disabled={!isEditing} type="text" />
                                                     </div>
                                                 </div>
                                                 <div className="space-y-4">
@@ -308,14 +326,14 @@ const UserProfile = () => {
                                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-2 leading-none">Mobile Intel Line</label>
                                                     <div className="relative group">
                                                         <Phone className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#6143f4] transition-colors" size={18} />
-                                                        <input className="w-full pl-14 pr-6 py-5 bg-slate-50 dark:bg-white/5 border border-transparent rounded-[1.5rem] focus:ring-4 focus:ring-[#6143f4]/10 focus:border-[#6143f4]/20 text-sm text-[#13082a] dark:text-white font-black uppercase tracking-tight transition-all disabled:opacity-70 disabled:cursor-not-allowed" value={isEditing ? editForm.phone : (healthProfile?.phone || user?.phone || '')} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} disabled={!isEditing} type="text" />
+                                                        <input className="w-full pl-14 pr-6 py-5 bg-slate-50 dark:bg-white/5 border border-transparent rounded-[1.5rem] focus:ring-4 focus:ring-[#6143f4]/10 focus:border-[#6143f4]/20 text-sm text-[#13082a] dark:text-white font-black uppercase tracking-tight transition-all disabled:opacity-70 disabled:cursor-not-allowed" value={isEditing ? editForm.phone_number : (profileRecord?.phone_number || profileRecord?.phone || user?.phone || '')} onChange={(e) => setEditForm({ ...editForm, phone_number: e.target.value })} disabled={!isEditing} type="text" />
                                                     </div>
                                                 </div>
                                                 <div className="space-y-4">
                                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-2 leading-none">Chronological Birth</label>
                                                     <div className="relative group">
                                                         <Calendar className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#6143f4] transition-colors" size={18} />
-                                                        <input className="w-full pl-14 pr-6 py-5 bg-slate-50 dark:bg-white/5 border border-transparent rounded-[1.5rem] focus:ring-4 focus:ring-[#6143f4]/10 focus:border-[#6143f4]/20 text-sm text-[#13082a] dark:text-white font-black uppercase tracking-tight transition-all disabled:opacity-70 disabled:cursor-not-allowed" value={isEditing ? editForm.date_of_birth : (healthProfile?.date_of_birth || user?.date_of_birth || '')} onChange={(e) => setEditForm({ ...editForm, date_of_birth: e.target.value })} disabled={!isEditing} type="date" />
+                                                        <input className="w-full pl-14 pr-6 py-5 bg-slate-50 dark:bg-white/5 border border-transparent rounded-[1.5rem] focus:ring-4 focus:ring-[#6143f4]/10 focus:border-[#6143f4]/20 text-sm text-[#13082a] dark:text-white font-black uppercase tracking-tight transition-all disabled:opacity-70 disabled:cursor-not-allowed" value={isEditing ? editForm.date_of_birth : (profileRecord?.date_of_birth || profileRecord?.dob || user?.date_of_birth || '')} onChange={(e) => setEditForm({ ...editForm, date_of_birth: e.target.value })} disabled={!isEditing} type="date" />
                                                     </div>
                                                 </div>
 

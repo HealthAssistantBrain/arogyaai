@@ -30,7 +30,7 @@ export async function syncGoogleFit({ timezone, days = 30 }) {
     timezone,
     days,
   });
-  return data.data;
+  return data;
 }
 
 export async function disconnectGoogleFit() {

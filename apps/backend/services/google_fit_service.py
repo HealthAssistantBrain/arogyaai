@@ -12,7 +12,19 @@ from sqlalchemy.orm import Session
 
 from core.config import settings
 from core.security import decrypt_secret, encrypt_secret
-from models import Device, DeviceTypeEnum, GoogleFitConnection, User, VitalsData, WearableData, UserDevice, UserDeviceProviderEnum, UserVitalTypeEnum
+from models import (
+    Device,
+    DeviceTypeEnum,
+    GoogleFitConnection,
+    PROVIDER_GOOGLE_FIT,
+    User,
+    VitalsData,
+    WearableData,
+    UserDevice,
+    UserVitalTypeEnum,
+)
+from services.user_data_service import UserDataService
+from services.event_service import emit_event
 
 GOOGLE_FIT_ACTIVITY_SCOPE = "https://www.googleapis.com/auth/fitness.activity.read"
 GOOGLE_FIT_HEART_RATE_SCOPE = "https://www.googleapis.com/auth/fitness.heart_rate.read"
@@ -132,7 +144,7 @@ class GoogleFitService:
             db.query(UserDevice)
             .filter(
                 UserDevice.user_id == user.id,
-                UserDevice.provider == UserDeviceProviderEnum.GOOGLE_FIT,
+                UserDevice.provider == PROVIDER_GOOGLE_FIT,
             )
             .first()
         )
@@ -147,7 +159,7 @@ class GoogleFitService:
 
         user_device = UserDevice(
             user_id=user.id,
-            provider=UserDeviceProviderEnum.GOOGLE_FIT,
+            provider=PROVIDER_GOOGLE_FIT,
             access_token=legacy_connection.access_token_encrypted,
             refresh_token=legacy_connection.refresh_token_encrypted,
             token_expiry=legacy_connection.token_expires_at,
@@ -165,7 +177,7 @@ class GoogleFitService:
         if not user_device:
             user_device = UserDevice(
                 user_id=user.id,
-                provider=UserDeviceProviderEnum.GOOGLE_FIT,
+                provider=PROVIDER_GOOGLE_FIT,
             )
             db.add(user_device)
 
@@ -224,6 +236,13 @@ class GoogleFitService:
         return access_token
 
     @staticmethod
+    async def get_valid_access_token(db: Session, user: User) -> str | None:
+        user_device = GoogleFitService._get_or_create_user_device(db, user)
+        if not user_device:
+            return None
+        return await GoogleFitService._get_valid_user_device_access_token(db, user_device)
+
+    @staticmethod
     async def _exchange_code_for_tokens(code: str) -> dict[str, Any]:
         redirect_uri = GoogleFitService._redirect_uri()
         logger.info(f"[GFit] Token exchange start | redirect_uri={redirect_uri}")
@@ -255,57 +274,6 @@ class GoogleFitService:
                 detail=f"Google token exchange failed: {error_body}",
             )
         return response.json()
-
-    @staticmethod
-    async def _refresh_access_token(connection: GoogleFitConnection) -> str:
-        refresh_token = decrypt_secret(connection.refresh_token_encrypted)
-        if not refresh_token:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Google Fit authorization expired. Please reconnect Google Fit.",
-            )
-
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            response = await client.post(
-                GOOGLE_TOKEN_URL,
-                data={
-                    "client_id": settings.GOOGLE_FIT_CLIENT_ID,
-                    "client_secret": settings.GOOGLE_FIT_CLIENT_SECRET,
-                    "refresh_token": refresh_token,
-                    "grant_type": "refresh_token",
-                },
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-            )
-
-        if response.is_error:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Google Fit authorization expired. Please reconnect Google Fit.",
-            )
-
-        token_data = response.json()
-        access_token = token_data.get("access_token")
-        if not access_token:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Google Fit authorization expired. Please reconnect Google Fit.",
-            )
-
-        connection.access_token_encrypted = encrypt_secret(access_token)
-        expires_in = token_data.get("expires_in") or 3600
-        connection.token_expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))
-        return access_token
-
-    @staticmethod
-    async def _get_valid_access_token(db: Session, connection: GoogleFitConnection) -> str:
-        if connection.token_expires_at and connection.token_expires_at > datetime.now(timezone.utc) + timedelta(minutes=2):
-            cached_access_token = decrypt_secret(connection.access_token_encrypted)
-            if cached_access_token:
-                return cached_access_token
-
-        access_token = await GoogleFitService._refresh_access_token(connection)
-        db.flush()
-        return access_token
 
     @staticmethod
     async def _fetch_google_email(access_token: str) -> str | None:
@@ -757,20 +725,15 @@ class GoogleFitService:
         }
 
     @staticmethod
-    def _fetch_window_for_user(db: Session, user: User, fallback_days: int = 1) -> tuple[UserDevice | None, str, int, int]:
-        user_device = GoogleFitService._get_or_create_user_device(db, user)
+    def _fetch_window_for_user(user: User, fallback_days: int = 1) -> tuple[str, int, int]:
         timezone_name = settings.GOOGLE_FIT_DEFAULT_TIMEZONE
         end = datetime.now(timezone.utc)
         start = end - timedelta(days=max(1, fallback_days))
-        return user_device, timezone_name, int(start.timestamp() * 1000), int(end.timestamp() * 1000)
+        return timezone_name, int(start.timestamp() * 1000), int(end.timestamp() * 1000)
 
     @staticmethod
-    async def fetch_heart_rate(user: User, db: Session, days: int = 1) -> list[dict[str, Any]]:
-        user_device, timezone_name, start_millis, end_millis = GoogleFitService._fetch_window_for_user(db, user, days)
-        if not user_device:
-            return []
-
-        access_token = await GoogleFitService._get_valid_user_device_access_token(db, user_device)
+    async def fetch_heart_rate(user: User, access_token: str, days: int = 1) -> list[dict[str, Any]]:
+        timezone_name, start_millis, end_millis = GoogleFitService._fetch_window_for_user(user, days)
         payload = await GoogleFitService._aggregate_fit_data(
             access_token,
             "com.google.heart_rate.bpm",
@@ -798,12 +761,8 @@ class GoogleFitService:
         return records
 
     @staticmethod
-    async def fetch_steps(user: User, db: Session, days: int = 1) -> list[dict[str, Any]]:
-        user_device, timezone_name, start_millis, end_millis = GoogleFitService._fetch_window_for_user(db, user, days)
-        if not user_device:
-            return []
-
-        access_token = await GoogleFitService._get_valid_user_device_access_token(db, user_device)
+    async def fetch_steps(user: User, access_token: str, days: int = 1) -> list[dict[str, Any]]:
+        timezone_name, start_millis, end_millis = GoogleFitService._fetch_window_for_user(user, days)
         payload = await GoogleFitService._aggregate_fit_data(
             access_token,
             "com.google.step_count.delta",
@@ -831,12 +790,8 @@ class GoogleFitService:
         return records
 
     @staticmethod
-    async def fetch_sleep(user: User, db: Session, days: int = 1) -> list[dict[str, Any]]:
-        user_device, timezone_name, start_millis, end_millis = GoogleFitService._fetch_window_for_user(db, user, days)
-        if not user_device:
-            return []
-
-        access_token = await GoogleFitService._get_valid_user_device_access_token(db, user_device)
+    async def fetch_sleep(user: User, access_token: str, days: int = 1) -> list[dict[str, Any]]:
+        timezone_name, start_millis, end_millis = GoogleFitService._fetch_window_for_user(user, days)
         payload = await GoogleFitService._aggregate_fit_data(
             access_token,
             "com.google.sleep.segment",
@@ -864,12 +819,8 @@ class GoogleFitService:
         return records
 
     @staticmethod
-    async def fetch_spo2(user: User, db: Session, days: int = 1) -> list[dict[str, Any]]:
-        user_device, timezone_name, start_millis, end_millis = GoogleFitService._fetch_window_for_user(db, user, days)
-        if not user_device:
-            return []
-
-        access_token = await GoogleFitService._get_valid_user_device_access_token(db, user_device)
+    async def fetch_spo2(user: User, access_token: str, days: int = 1) -> list[dict[str, Any]]:
+        timezone_name, start_millis, end_millis = GoogleFitService._fetch_window_for_user(user, days)
         payload = await GoogleFitService._aggregate_fit_data(
             access_token,
             "com.google.oxygen_saturation.summary",
@@ -897,6 +848,22 @@ class GoogleFitService:
         return records
 
     @staticmethod
+    def _serialize_vitals(records: list[Any]) -> list[dict[str, Any]]:
+        serialized: list[dict[str, Any]] = []
+        for record in records:
+            timestamp = getattr(record, "timestamp", None)
+            serialized.append(
+                {
+                    "type": getattr(record, "vital_type", None).value if getattr(record, "vital_type", None) else None,
+                    "value": getattr(record, "value", None),
+                    "unit": getattr(record, "unit", None),
+                    "timestamp": timestamp.isoformat() if isinstance(timestamp, datetime) else timestamp,
+                    "source": getattr(record, "source", None).value if getattr(record, "source", None) else None,
+                }
+            )
+        return serialized
+
+    @staticmethod
     async def handle_callback(db: Session, code: str, state_token: str) -> str:
         GoogleFitService._ensure_configured()
         state_payload = GoogleFitService._parse_state_token(state_token)
@@ -916,7 +883,7 @@ class GoogleFitService:
         if not user_device:
             user_device = UserDevice(
                 user_id=user.id,
-                provider=UserDeviceProviderEnum.GOOGLE_FIT,
+                provider=PROVIDER_GOOGLE_FIT,
             )
 
         refresh_token = token_data.get("refresh_token") or decrypt_secret(connection.refresh_token_encrypted)
@@ -938,6 +905,10 @@ class GoogleFitService:
         db.add(connection)
         db.add(user_device)
         db.commit()
+        try:
+            emit_event("DEVICE_CONNECTED", user.id, {"provider": "google_fit"})
+        except Exception:
+            logger.exception("[GFit] Failed to emit device connected event for user=%s", user.id)
 
         onboarding_step = state_payload.get("onboarding_step")
         if onboarding_step is not None:
@@ -956,89 +927,167 @@ class GoogleFitService:
     async def sync_steps(db: Session, user: User, timezone_name: str | None = None, days: int = 30) -> dict[str, Any]:
         connection = GoogleFitService.get_connection(db, user)
         if not connection:
-            raise HTTPException(status_code=404, detail="Google Fit is not connected")
+            logger.warning("[GFit] Sync requested for user=%s but Google Fit is not connected", user.id)
+            return {
+                "success": True,
+                "status": "ready",
+                "error": None,
+                "partial": True,
+                "message": "Google Fit is not connected",
+                "connected": False,
+                "data": [],
+                "stats": GoogleFitService._build_stats([]),
+                "raw_json": None,
+                "google_email": None,
+                "last_synced_at": None,
+                "last_sync_status": "disconnected",
+                "data_source_id": GOOGLE_FIT_DATASOURCE_ID,
+            }
 
         resolved_timezone = GoogleFitService._resolve_timezone(timezone_name or connection.default_timezone)
         connection.default_timezone = resolved_timezone
-        access_token = await GoogleFitService._get_valid_access_token(db, connection)
-        start_millis, end_millis = GoogleFitService._build_bucket_window(resolved_timezone, days=max(1, min(days, 90)))
+        access_token = await GoogleFitService.get_valid_access_token(db, user)
+        if not access_token:
+            logger.warning("[GFit] Sync requested for user=%s but Google Fit access token is unavailable", user.id)
+            return {
+                "success": True,
+                "status": "ready",
+                "error": None,
+                "partial": True,
+                "message": "Google Fit authorization expired. Please reconnect Google Fit.",
+                "connected": True,
+                "data": [],
+                "stats": GoogleFitService._build_stats([]),
+                "raw_json": None,
+                "google_email": connection.google_email,
+                "last_synced_at": connection.last_synced_at.isoformat() if connection.last_synced_at else None,
+                "last_sync_status": connection.last_sync_status,
+                "data_source_id": GOOGLE_FIT_DATASOURCE_ID,
+            }
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                GOOGLE_FIT_AGGREGATE_URL,
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "aggregateBy": [{"dataSourceId": GOOGLE_FIT_DATASOURCE_ID}],
-                    "bucketByTime": {"durationMillis": 86400000},
-                    "startTimeMillis": start_millis,
-                    "endTimeMillis": end_millis,
-                },
-            )
+        sync_days = max(1, min(days, 90))
+        all_records: list[dict[str, Any]] = []
+        step_records: list[dict[str, Any]] = []
+        fetched_metric_names: list[str] = []
+        failed_metrics: list[str] = []
+        fetch_jobs = [
+            ("steps", GoogleFitService.fetch_steps),
+            ("heart_rate", GoogleFitService.fetch_heart_rate),
+            ("sleep", GoogleFitService.fetch_sleep),
+            ("spo2", GoogleFitService.fetch_spo2),
+        ]
 
-        if response.is_error:
-            connection.last_sync_status = "error"
-            db.commit()
-            raise HTTPException(status_code=400, detail="Failed to fetch Google Fit steps")
+        for metric_name, fetcher in fetch_jobs:
+            try:
+                fetched = await fetcher(user, access_token, days=sync_days)
+            except Exception as exc:
+                failed_metrics.append(metric_name)
+                logger.warning(
+                    "[GFit] %s fetch failed for user=%s: %s",
+                    metric_name,
+                    user.id,
+                    exc,
+                )
+                continue
 
-        payload = response.json()
+            records = fetched or []
+            if records:
+                fetched_metric_names.append(metric_name)
+                all_records.extend(records)
+                if metric_name == "steps":
+                    step_records = records
+            else:
+                logger.info("[GFit] %s fetch returned no records for user=%s", metric_name, user.id)
+
+        saved_records = UserDataService.store_vitals(db, user, all_records) if all_records else []
+
         device = GoogleFitService._get_or_create_device(db, user)
         device.is_active = True
 
         tzinfo = GoogleFitService._safe_timezone_info(resolved_timezone)
         daily_steps: list[dict[str, Any]] = []
+        if step_records:
+            for record in step_records:
+                timestamp = record.get("timestamp")
+                if not isinstance(timestamp, datetime):
+                    continue
+                day = timestamp.astimezone(tzinfo).date().isoformat()
+                daily_steps.append({"date": day, "steps": int(round(float(record.get("value") or 0)))})
 
-        for bucket in payload.get("bucket", []):
-            start_value = bucket.get("startTimeMillis")
-            if start_value is None and bucket.get("startTimeNanos"):
-                start_value = int(bucket["startTimeNanos"]) // 1_000_000
-            if start_value is None:
-                continue
+            start_millis, end_millis = GoogleFitService._build_bucket_window(resolved_timezone, days=sync_days)
+            start_dt_utc = datetime.fromtimestamp(start_millis / 1000, tz=timezone.utc)
+            end_dt_utc = datetime.fromtimestamp(end_millis / 1000, tz=timezone.utc)
+            db.query(WearableData).filter(
+                WearableData.user_id == user.id,
+                WearableData.device_id == device.id,
+                WearableData.recorded_at >= start_dt_utc,
+                WearableData.recorded_at < end_dt_utc,
+            ).delete(synchronize_session=False)
 
-            bucket_datetime = datetime.fromtimestamp(int(start_value) / 1000, tz=timezone.utc).astimezone(tzinfo)
-            bucket_day = bucket_datetime.date().isoformat()
-            daily_steps.append({"date": bucket_day, "steps": GoogleFitService._extract_step_count(bucket)})
-
-        start_dt_utc = datetime.fromtimestamp(start_millis / 1000, tz=timezone.utc)
-        end_dt_utc = datetime.fromtimestamp(end_millis / 1000, tz=timezone.utc)
-        db.query(WearableData).filter(
-            WearableData.user_id == user.id,
-            WearableData.device_id == device.id,
-            WearableData.recorded_at >= start_dt_utc,
-            WearableData.recorded_at < end_dt_utc,
-        ).delete(synchronize_session=False)
-
-        for item in daily_steps:
-            local_day = datetime.strptime(item["date"], "%Y-%m-%d").replace(tzinfo=tzinfo)
-            db.add(
-                WearableData(
-                    user_id=user.id,
-                    device_id=device.id,
-                    recorded_at=local_day.astimezone(timezone.utc),
-                    step_count=item["steps"],
+            for item in daily_steps:
+                local_day = datetime.strptime(item["date"], "%Y-%m-%d").replace(tzinfo=tzinfo)
+                db.add(
+                    WearableData(
+                        user_id=user.id,
+                        device_id=device.id,
+                        recorded_at=local_day.astimezone(timezone.utc),
+                        step_count=item["steps"],
+                    )
                 )
-            )
 
         connection.device_id = device.id
-        connection.raw_last_response = payload
-        connection.last_synced_at = datetime.now(timezone.utc)
-        connection.last_sync_status = "ready"
+        sync_timestamp = datetime.now(timezone.utc)
+        connection.raw_last_response = {
+            "vitals_synced": len(saved_records),
+            "step_records": len(step_records),
+            "heart_rate_records": len([record for record in all_records if record.get("type") == UserVitalTypeEnum.HEART_RATE.value]),
+            "sleep_records": len([record for record in all_records if record.get("type") == UserVitalTypeEnum.SLEEP.value]),
+            "spo2_records": len([record for record in all_records if record.get("type") == UserVitalTypeEnum.SPO2.value]),
+            "successful_metrics": fetched_metric_names,
+            "failed_metrics": failed_metrics,
+        }
+        connection.last_synced_at = sync_timestamp
+        connection.last_sync_status = "partial" if failed_metrics else "ready"
         db.add(connection)
         db.commit()
         db.refresh(connection)
+        try:
+            if saved_records:
+                emit_event("VITALS_UPDATED", user.id, {"source": "google_fit", "records": len(saved_records)})
+            for record in saved_records:
+                if record.vital_type == UserVitalTypeEnum.HEART_RATE and record.value is not None:
+                    emit_event("HEART_RATE_ALERT", user.id, {"heart_rate": record.value})
+                elif record.vital_type == UserVitalTypeEnum.STEPS and record.value is not None:
+                    emit_event("STEPS_MILESTONE", user.id, {"steps": record.value})
+                elif record.vital_type == UserVitalTypeEnum.SLEEP and record.value is not None:
+                    emit_event("SLEEP_ALERT", user.id, {"sleep": record.value})
+        except Exception:
+            logger.exception("[GFit] Failed to emit sync notification events for user=%s", user.id)
 
+        serialized_records = GoogleFitService._serialize_vitals(saved_records)
         stats = GoogleFitService._build_stats(sorted(daily_steps, key=lambda item: item["date"]))
+        message = None
+        partial = bool(failed_metrics)
+        if not serialized_records:
+            message = "No data available"
+        elif partial:
+            message = "Google Fit sync completed with partial data."
+
         return {
+            "success": True,
+            "status": "ready",
+            "error": None,
+            "partial": partial,
+            "message": message,
             "connected": True,
             "timezone": resolved_timezone,
             "last_synced_at": connection.last_synced_at.isoformat(),
             "stats": stats,
-            "raw_json": payload,
+            "raw_json": connection.raw_last_response,
             "google_email": connection.google_email,
             "last_sync_status": connection.last_sync_status,
             "data_source_id": GOOGLE_FIT_DATASOURCE_ID,
+            "data": serialized_records,
         }
 
     @staticmethod
@@ -1058,7 +1107,12 @@ class GoogleFitService:
             )
 
         resolved_timezone = GoogleFitService._resolve_timezone(timezone_name or connection.default_timezone)
-        access_token = await GoogleFitService._get_valid_access_token(db, connection)
+        access_token = await GoogleFitService.get_valid_access_token(db, user)
+        if not access_token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Google Fit authorization expired. Please reconnect Google Fit.",
+            )
         payload = await GoogleFitService._fetch_heart_rate_payload(access_token)
         normalized = GoogleFitService.normalize_heart_rate_payload(payload)
         saved_rows = GoogleFitService.save_heart_rate(db, user.id, normalized)
@@ -1067,6 +1121,14 @@ class GoogleFitService:
         connection.last_sync_status = "ready"
         db.add(connection)
         db.commit()
+        try:
+            if saved_rows:
+                emit_event("VITALS_UPDATED", user.id, {"source": "google_fit", "records": len(saved_rows)})
+            for row in saved_rows:
+                if row.heart_rate_bpm is not None:
+                    emit_event("HEART_RATE_ALERT", user.id, {"heart_rate": row.heart_rate_bpm})
+        except Exception:
+            logger.exception("[GFit] Failed to emit heart rate sync notification for user=%s", user.id)
 
         if not saved_rows:
             return {
@@ -1097,7 +1159,7 @@ class GoogleFitService:
 
         user_device = db.query(UserDevice).filter(
             UserDevice.user_id == user.id,
-            UserDevice.provider == UserDeviceProviderEnum.GOOGLE_FIT,
+            UserDevice.provider == PROVIDER_GOOGLE_FIT,
         ).first()
         if user_device:
             user_device.access_token = None

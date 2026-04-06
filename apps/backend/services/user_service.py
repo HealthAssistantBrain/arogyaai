@@ -19,6 +19,7 @@ def _to_float(value: Any) -> Optional[float]:
 
 
 def _serialize_profile(user: User, profile: Optional[UserProfile]) -> dict:
+    dob_value = profile.date_of_birth.isoformat() if profile and profile.date_of_birth else None
     return {
         "id": str(user.id),
         "user_id": str(user.id),
@@ -28,7 +29,8 @@ def _serialize_profile(user: User, profile: Optional[UserProfile]) -> dict:
         "patient_id": None,
         "phone_number": profile.phone_number if profile else None,
         "phone": profile.phone_number if profile else None,
-        "date_of_birth": profile.date_of_birth.isoformat() if profile and profile.date_of_birth else None,
+        "date_of_birth": dob_value,
+        "dob": dob_value,
         "gender": profile.gender if profile else None,
         "height_cm": _to_float(profile.height_cm) if profile else None,
         "height": _to_float(profile.height_cm) if profile else None,
@@ -136,8 +138,9 @@ class UserService:
             phone = safe_input(phone_value, max_chars=20)
             profile.phone_number = phone or None
 
-        if "date_of_birth" in updates:
-            dob_str = safe_input(updates.get("date_of_birth"), max_chars=20)
+        dob_value = updates.get("date_of_birth", updates.get("dob"))
+        if dob_value is not None:
+            dob_str = safe_input(dob_value, max_chars=20)
             if dob_str:
                 try:
                     profile.date_of_birth = datetime.strptime(dob_str, "%Y-%m-%d").date()

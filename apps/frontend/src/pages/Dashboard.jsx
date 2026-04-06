@@ -60,8 +60,9 @@ const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('Dashboard');
 
   // ── Store ─────────────────────────────────────────────────────────────────
-  const { healthScore, history, prediction, profile, alerts, googleFit,
+  const { healthScore, prediction, profile, alerts,
     loading, error, fetchDashboardData } = useDashboardStore();
+  const vitals = useDashboardStore((s) => s.vitals);
   const authUser = useAuthStore((s) => s.user);
 
   useEffect(() => { fetchDashboardData(); }, [fetchDashboardData]);
@@ -69,18 +70,12 @@ const Dashboard = () => {
   // ── Per-module data + status ──────────────────────────────────────────────
   // Each store key is now a slice: { data, status, source, last_updated }
   const hsData = healthScore?.data;
-  const hiData = history?.data;
   const predData = prediction?.data;
   const profData = profile?.data;
   const alertsData = alerts?.data?.alerts ?? [];
-  const gfData = googleFit?.data;
 
-  // Status: 'ready' | 'processing' | 'fallback'
-  const hsStatus = healthScore?.status ?? 'fallback';
-  const hiStatus = history?.status ?? 'fallback';
-  const predStatus = prediction?.status ?? 'fallback';
-  const isShimmer = (status) => status === 'processing';  // dim + animate
-  const isFallback = (status) => status === 'fallback';    // show subtle badge
+  const stepsVitals = vitals?.['steps:24h']?.data ?? [];
+  const sleepVitals = vitals?.['sleep:24h']?.data ?? [];
 
   // ── Derived display values ────────────────────────────────────────────────
   const score = hsData?.score ?? 75;
@@ -89,20 +84,35 @@ const Dashboard = () => {
     { name: 'Score', value: score },
     { name: 'Remaining', value: 100 - score },
   ];
-  const hrvData = hiData?.hrv ?? [];
-  const sleepData = hiData?.sleep ?? [];
-  const avgBpm = hiData?.hrv_average_bpm ?? '—';
-  const avgSleep = hiData?.sleep_average_hours ?? '—';
   const displayName = profData?.full_name ?? authUser?.full_name ?? 'User';
   const bioAgeDelta = predData?.biological_age_delta ?? '—';
   const metabolicRate = predData?.metabolic_rate ?? '—';
   const trajectilePercentile = predData?.trajectory_percentile ?? '—';
   const predRecs = predData?.recommendations ?? [];
+  const hasProfileData = Boolean(profData && Object.keys(profData).length > 0);
 
-  const gfSteps = (gfData?.connected && gfData?.stats?.latest_day?.steps !== undefined) ? gfData.stats.latest_day.steps : 8432;
-  const gfDistance = (gfSteps * 0.00073529).toFixed(1);
-  const gfCalories = Math.round(gfSteps * 0.050759);
-  const gfProgress = Math.min((gfSteps / 10000) * 100, 100).toFixed(2);
+  const latestStepsRecord = stepsVitals.length > 0 ? stepsVitals[stepsVitals.length - 1] : null;
+  const gfSteps = latestStepsRecord ? Math.round(Number(latestStepsRecord.value ?? 0)) : null;
+  const gfDistance = gfSteps !== null ? (gfSteps * 0.00073529).toFixed(1) : '—';
+  const gfCalories = gfSteps !== null ? Math.round(gfSteps * 0.050759) : null;
+  const gfProgress = gfSteps !== null ? Math.min((gfSteps / 10000) * 100, 100).toFixed(2) : '0';
+
+  const sleepData = sleepVitals.reduce((acc, item) => {
+    const date = new Date(item.timestamp);
+    if (Number.isNaN(date.getTime())) return acc;
+    const day = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    const existing = acc.find((entry) => entry.day === day);
+    const hours = Number(item.value ?? 0);
+    if (existing) {
+      existing.hours = Number((existing.hours + hours).toFixed(2));
+    } else {
+      acc.push({ day, hours: Number(hours.toFixed(2)) });
+    }
+    return acc;
+  }, []);
+  const avgSleep = sleepVitals.length > 0
+    ? (sleepVitals.reduce((sum, item) => sum + Number(item.value ?? 0), 0) / sleepVitals.length).toFixed(1)
+    : '—';
 
   const sidebarLinks = [
     { icon: LayoutDashboard, label: 'Dashboard', path: ROUTES.DASHBOARD },
@@ -125,6 +135,14 @@ const Dashboard = () => {
     initial: { opacity: 0, scale: 0.98, y: 10 },
     animate: { opacity: 1, scale: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } }
   };
+
+  if (loading && !hasProfileData) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#f6f5f8] dark:bg-[#131022] text-sm font-bold text-slate-500">
+        Loading...
+      </div>
+    );
+  }
 
   return (
     <div className="bg-[#f6f5f8] dark:bg-[#131022] font-display text-[#13082A] dark:text-slate-100 min-h-screen flex antialiased">
@@ -322,29 +340,35 @@ const Dashboard = () => {
                 <span className="text-slate-400 font-medium mb-1.5">hrs avg</span>
               </div>
               <div className="h-32 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={sleepData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.03)" />
-                    <XAxis
-                      dataKey="day"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 9, fontWeight: 'bold', fill: '#94a3b8' }}
-                    />
-                    <Tooltip cursor={{ fill: 'rgba(0,0,0,0.02)' }} />
-                    <Bar
-                      dataKey="hours"
-                      fill="#6143f4"
-                      radius={[4, 4, 4, 4]}
-                      barSize={16}
-                      animationDuration={1500}
-                    >
-                      {sleepData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={index === 5 ? '#009CDE' : '#6143f4'} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                {sleepData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={sleepData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.03)" />
+                      <XAxis
+                        dataKey="day"
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fontSize: 9, fontWeight: 'bold', fill: '#94a3b8' }}
+                      />
+                      <Tooltip cursor={{ fill: 'rgba(0,0,0,0.02)' }} />
+                      <Bar
+                        dataKey="hours"
+                        fill="#6143f4"
+                        radius={[4, 4, 4, 4]}
+                        barSize={16}
+                        animationDuration={1500}
+                      >
+                        {sleepData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={index === 5 ? '#009CDE' : '#6143f4'} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex h-full min-h-[128px] items-center justify-center rounded-2xl border border-dashed border-slate-200 px-4 text-center text-[13px] font-medium text-slate-400 dark:border-white/10 dark:text-slate-500">
+                    No data yet. Connect your device or wait for sync.
+                  </div>
+                )}
               </div>
             </motion.div>
 
@@ -352,7 +376,9 @@ const Dashboard = () => {
             <motion.div variants={itemVariants} className="bg-white dark:bg-slate-900 p-8 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
               <h3 className="text-slate-500 font-bold text-xs uppercase tracking-[0.2em] mb-4">Daily Steps</h3>
               <div className="flex items-end gap-2 mb-8">
-                <span className="text-3xl font-black text-[#13082A] dark:text-white">{gfSteps.toLocaleString()}</span>
+                <span className="text-3xl font-black text-[#13082A] dark:text-white">
+                  {gfSteps !== null ? gfSteps.toLocaleString() : '--'}
+                </span>
                 <span className="text-slate-400 font-medium mb-1.5">/ 10,000</span>
               </div>
               <div className="space-y-6">
@@ -371,9 +397,14 @@ const Dashboard = () => {
                   </div>
                   <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 group hover:bg-[#6143f4]/5 hover:border-[#6143f4]/20 transition-all">
                     <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest leading-none mb-2">Calories</p>
-                    <p className="text-xl font-black text-[#13082A] dark:text-white">{gfCalories} <span className="text-xs font-bold text-slate-400 ml-1">kcal</span></p>
+                    <p className="text-xl font-black text-[#13082A] dark:text-white">{gfCalories !== null ? gfCalories : '--'} <span className="text-xs font-bold text-slate-400 ml-1">kcal</span></p>
                   </div>
                 </div>
+                {gfSteps === null && (
+                  <p className="text-[12px] font-medium text-slate-400 dark:text-slate-500">
+                    No data yet. Connect your device or wait for sync.
+                  </p>
+                )}
               </div>
             </motion.div>
 

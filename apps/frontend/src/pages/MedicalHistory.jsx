@@ -26,7 +26,7 @@ const MedicalHistory = () => {
   const [searchParams] = useSearchParams();
   const setOnboardingStep = useAuthStore((state) => state.setOnboardingStep);
   const healthProfile = useAuthStore((state) => state.healthProfile);
-  const updateProfile = useAuthStore((state) => state.updateProfile);
+  const saveOnboarding = useAuthStore((state) => state.saveOnboarding);
 
   const [conditions, setConditions] = useState(['Diabetes', 'Thyroid']);
   const [allergies, setAllergies] = useState(
@@ -58,7 +58,7 @@ const MedicalHistory = () => {
 
   const handleContinue = async () => {
     const normalizedAllergies = allergies.includes('None') ? '' : allergies.join(', ');
-    const saved = await updateProfile({ allergies: normalizedAllergies });
+    const saved = await saveOnboarding({ allergies: normalizedAllergies, onboarding_step: 3 });
     if (!saved) {
       toast.error('Unable to save your medical history right now.');
       return;
