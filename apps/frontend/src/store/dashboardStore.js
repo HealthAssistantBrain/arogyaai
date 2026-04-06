@@ -21,12 +21,12 @@ const vitalKey = (type, range) => `${type}:${range}`;
 const normalizeVitals = (payload, type, range) => {
     const rawRecords = Array.isArray(payload?.data) ? payload.data : [];
     const sorted = rawRecords
-        .filter((item) => item && item.timestamp)
+        .filter((item) => item && item.timestamp && item.value !== null && item.value !== undefined)
         .slice()
         .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
         .slice(-VITALS_LIMIT)
         .map((item) => ({
-            value: Number(item.value ?? 0),
+            value: Number(item.value),
             timestamp: item.timestamp,
             unit: item.unit ?? null,
             type: item.type ?? type,
@@ -39,7 +39,8 @@ const normalizeVitals = (payload, type, range) => {
         data: sorted,
         total_count: payload?.total_count ?? sorted.length,
         last_updated: payload?.last_updated ?? sorted[sorted.length - 1]?.timestamp ?? null,
-        status: sorted.length > 0 ? 'ready' : 'fallback',
+        missing: Array.isArray(payload?.missing) ? payload.missing : [],
+        status: sorted.length > 0 ? 'ready' : ((Array.isArray(payload?.missing) && payload.missing.length > 0) ? 'partial' : 'fallback'),
         source: 'db',
     };
 };
@@ -103,6 +104,7 @@ const useDashboardStore = create(
                         data: [],
                         total_count: 0,
                         last_updated: null,
+                        missing: [],
                         status: 'fallback',
                         source: 'db',
                         error: err?.response?.data?.detail || err?.message || 'Unable to load vitals.',

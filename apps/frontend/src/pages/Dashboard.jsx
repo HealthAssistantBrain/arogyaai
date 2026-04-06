@@ -61,7 +61,7 @@ const Dashboard = () => {
 
   // ── Store ─────────────────────────────────────────────────────────────────
   const { healthScore, prediction, profile, alerts,
-    loading, error, fetchDashboardData } = useDashboardStore();
+    loading, error, fetchDashboardData, googleFit } = useDashboardStore();
   const vitals = useDashboardStore((s) => s.vitals);
   const authUser = useAuthStore((s) => s.user);
 
@@ -74,8 +74,14 @@ const Dashboard = () => {
   const profData = profile?.data;
   const alertsData = alerts?.data?.alerts ?? [];
 
-  const stepsVitals = vitals?.['steps:24h']?.data ?? [];
-  const sleepVitals = vitals?.['sleep:24h']?.data ?? [];
+  const stepsSlice = vitals?.['steps:24h'] ?? {};
+  const sleepSlice = vitals?.['sleep:24h'] ?? {};
+  const stepsVitals = stepsSlice?.data ?? [];
+  const sleepVitals = sleepSlice?.data ?? [];
+  const failedGoogleFitMetrics = Array.isArray(googleFit?.data?.raw_json?.failed_metrics)
+    ? googleFit.data.raw_json.failed_metrics
+    : [];
+  const sleepUnavailable = failedGoogleFitMetrics.includes('sleep') && sleepVitals.length === 0;
 
   // ── Derived display values ────────────────────────────────────────────────
   const score = hsData?.score ?? 75;
@@ -92,17 +98,20 @@ const Dashboard = () => {
   const hasProfileData = Boolean(profData && Object.keys(profData).length > 0);
 
   const latestStepsRecord = stepsVitals.length > 0 ? stepsVitals[stepsVitals.length - 1] : null;
-  const gfSteps = latestStepsRecord ? Math.round(Number(latestStepsRecord.value ?? 0)) : null;
+  const gfSteps = latestStepsRecord?.value !== undefined && latestStepsRecord?.value !== null
+    ? Math.round(Number(latestStepsRecord.value))
+    : null;
   const gfDistance = gfSteps !== null ? (gfSteps * 0.00073529).toFixed(1) : '—';
   const gfCalories = gfSteps !== null ? Math.round(gfSteps * 0.050759) : null;
-  const gfProgress = gfSteps !== null ? Math.min((gfSteps / 10000) * 100, 100).toFixed(2) : '0';
+  const gfProgress = gfSteps !== null ? Math.min((gfSteps / 10000) * 100, 100).toFixed(2) : null;
 
   const sleepData = sleepVitals.reduce((acc, item) => {
     const date = new Date(item.timestamp);
     if (Number.isNaN(date.getTime())) return acc;
     const day = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
     const existing = acc.find((entry) => entry.day === day);
-    const hours = Number(item.value ?? 0);
+    const hours = Number(item.value);
+    if (!Number.isFinite(hours)) return acc;
     if (existing) {
       existing.hours = Number((existing.hours + hours).toFixed(2));
     } else {
@@ -111,7 +120,7 @@ const Dashboard = () => {
     return acc;
   }, []);
   const avgSleep = sleepVitals.length > 0
-    ? (sleepVitals.reduce((sum, item) => sum + Number(item.value ?? 0), 0) / sleepVitals.length).toFixed(1)
+    ? (sleepVitals.reduce((sum, item) => sum + Number(item.value), 0) / sleepVitals.length).toFixed(1)
     : '—';
 
   const sidebarLinks = [
@@ -336,11 +345,15 @@ const Dashboard = () => {
             <motion.div variants={itemVariants} className="bg-white dark:bg-slate-900 p-8 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
               <h3 className="text-slate-500 font-bold text-xs uppercase tracking-[0.2em] mb-4">Sleep Quality</h3>
               <div className="flex items-end gap-2 mb-8">
-                <span className="text-3xl font-black text-[#13082A] dark:text-white">{avgSleep}</span>
-                <span className="text-slate-400 font-medium mb-1.5">hrs avg</span>
+                <span className="text-3xl font-black text-[#13082A] dark:text-white">{sleepUnavailable ? 'Sleep data not available' : avgSleep}</span>
+                {!sleepUnavailable && <span className="text-slate-400 font-medium mb-1.5">hrs avg</span>}
               </div>
               <div className="h-32 w-full">
-                {sleepData.length > 0 ? (
+                {sleepUnavailable ? (
+                  <div className="flex h-full min-h-[128px] items-center justify-center rounded-2xl border border-dashed border-slate-200 px-4 text-center text-[13px] font-medium text-slate-400 dark:border-white/10 dark:text-slate-500">
+                    Sleep data not available
+                  </div>
+                ) : sleepData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={sleepData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.03)" />
@@ -383,12 +396,12 @@ const Dashboard = () => {
               </div>
               <div className="space-y-6">
                 <div className="h-4 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden shadow-inner border border-white dark:border-slate-700">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${gfProgress}%` }}
-                    transition={{ duration: 1.5, ease: "easeOut" }}
-                    className="h-full bg-gradient-to-r from-[#6143f4] to-[#009CDE] rounded-full"
-                  ></motion.div>
+                    <motion.div
+                      initial={{ width: 0 }}
+                    animate={{ width: `${gfProgress ?? 0}%` }}
+                      transition={{ duration: 1.5, ease: "easeOut" }}
+                      className="h-full bg-gradient-to-r from-[#6143f4] to-[#009CDE] rounded-full"
+                    ></motion.div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 group hover:bg-[#6143f4]/5 hover:border-[#6143f4]/20 transition-all">

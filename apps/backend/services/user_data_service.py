@@ -301,6 +301,8 @@ class UserDataService:
                 value = float(value_raw)
             except (TypeError, ValueError):
                 continue
+            if value == 0:
+                continue
             unit = str(record.get("unit") or "")
             if not unit:
                 continue

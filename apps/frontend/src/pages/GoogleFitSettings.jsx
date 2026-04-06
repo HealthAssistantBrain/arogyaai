@@ -26,7 +26,10 @@ const DEFAULT_TIMEZONE = import.meta.env.VITE_GOOGLE_FIT_DEFAULT_TIMEZONE || 'As
 const DEFAULT_WINDOW_DAYS = 30;
 
 function formatNumber(value) {
-  return new Intl.NumberFormat('en-IN').format(Number(value || 0));
+  if (value === null || value === undefined || value === '') {
+    return '--';
+  }
+  return new Intl.NumberFormat('en-IN').format(Number(value));
 }
 
 function formatDate(value, timezone = DEFAULT_TIMEZONE) {
@@ -113,7 +116,9 @@ const GoogleFitSettings = () => {
       const response = await syncGoogleFit({ timezone, days: DEFAULT_WINDOW_DAYS });
       await loadStatus(timezone, { silent: true });
       if (showSuccessMessage) {
-        setNotice(response?.message || `Google Fit steps synced for the last ${DEFAULT_WINDOW_DAYS} local days.`);
+        const missing = Array.isArray(response?.missing) ? response.missing : [];
+        const missingMessage = missing.length > 0 ? ` Missing: ${missing.join(', ')}.` : '';
+        setNotice((response?.message || `Google Fit steps synced for the last ${DEFAULT_WINDOW_DAYS} local days.`) + missingMessage);
       }
     } catch (apiError) {
       setError(extractApiError(apiError, 'Google Fit sync failed.'));
@@ -311,42 +316,42 @@ const GoogleFitSettings = () => {
             <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <StatCard
                 label="Daily Steps"
-                value={formatNumber(stats.latest_day?.steps || 0)}
+                value={formatNumber(stats.latest_day?.steps ?? null)}
                 helper={`Latest local day: ${stats.latest_day?.date ? formatLocalDay(stats.latest_day.date) : 'No sync yet'}`}
                 icon={Footprints}
                 accent="#22c55e"
               />
               <StatCard
                 label="Total Steps"
-                value={formatNumber(stats.total_steps)}
+                value={formatNumber(stats.total_steps ?? null)}
                 helper={`Total across the last ${DEFAULT_WINDOW_DAYS} local days`}
                 icon={TrendingUp}
                 accent="#6143f4"
               />
               <StatCard
                 label="Average Daily"
-                value={formatNumber(stats.average_daily_steps)}
+                value={formatNumber(stats.average_daily_steps ?? null)}
                 helper="Average across every bucket in the synced window"
                 icon={CalendarDays}
                 accent="#009cde"
               />
               <StatCard
                 label="Active-Day Average"
-                value={formatNumber(stats.average_steps_on_active_days)}
+                value={formatNumber(stats.average_steps_on_active_days ?? null)}
                 helper={`${formatNumber(stats.active_day_count)} days had more than 0 recorded steps`}
                 icon={Flame}
                 accent="#f97316"
               />
               <StatCard
                 label="Best Day"
-                value={formatNumber(stats.best_day?.steps || 0)}
+                value={formatNumber(stats.best_day?.steps ?? null)}
                 helper={stats.best_day?.date ? formatLocalDay(stats.best_day.date) : 'No synced history yet'}
                 icon={TrendingUp}
                 accent="#eab308"
               />
               <StatCard
                 label="Latest Day"
-                value={formatNumber(stats.latest_day?.steps || 0)}
+                value={formatNumber(stats.latest_day?.steps ?? null)}
                 helper={stats.latest_day?.date ? formatLocalDay(stats.latest_day.date) : 'No synced history yet'}
                 icon={CalendarDays}
                 accent="#14b8a6"
