@@ -6,11 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 # Import modular routers
-<<<<<<< HEAD
 from routes import auth, intelligence, users, prediction, dashboard, google_fit, vitals, notifications, user_data
-=======
-from routes import auth, intelligence, users, prediction, dashboard, google_fit, reports
->>>>>>> Report_Gen
 
 from database.session import engine
 from core.config import settings
@@ -78,7 +74,6 @@ app.include_router(intelligence.router)
 app.include_router(prediction.router)
 app.include_router(dashboard.router)
 app.include_router(google_fit.router)
-<<<<<<< HEAD
 app.include_router(vitals.router)
 app.include_router(notifications.router)
 app.include_router(user_data.router)
@@ -108,6 +103,3 @@ async def _startup_scheduler():
 @app.on_event("shutdown")
 def _shutdown_scheduler():
     stop_auto_fetch_scheduler()
-=======
-app.include_router(reports.router)
->>>>>>> Report_Gen
