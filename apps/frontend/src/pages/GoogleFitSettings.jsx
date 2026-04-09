@@ -117,7 +117,8 @@ const GoogleFitSettings = () => {
       await loadStatus(timezone, { silent: true });
       if (showSuccessMessage) {
         const missing = Array.isArray(response?.missing) ? response.missing : [];
-        const missingMessage = missing.length > 0 ? ` Missing: ${missing.join(', ')}.` : '';
+        const hasStepData = Array.isArray(response?.stats?.daily_steps) && response.stats.daily_steps.some((item) => Number(item?.steps || 0) >= 0);
+        const missingMessage = missing.length > 0 && !hasStepData ? ` Missing: ${missing.join(', ')}.` : '';
         setNotice((response?.message || `Google Fit steps synced for the last ${DEFAULT_WINDOW_DAYS} local days.`) + missingMessage);
       }
     } catch (apiError) {

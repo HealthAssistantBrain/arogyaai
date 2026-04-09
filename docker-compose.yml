@@ -12,7 +12,13 @@ services:
       - arogyaai_net
 
   backend:
-    build: ./apps/backend
+    build:
+      context: ./apps/backend
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,backend,postgres,redis,qdrant,prediction-service,rag-service,wearable-service}
+        CUSTOM_CA_CERT_B64: ${CUSTOM_CA_CERT_B64:-}
     command: >
       sh -c "alembic upgrade head &&
       uvicorn main:app --host 0.0.0.0 --port 8000"
@@ -37,7 +43,13 @@ services:
       start_period: 30s
 
   prediction-service:
-    build: ./pipelines/prediction-service
+    build:
+      context: ./pipelines/prediction-service
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,backend,postgres,redis,qdrant,prediction-service,rag-service,wearable-service}
+        CUSTOM_CA_CERT_B64: ${CUSTOM_CA_CERT_B64:-}
     container_name: prediction-service
     ports:
       - "8001:8000"
@@ -47,7 +59,13 @@ services:
       - arogyaai_net
 
   rag-service:
-    build: ./pipelines/rag-service
+    build:
+      context: ./pipelines/rag-service
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,backend,postgres,redis,qdrant,prediction-service,rag-service,wearable-service}
+        CUSTOM_CA_CERT_B64: ${CUSTOM_CA_CERT_B64:-}
     container_name: rag-service
     ports:
       - "8002:8000"
@@ -57,7 +75,13 @@ services:
       - arogyaai_net
 
   wearable-service:
-    build: ./pipelines/wearable-service
+    build:
+      context: ./pipelines/wearable-service
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,backend,postgres,redis,qdrant,prediction-service,rag-service,wearable-service}
+        CUSTOM_CA_CERT_B64: ${CUSTOM_CA_CERT_B64:-}
     container_name: wearable-service
     ports:
       - "8003:8000"

@@ -14,3 +14,5 @@ redis
 httpx
 cryptography
 APScheduler
+pypdf
+python-multipart

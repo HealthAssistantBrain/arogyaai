@@ -36,6 +36,15 @@ Make sure Docker Desktop is running.
 docker-compose up --build
 ```
 
+If your network uses SSL inspection or a proxy that injects its own certificate, export the root CA once before building:
+
+```bash
+export CUSTOM_CA_CERT_B64="$(base64 < /path/to/your-root-ca.crt | tr -d '\n')"
+docker-compose up --build
+```
+
+The Python service images will install that certificate into the container trust store during build, which avoids `SSLCertVerificationError` failures when installing dependencies from PyPI.
+
 ## For Pipeline Developers
 
 See: README_PIPELINES.md
