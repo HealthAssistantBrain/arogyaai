@@ -65,6 +65,8 @@ package-lock.json
 adapters/
 scripts/
 .pycache/
+.claude/
+
 
 # Files 
 verify_api.py
@@ -77,3 +79,7 @@ GSD-STYLE.md
 # tasks
 TASK.md
 
+# Jsons 
+skills-lock.json
+package-lock.json
+package.json
