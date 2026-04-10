@@ -107,26 +107,93 @@ jobs:
 
       # ── STAGE 4: Start & Health Check ──────────────────────────────────────
       - name: Stage 4 — Start core services
+        shell: bash
         run: |
+          set -euo pipefail
+
+          wait_for_health() {
+            local service="$1"
+            local attempts="${2:-30}"
+            local delay="${3:-2}"
+
+            for i in $(seq 1 "$attempts"); do
+              local container_id
+              container_id="$(docker compose ps -q "$service" || true)"
+              if [ -n "$container_id" ]; then
+                local status
+                status="$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_id" 2>/dev/null || true)"
+                if [ "$status" = "healthy" ] || [ "$status" = "running" ]; then
+                  echo "$service is $status"
+                  return 0
+                fi
+                if [ "$status" = "unhealthy" ]; then
+                  echo "❌ $service became unhealthy"
+                  docker compose logs "$service" --tail=200 || true
+                  return 1
+                fi
+                if [ "$status" = "exited" ] || [ "$status" = "dead" ]; then
+                  echo "❌ $service stopped unexpectedly"
+                  docker compose logs "$service" --tail=200 || true
+                  return 1
+                fi
+              fi
+
+              echo "Waiting for $service... ($i/$attempts)"
+              sleep "$delay"
+            done
+
+            echo "❌ Timed out waiting for $service"
+            docker compose logs "$service" --tail=200 || true
+            return 1
+          }
+
           # Start infrastructure first (postgres, redis)
           docker compose up -d postgres redis
           echo "⏳ Waiting for postgres and redis to be healthy..."
-          timeout 120 bash -c \
-            'until docker compose ps postgres | grep -q "healthy"; do sleep 2; done'
-          timeout 120 bash -c \
-            'until docker compose ps redis | grep -q "healthy"; do sleep 2; done'
+          wait_for_health postgres 30 2
+          wait_for_health redis 30 2
 
-          # Start backend (depends_on: service_healthy, so it waits internally)
+          # Start backend after infra is healthy; the container entrypoint handles
+          # DB readiness, migrations, and then launches Uvicorn.
           docker compose up -d backend
           echo "⏳ Waiting for backend to be ready..."
-          timeout 180 bash -c '
-            until curl -fsS http://localhost:8000/health; do
-              echo "Waiting for backend..."
-              sleep 5
-            done'
+          backend_ready=false
+          for i in $(seq 1 60); do
+            backend_container_id="$(docker compose ps -q backend || true)"
+            if [ -n "$backend_container_id" ]; then
+              backend_health_status="$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$backend_container_id" 2>/dev/null || true)"
+              backend_status="$(docker inspect --format='{{.State.Status}}' "$backend_container_id" 2>/dev/null || true)"
+              if [ "$backend_health_status" = "unhealthy" ]; then
+                echo "❌ Backend container became unhealthy"
+                docker compose logs backend --tail=200 || true
+                exit 1
+              fi
+              if [ "$backend_status" = "exited" ] || [ "$backend_status" = "dead" ]; then
+                echo "❌ Backend container stopped before becoming healthy"
+                docker compose logs backend --tail=200 || true
+                exit 1
+              fi
+            fi
+
+            if curl -fsS http://localhost:8000/health; then
+              backend_ready=true
+              break
+            fi
+
+            echo "Waiting for backend... ($i/60)"
+            sleep 3
+          done
+
+          if [ "$backend_ready" != "true" ]; then
+            echo "❌ Backend did not become ready in time"
+            docker compose logs backend --tail=200 || true
+            exit 1
+          fi
 
       - name: Stage 4 — Health check validation
+        shell: bash
         run: |
+          set -euo pipefail
           RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health)
           BODY=$(curl -s http://localhost:8000/health)
           echo "Status: $RESPONSE"
@@ -137,6 +204,12 @@ jobs:
             exit 1
           fi
           echo "✅ Health check passed"
+
+      - name: Dump service logs on failure
+        if: failure()
+        run: |
+          docker compose ps || true
+          docker compose logs --tail=200 backend postgres redis || true
 
       # ── STAGE 5: Cleanup ────────────────────────────────────────────────────
       - name: Stage 5 — Cleanup

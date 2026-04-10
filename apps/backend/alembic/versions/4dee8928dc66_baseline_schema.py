@@ -25,6 +25,10 @@ def upgrade() -> None:
     """Upgrade schema."""
     bind = op.get_bind()
 
+    # Enable database extensions required by the shared model defaults and time-series support.
+    op.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto")
+    op.execute("CREATE EXTENSION IF NOT EXISTS timescaledb")
+
     for table in Base.metadata.sorted_tables:
         table.create(bind=bind, checkfirst=True)
 

@@ -173,13 +173,11 @@ async def _projection_impl(user_id: str):
 
 
 @router.post("/predict")
-@router.post("/api/v1/predict")
 async def predict(payload: PredictRequest):
     return await _predict_impl(payload)
 
 
 @router.get("/projections/{user_id}")
-@router.get("/api/v1/projections/{user_id}")
 async def get_projection(user_id: str):
     return await _projection_impl(user_id)
 

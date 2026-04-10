@@ -54,17 +54,6 @@ def _parse_timestamp(value: Any) -> datetime:
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid timestamp value")
 
 
-def _serialize_profile(user: User, profile: Optional[UserProfile]) -> dict:
-    base = UserService._serialize_profile(user, profile)  # noqa: SLF001 - shared serialization contract
-    return {
-        **base,
-        "dob": base.get("dob") or base.get("date_of_birth"),
-        "phone_number": base.get("phone_number"),
-        "height_cm": base.get("height_cm"),
-        "weight_kg": base.get("weight_kg"),
-    }
-
-
 def _serialize_setting(setting: UserSetting, user_id: str) -> dict:
     return {
         "id": str(setting.id),
@@ -111,16 +100,7 @@ class UserDataService:
 
     @staticmethod
     def get_profile(db: Session, user: User) -> dict:
-        profile = UserDataService.get_or_create_profile(db, user)
-        payload = _serialize_profile(user, profile)
-        return {
-            "success": True,
-            "status": "ready",
-            "source": "db",
-            "error": None,
-            "data": payload,
-            "last_updated": payload.get("updated_at") or payload.get("created_at"),
-        }
+        return UserService.get_user_profile(db, user)
 
     @staticmethod
     def update_profile(db: Session, user: User, updates: dict) -> dict:
@@ -301,7 +281,7 @@ class UserDataService:
                 value = float(value_raw)
             except (TypeError, ValueError):
                 continue
-            if value == 0:
+            if value == 0 and vital_enum != UserVitalTypeEnum.STEPS:
                 continue
             unit = str(record.get("unit") or "")
             if not unit:

@@ -22,8 +22,6 @@ from models import User
 from routes.users import get_current_user_from_header
 from services import dashboard_service as svc
 from services import aqi_service
-from services.user_service import UserService
-from schemas.api_models import UserProfileUpdate
 
 router = APIRouter(prefix="/api/v1", tags=["Dashboard"])
 
@@ -50,27 +48,6 @@ async def get_latest_prediction(
     db: Session = Depends(get_db),
 ):
     return await svc.get_latest_prediction(current_user, db)
-
-
-@router.get("/user/profile")
-async def get_user_profile(
-    current_user: User = Depends(get_current_user_from_header),
-    db: Session = Depends(get_db),
-):
-    return UserService.get_user_profile(db, current_user)
-
-
-@router.put("/user/profile")
-async def update_user_profile(
-    payload: UserProfileUpdate,
-    current_user: User = Depends(get_current_user_from_header),
-    db: Session = Depends(get_db),
-):
-    return UserService.update_user_profile(
-        db,
-        current_user,
-        payload.model_dump(exclude_unset=True),
-    )
 
 
 @router.get("/alerts")

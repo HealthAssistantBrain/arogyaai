@@ -1,13 +1,15 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 import { isSystemLocked } from './systemLock';
+import { getApiRootUrl, getApiUrl } from './apiBaseUrl';
 
-const BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
+const BASE_URL = getApiRootUrl(import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000');
+const API_URL = getApiUrl(import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000');
 
-console.log('[ArogyaAI] API Base URL configured:', `${BASE_URL}/api/v1/`);
+console.log('[ArogyaAI] API Base URL configured:', API_URL);
 
 const api = axios.create({
-  baseURL: `${BASE_URL}/api/v1/`,
+  baseURL: API_URL,
   withCredentials: true,
   timeout: 10000,
   headers: { 'Content-Type': 'application/json' },

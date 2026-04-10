@@ -6,6 +6,7 @@ import { ArrowLeft, Bell, ChevronRight, CheckCircle2, Database, FileText, HelpCi
 
 import { ROUTES } from '../router/routes';
 import { useReportUploadStore } from '../store/reportUploadStore';
+import { getApiRootUrl } from '../lib/apiBaseUrl';
 
 const PIPELINE_STAGES = [
     { key: 'uploading', label: 'Uploading file', target: 20, detail: 'Sending the PDF securely to ArogyaAI.' },
@@ -72,7 +73,7 @@ const ReportProcessing = () => {
         }, 250);
 
         const analyzeReport = async () => {
-            const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
+            const apiBaseUrl = getApiRootUrl(import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000');
             const formData = new FormData();
             formData.append('file', pendingFile);
 

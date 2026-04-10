@@ -61,7 +61,6 @@ async def _get_vitals_impl(user_id: str):
 
 
 @router.get("/vitals/{user_id}")
-@router.get("/api/v1/vitals/{user_id}")
 async def get_vitals(user_id: str):
     return await _get_vitals_impl(user_id)
 

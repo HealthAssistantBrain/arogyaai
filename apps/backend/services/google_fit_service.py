@@ -64,20 +64,85 @@ class GoogleFitService:
             ZoneInfo(candidate)
             return candidate
         except Exception:
-            logger.warning("[GFit] Unsupported timezone '%s'; falling back to UTC", candidate)
-            return "UTC"
+            fallback = settings.GOOGLE_FIT_DEFAULT_TIMEZONE or "Asia/Kolkata"
+            logger.warning("[GFit] Unsupported timezone '%s'; falling back to %s", candidate, fallback)
+            return fallback
 
     @staticmethod
     def _safe_timezone_info(timezone_name: str | None):
-        candidate = timezone_name or "UTC"
+        candidate = timezone_name or settings.GOOGLE_FIT_DEFAULT_TIMEZONE or "Asia/Kolkata"
         try:
             return ZoneInfo(candidate)
         except Exception:
-            logger.warning("[GFit] ZoneInfo unavailable for '%s'; using UTC fallback", candidate)
+            fallback = settings.GOOGLE_FIT_DEFAULT_TIMEZONE or "Asia/Kolkata"
+            logger.warning("[GFit] ZoneInfo unavailable for '%s'; using %s fallback", candidate, fallback)
             try:
-                return ZoneInfo("UTC")
+                return ZoneInfo(fallback)
             except Exception:
-                return timezone.utc
+                try:
+                    return ZoneInfo("Asia/Kolkata")
+                except Exception:
+                    return timezone(timedelta(hours=5, minutes=30), name="Asia/Kolkata")
+
+    @staticmethod
+    def _coerce_utc_datetime(value: Any) -> datetime | None:
+        if isinstance(value, datetime):
+            return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+        if isinstance(value, (int, float)):
+            numeric = float(value)
+            if numeric > 10_000_000_000:
+                numeric /= 1000.0
+            try:
+                return datetime.fromtimestamp(numeric, tz=timezone.utc)
+            except (OverflowError, OSError, ValueError):
+                return None
+
+        if isinstance(value, str):
+            normalized = value.replace("Z", "+00:00")
+            try:
+                parsed = datetime.fromisoformat(normalized)
+            except ValueError:
+                return None
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+        return None
+
+    @staticmethod
+    def _extract_numeric_value(value: Any) -> float | None:
+        if not isinstance(value, dict):
+            return None
+
+        for key in ("intVal", "fpVal"):
+            raw_value = value.get(key)
+            if raw_value is None:
+                continue
+            try:
+                return float(raw_value)
+            except (TypeError, ValueError):
+                continue
+
+        map_values = value.get("mapVal")
+        if isinstance(map_values, list):
+            numeric_values: list[float] = []
+            for item in map_values:
+                nested_value = item.get("value") if isinstance(item, dict) else None
+                extracted = GoogleFitService._extract_numeric_value(nested_value)
+                if extracted is not None:
+                    numeric_values.append(extracted)
+            if numeric_values:
+                return float(sum(numeric_values))
+
+        return None
+
+    @staticmethod
+    def _extract_point_values(point: dict[str, Any]) -> list[float]:
+        extracted_values: list[float] = []
+        for value in point.get("value") or []:
+            extracted = GoogleFitService._extract_numeric_value(value)
+            if extracted is not None:
+                extracted_values.append(extracted)
+        return extracted_values
 
     @staticmethod
     def _redirect_uri() -> str:
@@ -310,55 +375,30 @@ class GoogleFitService:
 
     @staticmethod
     def _extract_step_count(bucket: dict[str, Any]) -> int | None:
-        values: list[int] = []
+        total = 0.0
+        found_value = False
         for dataset in bucket.get("dataset", []):
             for point in dataset.get("point", []):
                 if not point:
                     continue
-                point_values = point.get("value") or []
+                point_values = GoogleFitService._extract_point_values(point)
                 if not point_values:
                     continue
 
-                first_value = point_values[0] or {}
-                int_val = first_value.get("intVal")
-                if int_val is None:
-                    continue
+                found_value = True
+                total += sum(point_values)
 
-                try:
-                    parsed_value = int(int_val)
-                except (TypeError, ValueError):
-                    continue
-
-                if parsed_value <= 0:
-                    continue
-
-                logger.info("VALID STEP VALUE: %s", parsed_value)
-                values.append(parsed_value)
-
-        if not values:
+        if not found_value:
             return None
 
-        return sum(values)
+        return int(round(total))
 
     @staticmethod
     def _extract_point_value(point: dict[str, Any]) -> float | int | None:
-        values = point.get("value")
-        if not values:
+        point_values = GoogleFitService._extract_point_values(point)
+        if not point_values:
             return None
-
-        value = values[0] or {}
-
-        if value.get("intVal") is not None:
-            return value["intVal"]
-        if value.get("fpVal") is not None:
-            return value["fpVal"]
-        if value.get("mapVal") is not None:
-            return sum(
-                (item.get("value") or {}).get("fpVal", 0)
-                for item in value.get("mapVal", [])
-            )
-
-        return None
+        return point_values[0]
 
     @staticmethod
     def _build_last_24h_window() -> tuple[int, int]:
@@ -395,9 +435,9 @@ class GoogleFitService:
         values: list[float] = []
         for dataset in bucket.get("dataset", []):
             for point in dataset.get("point", []):
-                extracted = GoogleFitService._extract_point_value(point)
-                if extracted is not None:
-                    values.append(float(extracted))
+                extracted_values = GoogleFitService._extract_point_values(point)
+                if extracted_values:
+                    values.extend(float(value) for value in extracted_values)
 
         if not values:
             return None
@@ -411,7 +451,8 @@ class GoogleFitService:
 
         for dataset in bucket.get("dataset", []):
             for point in dataset.get("point", []):
-                stage_raw = GoogleFitService._extract_point_value(point)
+                extracted_values = GoogleFitService._extract_point_values(point)
+                stage_raw = extracted_values[0] if extracted_values else None
                 stage_value = int(stage_raw) if stage_raw is not None else None
 
                 if stage_value is not None and stage_value not in sleep_stage_values:
@@ -431,9 +472,9 @@ class GoogleFitService:
         values: list[float] = []
         for dataset in bucket.get("dataset", []):
             for point in dataset.get("point", []):
-                extracted = GoogleFitService._extract_point_value(point)
-                if extracted is not None:
-                    values.append(float(extracted))
+                extracted_values = GoogleFitService._extract_point_values(point)
+                if extracted_values:
+                    values.extend(float(value) for value in extracted_values)
 
         if not values:
             return None
@@ -497,10 +538,9 @@ class GoogleFitService:
 
         for dataset in bucket.get("dataset", []):
             for point in dataset.get("point", []):
-                for value in point.get("value", []):
-                    fp_val = value.get("fpVal")
-                    if fp_val is not None:
-                        values.append(float(fp_val))
+                extracted_values = GoogleFitService._extract_point_values(point)
+                if extracted_values:
+                    values.extend(float(value) for value in extracted_values)
 
         if not values:
             return None
@@ -528,8 +568,9 @@ class GoogleFitService:
         return sorted(normalized, key=lambda item: item["timestamp"])
 
     @staticmethod
-    async def _fetch_heart_rate_payload(access_token: str) -> dict[str, Any]:
-        start_millis, end_millis = GoogleFitService._build_last_24h_window()
+    async def _fetch_heart_rate_payload(access_token: str, timezone_name: str | None = None) -> dict[str, Any]:
+        timezone_name = timezone_name or settings.GOOGLE_FIT_DEFAULT_TIMEZONE
+        _, start_millis, end_millis = GoogleFitService._build_bucket_window(timezone_name, 1)
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
@@ -562,41 +603,56 @@ class GoogleFitService:
         if not data_list:
             return []
 
-        timestamps = [
-            datetime.fromtimestamp(item["timestamp"] / 1000, tz=timezone.utc).replace(minute=0, second=0, microsecond=0)
-            for item in data_list
-        ]
+        timestamps: list[datetime] = []
+        for item in data_list:
+            recorded_at = GoogleFitService._coerce_utc_datetime(item.get("timestamp"))
+            if recorded_at is None:
+                continue
+            timestamps.append(recorded_at)
+
+        if not timestamps:
+            return []
+
         min_recorded_at = min(timestamps)
         max_recorded_at = max(timestamps)
+        query_start = min_recorded_at.replace(minute=0, second=0, microsecond=0)
 
         existing_rows = (
             db.query(VitalsData)
             .filter(
                 VitalsData.user_id == user_id,
-                VitalsData.recorded_at >= min_recorded_at,
+                VitalsData.recorded_at >= query_start,
                 VitalsData.recorded_at <= max_recorded_at,
             )
             .all()
         )
 
-        rows_by_timestamp = {
-            int(row.recorded_at.astimezone(timezone.utc).timestamp() * 1000): row
-            for row in existing_rows
-            if row.recorded_at is not None
-        }
+        rows_by_timestamp: dict[int, VitalsData] = {}
+        for row in existing_rows:
+            if row.recorded_at is None:
+                continue
+            row_timestamp = row.recorded_at.astimezone(timezone.utc)
+            exact_key = int(row_timestamp.timestamp() * 1000)
+            legacy_key = int(row_timestamp.replace(minute=0, second=0, microsecond=0).timestamp() * 1000)
+            rows_by_timestamp[exact_key] = row
+            rows_by_timestamp[legacy_key] = row
 
         saved_rows: list[VitalsData] = []
         for item in data_list:
-            recorded_at = datetime.fromtimestamp(item["timestamp"] / 1000, tz=timezone.utc).replace(
-                minute=0,
-                second=0,
-                microsecond=0,
-            )
+            recorded_at = GoogleFitService._coerce_utc_datetime(item.get("timestamp"))
+            if recorded_at is None:
+                continue
             timestamp_key = int(recorded_at.timestamp() * 1000)
-            heart_rate_bpm = int(round(float(item["heart_rate"])))
+            legacy_key = int(recorded_at.replace(minute=0, second=0, microsecond=0).timestamp() * 1000)
+            try:
+                heart_rate_bpm = int(round(float(item["heart_rate"])))
+            except (TypeError, ValueError):
+                continue
 
-            row = rows_by_timestamp.get(timestamp_key)
+            row = rows_by_timestamp.get(timestamp_key) or rows_by_timestamp.get(legacy_key)
             if row:
+                if row.recorded_at is None or row.recorded_at != recorded_at:
+                    row.recorded_at = recorded_at
                 row.heart_rate_bpm = heart_rate_bpm
             else:
                 row = VitalsData(
@@ -605,7 +661,8 @@ class GoogleFitService:
                     heart_rate_bpm=heart_rate_bpm,
                 )
                 db.add(row)
-                rows_by_timestamp[timestamp_key] = row
+            rows_by_timestamp[timestamp_key] = row
+            rows_by_timestamp[legacy_key] = row
 
             saved_rows.append(row)
 
@@ -783,9 +840,8 @@ class GoogleFitService:
     def _fetch_window_for_user(user: User, fallback_days: int = 1, timezone_name: str | None = None) -> tuple[str, int, int]:
         del user
         timezone_name = timezone_name or settings.GOOGLE_FIT_DEFAULT_TIMEZONE
-        end = datetime.now(timezone.utc)
-        start = end - timedelta(days=max(1, fallback_days))
-        return timezone_name, int(start.timestamp() * 1000), int(end.timestamp() * 1000)
+        start_millis, end_millis = GoogleFitService._build_bucket_window(timezone_name, max(1, fallback_days))
+        return timezone_name, start_millis, end_millis
 
     @staticmethod
     def _fetch_local_bucket_window_for_user(
@@ -829,22 +885,24 @@ class GoogleFitService:
             return None
 
         payload = response.json()
-        total_steps = 0
+        total_steps = 0.0
         for point in payload.get("point", []):
             for value in point.get("value", []):
-                int_val = value.get("intVal")
-                if int_val is None:
+                extracted = GoogleFitService._extract_numeric_value(value)
+                if extracted is None:
                     continue
-                try:
-                    total_steps += int(int_val)
-                except (TypeError, ValueError):
-                    continue
+                total_steps += extracted
 
-        return {"date": local_day, "steps": max(0, total_steps), "raw": payload}
+        return {"date": local_day, "steps": max(0, int(round(total_steps))), "raw": payload}
 
     @staticmethod
-    async def fetch_heart_rate(user: User, access_token: str, days: int = 1) -> list[dict[str, Any]] | None:
-        timezone_name, start_millis, end_millis = GoogleFitService._fetch_window_for_user(user, days)
+    async def fetch_heart_rate(
+        user: User,
+        access_token: str,
+        days: int = 1,
+        timezone_name: str | None = None,
+    ) -> list[dict[str, Any]] | None:
+        timezone_name, start_millis, end_millis = GoogleFitService._fetch_window_for_user(user, days, timezone_name)
         response_json = await GoogleFitService._aggregate_fit_data(
             access_token,
             "com.google.heart_rate.bpm",
@@ -898,10 +956,8 @@ class GoogleFitService:
         for bucket in response_json.get("bucket", []):
             timestamp = GoogleFitService._extract_bucket_start_millis(bucket)
             value = GoogleFitService._extract_step_count(bucket)
-            if timestamp is None:
+            if timestamp is None or value is None:
                 continue
-            if value is None:
-                value = 0
             records.append(
                 {
                     "type": UserVitalTypeEnum.STEPS.value,
@@ -919,8 +975,13 @@ class GoogleFitService:
         return records
 
     @staticmethod
-    async def fetch_sleep(user: User, access_token: str, days: int = 1) -> list[dict[str, Any]] | None:
-        timezone_name, start_millis, end_millis = GoogleFitService._fetch_window_for_user(user, days)
+    async def fetch_sleep(
+        user: User,
+        access_token: str,
+        days: int = 1,
+        timezone_name: str | None = None,
+    ) -> list[dict[str, Any]] | None:
+        timezone_name, start_millis, end_millis = GoogleFitService._fetch_window_for_user(user, days, timezone_name)
         response_json = await GoogleFitService._aggregate_fit_data(
             access_token,
             "com.google.sleep.segment",
@@ -953,8 +1014,13 @@ class GoogleFitService:
         return records
 
     @staticmethod
-    async def fetch_spo2(user: User, access_token: str, days: int = 1) -> list[dict[str, Any]] | None:
-        timezone_name, start_millis, end_millis = GoogleFitService._fetch_window_for_user(user, days)
+    async def fetch_spo2(
+        user: User,
+        access_token: str,
+        days: int = 1,
+        timezone_name: str | None = None,
+    ) -> list[dict[str, Any]] | None:
+        timezone_name, start_millis, end_millis = GoogleFitService._fetch_window_for_user(user, days, timezone_name)
         response_json = await GoogleFitService._aggregate_fit_data(
             access_token,
             "com.google.oxygen_saturation.summary",
@@ -1118,10 +1184,7 @@ class GoogleFitService:
 
         for metric_name, fetcher in fetch_jobs:
             try:
-                if metric_name == "steps":
-                    fetched = await fetcher(user, access_token, days=sync_days, timezone_name=resolved_timezone)
-                else:
-                    fetched = await fetcher(user, access_token, days=sync_days)
+                fetched = await fetcher(user, access_token, days=sync_days, timezone_name=resolved_timezone)
             except Exception as exc:
                 failed_metrics.append(metric_name)
                 logger.warning(
@@ -1286,7 +1349,7 @@ class GoogleFitService:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Google Fit authorization expired. Please reconnect Google Fit.",
             )
-        payload = await GoogleFitService._fetch_heart_rate_payload(access_token)
+        payload = await GoogleFitService._fetch_heart_rate_payload(access_token, resolved_timezone)
         normalized = GoogleFitService.normalize_heart_rate_payload(payload)
         saved_rows = GoogleFitService.save_heart_rate(db, user.id, normalized)
 

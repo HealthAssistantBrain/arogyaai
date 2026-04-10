@@ -35,20 +35,20 @@ def upgrade() -> None:
         op.execute(sa.text("ALTER TYPE user_vital_source_enum ADD VALUE IF NOT EXISTS 'GOOGLE_FIT'"))
 
     # Backfill legacy lowercase rows so existing data remains readable.
-    op.execute(sa.text("UPDATE user_vitals SET type = 'HEART_RATE' WHERE type = 'heart_rate'"))
-    op.execute(sa.text("UPDATE user_vitals SET type = 'STEPS' WHERE type = 'steps'"))
-    op.execute(sa.text("UPDATE user_vitals SET type = 'SLEEP' WHERE type = 'sleep'"))
-    op.execute(sa.text("UPDATE user_vitals SET type = 'SPO2' WHERE type = 'spo2'"))
-    op.execute(sa.text("UPDATE user_vitals SET source = 'GOOGLE_FIT' WHERE source = 'google_fit'"))
+    op.execute(sa.text("UPDATE user_vitals SET type = 'HEART_RATE' WHERE type::text = 'heart_rate'"))
+    op.execute(sa.text("UPDATE user_vitals SET type = 'STEPS' WHERE type::text = 'steps'"))
+    op.execute(sa.text("UPDATE user_vitals SET type = 'SLEEP' WHERE type::text = 'sleep'"))
+    op.execute(sa.text("UPDATE user_vitals SET type = 'SPO2' WHERE type::text = 'spo2'"))
+    op.execute(sa.text("UPDATE user_vitals SET source = 'GOOGLE_FIT' WHERE source::text = 'google_fit'"))
 
-    op.execute(sa.text("UPDATE notifications SET type = 'AI_INSIGHT' WHERE type = 'ai_insight'"))
-    op.execute(sa.text("UPDATE notifications SET type = 'HEALTH_ALERT' WHERE type = 'health_alert'"))
-    op.execute(sa.text("UPDATE notifications SET type = 'APPOINTMENT' WHERE type = 'appointment'"))
-    op.execute(sa.text("UPDATE notifications SET type = 'SYSTEM' WHERE type = 'system'"))
-    op.execute(sa.text("UPDATE notifications SET type = 'ACTIVITY' WHERE type = 'activity'"))
-    op.execute(sa.text("UPDATE notifications SET severity = 'INFO' WHERE severity = 'info'"))
-    op.execute(sa.text("UPDATE notifications SET severity = 'WARNING' WHERE severity = 'warning'"))
-    op.execute(sa.text("UPDATE notifications SET severity = 'CRITICAL' WHERE severity = 'critical'"))
+    op.execute(sa.text("UPDATE notifications SET type = 'AI_INSIGHT' WHERE type::text = 'ai_insight'"))
+    op.execute(sa.text("UPDATE notifications SET type = 'HEALTH_ALERT' WHERE type::text = 'health_alert'"))
+    op.execute(sa.text("UPDATE notifications SET type = 'APPOINTMENT' WHERE type::text = 'appointment'"))
+    op.execute(sa.text("UPDATE notifications SET type = 'SYSTEM' WHERE type::text = 'system'"))
+    op.execute(sa.text("UPDATE notifications SET type = 'ACTIVITY' WHERE type::text = 'activity'"))
+    op.execute(sa.text("UPDATE notifications SET severity = 'INFO' WHERE severity::text = 'info'"))
+    op.execute(sa.text("UPDATE notifications SET severity = 'WARNING' WHERE severity::text = 'warning'"))
+    op.execute(sa.text("UPDATE notifications SET severity = 'CRITICAL' WHERE severity::text = 'critical'"))
 
 
 def downgrade() -> None:

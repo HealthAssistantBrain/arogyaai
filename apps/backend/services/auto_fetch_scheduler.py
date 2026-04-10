@@ -87,12 +87,17 @@ async def _tick_async():
     db = SessionLocal()
     try:
         now = datetime.now(timezone.utc)
-        settings_rows = (
-            db.query(UserSetting)
-            .join(User, User.id == UserSetting.user_id)
-            .filter(User.is_deleted == False, UserSetting.auto_fetch_enabled == True)
-            .all()
-        )
+        try:
+            settings_rows = (
+                db.query(UserSetting)
+                .join(User, User.id == UserSetting.user_id)
+                .filter(User.is_deleted == False, UserSetting.auto_fetch_enabled == True)
+                .all()
+            )
+        except Exception as exc:
+            logger.warning("[AutoFetch] Skipping tick because settings query failed: %s", exc)
+            db.rollback()
+            return
 
         for setting in settings_rows:
             if not _is_due(setting, now):
@@ -109,7 +114,10 @@ async def _tick_async():
 
 
 def run_auto_fetch_tick():
-    asyncio.run(_tick_async())
+    try:
+        asyncio.run(_tick_async())
+    except Exception as exc:
+        logger.exception("[AutoFetch] Tick execution failed: %s", exc)
 
 
 def start_auto_fetch_scheduler():
@@ -138,5 +146,10 @@ def start_auto_fetch_scheduler():
 def stop_auto_fetch_scheduler():
     global _scheduler
     if _scheduler:
-        _scheduler.shutdown(wait=False)
-        _scheduler = None
+        try:
+            if _scheduler.running:
+                _scheduler.shutdown(wait=False)
+        except Exception as exc:
+            logger.warning("[AutoFetch] Scheduler shutdown failed: %s", exc)
+        finally:
+            _scheduler = None

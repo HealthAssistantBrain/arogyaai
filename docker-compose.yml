@@ -19,9 +19,6 @@ services:
         HTTPS_PROXY: ${HTTPS_PROXY:-}
         NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,backend,postgres,redis,qdrant,prediction-service,rag-service,wearable-service}
         CUSTOM_CA_CERT_B64: ${CUSTOM_CA_CERT_B64:-}
-    command: >
-      sh -c "alembic upgrade head &&
-      uvicorn main:app --host 0.0.0.0 --port 8000"
     ports:
       - "8000:8000"
     env_file:
@@ -37,10 +34,10 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://localhost:8000/health"]
-      interval: 15s
+      interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 30s
+      retries: 12
+      start_period: 60s
 
   prediction-service:
     build:
@@ -91,7 +88,8 @@ services:
       - arogyaai_net
 
   postgres:
-    image: postgres:15-alpine
+    image: timescale/timescaledb:latest-pg15
+    command: ["postgres", "-c", "shared_preload_libraries=timescaledb"]
     env_file:
       - .env
     environment:

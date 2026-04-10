@@ -1,8 +1,9 @@
 import { create } from 'zustand'
 import { persist, devtools } from 'zustand/middleware'
 import { isSystemLocked } from '../lib/systemLock'
+import { getApiUrl } from '../lib/apiBaseUrl'
 
-const API_BASE_URL = `${(import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '')}/api/v1`
+const API_BASE_URL = getApiUrl(import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000')
 
 const normalizeProfileState = (profile) => ({
   full_name: profile?.full_name ?? null,
@@ -457,7 +458,7 @@ export const useAuthStore = create(
 
           try {
             if (refreshToken) {
-              await fetch('http://localhost:8000/api/v1/auth/logout', {
+              await fetch(`${API_BASE_URL}/auth/logout`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ refresh_token: refreshToken })

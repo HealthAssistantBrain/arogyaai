@@ -4,6 +4,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.requests import Request
 
 # Import modular routers
 from routes import auth, intelligence, users, prediction, dashboard, google_fit, vitals, notifications, user_data, reports
@@ -11,6 +12,7 @@ from routes import auth, intelligence, users, prediction, dashboard, google_fit,
 from database.session import engine
 from core.config import settings
 from services.auto_fetch_scheduler import start_auto_fetch_scheduler, stop_auto_fetch_scheduler
+from services.health_service import get_system_readiness
 
 # Critical: import all models so they register on Base.metadata
 import models  # noqa: F401
@@ -62,9 +64,52 @@ async def validation_exception_handler(request, exc):
     )
 
 
+@app.middleware("http")
+async def route_audit_middleware(request: Request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+
+    if response.status_code == 404:
+        logger.warning("404 route not found | method=%s path=%s", request.method, path)
+    elif path.startswith("/api/") and not path.startswith("/api/v1"):
+        logger.warning(
+            "Misrouted API request | method=%s path=%s status=%s expected_prefix=/api/v1",
+            request.method,
+            path,
+            response.status_code,
+        )
+
+    return response
+
+
+def _health_logic():
+    return {"status": "ok"}
+
 @app.get("/health", tags=["System"])
-def health_check():
-    return JSONResponse(status_code=200, content={"status": "ok"})
+async def health_root():
+    return JSONResponse(status_code=200, content=_health_logic())
+
+@app.get("/api/v1/health", tags=["System"])
+async def health_api():
+    try:
+        return JSONResponse(status_code=200, content=await get_system_readiness())
+    except Exception as exc:
+        logger.exception("Health readiness probe failed: %s", exc)
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "degraded",
+                "services": {
+                    "db": "degraded",
+                },
+                "checks": {
+                    "db": {
+                        "status": "degraded",
+                        "error": "probe_failed",
+                    }
+                },
+            },
+        )
 
 
 # Mount modular routers (prefixes now managed in routers)
@@ -82,23 +127,25 @@ app.include_router(user_data.router)
 
 @app.on_event("startup")
 async def _startup_scheduler():
-    async def _start_background_services():
-        from sqlalchemy import text
+    from sqlalchemy import text
 
-        def _check_db_connection():
-            with engine.connect() as conn:
-                conn.execute(text("SELECT 1"))
+    def _check_db_connection():
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
 
-        try:
-            await asyncio.to_thread(_check_db_connection)
-            logger.info("DB Connected")
-        except Exception as exc:
-            logger.warning("DB Connected check failed during startup: %s", exc)
+    try:
+        await asyncio.to_thread(_check_db_connection)
+        logger.info("DB Connected")
+    except Exception as exc:
+        logger.warning("DB Connected check failed during startup: %s", exc)
+
+    try:
         start_auto_fetch_scheduler()
         logger.info("Scheduler Started")
+    except Exception as exc:
+        logger.exception("Scheduler failed to start: %s", exc)
 
     logger.info("App Ready")
-    asyncio.create_task(_start_background_services())
 
 
 @app.on_event("shutdown")

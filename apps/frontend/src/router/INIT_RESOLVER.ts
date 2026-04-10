@@ -1,8 +1,15 @@
 import { useAuthStore } from '../store/authStore';
 import { isSystemLocked } from '../lib/systemLock';
 import { shouldRevalidate, consumeAuthRevalidation } from '../lib/authRevalidator';
+import { getApiRootUrl } from '../lib/apiBaseUrl';
 
 export type InitResult = { route: string | null; cause: string } | null;
+
+const API_ROOT_URL = getApiRootUrl(
+  (import.meta as any).env?.VITE_API_BASE_URL ||
+  (import.meta as any).env?.VITE_API_URL ||
+  'http://localhost:8000'
+);
 
 export async function INIT_RESOLVER(): Promise<InitResult> {
   // FAILSAFE: If authRevalidator is triggered, INIT_RESOLVER must run even if normally skipped
@@ -61,14 +68,8 @@ export async function INIT_RESOLVER(): Promise<InitResult> {
   }
 
   // ─── Step 4: Verify with backend ─────────────────────────────────────────
-  const baseUrl = (
-    (import.meta as any).env?.VITE_API_BASE_URL ||
-    (import.meta as any).env?.VITE_API_URL ||
-    'http://localhost:8000'
-  ).replace(/\/$/, '');
-
   try {
-    const response = await fetch(`${baseUrl}/api/v1/users/me`, {
+    const response = await fetch(`${API_ROOT_URL}/api/v1/users/me`, {
       headers: { Authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(5000),
     });

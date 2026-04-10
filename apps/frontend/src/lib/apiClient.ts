@@ -1,9 +1,11 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { useAuthStore } from '../store/authStore';
+import { getApiUrl } from './apiBaseUrl';
 
-// Ensure baseURL ends correctly and appends /api/v1
-const baseUrl = (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
-const API_URL = `${baseUrl}/api/v1`;
+const env = (import.meta as any).env ?? {};
+
+// Normalize the gateway base so /api/v1 is appended exactly once.
+const API_URL = getApiUrl(env.VITE_API_BASE_URL || env.VITE_API_URL || 'http://localhost:8000');
 
 export const apiClient = axios.create({
   baseURL: API_URL,
