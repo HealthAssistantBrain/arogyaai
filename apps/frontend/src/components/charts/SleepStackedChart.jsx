@@ -10,12 +10,13 @@ import {
     Legend
 } from 'recharts';
 
-const SleepStackedChart = ({ data, height = 240 }) => {
+const SleepStackedChart = ({ data = [], height = 240 }) => {
+    const safeData = Array.isArray(data) ? data : [];
     return (
         <div className="w-full" style={{ height }}>
             <ResponsiveContainer width="100%" height="100%">
                 <BarChart
-                    data={data}
+                    data={safeData}
                     margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                     barGap={0}
                 >
