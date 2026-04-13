@@ -86,10 +86,10 @@ const AlertDetails = () => {
                             </div>
                         </div>
                         <div className="flex items-center gap-5 ml-8">
-                            <button className="size-12 flex items-center justify-center rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 hover:bg-[#6143f4]/10 hover:text-[#6143f4] transition-all active:scale-95 shadow-sm">
+                            <button className="size-12 flex items-center justify-center rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 hover:bg-[#6143f4]/10 hover:text-[#6143f4] transition-all active:scale-95 shadow-sm" type="button">
                                 <MessageSquare size={20} />
                             </button>
-                            <button className="size-12 flex items-center justify-center rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 hover:bg-[#6143f4]/10 hover:text-[#6143f4] transition-all relative active:scale-95 shadow-sm">
+                            <button className="size-12 flex items-center justify-center rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 hover:bg-[#6143f4]/10 hover:text-[#6143f4] transition-all relative active:scale-95 shadow-sm" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
                                 <Bell size={20} />
                                 <span className="absolute top-3.5 right-3.5 size-2.5 bg-red-500 rounded-full ring-2 ring-white dark:ring-[#0B0819] animate-pulse"></span>
                             </button>
@@ -322,3 +322,4 @@ const AlertDetails = () => {
 };
 
 export default AlertDetails;
+

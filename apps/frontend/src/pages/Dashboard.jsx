@@ -176,7 +176,7 @@ const Dashboard = () => {
           </div>
 
           <div className="flex items-center gap-4">
-            <button className="p-2 text-slate-500 bg-transparent hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full relative transition-colors">
+            <button className="p-2 text-slate-500 bg-transparent hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full relative transition-colors" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
               <Bell size={20} />
               <span className="absolute top-2.5 right-2.5 size-2 bg-red-500 rounded-full ring-2 ring-white dark:ring-slate-900"></span>
             </button>
@@ -531,3 +531,4 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
+

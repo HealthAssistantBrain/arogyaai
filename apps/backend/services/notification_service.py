@@ -173,6 +173,22 @@ class NotificationService:
         }
 
     @staticmethod
+    def get_unread_count(db: Session, user: User) -> dict:
+        counts = _notification_counts(db, user)
+        unread_count = counts.get("unread", 0)
+
+        return {
+            "success": True,
+            "status": "ready",
+            "source": "db",
+            "error": None,
+            "data": {
+                "unread_count": unread_count,
+            },
+            "last_updated": None,
+        }
+
+    @staticmethod
     def mark_as_read(db: Session, user: User, notification_id: str) -> dict:
         try:
             notification_uuid = uuid.UUID(notification_id)
@@ -197,6 +213,7 @@ class NotificationService:
         notification.is_read = True
         db.commit()
         db.refresh(notification)
+        counts = _notification_counts(db, user)
 
         return {
             "success": True,
@@ -205,6 +222,7 @@ class NotificationService:
             "error": None,
             "data": {
                 "notification": _serialize_notification(notification),
+                "unread_count": counts.get("unread", 0),
             },
             "last_updated": notification.created_at.isoformat() if notification.created_at else None,
         }
@@ -220,6 +238,7 @@ class NotificationService:
             .update({Notification.is_read: True}, synchronize_session=False)
         )
         db.commit()
+        counts = _notification_counts(db, user)
 
         return {
             "success": True,
@@ -228,6 +247,7 @@ class NotificationService:
             "error": None,
             "data": {
                 "updated_count": updated_count,
+                "unread_count": counts.get("unread", 0),
             },
             "last_updated": None,
         }

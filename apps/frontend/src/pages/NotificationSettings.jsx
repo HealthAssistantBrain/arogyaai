@@ -158,11 +158,11 @@ const NotificationSettings = () => {
                             </div>
                         </div>
                         <div className="flex items-center gap-5 ml-8">
-                            <button className="bg-gradient-to-r from-[#6143f4] to-[#009cde] text-white px-8 py-4 rounded-[1.5rem] font-black text-xs uppercase tracking-[0.2em] flex items-center gap-3 shadow-2xl shadow-[#6143f4]/20 hover:scale-105 active:scale-95 transition-all leading-none">
+                            <button className="bg-gradient-to-r from-[#6143f4] to-[#009cde] text-white px-8 py-4 rounded-[1.5rem] font-black text-xs uppercase tracking-[0.2em] flex items-center gap-3 shadow-2xl shadow-[#6143f4]/20 hover:scale-105 active:scale-95 transition-all leading-none" type="button">
                                 <PlusCircle size={18} /> Quick Action
                             </button>
                             <div className="w-px h-8 bg-slate-200 dark:bg-white/10 mx-2"></div>
-                            <button className="size-12 flex items-center justify-center rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 hover:bg-[#6143f4]/10 hover:text-[#6143f4] transition-all relative active:scale-95 group shadow-sm">
+                            <button className="size-12 flex items-center justify-center rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 hover:bg-[#6143f4]/10 hover:text-[#6143f4] transition-all relative active:scale-95 group shadow-sm" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
                                 <Bell size={20} />
                                 <span className="absolute top-3.5 right-3.5 size-2.5 bg-[#6143f4] rounded-full ring-2 ring-white dark:ring-[#0B0819]"></span>
                             </button>
@@ -373,3 +373,4 @@ const NotificationSettings = () => {
 };
 
 export default NotificationSettings;
+

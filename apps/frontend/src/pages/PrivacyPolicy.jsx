@@ -129,7 +129,7 @@ const PrivacyPolicy = () => {
                 </div>
 
                 <div className="flex items-center gap-5">
-                    <button className="size-11 flex items-center justify-center rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 hover:text-[#6143f4] transition-all relative active:scale-95">
+                    <button className="size-11 flex items-center justify-center rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 hover:text-[#6143f4] transition-all relative active:scale-95" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
                         <Bell size={20} />
                         <span className="absolute top-3 right-3 size-2 bg-[#009cde] rounded-full ring-2 ring-white dark:ring-[#0B0819]"></span>
                     </button>
@@ -445,3 +445,4 @@ const PrivacyPolicy = () => {
 };
 
 export default PrivacyPolicy;
+

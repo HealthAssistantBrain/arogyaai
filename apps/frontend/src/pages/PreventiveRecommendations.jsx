@@ -94,7 +94,7 @@ const PreventiveRecommendations = () => {
                     />
                 </div>
                 <div className="flex items-center gap-4">
-                    <button className="size-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 relative shadow-inner active:scale-90 transition-all">
+                    <button className="size-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 relative shadow-inner active:scale-90 transition-all" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
                         <Bell size={20} />
                         <span className="absolute top-2.5 right-2.5 size-2 bg-[#6143f4] rounded-full border-2 border-white dark:border-[#131022]"></span>
                     </button>
@@ -382,3 +382,4 @@ const PreventiveRecommendations = () => {
 };
 
 export default PreventiveRecommendations;
+

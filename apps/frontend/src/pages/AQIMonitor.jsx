@@ -286,7 +286,7 @@ const AQIMonitor = () => {
               >
                <Navigation size={18} />
              </button>
-             <button className="size-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 relative active:scale-90 transition-all">
+             <button className="size-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 relative active:scale-90 transition-all" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
                 <Bell size={20} />
                 <span className="absolute top-2.5 right-2.5 size-2 bg-red-500 rounded-full ring-2 ring-white dark:ring-slate-900"></span>
              </button>

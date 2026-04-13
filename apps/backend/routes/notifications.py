@@ -38,3 +38,19 @@ async def mark_all_notifications_as_read(
     db: Session = Depends(get_db),
 ):
     return NotificationService.mark_all_as_read(db, current_user)
+
+
+@router.patch("/read-all")
+async def mark_all_notifications_as_read_alias(
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
+    return NotificationService.mark_all_as_read(db, current_user)
+
+
+@router.get("/unread-count")
+async def get_unread_notification_count(
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
+    return NotificationService.get_unread_count(db, current_user)

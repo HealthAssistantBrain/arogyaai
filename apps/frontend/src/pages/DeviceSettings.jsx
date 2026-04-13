@@ -117,7 +117,7 @@ const DeviceSettings = () => {
                             </div>
                         </div>
                         <div className="flex items-center gap-6">
-                            <button className="size-12 flex items-center justify-center rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 hover:bg-[#6143f4]/10 hover:text-[#6143f4] transition-all relative active:scale-95 group shadow-sm">
+                            <button className="size-12 flex items-center justify-center rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 hover:bg-[#6143f4]/10 hover:text-[#6143f4] transition-all relative active:scale-95 group shadow-sm" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
                                 <Bell size={22} />
                                 <span className="absolute top-3.5 right-3.5 size-2.5 bg-red-500 rounded-full border-2 border-white dark:border-[#0B0819] group-hover:scale-110 transition-transform"></span>
                             </button>
@@ -390,3 +390,4 @@ const DeviceSettings = () => {
 };
 
 export default DeviceSettings;
+

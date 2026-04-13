@@ -121,7 +121,7 @@ const DashboardAlternate = () => {
             
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-2">
-                <button className="size-10 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors relative">
+                <button className="size-10 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors relative" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
                   <Bell size={20} className="text-slate-600 dark:text-slate-400" />
                   <span className="absolute top-2.5 right-2.5 size-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900 shadow-sm"></span>
                 </button>
@@ -449,3 +449,4 @@ const DashboardAlternate = () => {
 };
 
 export default DashboardAlternate;
+

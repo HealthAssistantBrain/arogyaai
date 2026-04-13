@@ -94,7 +94,7 @@ const AIInsightsDesktop = () => {
                 type="text"
               />
             </div>
-            <button className="size-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400 hover:bg-slate-200 transition-colors">
+            <button className="size-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400 hover:bg-slate-200 transition-colors" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
               <Bell size={20} />
             </button>
             <button className="bg-[#6043F4] text-white px-5 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:opacity-90 transition-all shadow-md shadow-[#6043F4]/10">
@@ -301,3 +301,4 @@ const AIInsightsDesktop = () => {
 };
 
 export default AIInsightsDesktop;
+

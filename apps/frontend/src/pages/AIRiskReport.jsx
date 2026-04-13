@@ -66,11 +66,11 @@ const AIRiskReport = () => {
                     <nav className="hidden lg:flex items-center gap-8">
                         <Link to={ROUTES.DASHBOARD} className="text-xs font-black text-[#6143f4] uppercase tracking-widest">Dashboard</Link>
                         <Link to={ROUTES.MEDICAL_REPORTS} className="text-xs font-bold text-slate-500 hover:text-[#6143f4] transition-colors uppercase tracking-widest">Reports</Link>
-                        <button className="text-xs font-bold text-slate-500 hover:text-[#6143f4] transition-colors uppercase tracking-widest">Patients</button>
+                        <button className="text-xs font-bold text-slate-500 hover:text-[#6143f4] transition-colors uppercase tracking-widest" type="button">Patients</button>
                         <Link to={ROUTES.INSIGHTS} className="text-xs font-bold text-slate-500 hover:text-[#6143f4] transition-colors uppercase tracking-widest">AI Insights</Link>
                     </nav>
                     <div className="flex items-center gap-3 border-l border-slate-200 dark:border-slate-800 pl-6">
-                        <button className="p-2 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 hover:bg-[#6143f4]/10 hover:text-[#6143f4] transition-all active:scale-95 relative">
+                        <button className="p-2 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 hover:bg-[#6143f4]/10 hover:text-[#6143f4] transition-all active:scale-95 relative" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
                             <Bell size={20} />
                             <span className="absolute top-2 right-2 size-2 bg-[#6143f4] rounded-full border-2 border-white dark:border-[#131022]"></span>
                         </button>
@@ -330,3 +330,4 @@ const AIRiskReport = () => {
 };
 
 export default AIRiskReport;
+

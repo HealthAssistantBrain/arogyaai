@@ -2,11 +2,13 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Waves } from 'lucide-react';
 import { navConfig } from '../../config/navConfig';
 import { ROUTES } from '../../router/routes';
+import useNotificationStore from '../../store/notificationStore';
 
 export default function Sidebar() {
     const location = useLocation();
     const navigate = useNavigate();
     const currentPath = location.pathname;
+    const unreadCount = useNotificationStore((state) => state.unreadCount);
 
     return (
         <aside className="w-[260px] bg-white dark:bg-[#131022] border-r border-slate-100 dark:border-white/5 flex flex-col h-screen sticky top-0 z-30 shrink-0 hidden lg:flex">
@@ -51,10 +53,15 @@ export default function Sidebar() {
                                         }`}
                                     >
                                         {Icon && (
-                                            <Icon
-                                                size={18}
-                                                className={isActive ? 'text-white' : 'text-slate-400 group-hover:text-[#6143f4]'}
-                                            />
+                                            <span className="relative inline-flex">
+                                                <Icon
+                                                    size={18}
+                                                    className={isActive ? 'text-white' : 'text-slate-400 group-hover:text-[#6143f4]'}
+                                                />
+                                                {link.path === ROUTES.NOTIFICATIONS && unreadCount > 0 && (
+                                                    <span className="absolute -top-1 -right-1 size-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-[#131022]" />
+                                                )}
+                                            </span>
                                         )}
                                         <span className="text-[13px] tracking-tight leading-none">
                                             {link.label}

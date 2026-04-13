@@ -31,12 +31,12 @@ const NotFound = () => {
 
         <nav className="hidden lg:flex items-center gap-12">
           {['Diagnostics', 'Records', 'Support'].map((item) => (
-            <button key={item} className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 hover:text-[#6143f4] transition-colors italic">{item}</button>
+            <button key={item} className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 hover:text-[#6143f4] transition-colors italic" type="button">{item}</button>
           ))}
         </nav>
 
         <div className="flex items-center gap-8 pl-10 border-l border-slate-200 dark:border-white/10 ml-10">
-          <button className="relative p-3.5 text-slate-400 hover:text-[#6143f4] transition-all group">
+          <button className="relative p-3.5 text-slate-400 hover:text-[#6143f4] transition-all group" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
             <Bell size={20} strokeWidth={2.5} />
             <span className="absolute top-3.5 right-3.5 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-white dark:ring-[#13082A]"></span>
           </button>
@@ -173,3 +173,4 @@ const NotFound = () => {
 };
 
 export default NotFound;
+

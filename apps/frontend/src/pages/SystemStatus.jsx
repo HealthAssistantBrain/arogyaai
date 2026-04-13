@@ -78,7 +78,7 @@ const SystemStatus = () => {
           </div>
           <div className="flex items-center gap-8 pl-10">
             <div className="flex items-center gap-3">
-              <button className="relative p-3.5 text-slate-500 hover:bg-[#6143f4]/10 hover:text-[#6143f4] dark:hover:bg-white/5 rounded-2xl transition-all group">
+              <button className="relative p-3.5 text-slate-500 hover:bg-[#6143f4]/10 hover:text-[#6143f4] dark:hover:bg-white/5 rounded-2xl transition-all group" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
                 <Bell size={20} strokeWidth={2.5} />
                 <span className="absolute top-3.5 right-3.5 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-white dark:ring-[#13082A] animate-pulse"></span>
               </button>
@@ -366,3 +366,4 @@ const SystemStatus = () => {
 };
 
 export default SystemStatus;
+

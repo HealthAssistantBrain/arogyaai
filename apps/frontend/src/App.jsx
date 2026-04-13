@@ -3,12 +3,14 @@ import { Toaster } from 'react-hot-toast'
 import GlobalStateValidator from './components/guards/GlobalStateValidator'
 import LegacyProfileBinder from './components/LegacyProfileBinder'
 import AppErrorBoundary from './components/guards/AppErrorBoundary'
+import BrowserNotificationBootstrap from './components/BrowserNotificationBootstrap'
 
 export default function App() {
   return (
     <AppErrorBoundary>
       <GlobalStateValidator />
       <LegacyProfileBinder />
+      <BrowserNotificationBootstrap />
       <AppRouter />
       <Toaster
         position="top-right"

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import TopBar from './TopBar';
 import { useAuthStore } from '../../store/authStore';
 import UserProfileBadge from '../UserProfileBadge';
 import { ROUTES } from '../../router/routes';
@@ -26,6 +27,7 @@ export default function MainLayout() {
             ) : null}
 
             <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto custom-scrollbar">
+                <TopBar />
                 <Outlet />
             </div>
         </div>

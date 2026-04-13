@@ -364,11 +364,11 @@ const DeviceManagement = () => {
 
         {/* Right actions */}
         <div className="flex items-center gap-3">
-          <button className="h-9 bg-[#6143f4] text-white px-4 rounded-lg font-bold text-[11px] flex items-center gap-1.5 hover:bg-[#5235dc] shadow-md shadow-[#6143f4]/20 transition-all active:scale-95">
+          <button className="h-9 bg-[#6143f4] text-white px-4 rounded-lg font-bold text-[11px] flex items-center gap-1.5 hover:bg-[#5235dc] shadow-md shadow-[#6143f4]/20 transition-all active:scale-95" type="button">
             <Plus size={14} strokeWidth={2.5} />
             Quick Action
           </button>
-          <button className="w-9 h-9 flex items-center justify-center rounded-lg bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-400 hover:text-[#6143f4] transition-all relative">
+          <button className="w-9 h-9 flex items-center justify-center rounded-lg bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-400 hover:text-[#6143f4] transition-all relative" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
             <Bell size={16} />
             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-[1.5px] border-white dark:border-[#0B0819]" />
           </button>
@@ -453,3 +453,4 @@ const DeviceManagement = () => {
 };
 
 export default DeviceManagement;
+

@@ -100,7 +100,7 @@ const LabResults = () => {
                             </div>
                         </div>
                         <div className="flex items-center gap-8">
-                            <button className="size-11 flex items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/5 text-slate-500 hover:bg-[#6143f4]/10 hover:text-[#6143f4] transition-all relative active:scale-90 group">
+                            <button className="size-11 flex items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/5 text-slate-500 hover:bg-[#6143f4]/10 hover:text-[#6143f4] transition-all relative active:scale-90 group" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
                                 <Bell size={20} />
                                 <span className="absolute top-3 right-3 size-2.5 bg-red-500 rounded-full border-2 border-white dark:border-[#131022] group-hover:scale-110 transition-transform"></span>
                             </button>
@@ -334,3 +334,4 @@ const LabResults = () => {
 };
 
 export default LabResults;
+

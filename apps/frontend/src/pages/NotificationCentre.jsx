@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../router/routes';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { 
   History, 
   Bell, 
@@ -109,6 +109,7 @@ const NotificationCentre = () => {
     const {
         notifications,
         counts,
+        unreadCount,
         loading,
         fetchNotifications,
         markAsRead,
@@ -147,14 +148,27 @@ const NotificationCentre = () => {
         };
     }, [activeFilter, debouncedSearchText, fetchNotifications]);
 
+    useEffect(() => {
+        const interval = window.setInterval(() => {
+            const selectedFilter = FILTERS.find((filter) => filter.name === activeFilter);
+            void fetchNotifications({
+                type: selectedFilter?.apiType || undefined,
+                search: debouncedSearchText,
+            }).catch(() => {});
+        }, 20000);
+
+        return () => window.clearInterval(interval);
+    }, [activeFilter, debouncedSearchText, fetchNotifications]);
+
     const filters = useMemo(() => FILTERS.map((filter) => ({
         ...filter,
         count: filter.apiType ? (counts?.[filter.apiType] ?? 0) : (counts?.all ?? 0),
     })), [counts]);
 
-    const visibleNotifications = notifications || [];
+    const visibleNotifications = useMemo(() => (
+        (Array.isArray(notifications) ? notifications : []).filter((notification) => !notification.is_read)
+    ), [notifications]);
     const showEmptyState = hasLoadedOnce && !loading && visibleNotifications.length === 0;
-    const unreadCount = counts?.unread ?? 0;
 
     return (
         <div className="bg-[#f6f5f8] dark:bg-[#0B0819] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased text-[14px]">
@@ -179,7 +193,7 @@ const NotificationCentre = () => {
                             </div>
                         </div>
                         <div className="flex items-center gap-5 ml-8">
-                            <button className="size-12 flex items-center justify-center rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 hover:bg-[#6143f4]/10 hover:text-[#6143f4] transition-all relative active:scale-95 group shadow-sm">
+                            <button className="size-12 flex items-center justify-center rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 hover:bg-[#6143f4]/10 hover:text-[#6143f4] transition-all relative active:scale-95 group shadow-sm" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
                                 <Bell size={20} />
                                 {unreadCount > 0 && (
                                     <span className="absolute top-3.5 right-3.5 size-2.5 bg-[#6143f4] rounded-full ring-2 ring-white dark:ring-[#0B0819]"></span>
@@ -212,7 +226,8 @@ const NotificationCentre = () => {
                                 <div className="flex gap-4">
                                     <button
                                         onClick={markAllAsRead}
-                                        className="px-6 py-4 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-[1.25rem] text-[10px] font-black uppercase tracking-[0.25em] text-slate-500 hover:text-[#6143f4] hover:bg-[#6143f4]/5 transition-all flex items-center gap-3 shadow-sm active:scale-95 group"
+                                        disabled={unreadCount === 0 || loading}
+                                        className="px-6 py-4 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-[1.25rem] text-[10px] font-black uppercase tracking-[0.25em] text-slate-500 hover:text-[#6143f4] hover:bg-[#6143f4]/5 transition-all flex items-center gap-3 shadow-sm active:scale-95 group disabled:opacity-40 disabled:cursor-not-allowed"
                                     >
                                         <CheckCheck size={18} className="group-hover:scale-110 transition-transform" />
                                         Mark all as read
@@ -252,17 +267,16 @@ const NotificationCentre = () => {
                                         const severityMeta = SEVERITY_META[notif.severity] || SEVERITY_META.info;
                                         const Icon = meta.icon;
                                         const timeLabel = formatRelativeTime(notif.created_at);
-                                        const isRead = Boolean(notif.is_read);
 
                                         return (
-                                        <motion.div 
+                                        <Motion.div 
                                             layout
                                             initial={{ opacity: 0, y: 20 }}
                                             animate={{ opacity: 1, y: 0 }}
                                             exit={{ opacity: 0, scale: 0.95 }}
                                             transition={{ delay: idx * 0.05 }}
                                             key={notif.id} 
-                                            className={`bg-white dark:bg-[#131022] rounded-[2.5rem] p-10 shadow-[0_40px_80px_-20px_rgba(19,8,42,0.05)] border border-slate-100 dark:border-white/5 relative overflow-hidden group hover:scale-[1.01] transition-all duration-500 ${isRead ? 'opacity-80' : ''}`}
+                                            className="bg-white dark:bg-[#131022] rounded-[2.5rem] p-10 shadow-[0_40px_80px_-20px_rgba(19,8,42,0.05)] border border-slate-100 dark:border-white/5 relative overflow-hidden group hover:scale-[1.01] transition-all duration-500"
                                         >
                                             {/* Status Indicator Bar */}
                                             <div className="absolute top-0 bottom-0 left-0 w-2" style={{ backgroundColor: meta.accent }}></div>
@@ -301,15 +315,14 @@ const NotificationCentre = () => {
                                                         </button>
                                                         <button
                                                             onClick={() => markAsRead(notif.id)}
-                                                            disabled={isRead}
-                                                            className="px-8 py-3.5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 hover:text-[#6143f4] transition-colors leading-none disabled:opacity-40 disabled:cursor-not-allowed"
+                                                            className="px-8 py-3.5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 hover:text-[#6143f4] transition-colors leading-none"
                                                         >
                                                             Mark as read
                                                         </button>
                                                     </div>
                                                 </div>
                                             </div>
-                                        </motion.div>
+                                        </Motion.div>
                                     )})}
                                 </AnimatePresence>
 
@@ -320,8 +333,8 @@ const NotificationCentre = () => {
                                             <Bell size={48} strokeWidth={1} />
                                         </div>
                                         <div className="space-y-2">
-                                            <p className="text-xl font-black text-[#13082a] dark:text-white uppercase tracking-tighter italic">You&apos;re all caught up 🎉</p>
-                                            <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-[0.2em]">No notifications yet. Once your health data syncs, insights and alerts will appear here.</p>
+                                            <p className="text-xl font-black text-[#13082a] dark:text-white uppercase tracking-tighter italic">You&apos;re all caught up</p>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-[0.2em]">New alerts will appear here as soon as they arrive.</p>
                                         </div>
                                     </div>
                                 )}
@@ -356,3 +369,4 @@ const NotificationCentre = () => {
 };
 
 export default NotificationCentre;
+

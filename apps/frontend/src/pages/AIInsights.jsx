@@ -92,7 +92,7 @@ const AIInsights = () => {
             </div>
             
             <div className="flex items-center gap-4">
-              <button className="size-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400 hover:bg-slate-200 transition-colors">
+              <button className="size-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400 hover:bg-slate-200 transition-colors" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
                 <Bell size={20} />
               </button>
               <div className="h-8 w-[1px] bg-slate-200 dark:bg-slate-800 mx-2"></div>
@@ -310,3 +310,4 @@ const AIInsights = () => {
 };
 
 export default AIInsights;
+

@@ -67,7 +67,7 @@ const Reports = () => {
                             </div>
                         </div>
                         <div className="flex items-center gap-8">
-                            <button className="relative size-12 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-white/5 rounded-2xl transition-all shadow-xl shadow-slate-200/30 dark:shadow-none active:scale-95 group">
+                            <button className="relative size-12 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-white/5 rounded-2xl transition-all shadow-xl shadow-slate-200/30 dark:shadow-none active:scale-95 group" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
                                 <Bell size={22} />
                                 <span className="absolute top-3.5 right-3.5 size-2.5 bg-red-500 rounded-full border-2 border-white dark:border-[#131022] animate-pulse"></span>
                             </button>
@@ -266,3 +266,4 @@ const Reports = () => {
 };
 
 export default Reports;
+

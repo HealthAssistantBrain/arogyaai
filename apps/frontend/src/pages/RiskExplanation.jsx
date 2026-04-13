@@ -71,7 +71,7 @@ const RiskExplanation = () => {
                     </div>
                     
                     <div className="flex items-center gap-4">
-                        <button className="size-10 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 text-slate-600 dark:text-slate-400 relative active:scale-95 transition-all">
+                        <button className="size-10 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 text-slate-600 dark:text-slate-400 relative active:scale-95 transition-all" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
                             <Bell size={20} />
                             <span className="absolute top-2.5 right-2.5 size-2 bg-red-500 rounded-full border-2 border-white dark:border-[#1C1136]"></span>
                         </button>
@@ -280,3 +280,4 @@ const RiskExplanation = () => {
 };
 
 export default RiskExplanation;
+

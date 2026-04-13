@@ -159,7 +159,7 @@ const Timeline = () => {
                         </div>
                     </div>
                     <div className="flex items-center gap-4">
-                        <button className="size-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400 hover:bg-slate-200 transition-colors relative active:scale-95">
+                        <button className="size-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400 hover:bg-slate-200 transition-colors relative active:scale-95" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
                             <Bell size={20} />
                             <span className="absolute top-2.5 right-2.5 size-2 bg-red-500 rounded-full border-2 border-white dark:border-[#131022]"></span>
                         </button>
@@ -320,3 +320,4 @@ const Timeline = () => {
 };
 
 export default Timeline;
+
