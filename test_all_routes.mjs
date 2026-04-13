@@ -4,7 +4,6 @@ const routes = [
     { name: 'Simulate', url: 'http://localhost:5173/simulator' },
     { name: 'Reports', url: 'http://localhost:5173/medical-reports' },
     { name: 'AI Insights', url: 'http://localhost:5173/insights' },
-    { name: 'Book Consultation', url: 'http://localhost:5173/consultation' },
     { name: 'Devices', url: 'http://localhost:5173/devices' },
     { name: 'Data Privacy', url: 'http://localhost:5173/settings/privacy' },
     { name: 'Security Audits', url: 'http://localhost:5173/settings/security' },

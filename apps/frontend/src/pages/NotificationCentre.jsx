@@ -50,8 +50,8 @@ const TYPE_META = {
         color: 'text-[#009cde]',
         bg: 'bg-[#009cde]/10',
         accent: '#009cde',
-        actionLabel: 'View appointment',
-        actionPath: ROUTES.CONSULTATION,
+        actionLabel: 'View history',
+        actionPath: ROUTES.NOTIFICATIONS_HISTORY,
     },
     system: {
         label: 'System',

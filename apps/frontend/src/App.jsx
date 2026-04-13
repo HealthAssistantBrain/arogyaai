@@ -2,10 +2,11 @@ import AppRouter from './router'
 import { Toaster } from 'react-hot-toast'
 import GlobalStateValidator from './components/guards/GlobalStateValidator'
 import LegacyProfileBinder from './components/LegacyProfileBinder'
+import AppErrorBoundary from './components/guards/AppErrorBoundary'
 
 export default function App() {
   return (
-    <>
+    <AppErrorBoundary>
       <GlobalStateValidator />
       <LegacyProfileBinder />
       <AppRouter />
@@ -22,6 +23,6 @@ export default function App() {
           error: { iconTheme: { primary: '#ef4444', secondary: '#0A0F2E' } },
         }}
       />
-    </>
+    </AppErrorBoundary>
   )
 }

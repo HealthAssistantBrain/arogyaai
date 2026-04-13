@@ -6,7 +6,6 @@ import {
     Sparkles,
     Utensils,
     Dumbbell,
-    Calendar,
     ArrowRight,
     AlarmClock,
     Thermometer,
@@ -358,11 +357,11 @@ const PreventiveRecommendations = () => {
                         </div>
                         <div className="relative z-10 flex gap-4 w-full lg:w-auto">
                             <button
-                                onClick={() => navigate(ROUTES.CONSULTATION)}
+                                onClick={() => navigate(ROUTES.HELP)}
                                 className="flex-1 lg:flex-none px-10 py-5 bg-white text-[#6143f4] font-black text-xs uppercase tracking-[0.3em] rounded-2xl hover:scale-[1.05] transition-all shadow-2xl active:scale-95 flex items-center justify-center gap-3"
                             >
-                                <Calendar size={18} />
-                                Book Consultation
+                                <ArrowRight size={18} />
+                                Open Support Center
                             </button>
                         </div>
                         <div className="absolute top-0 right-0 size-80 bg-white/10 rounded-full -mr-20 -mt-20 blur-3xl group-hover:scale-150 transition-transform duration-1000"></div>

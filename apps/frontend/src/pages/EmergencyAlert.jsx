@@ -13,7 +13,6 @@ import {
   ShieldCheck, 
   Bell, 
   Search,
-  MoreVertical,
   Waves,
   CheckCircle2,
   HelpCircle,
@@ -21,7 +20,6 @@ import {
   ChevronRight,
   Info,
   Check,
-  Calendar,
   Sparkles,
   Watch,
   Plus,
@@ -30,12 +28,10 @@ import {
   ClipboardCheck,
   Coffee,
   Wind,
-  Stethoscope,
   TrendingDown,
   Download,
   AlertCircle,
   Siren,
-  Phone,
   ArrowRight,
   MapPin,
   Lock,
@@ -65,7 +61,6 @@ const EmergencyAlert = () => {
     { label: 'Medical Reports', icon: FileText, path: ROUTES.MEDICAL_REPORTS },
     { label: 'Sleep Analysis', icon: Watch, path: ROUTES.SLEEP },
     { label: 'Device Manager', icon: Settings, path: '/device-manager' },
-    { label: 'Consultation', icon: Stethoscope, path: ROUTES.CONSULTATION },
   ];
 
   return (
@@ -203,11 +198,11 @@ const EmergencyAlert = () => {
                         {/* High-Impact Actions */}
                         <div className="space-y-5">
                             <button 
-                                onClick={() => navigate(ROUTES.CONSULTATION)}
+                                onClick={() => navigate(ROUTES.HELP)}
                                 className="group w-full py-6 bg-[#6143f4] text-white rounded-[2rem] font-black text-[11px] uppercase tracking-[0.3em] flex items-center justify-center gap-5 shadow-2xl shadow-[#6143f4]/40 hover:scale-[1.02] active:scale-95 transition-all outline-none italic"
                             >
-                                <Phone size={22} className="group-hover:rotate-12 transition-transform" />
-                                Contact On-call Doctor
+                                <HelpCircle size={22} className="group-hover:rotate-12 transition-transform" />
+                                Open Support Center
                             </button>
                             <button 
                                 className="group w-full py-6 bg-red-500 text-white rounded-[2rem] font-black text-[11px] uppercase tracking-[0.3em] flex items-center justify-center gap-5 shadow-2xl shadow-red-500/40 hover:scale-[1.02] active:scale-95 transition-all outline-none italic"
@@ -263,4 +258,3 @@ const EmergencyAlert = () => {
 };
 
 export default EmergencyAlert;
-

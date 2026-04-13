@@ -11,7 +11,6 @@ import {
   FileText, 
   Moon, 
   Smartphone, 
-  Stethoscope, 
   Bell, 
   Sparkles, 
   Settings, 
@@ -39,7 +38,6 @@ const WhatsNew = () => {
     { icon: <FileText size={20} />, label: 'Medical Reports', path: ROUTES.MEDICAL_REPORTS },
     { icon: <Moon size={20} />, label: 'Sleep Analysis', path: ROUTES.SLEEP },
     { icon: <Smartphone size={20} />, label: 'Device Manager', path: '/device-manager' },
-    { icon: <Stethoscope size={20} />, label: 'Consultation', path: ROUTES.CONSULTATION },
     { icon: <Bell size={20} />, label: 'Notifications', path: ROUTES.NOTIFICATIONS },
     { icon: <Sparkles size={20} />, label: "What's New", path: ROUTES.WHATS_NEW, active: true },
     { icon: <Settings size={20} />, label: 'Settings', path: ROUTES.SETTINGS },
@@ -163,7 +161,7 @@ const WhatsNew = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                 {[
                   { icon: <Activity size={32} />, label: 'Enhanced Disease Simulation', sub: 'Model complex disease trajectories using our new stochastic simulation engine. Supports over 400+ distinct pathological markers with 99.2% inference accuracy.' },
-                  { icon: <Share2 size={32} />, label: 'Biometric Data Export', sub: 'Seamlessly export your raw biometric data into HL7 FHIR or PDF formats for easy consultation within the Arogya medical ecosystem.' }
+                  { icon: <Share2 size={32} />, label: 'Biometric Data Export', sub: 'Seamlessly export your raw biometric data into HL7 FHIR or PDF formats for easy review within the Arogya medical ecosystem.' }
                 ].map((item, i) => (
                   <motion.div 
                     whileHover={{ y: -10 }}
@@ -289,4 +287,3 @@ const WhatsNew = () => {
 };
 
 export default WhatsNew;
-

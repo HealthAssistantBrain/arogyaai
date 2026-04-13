@@ -75,7 +75,7 @@ const NotificationSettings = () => {
         {
             id: 'appointment_reminders',
             title: 'Appointment Reminders',
-            description: 'Notifications about upcoming consultations, screenings, and follow-ups.',
+            description: 'Notifications about upcoming visits, screenings, and follow-ups.',
             icon: Calendar,
             color: 'text-blue-500',
             bgColor: 'bg-blue-50',

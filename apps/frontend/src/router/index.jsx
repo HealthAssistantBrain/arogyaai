@@ -45,10 +45,6 @@ const GoogleFitSettings = lazy(() => import('../pages/GoogleFitSettings'))
 const UploadMedicalReport = lazy(() => import('../pages/UploadReport'))
 const ReportProcessing = lazy(() => import('../pages/ReportProcessing'))
 const UploadSuccess = lazy(() => import('../pages/UploadSuccess'))
-const BookConsultation = lazy(() => import('../pages/BookConsultation'))
-const DoctorProfile = lazy(() => import('../pages/DoctorProfile'))
-const AppointmentConfirm = lazy(() => import('../pages/AppointmentConfirmation'))
-const ConsultationHistory = lazy(() => import('../pages/ConsultationHistory'))
 const SettingsHub = lazy(() => import('../pages/SettingsHub'))
 const UserProfile = lazy(() => import('../pages/UserProfile'))
 const SecurityAudit = lazy(() => import('../pages/SecurityAudit'))
@@ -140,10 +136,6 @@ export default function AppRouter() {
                 <Route path={ROUTES.UPLOAD} element={<UploadMedicalReport />} />
                 <Route path={ROUTES.REPORT_PROCESSING} element={<ReportProcessing />} />
                 <Route path={ROUTES.UPLOAD_SUCCESS} element={<UploadSuccess />} />
-                <Route path={ROUTES.CONSULTATION} element={<BookConsultation />} />
-                <Route path={ROUTES.DOCTOR_PROFILE} element={<DoctorProfile />} />
-                <Route path={ROUTES.APPOINTMENT_CONFIRM} element={<AppointmentConfirm />} />
-                <Route path={ROUTES.CONSULTATION_HISTORY} element={<ConsultationHistory />} />
                 <Route path={ROUTES.SETTINGS} element={<SettingsHub />} />
                 <Route path={ROUTES.PROFILE} element={<UserProfile />} />
                 <Route path={ROUTES.SETTINGS_PROFILE} element={<UserProfile />} />

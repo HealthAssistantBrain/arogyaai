@@ -41,7 +41,6 @@ import {
   HelpCircle as HelpIcon,
   X,
   ArrowUpRight,
-  Stethoscope,
   Mail
 } from 'lucide-react';
 
@@ -58,7 +57,6 @@ const HelpCenterSearchResults = () => {
         { icon: FileText, label: 'Reports', path: ROUTES.MEDICAL_REPORTS },
         { icon: Watch, label: 'Sleep Analysis', path: ROUTES.SLEEP },
         { icon: Settings, label: 'Device Manager', path: '/device-manager' },
-        { icon: Stethoscope, label: 'Consultation', path: ROUTES.CONSULTATION },
         { icon: Bell, label: 'Notifications', path: ROUTES.NOTIFICATIONS },
         { icon: Settings, label: 'Settings', path: ROUTES.SETTINGS },
         { icon: HelpIcon, label: 'Help Center', path: ROUTES.HELP, active: true },

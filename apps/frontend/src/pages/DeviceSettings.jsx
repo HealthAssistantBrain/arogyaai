@@ -94,7 +94,6 @@ const DeviceSettings = () => {
         { icon: FileText, label: 'Medical Reports', path: ROUTES.MEDICAL_REPORTS, group: 'History & Labs' },
         { icon: Moon, label: 'Sleep Analysis', path: ROUTES.SLEEP, group: 'History & Labs' },
         { icon: Smartphone, label: 'Device Manager', path: ROUTES.DEVICES, group: 'Management', active: true },
-        { icon: User, label: 'Consultation', path: ROUTES.CONSULTATION, group: 'Management' },
         { icon: Settings, label: 'Settings', path: ROUTES.SETTINGS, group: 'Management' },
     ];
 
@@ -391,4 +390,3 @@ const DeviceSettings = () => {
 };
 
 export default DeviceSettings;
-

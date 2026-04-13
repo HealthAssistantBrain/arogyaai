@@ -22,7 +22,6 @@ import {
   Upload,
   Wind,
   Smartphone,
-  User,
   Bell,
   Settings,
   LogOut,
@@ -64,7 +63,6 @@ const sidebarConfig = [
     section: 'Management',
     items: [
       { label: 'Device Manager',     icon: Smartphone,      path: ROUTES.DEVICES },
-      { label: 'Consultation',       icon: User,            path: ROUTES.CONSULTATION },
     ],
   },
   {

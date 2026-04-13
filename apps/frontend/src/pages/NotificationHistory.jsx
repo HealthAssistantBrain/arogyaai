@@ -14,7 +14,6 @@ import {
   ShieldCheck, 
   Bell, 
   Search,
-  MoreVertical,
   Waves,
   CheckCircle2,
   HelpCircle,
@@ -45,7 +44,6 @@ const NotificationHistory = () => {
         { icon: FileText, label: 'Medical Reports', path: ROUTES.MEDICAL_REPORTS },
         { icon: FileText, label: 'Sleep Analysis', path: ROUTES.SLEEP },
         { icon: Watch, label: 'Device Manager', path: ROUTES.DEVICE_MANAGER },
-        { icon: MoreVertical, label: 'Consultation', path: ROUTES.CONSULTATION },
         { icon: Bell, label: 'Notifications', path: ROUTES.SETTINGS_NOTIFICATIONS, active: true },
     ];
 

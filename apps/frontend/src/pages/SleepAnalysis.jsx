@@ -22,16 +22,15 @@ import {
   Lock,
   QrCode,
   Moon,
+  Calendar,
   ChevronRight,
   ClipboardList,
-  Calendar,
   Share2,
   Info,
   Heart,
   Wind,
   TrendingUp,
   Smartphone,
-  User,
   Clock,
   Waves
 } from 'lucide-react';
@@ -50,7 +49,6 @@ const SleepAnalysis = () => {
         { icon: FileText, label: 'Medical Reports', path: ROUTES.MEDICAL_REPORTS, group: 'History & Labs' },
         { icon: Moon, label: 'Sleep Analysis', path: ROUTES.SLEEP, group: 'History & Labs', active: true },
         { icon: Smartphone, label: 'Device Manager', path: ROUTES.DEVICES, group: 'Management' },
-        { icon: User, label: 'Consultation', path: ROUTES.CONSULTATION, group: 'Management' },
         { icon: Settings, label: 'Settings', path: ROUTES.SETTINGS, group: 'Management' },
     ];
 

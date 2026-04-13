@@ -7,7 +7,6 @@ import {
     FileText,
     Moon,
     Smartphone,
-    User,
     Bell,
     Settings,
     HelpCircle
@@ -38,7 +37,6 @@ export const navConfig: NavSection[] = [
             { label: 'Medical Reports', icon: FileText, path: ROUTES.MEDICAL_REPORTS },
             { label: 'Sleep Analysis', icon: Moon, path: ROUTES.SLEEP },
             { label: 'Device Manager', icon: Smartphone, path: ROUTES.DEVICES },
-            { label: 'Consultation', icon: User, path: ROUTES.CONSULTATION },
         ],
     },
     {

@@ -17,7 +17,6 @@ import {
   User,
   LayoutDashboard,
   FolderOpen,
-  Video,
   Smartphone,
   Settings,
   ArrowDown,
@@ -47,7 +46,6 @@ const AIInsights = () => {
     { icon: LayoutDashboard, label: 'Dashboard', path: ROUTES.DASHBOARD },
     { icon: FolderOpen, label: 'Health Records', path:ROUTES.REPORTS },
     { icon: Brain, label: 'AI Insights', path: ROUTES.INSIGHTS, active: true },
-    { icon: Video, label: 'Telemedicine', path: ROUTES.CONSULTATION },
     { icon: Smartphone, label: 'Simulator', path: ROUTES.SIMULATOR },
   ];
 

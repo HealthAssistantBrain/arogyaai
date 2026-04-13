@@ -5,7 +5,7 @@ import { chromium } from 'playwright';
     const page = await browser.newPage();
 
     try {
-        await page.goto('http://localhost:5173/consultation', { waitUntil: 'networkidle' });
+        await page.goto('http://localhost:5173/help', { waitUntil: 'networkidle' });
 
         console.log('Current URL:', page.url());
 

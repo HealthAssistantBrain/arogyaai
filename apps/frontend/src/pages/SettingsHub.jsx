@@ -66,7 +66,6 @@ const SettingsHub = () => {
         { icon: FileText, label: 'Medical Reports', path: ROUTES.MEDICAL_REPORTS, group: 'History & Labs' },
         { icon: Moon, label: 'Sleep Analysis', path: ROUTES.SLEEP, group: 'History & Labs' },
         { icon: Smartphone, label: 'Device Manager', path: ROUTES.DEVICES, group: 'Management' },
-        { icon: User, label: 'Consultation', path: ROUTES.CONSULTATION, group: 'Management' },
         { icon: Settings, label: 'Settings', path: ROUTES.SETTINGS, group: 'Management', active: true },
     ];
 
@@ -124,7 +123,7 @@ const SettingsHub = () => {
         {
             icon: BellRing, bg: 'bg-amber-500/10', color: 'text-amber-500',
             title: 'Communication Prefs',
-            desc: 'Control how and when you receive AI insights and patient consultation alerts.',
+            desc: 'Control how and when you receive AI insights and patient follow-up alerts.',
             extra: (
                 <div className="mt-5 flex flex-wrap gap-2 opacity-80">
                     {['Email', 'Push', 'Desktop'].map(tag => (
@@ -383,4 +382,3 @@ const SettingsHub = () => {
 };
 
 export default SettingsHub;
-
