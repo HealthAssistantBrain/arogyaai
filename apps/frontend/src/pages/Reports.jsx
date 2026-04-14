@@ -14,6 +14,7 @@ import {
 import ReportSummary, { hasReportSummaryContent, normalizeReportSummaryData } from '../components/reports/ReportSummary';
 import { apiClient } from '../lib/apiClient';
 import { getUploadedReportHistory, getUploadedReportSession } from '../lib/reportUpload';
+import { buildSummaryPdfFileName, generateStyledSummaryPdf } from '../utils/generateStyledSummaryPdf';
 import { ROUTES } from '../router/routes';
 
 const REPORT_HISTORY_FALLBACK = [];
@@ -109,11 +110,11 @@ const normalizePatientInfo = (report = {}) => {
     if (!text) return [];
 
     const patterns = [
-        { label: 'Patient Name', pattern: /(?:patient name|name)\s*[:\-]\s*([^\n,;|]{2,80})/i },
-        { label: 'Age', pattern: /(?:age)\s*[:\-]\s*([0-9]{1,3}(?:\s*(?:years?|yrs?))?)/i },
-        { label: 'Gender', pattern: /(?:sex|gender)\s*[:\-]\s*([A-Za-z]{3,10})/i },
-        { label: 'Patient ID', pattern: /(?:patient id|id)\s*[:\-]\s*([A-Za-z0-9-]{2,40})/i },
-        { label: 'Report Date', pattern: /(?:report date|date of report|date)\s*[:\-]\s*([A-Za-z0-9,/\- ]{4,40})/i },
+        { label: 'Patient Name', pattern: /(?:patient name|name)\s*[:-]\s*([^\n,;|]{2,80})/i },
+        { label: 'Age', pattern: /(?:age)\s*[:-]\s*([0-9]{1,3}(?:\s*(?:years?|yrs?))?)/i },
+        { label: 'Gender', pattern: /(?:sex|gender)\s*[:-]\s*([A-Za-z]{3,10})/i },
+        { label: 'Patient ID', pattern: /(?:patient id|id)\s*[:-]\s*([A-Za-z0-9-]{2,40})/i },
+        { label: 'Report Date', pattern: /(?:report date|date of report|date)\s*[:-]\s*([-A-Za-z0-9,/ ]{4,40})/i },
     ];
 
     return patterns
@@ -230,93 +231,6 @@ const mergeSummaryViews = (current = {}, next = {}) => ({
     notes: next.notes?.length ? next.notes : current.notes || [],
     source: next.source || current.source || '',
 });
-
-const formatValueText = (value) => {
-    if (value === null || value === undefined || value === '') {
-        return '';
-    }
-
-    if (typeof value === 'object') {
-        try {
-            return JSON.stringify(value, null, 2);
-        } catch {
-            return '';
-        }
-    }
-
-    return String(value).trim();
-};
-
-const formatSummaryFile = (report) => {
-    const summary = report?.summaryData ?? normalizeReportSummaryData(report);
-    const lines = [];
-
-    lines.push('ArogyaAI Summary Report');
-    lines.push(`Report: ${report?.fileName || report?.title || 'Medical Report'}`);
-    lines.push(`Date: ${formatDate(report?.createdAt)}`);
-    if (summary.status) {
-        lines.push(`Status: ${summary.status}`);
-    }
-    if (summary.risk_level) {
-        lines.push(`Risk Level: ${summary.risk_level}`);
-    }
-    lines.push('');
-    lines.push('Summary');
-    if (summary.summary) {
-        lines.push(summary.summary);
-    } else {
-        lines.push('Summary not available for this report');
-    }
-    lines.push('');
-    lines.push('Risk Analysis');
-    if (summary.risk_analysis.length) {
-        summary.risk_analysis.forEach((item) => lines.push(`- ${formatValueText(item)}`));
-    } else {
-        lines.push('- No risk statements were returned for this report.');
-    }
-    lines.push('');
-    lines.push('Recommendations');
-    if (summary.recommendations.length) {
-        summary.recommendations.forEach((item) => lines.push(`- ${formatValueText(item)}`));
-    } else {
-        lines.push('- No recommendations were returned for this report.');
-    }
-    lines.push('');
-    lines.push('Extracted Values');
-    if (summary.extracted_values.length) {
-        summary.extracted_values.forEach((item) => {
-            const normalizedItem = item && typeof item === 'object' && !Array.isArray(item)
-                ? item
-                : { value: item };
-            const name = formatValueText(normalizedItem.name ?? normalizedItem.label ?? normalizedItem.test ?? 'Extracted Value') || 'Extracted Value';
-            const value = formatValueText(
-                normalizedItem.value ??
-                    normalizedItem.result ??
-                    normalizedItem.reading ??
-                    normalizedItem.measurement ??
-                    normalizedItem.amount ??
-                    normalizedItem.score ??
-                    normalizedItem.text ??
-                    normalizedItem.summary ??
-                    normalizedItem.description
-            ) || 'No value';
-            const unit = formatValueText(normalizedItem.unit);
-            const status = formatValueText(normalizedItem.status ?? normalizedItem.flag ?? normalizedItem.trend);
-            const pieces = [name, value];
-            if (unit) {
-                pieces[1] = `${value}${unit ? ` ${unit}` : ''}`;
-            }
-            if (status) {
-                pieces.push(status);
-            }
-            lines.push(`- ${pieces.filter(Boolean).join(' | ')}`);
-        });
-    } else {
-        lines.push('- No structured values were extracted from this report.');
-    }
-
-    return lines.join('\n');
-};
 
 const normalizeReport = (report) => {
     const fileUrl = report?.fileUrl ?? report?.file_url ?? report?.url ?? '';
@@ -584,8 +498,6 @@ const Reports = () => {
     }, [selectedReport]);
 
     const selectedSummaryData = selectedReport ? (selectedReport.summaryData ?? normalizeReportSummaryData(selectedReport)) : null;
-    const selectedSummaryHasContent = Boolean(selectedSummaryData && hasReportSummaryContent(selectedSummaryData));
-
     const handleSelectReport = (report) => {
         setSelectedReport(report);
         setSelectedReportLoading(false);
@@ -594,22 +506,24 @@ const Reports = () => {
     const handleDownloadSummary = async () => {
         if (!selectedReport) return;
 
-        const summary = selectedReport.summaryData ?? normalizeReportSummaryData(selectedReport);
-        if (!hasReportSummaryContent(summary)) {
+        if (selectedReportLoading) {
+            console.warn('[Reports] PDF export skipped because the report is still loading.', {
+                reportId: selectedReport.id,
+            });
             return;
         }
 
-        const fileContent = formatSummaryFile(selectedReport);
-        const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' });
-        const blobUrl = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-
-        link.href = blobUrl;
-        link.download = `${selectedReport.fileName || selectedReport.title || 'medical-report'}-summary.txt`;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        window.URL.revokeObjectURL(blobUrl);
+        try {
+            console.log('[Reports] Download Summary clicked.', {
+                reportId: selectedReport.id,
+                fileName: selectedReport.fileName,
+                hasSummaryContent: hasReportSummaryContent(selectedReport.summaryData ?? normalizeReportSummaryData(selectedReport)),
+            });
+            await generateStyledSummaryPdf(selectedReport, buildSummaryPdfFileName(selectedReport));
+        } catch (error) {
+            console.error('[Reports] Failed to export summary PDF:', error);
+            alert(`PDF generation failed: ${error?.message || 'Unknown error'}`);
+        }
     };
 
     return (
@@ -755,7 +669,7 @@ const Reports = () => {
                                             <button
                                                 type="button"
                                                 onClick={handleDownloadSummary}
-                                                disabled={!selectedSummaryHasContent || selectedReportLoading}
+                                                disabled={!selectedReport || selectedReportLoading}
                                                 className="p-2.5 hover:bg-white dark:hover:bg-white/10 rounded-xl text-slate-500 dark:text-slate-400 transition-all active:scale-90 border border-transparent hover:border-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
                                             >
                                                 <Download size={18} />

@@ -55,6 +55,9 @@ const toDisplayText = (value) => {
             if (text) return text;
         }
 
+        const formatted = formatObject(value);
+        if (formatted) return formatted;
+
         try {
             return JSON.stringify(value, null, 2);
         } catch {
@@ -63,6 +66,19 @@ const toDisplayText = (value) => {
     }
 
     return '';
+};
+
+const formatObject = (obj) => {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return 'N/A';
+
+    const entries = Object.entries(obj)
+        .map(([key, value]) => {
+            const renderedValue = toDisplayText(value);
+            return renderedValue ? `${toTitleCase(key)}: ${renderedValue}` : '';
+        })
+        .filter(Boolean);
+
+    return entries.length ? entries.join(', ') : 'N/A';
 };
 
 const toTitleCase = (value) => {
