@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.requests import Request
 
 # Import modular routers
-from routes import auth, intelligence, users, prediction, dashboard, google_fit, vitals, notifications, user_data, reports, sleep, insights, lab_results
+from routes import auth, intelligence, users, prediction, dashboard, google_fit, vitals, notifications, user_data, reports, sleep, insights, lab_results, timeline
 
 from database.session import engine
 from core.config import settings
@@ -131,6 +131,7 @@ app.include_router(notifications.router)
 app.include_router(user_data.router)
 app.include_router(sleep.router)
 app.include_router(insights.router)
+app.include_router(timeline.router)
 
 
 @app.on_event("startup")
