@@ -6,7 +6,8 @@ import { ArrowLeft, Bell, ChevronRight, CheckCircle2, Database, FileText, HelpCi
 
 import { ROUTES } from '../router/routes';
 import { useReportUploadStore } from '../store/reportUploadStore';
-import { getApiRootUrl } from '../lib/apiBaseUrl';
+import { apiClient } from '../lib/apiClient';
+import { resolveReportType, saveUploadedReportSession } from '../lib/reportUpload';
 
 const PIPELINE_STAGES = [
     { key: 'uploading', label: 'Uploading file', target: 20, detail: 'Sending the PDF securely to ArogyaAI.' },
@@ -73,9 +74,9 @@ const ReportProcessing = () => {
         }, 250);
 
         const analyzeReport = async () => {
-            const apiBaseUrl = getApiRootUrl(import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000');
             const formData = new FormData();
             formData.append('file', pendingFile);
+            formData.append('report_type', resolveReportType(pendingFile));
 
             try {
                 setStageKey('uploading');
@@ -98,8 +99,11 @@ const ReportProcessing = () => {
                     setProgress((prev) => Math.max(prev, 45));
                 }, 1400);
 
-                const response = await axios.post(`${apiBaseUrl}/api/v1/reports/analyze`, formData, {
+                const response = await apiClient.post('/reports/analyze', formData, {
                     signal: controller.signal,
+                    headers: {
+                        'Content-Type': 'multipart/form-data',
+                    },
                     onUploadProgress: (event) => {
                         if (!isMounted || !event.total) return;
 
@@ -114,6 +118,7 @@ const ReportProcessing = () => {
 
                 if (!isMounted) return;
 
+                console.log('UPLOAD RESPONSE:', response);
                 clearTimeout(uploadFallbackTimeout);
                 clearTimeout(extractingStageTimeout);
                 clearTimeout(processingStageTimeout);
@@ -130,7 +135,9 @@ const ReportProcessing = () => {
                     setProgress((prev) => Math.max(prev, 100));
                 }, 300);
 
-                setReportResult(response.data.data, pendingFile.name);
+                const reportData = response.data.data || {};
+                saveUploadedReportSession(reportData);
+                setReportResult(reportData, pendingFile.name);
 
                 setTimeout(() => {
                     if (!isMounted) return;

@@ -1,9 +1,11 @@
 import asyncio
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.requests import Request
 
 # Import modular routers
@@ -24,6 +26,9 @@ app = FastAPI(
     description="Orchestrator API routing to specialized Microservices.",
     version="1.0.0"
 )
+
+Path(settings.REPORT_UPLOAD_DIR).parent.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
 app.add_middleware(

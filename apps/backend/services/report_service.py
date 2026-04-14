@@ -4,11 +4,13 @@ import uuid
 from io import BytesIO
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from fastapi import HTTPException, UploadFile, status
 from pypdf import PdfReader
 from sqlalchemy.orm import Session
 
+from core.config import settings
 from models import Report, ReportStatusEnum, ReportTypeEnum, User
 
 
@@ -74,6 +76,9 @@ class ReportService:
             "error": None,
             "data": {
                 "id": str(report.id),
+                "name": cls._report_name(report.file_url, file.filename),
+                "file_name": file.filename,
+                "file_size": len(file_bytes),
                 "report_type": report.report_type.value,
                 "file_url": report.file_url,
                 "status": report.status.value,
@@ -85,8 +90,71 @@ class ReportService:
                 "ocr_text": analysis["ocr_text"],
                 "markers": analysis["markers"],
                 "summary_source": analysis["source"],
+                "summary_view": cls._build_summary_view(
+                    analysis["ocr_text"],
+                    analysis["summary"],
+                    analysis["markers"],
+                    analysis["title"],
+                    analysis["source"],
+                ),
             },
         }
+
+    @classmethod
+    def list_reports(
+        cls,
+        db: Session,
+        current_user: User,
+        status_filter: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        query = db.query(Report).filter(
+            Report.user_id == current_user.id,
+            Report.is_deleted == False,
+        )
+
+        if status_filter:
+            try:
+                query = query.filter(Report.status == ReportStatusEnum(status_filter.upper()))
+            except ValueError as exc:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid report status.") from exc
+
+        rows = (
+            query.order_by(Report.created_at.desc())
+            .offset(max(offset, 0))
+            .limit(max(limit, 1))
+            .all()
+        )
+
+        return [cls._serialize_report(report) for report in rows]
+
+    @classmethod
+    def get_report(
+        cls,
+        db: Session,
+        current_user: User,
+        report_id: str,
+    ) -> dict[str, Any]:
+        try:
+            report_uuid = uuid.UUID(report_id)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid report id.") from exc
+
+        report = (
+            db.query(Report)
+            .filter(
+                Report.id == report_uuid,
+                Report.user_id == current_user.id,
+                Report.is_deleted == False,
+            )
+            .first()
+        )
+
+        if not report:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
+
+        return cls._serialize_report(report)
 
     @classmethod
     def _persist_file(cls, user_id: Any, original_name: str, file_bytes: bytes) -> tuple[Path, str]:
@@ -194,7 +262,7 @@ class ReportService:
     @staticmethod
     def _summarize_text(text: str, markers: list[dict[str, str]]) -> list[str]:
         words = text.split()
-        line_one = "PDF report uploaded and text extracted successfully."
+        line_one = "Report text extracted successfully."
 
         if markers:
             marker_names = ", ".join(marker["name"] for marker in markers[:3])
@@ -214,6 +282,150 @@ class ReportService:
     def _safe_filename(filename: str) -> str:
         cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", filename or "report")
         return cleaned.strip("-") or "report"
+
+    @staticmethod
+    def _report_name(file_url: str, fallback_name: str | None = None) -> str:
+        parsed_path = urlparse(file_url or "").path
+        file_name = Path(parsed_path).name if parsed_path else ""
+        return file_name or fallback_name or "Medical Report"
+
+    @classmethod
+    def _serialize_report(cls, report: Report) -> dict[str, Any]:
+        file_name = cls._report_name(report.file_url)
+        file_size = None
+        parsed_path = urlparse(report.file_url or "").path.lstrip("/")
+        parsed_text = (report.parsed_text or "").strip()
+        if parsed_text and not cls._looks_like_fallback_text(parsed_text):
+            analysis = cls._build_local_analysis(file_name, parsed_text)
+        elif parsed_text:
+            analysis = {
+                "title": file_name,
+                "summary": [],
+                "ocr_text": parsed_text,
+                "markers": [],
+                "source": "local-fallback",
+            }
+        else:
+            analysis = {
+            "title": file_name,
+            "summary": [],
+            "ocr_text": "",
+            "markers": [],
+            "source": "stored-empty",
+            }
+        if parsed_path:
+            file_path = Path(parsed_path)
+            if file_path.exists():
+                try:
+                    file_size = file_path.stat().st_size
+                except OSError:
+                    file_size = None
+
+        return {
+            "id": str(report.id),
+            "name": file_name,
+            "file_name": file_name,
+            "file_url": report.file_url,
+            "report_type": report.report_type.value,
+            "status": report.status.value,
+            "created_at": report.created_at.isoformat() if report.created_at else None,
+            "updated_at": report.updated_at.isoformat() if report.updated_at else None,
+            "file_size": file_size,
+            "parsed_text": report.parsed_text,
+            "ocr_text": analysis["ocr_text"],
+            "summary": analysis["summary"],
+            "markers": analysis["markers"],
+            "summary_source": analysis["source"],
+            "summary_view": cls._build_summary_view(
+                analysis["ocr_text"],
+                analysis["summary"],
+                analysis["markers"],
+                analysis["title"],
+                analysis["source"],
+            ),
+        }
+
+    @classmethod
+    def _build_summary_view(
+        cls,
+        extracted_text: str,
+        summary_lines: list[str],
+        markers: list[dict[str, str]],
+        title: str,
+        source: str,
+    ) -> dict[str, Any]:
+        normalized_text = re.sub(r"\s+", " ", extracted_text or "").strip()
+        if not normalized_text or source == "local-fallback":
+            return {
+                "title": title,
+                "patient_info": {},
+                "key_findings": [],
+                "biomarkers": [],
+                "abnormal_values": [],
+                "notes": [],
+                "source": source,
+            }
+
+        return {
+            "title": title,
+            "patient_info": cls._extract_patient_info(extracted_text),
+            "key_findings": [line for line in summary_lines if line],
+            "biomarkers": [marker for marker in markers if marker],
+            "abnormal_values": [],
+            "notes": cls._extract_notes(normalized_text),
+            "source": source,
+        }
+
+    @staticmethod
+    def _extract_patient_info(text: str) -> dict[str, str]:
+        if not text:
+            return {}
+
+        patterns = {
+            "patient_name": r"(?:patient name|name)\s*[:\-]\s*([^\n,;|]{2,80})",
+            "age": r"\bage\s*[:\-]\s*([0-9]{1,3}(?:\s*(?:years?|yrs?))?)",
+            "sex": r"(?:sex|gender)\s*[:\-]\s*([A-Za-z]{3,10})",
+            "patient_id": r"(?:patient id|id)\s*[:\-]\s*([A-Za-z0-9-]{2,40})",
+            "report_date": r"(?:report date|date of report|date)\s*[:\-]\s*([A-Za-z0-9,/\- ]{4,40})",
+        }
+
+        extracted: dict[str, str] = {}
+        for key, pattern in patterns.items():
+            match = re.search(pattern, text, flags=re.IGNORECASE)
+            if match:
+                extracted[key] = match.group(1).strip()
+        return extracted
+
+    @staticmethod
+    def _extract_notes(text: str) -> list[str]:
+        if not text:
+            return []
+
+        sentences = [segment.strip() for segment in re.split(r"(?<=[.!?])\s+", text) if segment.strip()]
+        if sentences:
+            note = " ".join(sentences[:2]).strip()
+        else:
+            words = text.split()
+            note = " ".join(words[:35]).strip()
+
+        if not note:
+            return []
+
+        return [note[:240] + ("..." if len(note) > 240 else "")]
+
+    @staticmethod
+    def _looks_like_fallback_text(text: str) -> bool:
+        lowered = (text or "").lower()
+        return any(
+            marker in lowered
+            for marker in [
+                "image ocr is not configured on this machine yet",
+                "no text could be extracted from this pdf",
+                "free mode currently supports direct text extraction from pdf reports",
+                "pdf uploaded and stored successfully",
+                "report uploaded and stored successfully",
+            ]
+        )
 
     @staticmethod
     def _validate_report_type(report_type: str) -> None:

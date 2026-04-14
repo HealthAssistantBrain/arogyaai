@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
@@ -15,6 +16,7 @@ class Settings(BaseSettings):
     # APP URLS
     FRONTEND_APP_URL: str = os.getenv("FRONTEND_APP_URL", "http://localhost:5173")
     BACKEND_PUBLIC_URL: str = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000")
+    REPORT_UPLOAD_DIR: str = os.getenv("REPORT_UPLOAD_DIR", str(Path("uploads") / "reports"))
 
     # GOOGLE FIT
     GOOGLE_FIT_CLIENT_ID: str = os.getenv("GOOGLE_FIT_CLIENT_ID", "")

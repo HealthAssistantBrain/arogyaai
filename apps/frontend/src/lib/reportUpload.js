@@ -1,6 +1,7 @@
 import { apiClient } from './apiClient';
 
 const STORAGE_KEY = 'arogyaai-report-upload';
+const HISTORY_KEY = 'arogyaai-report-history';
 
 const reportTypeMap = {
   pdf: 'BLOOD_TEST',
@@ -15,10 +16,35 @@ export const resolveReportType = (file) => {
 };
 
 export const saveUploadedReportSession = (payload) => {
-  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  if (typeof window !== 'undefined') {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+
+    try {
+      const rawHistory = localStorage.getItem(HISTORY_KEY);
+      const history = rawHistory ? JSON.parse(rawHistory) : [];
+      const normalizedHistory = Array.isArray(history) ? history : [];
+      const nextEntry = {
+        ...payload,
+        source: payload?.source || 'upload',
+      };
+      const nextHistory = [
+        nextEntry,
+        ...normalizedHistory.filter((item) => {
+          const currentKey = item?.id || item?.fileUrl || item?.file_url || item?.fileName || item?.title;
+          const nextKey = nextEntry.id || nextEntry.fileUrl || nextEntry.file_url || nextEntry.fileName || nextEntry.title;
+          return currentKey !== nextKey;
+        }),
+      ];
+
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(nextHistory));
+    } catch (error) {
+      console.warn('[reportUpload] Failed to persist report history', error);
+    }
+  }
 };
 
 export const getUploadedReportSession = () => {
+  if (typeof window === 'undefined') return null;
   const raw = sessionStorage.getItem(STORAGE_KEY);
 
   if (!raw) return null;
@@ -31,25 +57,53 @@ export const getUploadedReportSession = () => {
   }
 };
 
+export const getUploadedReportHistory = () => {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    const history = raw ? JSON.parse(raw) : [];
+    return Array.isArray(history) ? history : [];
+  } catch (error) {
+    console.warn('[reportUpload] Failed to read report history', error);
+    return [];
+  }
+};
+
 export const clearUploadedReportSession = () => {
-  sessionStorage.removeItem(STORAGE_KEY);
+  if (typeof window !== 'undefined') {
+    sessionStorage.removeItem(STORAGE_KEY);
+  }
 };
 
 const normalizeResponse = (response, file, reportType) => {
   const payload = response?.data?.data ?? response?.data ?? {};
+  const fileName = payload.name ?? payload.file_name ?? file.name;
+  const fileUrl = payload.file_url ?? payload.fileUrl ?? null;
+  const summary = payload.summary ?? payload.patient_summary ?? [];
+  const summaryView = payload.summary_view ?? payload.summaryView ?? null;
 
   return {
     id: payload.id ?? null,
-    fileName: file.name,
+    name: fileName,
+    fileName,
+    file_name: fileName,
     fileSize: file.size,
-    fileUrl: payload.file_url ?? null,
+    fileUrl,
+    file_url: fileUrl,
     reportType: payload.report_type ?? reportType,
     status: payload.status ?? 'PENDING',
     createdAt: payload.created_at ?? new Date().toISOString(),
     title: payload.title ?? file.name,
-    summary: Array.isArray(payload.summary) ? payload.summary : [],
+    summary,
+    summaryView,
     ocrText: payload.ocr_text ?? '',
+    parsedText: payload.parsed_text ?? payload.parsedText ?? payload.ocr_text ?? '',
     markers: Array.isArray(payload.markers) ? payload.markers : [],
+    abnormalValues: Array.isArray(payload.abnormal_values) ? payload.abnormal_values : [],
+    patientSummary: payload.patient_summary ?? '',
+    risks: Array.isArray(payload.risks) ? payload.risks : [],
+    recommendations: Array.isArray(payload.recommendations) ? payload.recommendations : [],
     summarySource: payload.summary_source ?? 'unknown',
   };
 };
