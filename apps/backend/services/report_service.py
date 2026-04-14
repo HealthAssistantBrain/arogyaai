@@ -229,17 +229,19 @@ class ReportService:
 
     @staticmethod
     def _extract_markers(text: str) -> list[dict[str, str]]:
+        # NOTE: every unit group MUST be a capturing group (...)
+        # so that match.group(2) is always safe when the pattern matches.
         marker_patterns = [
-            ("Hemoglobin", r"hemoglobin[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(g/dl|gm/dl|g%)?"),
-            ("WBC", r"(?:wbc|white blood cells?)[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(?:/mm3|cells/?u?l|10\^3/?u?l)?"),
-            ("RBC", r"(?:rbc|red blood cells?)[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(?:million/?u?l|10\^6/?u?l)?"),
-            ("Platelets", r"(?:platelets?)[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(?:lakhs/?cumm|10\^3/?u?l|/mm3)?"),
-            ("Glucose", r"(?:glucose|blood sugar|fasting glucose)[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(mg/dl)?"),
-            ("HbA1c", r"(?:hba1c|a1c)[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(%)?"),
-            ("Creatinine", r"(?:creatinine)[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(mg/dl)?"),
-            ("Urea", r"(?:urea|blood urea)[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(mg/dl)?"),
-            ("TSH", r"(?:tsh)[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(uIU/ml|miu/l|mIU/L)?"),
-            ("Vitamin D", r"(?:vitamin d|25-oh vitamin d)[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(ng/ml)?"),
+            ("Hemoglobin",  r"hemoglobin[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(g/dl|gm/dl|g%)?"),
+            ("WBC",         r"(?:wbc|white blood cells?)[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(/mm3|cells/?u?l|10\^3/?u?l)?"),
+            ("RBC",         r"(?:rbc|red blood cells?)[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(million/?u?l|10\^6/?u?l)?"),
+            ("Platelets",   r"(?:platelets?)[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(lakhs/?cumm|10\^3/?u?l|/mm3)?"),
+            ("Glucose",     r"(?:glucose|blood sugar|fasting glucose)[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(mg/dl)?"),
+            ("HbA1c",       r"(?:hba1c|a1c)[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(%)?"),
+            ("Creatinine",  r"creatinine[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(mg/dl)?"),
+            ("Urea",        r"(?:urea|blood urea)[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(mg/dl)?"),
+            ("TSH",         r"tsh[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(uiu/ml|miu/l|miu/l)?"),
+            ("Vitamin D",   r"(?:vitamin d|25-oh vitamin d)[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(ng/ml)?"),
             ("Cholesterol", r"(?:total cholesterol|cholesterol)[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(mg/dl)?"),
         ]
 
@@ -249,15 +251,17 @@ class ReportService:
             match = re.search(pattern, lowered, flags=re.IGNORECASE)
             if not match:
                 continue
+            unit = (match.group(2) if match.lastindex and match.lastindex >= 2 else None) or ""
             markers.append(
                 {
                     "name": name,
                     "value": match.group(1) or "",
-                    "unit": (match.group(2) or "").strip(),
+                    "unit": unit.strip(),
                     "flag": "captured",
                 }
             )
         return markers
+
 
     @staticmethod
     def _summarize_text(text: str, markers: list[dict[str, str]]) -> list[str]:

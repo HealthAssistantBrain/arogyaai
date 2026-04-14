@@ -1,7 +1,8 @@
 """
-Lab pipeline — processes raw lab report text into structured, persisted lab results.
+Lab pipeline service — processes raw lab report text into structured DB records.
 
-Pure functions with a single side effect: DB write in store_lab_results().
+Lives inside apps/backend/services/ so it is available inside the Docker container
+without requiring the monorepo pipelines/ directory (which is not COPYed into the image).
 
 Entry point: run_lab_pipeline(text, user_id, report_id, db)
 """
@@ -18,7 +19,7 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger("uvicorn.error")
 
 # ---------------------------------------------------------------------------
-# Reference catalogue — single source of truth for all known lab parameters
+# Lab parameter catalogue (single source of truth shared with the route)
 # ---------------------------------------------------------------------------
 _LAB_DEFINITIONS: list[dict[str, Any]] = [
     {
@@ -77,7 +78,7 @@ _LAB_DEFINITIONS: list[dict[str, Any]] = [
         "category": "biochemistry",
         "unit": "mg/dL",
         "reference_range": "0.7 - 1.3",
-        "patterns": [r"(?:creatinine)[:\s\-]*([0-9]+(?:\.[0-9]+)?)"],
+        "patterns": [r"creatinine[:\s\-]*([0-9]+(?:\.[0-9]+)?)"],
     },
     {
         "key": "urea",
@@ -113,7 +114,7 @@ _LAB_DEFINITIONS: list[dict[str, Any]] = [
         "category": "lipid",
         "unit": "mg/dL",
         "reference_range": "< 150",
-        "patterns": [r"(?:triglycerides?)[:\s\-]*([0-9]+(?:\.[0-9]+)?)"],
+        "patterns": [r"triglycerides?[:\s\-]*([0-9]+(?:\.[0-9]+)?)"],
     },
     {
         "key": "tsh",
@@ -121,98 +122,65 @@ _LAB_DEFINITIONS: list[dict[str, Any]] = [
         "category": "thyroid",
         "unit": "uIU/mL",
         "reference_range": "0.4 - 4.0",
-        "patterns": [r"(?:tsh)[:\s\-]*([0-9]+(?:\.[0-9]+)?)"],
+        "patterns": [r"tsh[:\s\-]*([0-9]+(?:\.[0-9]+)?)"],
     },
 ]
 
 
-# ---------------------------------------------------------------------------
-# Pure helper: classify status from reference range string
-# ---------------------------------------------------------------------------
 def _classify_status(value: float, reference_range: str) -> str:
     normalized = (reference_range or "").strip()
 
-    lt_match = re.match(r"^<\s*([0-9]+(?:\.[0-9]+)?)$", normalized)
-    if lt_match:
-        threshold = float(lt_match.group(1))
-        if value <= threshold:
+    lt = re.match(r"^<\s*([0-9]+(?:\.[0-9]+)?)$", normalized)
+    if lt:
+        t = float(lt.group(1))
+        if value <= t:
             return "normal"
-        return "borderline" if value <= threshold * 1.15 else "high"
+        return "borderline" if value <= t * 1.15 else "high"
 
-    gt_match = re.match(r"^>\s*([0-9]+(?:\.[0-9]+)?)$", normalized)
-    if gt_match:
-        threshold = float(gt_match.group(1))
-        if value >= threshold:
+    gt = re.match(r"^>\s*([0-9]+(?:\.[0-9]+)?)$", normalized)
+    if gt:
+        t = float(gt.group(1))
+        if value >= t:
             return "normal"
-        return "borderline" if value >= threshold * 0.85 else "low"
+        return "borderline" if value >= t * 0.85 else "low"
 
-    range_match = re.match(r"^([0-9]+(?:\.[0-9]+)?)\s*-\s*([0-9]+(?:\.[0-9]+)?)$", normalized)
-    if range_match:
-        low = float(range_match.group(1))
-        high = float(range_match.group(2))
-        if low <= value <= high:
+    rng = re.match(r"^([0-9]+(?:\.[0-9]+)?)\s*-\s*([0-9]+(?:\.[0-9]+)?)$", normalized)
+    if rng:
+        lo, hi = float(rng.group(1)), float(rng.group(2))
+        if lo <= value <= hi:
             return "normal"
-        band = max((high - low) * 0.1, 0.1)
-        if value < low:
-            return "borderline" if value >= low - band else "low"
-        return "borderline" if value <= high + band else "high"
+        band = max((hi - lo) * 0.1, 0.1)
+        if value < lo:
+            return "borderline" if value >= lo - band else "low"
+        return "borderline" if value <= hi + band else "high"
 
     return "normal"
 
 
-# ---------------------------------------------------------------------------
-# Step 1: Extract raw numeric matches from text (no side effects)
-# ---------------------------------------------------------------------------
 def extract_lab_values(text: str) -> list[dict[str, Any]]:
-    """
-    Regex-scan *text* against all known lab parameter patterns.
-
-    Returns a list of dicts with keys:
-        key, name, category, unit, reference_range, raw_value
-    """
+    """Parse text and return matched lab parameter dicts (no side-effects)."""
     results: list[dict[str, Any]] = []
-
     for defn in _LAB_DEFINITIONS:
         raw: float | None = None
         for pattern in defn["patterns"]:
-            match = re.search(pattern, text, flags=re.IGNORECASE)
-            if match:
+            m = re.search(pattern, text, flags=re.IGNORECASE)
+            if m:
                 try:
-                    raw = float(match.group(1))
+                    raw = float(m.group(1))
                     break
                 except (TypeError, ValueError):
                     continue
-
         if raw is not None:
-            results.append(
-                {
-                    "key": defn["key"],
-                    "name": defn["name"],
-                    "category": defn["category"],
-                    "unit": defn["unit"],
-                    "reference_range": defn["reference_range"],
-                    "raw_value": raw,
-                }
-            )
-
+            results.append({**defn, "raw_value": raw})
     return results
 
 
-# ---------------------------------------------------------------------------
-# Step 2: Normalise raw extractions into canonical format (no side effects)
-# ---------------------------------------------------------------------------
 def normalize_lab_values(raw_values: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """
-    Apply rounding + status classification to each extraction.
-
-    Returns list of dicts matching the canonical format:
-        name, value, unit, reference_range, category, status
-    """
-    normalized: list[dict[str, Any]] = []
-
+    """Round values and classify status (no side-effects)."""
+    out = []
     for item in raw_values:
         value = round(item["raw_value"], 1)
-        normalized.append(
+        out.append(
             {
                 "name": item["name"],
                 "category": item["category"],
@@ -222,36 +190,26 @@ def normalize_lab_values(raw_values: list[dict[str, Any]]) -> list[dict[str, Any
                 "status": _classify_status(value, item["reference_range"]),
             }
         )
+    return out
 
-    return normalized
 
-
-# ---------------------------------------------------------------------------
-# Step 3: Persist to DB (upsert on user_id + report_id + name)
-# ---------------------------------------------------------------------------
 def store_lab_results(
     db: Session,
     user_id: UUID | str,
     report_id: UUID | str | None,
-    normalized_values: list[dict[str, Any]],
+    normalized: list[dict[str, Any]],
 ) -> int:
-    """
-    Upsert *normalized_values* into the lab_results table.
-
-    Uses a raw SQL upsert (ON CONFLICT DO UPDATE) so that re-processing the
-    same report is idempotent.  Returns the number of rows affected.
-    """
+    """Upsert normalized lab rows into lab_results table. Returns count stored."""
     from sqlalchemy import text as _text
 
-    if not normalized_values:
+    if not normalized:
         return 0
 
-    rows_affected = 0
     now = datetime.now(timezone.utc)
+    count = 0
 
-    for item in normalized_values:
+    for item in normalized:
         if report_id is not None:
-            # Upsert keyed on (user_id, report_id, name)
             db.execute(
                 _text(
                     """
@@ -264,9 +222,9 @@ def store_lab_results(
                          :reference_range, :category, :status, :ts, :ts, :ts)
                     ON CONFLICT (user_id, report_id, name)
                     DO UPDATE SET
-                        value           = EXCLUDED.value,
-                        status          = EXCLUDED.status,
-                        updated_at      = EXCLUDED.updated_at
+                        value      = EXCLUDED.value,
+                        status     = EXCLUDED.status,
+                        updated_at = EXCLUDED.updated_at
                     """
                 ),
                 {
@@ -282,7 +240,6 @@ def store_lab_results(
                 },
             )
         else:
-            # No report_id — simple insert
             db.execute(
                 _text(
                     """
@@ -306,16 +263,12 @@ def store_lab_results(
                     "ts": now,
                 },
             )
-
-        rows_affected += 1
+        count += 1
 
     db.commit()
-    return rows_affected
+    return count
 
 
-# ---------------------------------------------------------------------------
-# Orchestrator: extract → normalize → store
-# ---------------------------------------------------------------------------
 def run_lab_pipeline(
     text: str,
     user_id: UUID | str,
@@ -323,31 +276,18 @@ def run_lab_pipeline(
     db: Session,
 ) -> list[dict[str, Any]]:
     """
-    Full pipeline: parse text → classify → persist → return normalized values.
-
-    Never raises — failures are logged and an empty list is returned so the
-    caller (upload flow) continues normally.
+    Full pipeline: extract → normalize → persist.
+    Never raises — failures are logged and [] is returned.
     """
     try:
         raw = extract_lab_values(text)
         if not raw:
-            logger.info("Lab pipeline: no recognisable lab values in text (report_id=%s)", report_id)
+            logger.info("lab_pipeline: no lab values found (report_id=%s)", report_id)
             return []
-
         normalized = normalize_lab_values(raw)
         count = store_lab_results(db, user_id, report_id, normalized)
-        logger.info(
-            "Lab pipeline: stored %d lab results for user=%s report=%s",
-            count,
-            user_id,
-            report_id,
-        )
+        logger.info("lab_pipeline: stored %d results (user=%s report=%s)", count, user_id, report_id)
         return normalized
-
     except Exception:
-        logger.exception(
-            "Lab pipeline failed for user=%s report=%s — results not persisted",
-            user_id,
-            report_id,
-        )
+        logger.exception("lab_pipeline: failed for user=%s report=%s", user_id, report_id)
         return []

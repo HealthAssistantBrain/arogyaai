@@ -34,6 +34,7 @@ from .user_setting    import UserSetting
 from .session         import Session
 from .log             import Log
 from .google_fit_connection import GoogleFitConnection
+from .lab_result          import LabResult
 
 __all__ = [
     # Core Base
@@ -57,6 +58,7 @@ __all__ = [
     "Session",
     "Log",
     "GoogleFitConnection",
+    "LabResult",
     # Enums
     "GenderEnum",
     "DeviceTypeEnum",

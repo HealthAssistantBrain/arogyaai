@@ -192,6 +192,22 @@ def _persist_analyzed_report(
     db.commit()
     db.refresh(report)
 
+    # ── Lab pipeline hook (non-fatal) ──────────────────────────────────────
+    # Runs after the report is committed so report.id exists in the DB.
+    try:
+        from services.lab_pipeline_service import run_lab_pipeline
+        run_lab_pipeline(
+            text=extracted_text,
+            user_id=current_user.id,
+            report_id=report.id,
+            db=db,
+        )
+    except Exception:
+        logger.exception(
+            "Lab pipeline failed — lab results not persisted for report %s", report.id
+        )
+    # ── end lab pipeline hook ──────────────────────────────────────────────
+
     return {
         "id": str(report.id),
         "name": ReportService._report_name(report.file_url, file.filename),
