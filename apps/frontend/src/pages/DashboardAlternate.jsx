@@ -47,6 +47,7 @@ import {
   Cell 
 } from 'recharts';
 import { ROUTES } from '../router/routes';
+import { openCommandPalette } from '../components/CommandPalette';
 
 // Mock Data
 const metabolicTrendData = [
@@ -110,7 +111,7 @@ const DashboardAlternate = () => {
           <header className="h-20 bg-white/50 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-8 shrink-0 backdrop-blur-md z-30">
             <div className="w-96">
               <div className="relative group">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6043F4] transition-colors" size={18} />
+                <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6043F4] transition-colors" size={18} />
                 <input 
                   className="w-full bg-slate-100/50 dark:bg-slate-800 border-none rounded-xl pl-10 pr-4 py-2 focus:ring-2 focus:ring-[#6043F4]/20 text-sm font-medium transition-all outline-none" 
                   placeholder="Search biometrics, patients, or alerts..." 

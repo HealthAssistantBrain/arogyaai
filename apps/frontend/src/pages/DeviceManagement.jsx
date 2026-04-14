@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { ROUTES } from '../router/routes';
 import googleFitLogo from '../assets/google-fit.png';
+import { openCommandPalette } from '../components/CommandPalette';
 
 /* ═══════════════════════════════════════════════════════════════
    DeviceCard — Rectangular card with settings gear icon
@@ -353,7 +354,7 @@ const DeviceManagement = () => {
         {/* Search */}
         <div className="flex-1 max-w-md">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <input
               className="w-full h-10 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg pl-9 pr-4 text-[13px] font-medium placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-[#6143f4]/20 focus:border-[#6143f4]/30 transition-all dark:text-white"
               placeholder="Search medical data, devices, or insights..."

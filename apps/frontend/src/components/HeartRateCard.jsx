@@ -1,4 +1,4 @@
-import { Heart, RefreshCw, Activity, Link2 } from 'lucide-react';
+import { Heart, Activity, Link2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import HeartRateChart from './charts/HeartRateChart';
@@ -9,7 +9,7 @@ const HeartRateCard = () => {
   const navigate = useNavigate();
   const heartRateSlice = useDashboardStore((s) => s.vitals?.['heart_rate:24h']);
   const googleFitSlice = useDashboardStore((s) => s.googleFit);
-  const fetchVitals = useDashboardStore((s) => s.fetchVitals);
+
 
   const heartRateData = Array.isArray(heartRateSlice?.data) ? heartRateSlice.data : [];
   const loading = heartRateSlice?.status === 'processing';
@@ -35,25 +35,15 @@ const HeartRateCard = () => {
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-3">
+        {!connected && (
           <button
-            onClick={() => fetchVitals('heart_rate', '24h', { force: true })}
-            disabled={loading}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-[12px] font-black uppercase tracking-[0.16em] text-[#13082a] transition hover:border-rose-500/30 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/5 dark:text-white"
+            onClick={() => navigate(ROUTES.GOOGLE_FIT_SETTINGS)}
+            className="inline-flex items-center gap-2 rounded-2xl bg-[#6143f4] px-4 py-3 text-[12px] font-black uppercase tracking-[0.16em] text-white transition hover:bg-[#5235dc]"
           >
-            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-            {loading ? 'Syncing...' : 'Refresh'}
+            <Link2 size={16} />
+            Connect Google Fit
           </button>
-          {!connected && (
-            <button
-              onClick={() => navigate(ROUTES.GOOGLE_FIT_SETTINGS)}
-              className="inline-flex items-center gap-2 rounded-2xl bg-[#6143f4] px-4 py-3 text-[12px] font-black uppercase tracking-[0.16em] text-white transition hover:bg-[#5235dc]"
-            >
-              <Link2 size={16} />
-              Connect Google Fit
-            </button>
-          )}
-        </div>
+        )}
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">

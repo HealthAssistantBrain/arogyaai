@@ -53,27 +53,48 @@ const Login = () => {
     // Lock ALL guards + bypass all interceptor logic before touching auth state.
     lockSystem();
     setAuthFlow(true); // suppress maintenance redirects during login
+
     try {
-      // 1. Call standard backend Authentication workflow
+      // STEP 1 — FORCE CLEAN STATE BEFORE LOGIN
+      // STEP 6 — REMOVE ANY CACHED USER
+      useAuthStore.getState().setUser(null);
+      localStorage.removeItem('user');
+      sessionStorage.removeItem('user');
+
+      // Call standard backend Authentication workflow
       const response = await api.post('auth/login', data);
 
       if (response.status !== 200) {
         throw new Error(response.data?.detail || 'Invalid email or password');
       }
 
-      // 2. Extract access token
+      // STEP 2 — SET TOKEN FIRST
       const { access_token } = response.data.data;
-
-      // 3. Set token in store
       setToken(access_token);
 
-      // 4. Sync with server state (blocks until /users/me resolves)
+      // STEP 3 — IMMEDIATE USER FETCH (MANDATORY)
+      let userObj = null;
+      try {
+        const userRes = await api.get("/api/v1/users/me");
+        userObj = userRes.data;
+        // STEP 9 — DEBUG (TEMPORARY)
+        console.log("LOGIN USER:", userObj.data);
+      } catch (err) {
+        // STEP 8 — ADD SAFETY GUARD (IMPORTANT)
+        useAuthStore.getState().setUser(null);
+        throw new Error('Failed to fetch user profile');
+      }
+
+      // STEP 4 — HARD OVERWRITE STORE
+      useAuthStore.getState().setUser(userObj.data);
+
+      // Delegate rest of the sync to hydrateAuth
       await hydrateAuth();
 
-      // 5. Fire global revalidation signal to flush router correctly
+      // Fire global revalidation signal to flush router correctly
       triggerAuthRevalidation();
 
-      // 5. Read resolved state
+      // Read resolved state
       const { isAuthenticated } = useAuthStore.getState();
 
       if (!isAuthenticated) {

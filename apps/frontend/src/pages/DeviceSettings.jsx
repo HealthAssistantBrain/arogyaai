@@ -32,6 +32,7 @@ import {
   Zap
 } from 'lucide-react';
 import { ROUTES } from '../router/routes';
+import { openCommandPalette } from '../components/CommandPalette';
 
 const DeviceSettings = () => {
     const navigate = useNavigate();
@@ -112,7 +113,7 @@ const DeviceSettings = () => {
                     <header className="h-24 bg-white/70 dark:bg-[#0B0819]/70 backdrop-blur-3xl border-b border-[#6143f4]/10 flex items-center justify-between px-10 shrink-0 sticky top-0 z-20">
                         <div className="flex-1 max-w-xl">
                             <div className="relative group">
-                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" size={20} />
+                                <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" size={20} />
                                 <input className="w-full h-14 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl pl-12 pr-6 text-sm font-medium focus:ring-4 focus:ring-[#6143f4]/10 focus:border-[#6143f4]/40 transition-all placeholder:text-slate-400 outline-none dark:text-white shadow-sm" placeholder="Search settings, data or devices..." type="text"/>
                             </div>
                         </div>

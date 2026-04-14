@@ -1,4 +1,3 @@
-import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { ROUTES } from '../router/routes';
@@ -47,16 +46,11 @@ export default function UserProfileBadge({
   const navigate = useNavigate();
   const authUser = useAuthStore((state) => state.user);
   const role = useAuthStore((state) => state.role);
-  const config = VARIANTS[variant] ?? VARIANTS.standard;
-  const profile = useMemo(
-    () => getUserProfile(userOverride ?? authUser, role),
-    [authUser, role, userOverride]
-  );
-  const [avatarSrc, setAvatarSrc] = useState(profile.avatar);
 
-  useEffect(() => {
-    setAvatarSrc(profile.avatar);
-  }, [profile.avatar]);
+  const config = VARIANTS[variant] ?? VARIANTS.standard;
+
+  // STEP 7: STRICT NO MEMO CACHING / NO LOCAL STATE
+  const profile = getUserProfile(userOverride ?? authUser, role);
 
   return (
     <div
@@ -78,9 +72,9 @@ export default function UserProfileBadge({
       <div className={config.avatarWrap}>
         <img
           className={config.avatar}
-          src={avatarSrc}
+          src={profile.avatar}
           alt={profile.name}
-          onError={() => setAvatarSrc(profile.fallbackAvatar)}
+          onError={(e) => { e.currentTarget.src = profile.fallbackAvatar; }}
         />
       </div>
     </div>

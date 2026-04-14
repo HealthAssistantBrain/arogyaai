@@ -38,6 +38,7 @@ import {
 import api from '../lib/axios';
 import toast from 'react-hot-toast';
 import { ROUTES } from '../router/routes';
+import { openCommandPalette } from '../components/CommandPalette';
 
 const aqiTrendData = [
   { day: 'Mon', aqi: 42, cat: 'Good' },
@@ -382,7 +383,7 @@ const AQIMonitor = () => {
                            }}
                            className="size-10 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 text-white flex items-center justify-center hover:bg-white/20 transition-all"
                          >
-                           <Search size={18} />
+                           <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} size={18} />
                          </button>
                          <AnimatePresence>
                            {isSearchOpen && (
@@ -393,7 +394,7 @@ const AQIMonitor = () => {
                                className="absolute right-0 top-14 w-80 rounded-2xl border border-white/15 bg-[#13082A]/95 p-3 shadow-2xl backdrop-blur-xl"
                              >
                                <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/10 px-3">
-                                 <Search size={16} className="text-white/60" />
+                                 <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} size={16} className="text-white/60" />
                                  <input
                                    type="text"
                                    value={searchQuery}

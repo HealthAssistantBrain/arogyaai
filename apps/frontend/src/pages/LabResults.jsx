@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { ROUTES } from '../router/routes';
 import { apiClient } from '../lib/apiClient';
+import { openCommandPalette } from '../components/CommandPalette';
 
 const FILTERS = [
   { label: 'All', value: 'all' },
@@ -177,7 +178,7 @@ const LabResults = () => {
           <header className="h-20 bg-white/80 dark:bg-[#131022]/80 backdrop-blur-md border-b border-[#6143f4]/10 flex items-center justify-between px-10 shrink-0 z-10">
             <div className="flex-1 max-w-xl">
               <div className="relative group">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" size={18} />
+                <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" size={18} />
                 <input className="w-full pl-12 pr-6 py-3 bg-slate-100 dark:bg-white/5 border-none rounded-2xl text-sm font-medium focus:ring-2 focus:ring-[#6143f4]/20 transition-all placeholder:text-slate-400 outline-none" placeholder="Search lab parameters, dates or providers..." type="text" />
               </div>
             </div>

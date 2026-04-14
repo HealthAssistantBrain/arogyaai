@@ -16,6 +16,7 @@ import { apiClient } from '../lib/apiClient';
 import { getUploadedReportHistory, getUploadedReportSession } from '../lib/reportUpload';
 import { buildSummaryPdfFileName, generateStyledSummaryPdf } from '../utils/generateStyledSummaryPdf';
 import { ROUTES } from '../router/routes';
+import { openCommandPalette } from '../components/CommandPalette';
 
 const REPORT_HISTORY_FALLBACK = [];
 
@@ -538,7 +539,7 @@ const Reports = () => {
                     <header className="h-24 bg-white/40 dark:bg-[#131022]/40 backdrop-blur-2xl border-b border-[#6143f4]/10 flex items-center justify-between px-10 shrink-0 z-10">
                         <div className="flex items-center gap-6 flex-1 max-w-2xl">
                             <div className="relative w-full group">
-                                <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" size={20} />
+                                <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" size={20} />
                                 <input className="w-full pl-14 pr-7 py-4 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/5 rounded-[1.75rem] focus:ring-4 focus:ring-[#6143f4]/10 outline-none transition-all shadow-xl shadow-slate-200/30 dark:shadow-none placeholder:text-slate-400 font-medium" placeholder="Search reports, clinics, or diagnosis..." type="text"/>
                             </div>
                         </div>

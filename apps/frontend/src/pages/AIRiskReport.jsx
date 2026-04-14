@@ -27,6 +27,7 @@ import {
   CalendarDays
 } from 'lucide-react';
 import { ROUTES } from '../router/routes';
+import { openCommandPalette } from '../components/CommandPalette';
 
 const AIRiskReport = () => {
     const navigate = useNavigate();
@@ -58,7 +59,7 @@ const AIRiskReport = () => {
                         <h2 className="text-[#13082a] dark:text-white text-xl font-black tracking-tight leading-none uppercase">ArogyaAI</h2>
                     </div>
                     <div className="hidden md:flex relative h-10 w-64 group">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" size={18} />
+                        <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" size={18} />
                         <input className="w-full h-full pl-10 pr-4 rounded-xl border-none bg-slate-100 dark:bg-white/5 focus:ring-2 focus:ring-[#6143f4]/20 text-sm font-medium outline-none transition-all" placeholder="Search records..." type="text"/>
                     </div>
                 </div>

@@ -2,6 +2,7 @@ import { HelpCircle, Search, MessageSquare, Book, LifeBuoy } from 'lucide-react'
 import PageWrapper from '../components/layout/PageWrapper';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
+import { openCommandPalette } from '../components/CommandPalette';
 
 const Help = () => {
   return (
@@ -13,7 +14,7 @@ const Help = () => {
         </div>
 
         <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted w-5 h-5" />
+          <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted w-5 h-5" />
           <input
             type="text"
             placeholder="Search topics, e.g. HRV, Lab Results..."

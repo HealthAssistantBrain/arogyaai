@@ -3,6 +3,7 @@ import { Bell, Search, Menu } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../router/routes';
 import useNotificationStore from '../../store/notificationStore';
+import { openCommandPalette } from '../CommandPalette';
 
 const TopBar = () => {
     const location = useLocation();
@@ -39,7 +40,7 @@ const TopBar = () => {
 
             <div className="flex items-center gap-2">
                 <button className="p-2 text-text-secondary hover:bg-white hover:shadow-sm rounded-xl transition-all">
-                    <Search className="w-5 h-5" />
+                    <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="w-5 h-5" />
                 </button>
                 <button
                     type="button"

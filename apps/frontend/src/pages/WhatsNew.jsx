@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../router/routes';
 import { motion } from 'framer-motion';
 import { 
+import { openCommandPalette } from '../components/CommandPalette';
   LayoutDashboard, 
   Brain, 
   Search, 
@@ -32,7 +33,7 @@ const WhatsNew = () => {
   const menuItems = [
     { icon: <LayoutDashboard size={20} />, label: 'Dashboard', path: ROUTES.DASHBOARD },
     { icon: <Brain size={20} />, label: 'AI Insights', path: ROUTES.INSIGHTS },
-    { icon: <SearchIcon size={20} />, label: 'Disease Simulator', path: '/simulator' },
+    { icon: <SearchIcon onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} size={20} />, label: 'Disease Simulator', path: '/simulator' },
     { icon: <Activity size={20} />, label: 'Health List', path: ROUTES.List },
     { icon: <FlaskConical size={20} />, label: 'Lab Results', path: ROUTES.LAB_RESULTS },
     { icon: <FileText size={20} />, label: 'Medical Reports', path: ROUTES.MEDICAL_REPORTS },
@@ -55,7 +56,7 @@ const WhatsNew = () => {
         <header className="bg-white/80 dark:bg-[#13082A]/80 backdrop-blur-2xl border-b border-slate-200 dark:border-white/5 h-24 px-10 flex items-center justify-between shrink-0 sticky top-0 z-50">
           <div className="flex-1 max-w-2xl relative">
             <div className="relative group">
-              <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" size={18} />
+              <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" size={18} />
               <input 
                 className="w-full pl-16 pr-6 py-4 bg-slate-100/50 dark:bg-white/5 border-none rounded-2xl focus:outline-none focus:ring-4 focus:ring-[#6143f4]/10 transition-all text-[11px] font-bold text-[#13082A] dark:text-white uppercase tracking-[0.2em] italic placeholder:text-slate-400" 
                 placeholder="Search updates, protocols or features..." 

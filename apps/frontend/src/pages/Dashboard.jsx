@@ -11,9 +11,7 @@ import {
   Moon,
   Watch,
   Settings,
-  Bell,
   Plus,
-  Search,
   TrendingUp,
   Heart,
   Flame,
@@ -55,9 +53,11 @@ import useDashboardStore from '../store/dashboardStore';
 import { useAuthStore } from '../store/authStore';
 import HeartRateCard from '../components/HeartRateCard';
 import UserProfileBadge from '../components/UserProfileBadge';
+import { CommandPaletteTrigger } from '../components/CommandPalette';
 const Dashboard = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('Dashboard');
+  const [syncing, setSyncing] = useState(false);
 
   // ── Store ─────────────────────────────────────────────────────────────────
   const { healthScore, prediction, profile, alerts,
@@ -66,6 +66,26 @@ const Dashboard = () => {
   const authUser = useAuthStore((s) => s.user);
 
   useEffect(() => { fetchDashboardData(); }, [fetchDashboardData]);
+
+  // ── Sync handler ──────────────────────────────────────────────────────────
+  const handleSync = async () => {
+    try {
+      setSyncing(true);
+      const { default: api } = await import('../lib/axios');
+      await api.post('/api/v1/google-fit/sync');
+      await fetchDashboardData();
+    } catch (err) {
+      console.error('Sync failed', err);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+
+  // ── Open global command palette ───────────────────────────────────────────
+  const openPalette = () => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
+  };
 
   // ── Per-module data + status ──────────────────────────────────────────────
   // Each store key is now a slice: { data, status, source, last_updated }
@@ -164,26 +184,20 @@ const Dashboard = () => {
 
         {/* Top Header Navbar - Matched Stitch */}
         <header className="h-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-8 flex items-center justify-between sticky top-0 z-20">
-          <div className="flex items-center gap-4 flex-1">
-            <div className="relative w-full max-w-md group">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" size={18} />
-              <input
-                className="w-full pl-10 pr-4 py-2 bg-slate-100 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-[#6143f4] text-sm font-medium"
-                placeholder="Search health records, insights, or labs..."
-                type="text"
-              />
-            </div>
+          {/* Global search trigger — left side */}
+          <div className="flex items-center flex-1">
+            <CommandPaletteTrigger onClick={openPalette} />
           </div>
 
-          <div className="flex items-center gap-4">
-            <button className="p-2 text-slate-500 bg-transparent hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full relative transition-colors" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
-              <Bell size={20} />
-              <span className="absolute top-2.5 right-2.5 size-2 bg-red-500 rounded-full ring-2 ring-white dark:ring-slate-900"></span>
-            </button>
-            <div className="h-8 w-px bg-slate-200 dark:bg-slate-800 mx-2"></div>
-            <button className="flex items-center gap-2 bg-[#6143f4] text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-[#6143f4]/20 hover:shadow-xl transition-all active:scale-95">
-              <Plus size={16} strokeWidth={3} />
-              Sync Data
+          {/* Actions — right side */}
+          <div className="flex items-center ml-6">
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="flex items-center gap-2 bg-[#6143f4] text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-[#6143f4]/20 hover:shadow-xl transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              <Plus size={16} strokeWidth={3} className={syncing ? 'animate-spin' : ''} />
+              {syncing ? 'Syncing...' : 'Sync Data'}
             </button>
           </div>
         </header>
@@ -396,12 +410,12 @@ const Dashboard = () => {
               </div>
               <div className="space-y-6">
                 <div className="h-4 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden shadow-inner border border-white dark:border-slate-700">
-                    <motion.div
-                      initial={{ width: 0 }}
+                  <motion.div
+                    initial={{ width: 0 }}
                     animate={{ width: `${gfProgress ?? 0}%` }}
-                      transition={{ duration: 1.5, ease: "easeOut" }}
-                      className="h-full bg-gradient-to-r from-[#6143f4] to-[#009CDE] rounded-full"
-                    ></motion.div>
+                    transition={{ duration: 1.5, ease: "easeOut" }}
+                    className="h-full bg-gradient-to-r from-[#6143f4] to-[#009CDE] rounded-full"
+                  ></motion.div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 group hover:bg-[#6143f4]/5 hover:border-[#6143f4]/20 transition-all">

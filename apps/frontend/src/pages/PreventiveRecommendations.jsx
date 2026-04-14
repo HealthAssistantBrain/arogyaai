@@ -16,6 +16,7 @@ import {
     Activity,
 } from 'lucide-react';
 import { ROUTES } from '../router/routes';
+import { openCommandPalette } from '../components/CommandPalette';
 
 const PreventiveRecommendations = () => {
     const navigate = useNavigate();
@@ -83,7 +84,7 @@ const PreventiveRecommendations = () => {
             {/* Top Header */}
             <header className="h-20 bg-white/80 dark:bg-[#131022]/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-8 flex items-center justify-between sticky top-0 z-40 shrink-0">
                 <div className="relative w-full max-w-md group">
-                    <Search
+                    <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} 
                         className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors"
                         size={18}
                     />

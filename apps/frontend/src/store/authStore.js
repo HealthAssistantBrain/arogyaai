@@ -71,7 +71,10 @@ export const useAuthStore = create(
         isHydratingAuth: false,   // ← network fetching lock
 
         setUser: (user) =>
-          set({ user: user || {}, isAuthenticated: true }, false, 'setUser'),
+          set({
+            user: user || {},
+            isAuthenticated: !!user && Object.keys(user).length > 0
+          }, false, 'setUser'),
 
         setToken: (token) => {
           // ── SECTION 5: TOKEN VALIDATION ──
@@ -370,16 +373,16 @@ export const useAuthStore = create(
               overrideStep !== null
                 ? overrideStep
                 : (persistedStep !== null && persistedStep >= 1 && persistedStep <= 5
-                ? persistedStep
-                : 1)
+                  ? persistedStep
+                  : 1)
             const normalizedOnboardingStep = normalizedOnboardingDone
               ? 6
               : (
                 overrideStep !== null
                   ? overrideStep
                   : (stepFromServer !== null && stepFromServer >= 1 && stepFromServer <= 5
-                  ? stepFromServer
-                  : fallbackIncompleteStep)
+                    ? stepFromServer
+                    : fallbackIncompleteStep)
               )
 
             // #region agent log (authStore hydrateAuth normalization)
@@ -470,16 +473,16 @@ export const useAuthStore = create(
           }
 
           // 1. Wipe all Zustand state back to absolute zero (No stale state remains)
-              set(
-                {
-                  user: {},
-                  profile: {},
-                  healthProfile: {},
-                  vitals: [],
-                  notifications: [],
-                  profileLoading: false,
-                  profileError: null,
-                  token: null,
+          set(
+            {
+              user: {},
+              profile: {},
+              healthProfile: {},
+              vitals: [],
+              notifications: [],
+              profileLoading: false,
+              profileError: null,
+              token: null,
               refreshToken: null,
               isAuthenticated: false,
               isEmailVerified: false,
@@ -509,16 +512,16 @@ export const useAuthStore = create(
         // ────────────────────────────────────────────────────────────────────
         hardReset: () => {
           // 1. Wipe all Zustand state back to absolute zero
-              set(
-              {
-                user: {},
-                profile: {},
-                healthProfile: {},
-                vitals: [],
-                notifications: [],
-                profileLoading: false,
-                profileError: null,
-                token: null,
+          set(
+            {
+              user: {},
+              profile: {},
+              healthProfile: {},
+              vitals: [],
+              notifications: [],
+              profileLoading: false,
+              profileError: null,
+              token: null,
               refreshToken: null,
               isAuthenticated: false,
               isEmailVerified: false,

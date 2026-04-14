@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../router/routes';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
+import { openCommandPalette } from '../components/CommandPalette';
   ShieldCheck, 
   ChevronRight, 
   Search, 
@@ -60,7 +61,7 @@ const DataConsent = () => {
                 <header className="bg-white/80 dark:bg-[#0B0819]/80 backdrop-blur-3xl border-b border-[#6143f4]/10 h-24 px-12 flex items-center justify-between shrink-0 sticky top-0 z-50">
                     <div className="flex-1 max-w-2xl">
                         <div className="relative group/search bg-slate-100 dark:bg-white/5 rounded-2xl border border-transparent focus-within:border-[#6143f4]/20 transition-all">
-                            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                            <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                             <input 
                                 className="w-full pl-14 pr-6 py-4 bg-transparent border-none outline-none text-[12px] font-bold text-[#13082a] dark:text-white placeholder:text-slate-400 uppercase tracking-tight" 
                                 placeholder="Search insights, labs, or records..." 

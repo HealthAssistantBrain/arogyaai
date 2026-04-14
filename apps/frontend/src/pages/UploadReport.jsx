@@ -4,6 +4,7 @@ import { CloudUpload, ArrowLeft, Bell, HelpCircle, Search, FileText } from 'luci
 
 import { ROUTES } from '../router/routes';
 import { useReportUploadStore } from '../store/reportUploadStore';
+import { openCommandPalette } from '../components/CommandPalette';
 
 const UploadReport = () => {
     const navigate = useNavigate();
@@ -52,7 +53,7 @@ const UploadReport = () => {
                                 <ArrowLeft size={20} strokeWidth={3} />
                             </button>
                             <div className="relative group flex-1">
-                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                                <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
                                 <input className="w-full h-14 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl pl-12 pr-6 text-sm font-medium outline-none dark:text-white shadow-sm" placeholder="Search reports, insights or doctor notes..." type="text"/>
                             </div>
                         </div>

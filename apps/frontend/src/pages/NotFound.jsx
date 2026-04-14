@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../router/routes';
 import { motion } from 'framer-motion';
 import { 
+import { openCommandPalette } from '../components/CommandPalette';
   Dna, 
   SearchX, 
   ArrowLeft, 
@@ -74,7 +75,7 @@ const NotFound = () => {
                    <div className="absolute inset-0 bg-[#6143f4]/20 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
                  </div>
                  <div className="size-32 rounded-[2.5rem] bg-[#009CDE]/10 text-[#009CDE] flex items-center justify-center shadow-inner relative group-hover:scale-110 transition-transform duration-500 delay-75">
-                   <SearchX size={64} strokeWidth={2.5} />
+                   <SearchX onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} size={64} strokeWidth={2.5} />
                    <div className="absolute inset-0 bg-[#009CDE]/20 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
                  </div>
                </div>

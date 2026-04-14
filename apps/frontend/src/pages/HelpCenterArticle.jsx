@@ -3,6 +3,7 @@ import { ROUTES } from '../router/routes';
 import { motion } from 'framer-motion';
 import React from 'react';
 import { 
+import { openCommandPalette } from '../components/CommandPalette';
   LayoutDashboard, 
   Brain, 
   FlaskConical, 
@@ -73,7 +74,7 @@ const HelpCenterArticle = () => {
                     <header className="h-24 bg-white/80 dark:bg-[#0B0819]/80 backdrop-blur-3xl border-b border-[#6143f4]/10 flex items-center justify-between px-10 shrink-0 sticky top-0 z-30">
                         <div className="flex-1 max-w-2xl">
                             <div className="relative group/search cursor-pointer" onClick={() => navigate(ROUTES.HELP_SEARCH)}>
-                                <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within/search:text-[#6143f4] transition-colors" size={18} />
+                                <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within/search:text-[#6143f4] transition-colors" size={18} />
                                 <input className="w-full pl-14 pr-6 py-4 bg-slate-100 dark:bg-white/5 border border-transparent rounded-[1.25rem] transition-all text-[13px] text-[#13082a] dark:text-white placeholder:text-slate-400 font-bold uppercase tracking-tight cursor-pointer" placeholder="Search documentation, guides, and tutorials..." type="text" readOnly/>
                             </div>
                         </div>

@@ -26,6 +26,7 @@ import {
   Wind
 } from 'lucide-react';
 import { ROUTES } from '../router/routes';
+import { openCommandPalette } from '../components/CommandPalette';
 
 const Timeline = () => {
     const navigate = useNavigate();
@@ -154,7 +155,7 @@ const Timeline = () => {
                             Health Timeline
                         </h2>
                         <div className="max-w-md w-full relative group hidden md:block">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" size={18} />
+                            <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" size={18} />
                             <input className="w-full bg-slate-100 dark:bg-slate-800/50 border-none rounded-xl pl-11 pr-4 py-2 text-sm font-semibold focus:ring-2 focus:ring-[#6143f4]/20 transition-all outline-none" placeholder="Search events, diseases, or lab notes..." type="text"/>
                         </div>
                     </div>

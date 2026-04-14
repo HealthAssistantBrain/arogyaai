@@ -4,6 +4,7 @@ import { ROUTES } from '../router/routes';
 import { motion, AnimatePresence } from 'framer-motion';
 import React from 'react';
 import { 
+import { openCommandPalette } from '../components/CommandPalette';
   LayoutDashboard, 
   Brain, 
   FlaskConical, 
@@ -113,7 +114,7 @@ const HelpCenterSearchResults = () => {
                     <header className="h-24 bg-white/80 dark:bg-[#0B0819]/80 backdrop-blur-3xl border-b border-[#6143f4]/10 flex items-center justify-between px-10 shrink-0 sticky top-0 z-30">
                         <div className="flex-1 max-w-2xl">
                             <div className="relative group/search">
-                                <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within/search:text-[#6143f4] transition-colors" size={18} />
+                                <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within/search:text-[#6143f4] transition-colors" size={18} />
                                 <input className="w-full pl-14 pr-6 py-4 bg-slate-100 dark:bg-white/5 border border-transparent rounded-[1.25rem] focus:ring-4 focus:ring-[#6143f4]/10 focus:border-[#6143f4]/30 transition-all text-[13px] text-[#13082a] dark:text-white placeholder:text-slate-400 font-bold uppercase tracking-tight" placeholder="Search documentation, guides, and tutorials..." type="text"/>
                             </div>
                         </div>
@@ -155,7 +156,7 @@ const HelpCenterSearchResults = () => {
                                 <div className="relative group/large">
                                     <div className="absolute inset-0 bg-[#6143f4]/10 blur-3xl opacity-0 group-focus-within/large:opacity-50 transition-opacity duration-500"></div>
                                     <div className="relative flex items-center bg-white dark:bg-white/5 backdrop-blur-3xl rounded-[2.5rem] p-4 shadow-[0_40px_80px_-20px_rgba(97,67,244,0.15)] ring-1 ring-[#6143f4]/10 border border-white dark:border-white/5">
-                                        <Search className="ml-8 text-[#6143f4]" size={36} strokeWidth={3} />
+                                        <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="ml-8 text-[#6143f4]" size={36} strokeWidth={3} />
                                         <input 
                                             className="flex-1 bg-transparent border-none outline-none px-8 py-6 text-2xl lg:text-3xl font-black uppercase tracking-widest text-[#13082a] dark:text-white placeholder:text-slate-300 italic" 
                                             value={searchQuery}

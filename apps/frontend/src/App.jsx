@@ -4,6 +4,7 @@ import GlobalStateValidator from './components/guards/GlobalStateValidator'
 import LegacyProfileBinder from './components/LegacyProfileBinder'
 import AppErrorBoundary from './components/guards/AppErrorBoundary'
 import BrowserNotificationBootstrap from './components/BrowserNotificationBootstrap'
+import CommandPalette from './components/CommandPalette'
 
 export default function App() {
   return (
@@ -11,6 +12,7 @@ export default function App() {
       <GlobalStateValidator />
       <LegacyProfileBinder />
       <BrowserNotificationBootstrap />
+      <CommandPalette />
       <AppRouter />
       <Toaster
         position="top-right"
