@@ -1,0 +1,2 @@
+"""SHAP pipeline package scaffold."""
+

@@ -1,0 +1,2 @@
+"""Storage pipeline package scaffold."""
+

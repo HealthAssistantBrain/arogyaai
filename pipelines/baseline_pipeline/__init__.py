@@ -1,0 +1,2 @@
+"""Baseline pipeline package scaffold."""
+

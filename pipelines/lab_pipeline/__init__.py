@@ -1,0 +1,2 @@
+"""Lab pipeline package scaffold."""
+

@@ -1,0 +1,2 @@
+"""Insights pipeline package scaffold."""
+
