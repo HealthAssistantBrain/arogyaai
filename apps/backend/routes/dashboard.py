@@ -15,15 +15,44 @@ Pipeline-compatible response envelope:
 """
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from database.session import get_db
 from models import User
 from routes.users import get_current_user_from_header
-from services import dashboard_service as svc
 from services import aqi_service
+from services import dashboard_service as svc
+from services.dashboard_realtime import build_dashboard_bundle
 
 router = APIRouter(prefix="/api/v1", tags=["Dashboard"])
+NO_CACHE_HEADERS = {
+    "Cache-Control": "no-cache, no-store, max-age=0, must-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
+
+
+@router.get("/dashboard")
+async def get_dashboard_bundle(
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
+    print("Serving latest dashboard data")
+    bundle = await build_dashboard_bundle(db, current_user)
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "success": True,
+            "status": "ready",
+            "source": "db",
+            "error": None,
+            "data": bundle,
+            "last_updated": bundle.get("last_updated"),
+        },
+        headers=NO_CACHE_HEADERS,
+    )
 
 
 @router.get("/health/score")

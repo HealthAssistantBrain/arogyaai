@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -51,13 +51,16 @@ import {
 import { ROUTES } from '../router/routes';
 import useDashboardStore from '../store/dashboardStore';
 import { useAuthStore } from '../store/authStore';
+import api from '../lib/axios';
 import HeartRateCard from '../components/HeartRateCard';
 import UserProfileBadge from '../components/UserProfileBadge';
 import { CommandPaletteTrigger } from '../components/CommandPalette';
+import { refreshAfterGoogleFitSync } from '../lib/googleFitRefresh';
 const Dashboard = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('Dashboard');
   const [syncing, setSyncing] = useState(false);
+  const refreshInFlightRef = useRef(false);
 
   // ── Store ─────────────────────────────────────────────────────────────────
   const { healthScore, prediction, profile, alerts,
@@ -65,15 +68,38 @@ const Dashboard = () => {
   const vitals = useDashboardStore((s) => s.vitals);
   const authUser = useAuthStore((s) => s.user);
 
-  useEffect(() => { fetchDashboardData(); }, [fetchDashboardData]);
+  const refreshDashboard = async ({ silent = true } = {}) => {
+    if (refreshInFlightRef.current) {
+      return;
+    }
+
+    refreshInFlightRef.current = true;
+    try {
+      await fetchDashboardData({ force: true, silent });
+    } finally {
+      refreshInFlightRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    void refreshDashboard({ silent: false });
+
+    const interval = window.setInterval(() => {
+      void refreshDashboard({ silent: true });
+    }, 30000);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Sync handler ──────────────────────────────────────────────────────────
   const handleSync = async () => {
     try {
       setSyncing(true);
-      const { default: api } = await import('../lib/axios');
-      await api.post('/api/v1/google-fit/sync');
-      await fetchDashboardData();
+      await api.post('/google-fit/sync', {});
+      await refreshAfterGoogleFitSync();
     } catch (err) {
       console.error('Sync failed', err);
     } finally {
@@ -117,10 +143,15 @@ const Dashboard = () => {
   const predRecs = predData?.recommendations ?? [];
   const hasProfileData = Boolean(profData && Object.keys(profData).length > 0);
 
+  const googleFitLatestDaySteps = googleFit?.data?.stats?.latest_day?.steps;
+  const canonicalGoogleFitSteps = Number.isFinite(Number(googleFitLatestDaySteps))
+    ? Math.round(Number(googleFitLatestDaySteps))
+    : null;
   const latestStepsRecord = stepsVitals.length > 0 ? stepsVitals[stepsVitals.length - 1] : null;
-  const gfSteps = latestStepsRecord?.value !== undefined && latestStepsRecord?.value !== null
+  const fallbackSteps = Number.isFinite(Number(latestStepsRecord?.value))
     ? Math.round(Number(latestStepsRecord.value))
     : null;
+  const gfSteps = canonicalGoogleFitSteps ?? fallbackSteps;
   const gfDistance = gfSteps !== null ? (gfSteps * 0.00073529).toFixed(1) : '—';
   const gfCalories = gfSteps !== null ? Math.round(gfSteps * 0.050759) : null;
   const gfProgress = gfSteps !== null ? Math.min((gfSteps / 10000) * 100, 100).toFixed(2) : null;
@@ -212,7 +243,7 @@ const Dashboard = () => {
           {/* Error Banner — Added Post-Audit */}
           <AnimatePresence>
             {error && (
-              <motion.div
+                <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
@@ -224,7 +255,7 @@ const Dashboard = () => {
                   <p className="text-red-700 dark:text-red-400/80 text-xs font-medium truncate">{error}</p>
                 </div>
                 <button
-                  onClick={() => fetchDashboardData()}
+                  onClick={() => void refreshDashboard({ silent: true })}
                   className="bg-red-500 text-white px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-red-600 transition-colors"
                 >
                   Retry Now
@@ -545,4 +576,3 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
-

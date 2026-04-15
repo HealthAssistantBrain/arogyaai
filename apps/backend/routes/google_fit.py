@@ -144,6 +144,7 @@ async def google_fit_callback(
 @router.post("/sync")
 async def sync_google_fit(
     payload: GoogleFitSyncRequest,
+    silent: bool = Query(default=False),
     current_user=Depends(get_current_user_from_header),
     db: Session = Depends(get_db),
 ):
@@ -152,6 +153,7 @@ async def sync_google_fit(
         current_user,
         timezone_name=payload.timezone,
         days=payload.days,
+        silent=silent,
     )
 
 

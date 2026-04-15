@@ -9,12 +9,13 @@ from fastapi.staticfiles import StaticFiles
 from starlette.requests import Request
 
 # Import modular routers
-from routes import auth, intelligence, users, prediction, dashboard, google_fit, vitals, notifications, user_data, reports, sleep, insights, lab_results, timeline
+from routes import auth, intelligence, users, prediction, dashboard, google_fit, vitals, notifications, user_data, reports, sleep, insights, lab_results, timeline, dashboard_ws
 
 from database.session import engine
 from core.config import settings
-from services.auto_fetch_scheduler import start_auto_fetch_scheduler, stop_auto_fetch_scheduler
+from services.dashboard_realtime import start_dashboard_realtime_listener, stop_dashboard_realtime_listener
 from services.health_service import get_system_readiness
+from workers.google_fit_worker import start_google_fit_worker, stop_google_fit_worker
 
 # Critical: import all models so they register on Base.metadata
 import models  # noqa: F401
@@ -123,6 +124,7 @@ app.include_router(users.router)
 app.include_router(intelligence.router)
 app.include_router(prediction.router)
 app.include_router(dashboard.router)
+app.include_router(dashboard_ws.router)
 app.include_router(google_fit.router)
 app.include_router(reports.router)
 app.include_router(lab_results.router)
@@ -149,14 +151,21 @@ async def _startup_scheduler():
         logger.warning("DB Connected check failed during startup: %s", exc)
 
     try:
-        start_auto_fetch_scheduler()
-        logger.info("Scheduler Started")
+        start_google_fit_worker()
+        logger.info("Google Fit background worker started")
     except Exception as exc:
-        logger.exception("Scheduler failed to start: %s", exc)
+        logger.exception("Google Fit worker failed to start: %s", exc)
+
+    try:
+        start_dashboard_realtime_listener(asyncio.get_running_loop())
+        logger.info("Dashboard realtime listener started")
+    except Exception as exc:
+        logger.exception("Dashboard realtime listener failed to start: %s", exc)
 
     logger.info("App Ready")
 
 
 @app.on_event("shutdown")
 def _shutdown_scheduler():
-    stop_auto_fetch_scheduler()
+    stop_google_fit_worker()
+    stop_dashboard_realtime_listener()

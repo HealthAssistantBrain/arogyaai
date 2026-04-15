@@ -10,13 +10,116 @@ import api from '../lib/axios';
  * without changing component structure.
  */
 
-const POLL_INTERVAL_MS = 7_000;
+const POLL_INTERVAL_MS = 30_000;
 const STALE_THRESHOLD_MS = 60_000;
 const VITALS_LIMIT = 100;
 const DEFAULT_VITAL_RANGE = '24h';
+const NO_CACHE_HEADERS = {
+    'Cache-Control': 'no-cache, no-store, max-age=0, must-revalidate',
+    Pragma: 'no-cache',
+};
+
+let dashboardFetchSeq = 0;
 
 const emptySlice = () => ({ data: null, status: 'fallback', source: 'db', last_updated: null });
 const vitalKey = (type, range) => `${type}:${range}`;
+
+const buildNoCacheConfig = (cacheBust) => ({
+    params: { ts: cacheBust },
+    headers: NO_CACHE_HEADERS,
+});
+
+const toTimestampMs = (value) => {
+    if (!value) return null;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : null;
+};
+
+const dashboardSignature = (bundle) => JSON.stringify({
+    healthScore: bundle?.healthScore?.data ?? null,
+    history: bundle?.history?.data ?? null,
+    prediction: bundle?.prediction?.data ?? null,
+    profile: bundle?.profile?.data ?? null,
+    alerts: bundle?.alerts?.data ?? null,
+    googleFit: bundle?.googleFit?.data ?? null,
+    heartRate: bundle?.vitals?.[vitalKey('heart_rate', DEFAULT_VITAL_RANGE)]?.data ?? null,
+    steps: bundle?.vitals?.[vitalKey('steps', DEFAULT_VITAL_RANGE)]?.data ?? null,
+    sleep: bundle?.vitals?.[vitalKey('sleep', DEFAULT_VITAL_RANGE)]?.data ?? null,
+});
+
+const extractPayloadTimestamp = (payload) => {
+    const candidates = [
+        payload?.last_updated,
+        payload?.googleFit?.last_updated,
+        payload?.googleFit?.data?.last_synced_at,
+        payload?.healthScore?.last_updated,
+        payload?.history?.last_updated,
+        payload?.prediction?.last_updated,
+        payload?.profile?.last_updated,
+        payload?.alerts?.last_updated,
+        payload?.vitals?.[vitalKey('heart_rate', DEFAULT_VITAL_RANGE)]?.last_updated,
+        payload?.vitals?.[vitalKey('steps', DEFAULT_VITAL_RANGE)]?.last_updated,
+        payload?.vitals?.[vitalKey('sleep', DEFAULT_VITAL_RANGE)]?.last_updated,
+        payload?.heart_rate?.last_updated,
+        payload?.steps?.last_updated,
+        payload?.sleep?.last_updated,
+    ];
+
+    for (const candidate of candidates) {
+        const ts = toTimestampMs(candidate);
+        if (ts !== null) return ts;
+    }
+
+    return null;
+};
+
+const buildDashboardState = (currentState, payload = {}, replace = false) => {
+    const currentVitals = replace ? {} : { ...(currentState.vitals || {}) };
+    const nextDashboardData = replace
+        ? { ...payload }
+        : { ...(currentState.dashboardData || {}), ...payload };
+
+    if (payload.healthScore) nextDashboardData.healthScore = payload.healthScore;
+    if (payload.history) nextDashboardData.history = payload.history;
+    if (payload.prediction) nextDashboardData.prediction = payload.prediction;
+    if (payload.profile) nextDashboardData.profile = payload.profile;
+    if (payload.alerts) nextDashboardData.alerts = payload.alerts;
+    if (payload.googleFit) nextDashboardData.googleFit = payload.googleFit;
+    if (payload.vitals) nextDashboardData.vitals = payload.vitals;
+
+    if (payload.healthScore) currentState = { ...currentState, healthScore: payload.healthScore };
+    if (payload.history) currentState = { ...currentState, history: payload.history };
+    if (payload.prediction) currentState = { ...currentState, prediction: payload.prediction };
+    if (payload.profile) currentState = { ...currentState, profile: payload.profile };
+    if (payload.alerts) currentState = { ...currentState, alerts: payload.alerts };
+    if (payload.googleFit) currentState = { ...currentState, googleFit: payload.googleFit };
+
+    if (payload.vitals) {
+        Object.entries(payload.vitals).forEach(([key, slice]) => {
+            currentVitals[key] = slice;
+        });
+    }
+
+    if (payload.steps) {
+        currentVitals[vitalKey('steps', DEFAULT_VITAL_RANGE)] = payload.steps;
+    }
+    if (payload.heart_rate) {
+        currentVitals[vitalKey('heart_rate', DEFAULT_VITAL_RANGE)] = payload.heart_rate;
+    }
+    if (payload.sleep) {
+        currentVitals[vitalKey('sleep', DEFAULT_VITAL_RANGE)] = payload.sleep;
+    }
+
+    const nextState = {
+        ...currentState,
+        vitals: currentVitals,
+        dashboardData: nextDashboardData,
+    };
+
+    nextState.dashboardSignature = dashboardSignature(nextState);
+    nextState.dashboardUpdatedAt = extractPayloadTimestamp(payload) ?? extractPayloadTimestamp(nextState) ?? null;
+    return nextState;
+};
 
 const normalizeVitals = (payload, type, range) => {
     const rawRecords = Array.isArray(payload?.data) ? payload.data : [];
@@ -55,13 +158,16 @@ const useDashboardStore = create(
             alerts: emptySlice(),
             googleFit: emptySlice(),
             vitals: {},
+            dashboardData: null,
+            dashboardSignature: null,
+            dashboardUpdatedAt: null,
 
             loading: false,
             error: null,
             lastFetched: null,
             _pollTimer: null,
 
-            fetchVitals: async (type, range = DEFAULT_VITAL_RANGE, { force = false, silent = false } = {}) => {
+            fetchVitals: async (type, range = DEFAULT_VITAL_RANGE, { force = false, silent = false, requestId = null, cacheBust = null } = {}) => {
                 const key = vitalKey(type, range);
                 const current = get().vitals?.[key];
                 if (!force && current?.status === 'ready' && current?.last_updated) {
@@ -88,8 +194,11 @@ const useDashboardStore = create(
                 }
 
                 try {
-                    const res = await api.get('/vitals', { params: { type, range } });
+                    const res = await api.get('/vitals', force ? buildNoCacheConfig(cacheBust ?? `${Date.now()}-${key}`) : { params: { type, range } });
                     const slice = normalizeVitals(res.data, type, range);
+                    if (requestId !== null && requestId !== dashboardFetchSeq) {
+                        return slice;
+                    }
                     set((state) => ({
                         vitals: {
                             ...(state.vitals || {}),
@@ -119,54 +228,71 @@ const useDashboardStore = create(
                 }
             },
 
-            fetchDashboardData: async ({ force = false } = {}) => {
-                const { lastFetched, loading } = get();
-                if (loading) return;
-                if (!force && lastFetched && Date.now() - lastFetched < STALE_THRESHOLD_MS) return;
+            setDashboardData: (payload = {}, { replace = false, source = 'push' } = {}) => {
+                const current = get();
+                const incomingUpdatedAt = extractPayloadTimestamp(payload);
+                const currentUpdatedAt = current.dashboardUpdatedAt ?? null;
 
-                set({ loading: true, error: null }, false, 'fetch/start');
+                const next = buildDashboardState(current, payload, replace);
+                const isStalePayload = currentUpdatedAt !== null && incomingUpdatedAt !== null && incomingUpdatedAt < currentUpdatedAt;
 
-                try {
-                    const [scoreRes, historyRes, predRes, profileRes, alertsRes, googleFitRes, heartRateSlice, stepsSlice, sleepSlice] = await Promise.all([
-                        api.get('/health/score'),
-                        api.get('/health/history'),
-                        api.get('/prediction/latest'),
-                        api.get('/user/profile'),
-                        api.get('/alerts'),
-                        api.get('/google-fit/status').catch(() => ({ data: { data: null, status: 'fallback', source: 'db' } })),
-                        get().fetchVitals('heart_rate', DEFAULT_VITAL_RANGE, { silent: true, force: true }),
-                        get().fetchVitals('steps', DEFAULT_VITAL_RANGE, { silent: true, force: true }),
-                        get().fetchVitals('sleep', DEFAULT_VITAL_RANGE, { silent: true, force: true }),
-                    ]);
+                if (isStalePayload && next.dashboardSignature !== current.dashboardSignature) {
+                    return current.dashboardData;
+                }
 
-                    const toSlice = (res) => ({
-                        data: res.data?.data ?? null,
-                        status: res.data?.status ?? 'fallback',
-                        source: res.data?.source ?? 'db',
-                        last_updated: res.data?.last_updated ?? null,
-                    });
-
-                    const next = {
-                        healthScore: toSlice(scoreRes),
-                        history: toSlice(historyRes),
-                        prediction: toSlice(predRes),
-                        profile: toSlice(profileRes),
-                        alerts: toSlice(alertsRes),
-                        googleFit: toSlice(googleFitRes),
-                        vitals: {
-                            ...(get().vitals || {}),
-                            [vitalKey('heart_rate', DEFAULT_VITAL_RANGE)]: heartRateSlice,
-                            [vitalKey('steps', DEFAULT_VITAL_RANGE)]: stepsSlice,
-                            [vitalKey('sleep', DEFAULT_VITAL_RANGE)]: sleepSlice,
+                if (next.dashboardSignature === current.dashboardSignature) {
+                    set(
+                        {
+                            loading: false,
+                            error: null,
+                            lastFetched: Date.now(),
+                            dashboardUpdatedAt: next.dashboardUpdatedAt ?? current.dashboardUpdatedAt ?? null,
                         },
+                        false,
+                        `dashboard/${source}:unchanged`
+                    );
+                    return current.dashboardData;
+                }
+
+                set(
+                    {
+                        ...next,
                         loading: false,
                         error: null,
                         lastFetched: Date.now(),
-                    };
+                    },
+                    false,
+                    `dashboard/${source}`
+                );
+                return next.dashboardData;
+            },
 
-                    set(next, false, 'fetch/success');
-                    get()._managePoll(next);
+            fetchDashboardData: async ({ force = false, silent = false } = {}) => {
+                const { lastFetched, loading } = get();
+                if (loading && !force) return;
+                if (!force && lastFetched && Date.now() - lastFetched < STALE_THRESHOLD_MS) return;
+
+                const requestId = ++dashboardFetchSeq;
+                const cacheBust = `${Date.now()}-${requestId}`;
+                console.log('[Dashboard] Fetching dashboard data');
+                if (!silent) {
+                    set({ loading: true }, false, 'fetch/start');
+                }
+                set({ error: null }, false, 'fetch/clear-error');
+
+                try {
+                    const response = await api.get('/dashboard', buildNoCacheConfig(cacheBust));
+                    const bundle = response.data?.data ?? {};
+                    if (requestId !== dashboardFetchSeq) {
+                        return bundle;
+                    }
+
+                    get().setDashboardData(bundle, { replace: true, source: 'fetch' });
+                    return bundle;
                 } catch (err) {
+                    if (requestId !== dashboardFetchSeq) {
+                        return;
+                    }
                     console.error('[dashboardStore] fetch failed:', err);
                     set(
                         { loading: false, error: err?.response?.data?.detail || err?.message || 'Failed to load dashboard data.' },
@@ -195,6 +321,7 @@ const useDashboardStore = create(
             clearDashboard: () => {
                 const { _pollTimer } = get();
                 if (_pollTimer) clearInterval(_pollTimer);
+                dashboardFetchSeq = 0;
                 set(
                     {
                         healthScore: emptySlice(),
@@ -204,6 +331,9 @@ const useDashboardStore = create(
                         alerts: emptySlice(),
                         googleFit: emptySlice(),
                         vitals: {},
+                        dashboardData: null,
+                        dashboardSignature: null,
+                        dashboardUpdatedAt: null,
                         loading: false,
                         error: null,
                         lastFetched: null,

@@ -21,6 +21,7 @@ import {
   startGoogleFitConnect,
   syncGoogleFit,
 } from '../lib/googleFitApi';
+import { refreshAfterGoogleFitSync } from '../lib/googleFitRefresh';
 
 const DEFAULT_TIMEZONE = import.meta.env.VITE_GOOGLE_FIT_DEFAULT_TIMEZONE || 'Asia/Kolkata';
 const DEFAULT_WINDOW_DAYS = 30;
@@ -114,7 +115,10 @@ const GoogleFitSettings = () => {
 
     try {
       const response = await syncGoogleFit({ timezone, days: DEFAULT_WINDOW_DAYS });
-      await loadStatus(timezone, { silent: true });
+      await Promise.all([
+        loadStatus(timezone, { silent: true }),
+        refreshAfterGoogleFitSync(),
+      ]);
       if (showSuccessMessage) {
         const missing = Array.isArray(response?.missing) ? response.missing : [];
         const hasStepData = Array.isArray(response?.stats?.daily_steps) && response.stats.daily_steps.some((item) => Number(item?.steps || 0) >= 0);
@@ -193,6 +197,7 @@ const GoogleFitSettings = () => {
         try {
           await loadStatus(timezone, { silent: true });
           await handleSync(false);
+          navigate(ROUTES.DEVICES, { replace: true });
         } catch (syncError) {
           setError(extractApiError(syncError, 'Google Fit sync failed after connection.'));
         }

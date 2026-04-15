@@ -256,19 +256,53 @@ class GoogleFitService:
         return user_device
 
     @staticmethod
+    def _persist_refreshed_access_token(
+        db: Session,
+        user_device: UserDevice,
+        access_token: str,
+        expires_in: int,
+        refresh_token: str | None = None,
+        connection: GoogleFitConnection | None = None,
+    ) -> None:
+        encrypted_access_token = encrypt_secret(access_token)
+        token_expiry = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))
+
+        user_device.access_token = encrypted_access_token
+        user_device.token_expiry = token_expiry
+        user_device.is_active = True
+
+        encrypted_refresh_token = None
+        if refresh_token is not None:
+            encrypted_refresh_token = encrypt_secret(refresh_token)
+            user_device.refresh_token = encrypted_refresh_token
+
+        if connection is None:
+            connection = db.query(GoogleFitConnection).filter(GoogleFitConnection.user_id == user_device.user_id).first()
+
+        if connection:
+            connection.access_token_encrypted = encrypted_access_token
+            connection.token_expires_at = token_expiry
+            if encrypted_refresh_token is not None:
+                connection.refresh_token_encrypted = encrypted_refresh_token
+
+    @staticmethod
     async def _get_valid_user_device_access_token(db: Session, user_device: UserDevice) -> str:
         if user_device.token_expiry and user_device.token_expiry > datetime.now(timezone.utc) + timedelta(minutes=2):
             cached_access_token = decrypt_secret(user_device.access_token)
             if cached_access_token:
                 return cached_access_token
 
+        connection = db.query(GoogleFitConnection).filter(GoogleFitConnection.user_id == user_device.user_id).first()
         refresh_token = decrypt_secret(user_device.refresh_token)
+        if not refresh_token and connection:
+            refresh_token = decrypt_secret(connection.refresh_token_encrypted)
         if not refresh_token:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Google Fit authorization expired. Please reconnect Google Fit.",
             )
 
+        logger.info("[GFit] TOKEN REFRESH STARTED | user=%s", user_device.user_id)
         async with httpx.AsyncClient(timeout=20.0) as client:
             response = await client.post(
                 GOOGLE_TOKEN_URL,
@@ -295,9 +329,17 @@ class GoogleFitService:
                 detail="Google Fit authorization expired. Please reconnect Google Fit.",
             )
 
-        user_device.access_token = encrypt_secret(access_token)
         expires_in = token_data.get("expires_in") or 3600
-        user_device.token_expiry = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))
+        refresh_token = token_data.get("refresh_token") or refresh_token
+        GoogleFitService._persist_refreshed_access_token(
+            db,
+            user_device,
+            access_token,
+            int(expires_in),
+            refresh_token=refresh_token,
+            connection=connection,
+        )
+        logger.info("[GFit] TOKEN REFRESHED | user=%s | expires_in=%s", user_device.user_id, expires_in)
         db.commit()
         return access_token
 
@@ -1129,8 +1171,21 @@ class GoogleFitService:
         )
 
     @staticmethod
-    async def sync_steps(db: Session, user: User, timezone_name: str | None = None, days: int = 30) -> dict[str, Any]:
+    async def sync_steps(
+        db: Session,
+        user: User,
+        timezone_name: str | None = None,
+        days: int = 30,
+        silent: bool = False,
+    ) -> dict[str, Any]:
         connection = GoogleFitService.get_connection(db, user)
+        logger.info(
+            "[GFit] SYNC STARTED | user=%s | timezone=%s | days=%s | silent=%s",
+            user.id,
+            timezone_name,
+            days,
+            silent,
+        )
         if not connection:
             logger.warning("[GFit] Sync requested for user=%s but Google Fit is not connected", user.id)
             return {
@@ -1175,6 +1230,12 @@ class GoogleFitService:
         step_records: list[dict[str, Any]] = []
         fetched_metric_names: list[str] = []
         failed_metrics: list[str] = []
+        logger.info(
+            "[GFit] FETCHING FROM GOOGLE FIT API | user=%s | timezone=%s | days=%s",
+            user.id,
+            resolved_timezone,
+            sync_days,
+        )
         fetch_jobs = [
             ("steps", GoogleFitService.fetch_steps),
             ("heart_rate", GoogleFitService.fetch_heart_rate),
