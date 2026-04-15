@@ -5,7 +5,7 @@ import {
 } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
 import { ROUTES } from './routes'
-import AuthGuard from '../components/guards/AuthGuard'
+import ProtectedRoute from '../components/guards/AuthGuard'
 import OnboardingGuard from '../components/guards/OnboardingGuard'
 import GuestGuard from '../components/guards/GuestGuard'
 import ActiveOnboardingGuard from '../components/guards/ActiveOnboardingGuard'
@@ -95,7 +95,7 @@ export default function AppRouter() {
           </Route>
 
           {/* ── AUTH REQUIRED ─────────────────────────────────── */}
-          <Route element={<AuthGuard />}>
+          <Route element={<ProtectedRoute />}>
 
             {/* CRITICAL: onboarding steps are INSIDE AuthGuard   */}
             {/* but OUTSIDE OnboardingGuard — if they were inside  */}

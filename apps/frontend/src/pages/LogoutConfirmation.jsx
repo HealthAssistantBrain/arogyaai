@@ -15,10 +15,8 @@ const LogoutConfirmation = () => {
     const navigate = useNavigate();
     const logout = useAuthStore((state) => state.logout);
 
-    const handleLogout = () => {
-        logout();
-        // ── Patch 6: use replace:true to purge protected routes from browser history
-        navigate(ROUTES.HOME, { replace: true });
+    const handleLogout = async () => {
+        await logout();
     };
 
     return (

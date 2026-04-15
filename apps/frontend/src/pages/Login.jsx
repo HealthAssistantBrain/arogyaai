@@ -1,4 +1,4 @@
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -26,18 +26,9 @@ const loginSchema = z.object({
 
 const Login = () => {
   const Motion = motion;
-  const navigate = useNavigate();
-  const location = useLocation();
 
   // Selector pattern for Zustand
-  const setToken = useAuthStore((state) => state.setToken);
-  const hydrateAuth = useAuthStore((state) => state.hydrateAuth);
-
-  // ── Patch 3: consume ?redirect= param injected by AuthGuard, fallback to state.from, then home
-  const params = new URLSearchParams(location.search)
-  const redirectTo = params.get('redirect')
-    || location.state?.from?.pathname
-    || ROUTES.HOME;
+  const setAccessToken = useAuthStore((state) => state.setAccessToken);
 
   const {
     register,
@@ -55,11 +46,29 @@ const Login = () => {
     setAuthFlow(true); // suppress maintenance redirects during login
 
     try {
+      const authStore = useAuthStore.getState();
+
       // STEP 1 — FORCE CLEAN STATE BEFORE LOGIN
-      // STEP 6 — REMOVE ANY CACHED USER
-      useAuthStore.getState().setUser(null);
-      localStorage.removeItem('user');
-      sessionStorage.removeItem('user');
+      // Clear all previous session data so a different user can never inherit it.
+      useAuthStore.setState({
+        user: null,
+        profile: {},
+        healthProfile: {},
+        vitals: [],
+        notifications: [],
+        profileLoading: false,
+        profileError: null,
+        isAuthenticated: false,
+        isEmailVerified: false,
+        onboardingStep: 1,
+        onboardingDone: false,
+        role: 'user',
+        isHydrated: true,
+        isHydratingAuth: true,
+      });
+      authStore.setAccessToken(null);
+      authStore.setRefreshToken(null);
+      authStore.setUser(null);
 
       // Call standard backend Authentication workflow
       const response = await api.post('auth/login', data);
@@ -69,27 +78,45 @@ const Login = () => {
       }
 
       // STEP 2 — SET TOKEN FIRST
-      const { access_token } = response.data.data;
-      setToken(access_token);
+      const { access_token, refresh_token } = response.data.data;
+      setAccessToken(access_token);
+      authStore.setRefreshToken(refresh_token ?? null);
 
       // STEP 3 — IMMEDIATE USER FETCH (MANDATORY)
       let userObj = null;
       try {
-        const userRes = await api.get("/api/v1/users/me");
-        userObj = userRes.data;
-        // STEP 9 — DEBUG (TEMPORARY)
-        console.log("LOGIN USER:", userObj.data);
+        const userRes = await api.get("/users/me");
+        userObj = userRes.data?.data ?? userRes.data;
       } catch (err) {
         // STEP 8 — ADD SAFETY GUARD (IMPORTANT)
-        useAuthStore.getState().setUser(null);
+        authStore.setAccessToken(null);
+        authStore.setRefreshToken(null);
+        authStore.setUser(null);
+        useAuthStore.setState({
+          profile: {},
+          healthProfile: {},
+          vitals: [],
+          notifications: [],
+          profileError: null,
+          profileLoading: false,
+          isAuthenticated: false,
+          isEmailVerified: false,
+          onboardingStep: 1,
+          onboardingDone: false,
+          isHydratingAuth: false,
+          isHydrated: true,
+        });
         throw new Error('Failed to fetch user profile');
       }
 
       // STEP 4 — HARD OVERWRITE STORE
-      useAuthStore.getState().setUser(userObj.data);
-
-      // Delegate rest of the sync to hydrateAuth
-      await hydrateAuth();
+      authStore.setUser(userObj);
+      authStore.setEmailVerified(!!(userObj?.is_email_verified ?? userObj?.isEmailVerified));
+      authStore.setOnboardingStatus({
+        onboardingDone: !!(userObj?.is_onboarding_done ?? userObj?.onboardingDone),
+        onboardingStep: userObj?.onboarding_step ?? userObj?.onboardingStep ?? 1,
+      });
+      await authStore.fetchProfile();
 
       // Fire global revalidation signal to flush router correctly
       triggerAuthRevalidation();
@@ -110,8 +137,30 @@ const Login = () => {
       // we call `unlockSystem()`.
     } catch (err) {
       console.error('Login failed:', err);
+      useAuthStore.setState({
+        user: null,
+        profile: {},
+        healthProfile: {},
+        vitals: [],
+        notifications: [],
+        profileLoading: false,
+        profileError: null,
+        token: null,
+        refreshToken: null,
+        isAuthenticated: false,
+        isEmailVerified: false,
+        onboardingStep: 1,
+        onboardingDone: false,
+        role: 'user',
+        isHydrated: true,
+        isHydratingAuth: false,
+      });
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('arogyaai-auth');
+      localStorage.removeItem('user');
       toast.error(err.message || 'Invalid email or password');
     } finally {
+      useAuthStore.setState({ isHydratingAuth: false, isHydrated: true });
       unlockSystem();
       setAuthFlow(false);
     }

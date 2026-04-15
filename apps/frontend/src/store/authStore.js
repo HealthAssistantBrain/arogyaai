@@ -1,9 +1,33 @@
 import { create } from 'zustand'
-import { persist, devtools } from 'zustand/middleware'
-import { isSystemLocked } from '../lib/systemLock'
+import { devtools } from 'zustand/middleware'
 import { getApiUrl } from '../lib/apiBaseUrl'
 
 const API_BASE_URL = getApiUrl(import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000')
+const ACCESS_TOKEN_STORAGE_KEY = 'access_token'
+const LEGACY_AUTH_STORAGE_KEY = 'arogyaai-auth'
+const LEGACY_USER_STORAGE_KEY = 'user'
+
+const isBrowser = () => typeof window !== 'undefined'
+
+const clearLegacyAuthStorage = () => {
+  if (!isBrowser()) return
+
+  window.localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY)
+  window.localStorage.removeItem(LEGACY_AUTH_STORAGE_KEY)
+  window.localStorage.removeItem(LEGACY_USER_STORAGE_KEY)
+}
+
+const persistAccessToken = (token) => {
+  if (!isBrowser()) return
+
+  if (token && typeof token === 'string' && token.trim() !== '') {
+    window.localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, token)
+    window.localStorage.removeItem(LEGACY_AUTH_STORAGE_KEY)
+    window.localStorage.removeItem(LEGACY_USER_STORAGE_KEY)
+  } else {
+    window.localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY)
+  }
+}
 
 const normalizeProfileState = (profile) => ({
   full_name: profile?.full_name ?? null,
@@ -48,12 +72,10 @@ const normalizeProfilePayload = (profile = {}) => {
 //    are user-level persistent data, not session data. They survive across login cycles.
 
 export const useAuthStore = create(
-  devtools(
-    persist(
-      (set, get) => ({
+  devtools((set, get) => ({
         // Trace state for debugging
         logOnboardingState: () => console.log("ONBOARDING STATE:", get()),
-        user: {},
+        user: null,
         profile: {},
         healthProfile: {},
         vitals: [],
@@ -72,7 +94,7 @@ export const useAuthStore = create(
 
         setUser: (user) =>
           set({
-            user: user || {},
+            user: user ?? null,
             isAuthenticated: !!user && Object.keys(user).length > 0
           }, false, 'setUser'),
 
@@ -81,17 +103,21 @@ export const useAuthStore = create(
           if (!token || typeof token !== 'string' || token.trim() === '') {
             // Invalid token → nullify
             set({ token: null }, false, 'setToken')
+            clearLegacyAuthStorage()
             return
           }
           set({ token }, false, 'setToken')
+          persistAccessToken(token)
         },
+
+        setAccessToken: (token) => get().setToken(token),
 
         setRefreshToken: (refreshToken) => {
           set({ refreshToken }, false, 'setRefreshToken')
         },
 
-        setEmailVerified: () =>
-          set({ isEmailVerified: true }, false, 'setEmailVerified'),
+        setEmailVerified: (isEmailVerified = true) =>
+          set({ isEmailVerified: !!isEmailVerified }, false, 'setEmailVerified'),
 
         setOnboardingStatus: (data) => {
           const onboardingDone = data?.onboardingDone ?? data?.is_onboarding_done ?? false
@@ -331,14 +357,31 @@ export const useAuthStore = create(
             : null
 
           if (!token) {
-            set({ isHydrated: true, isHydratingAuth: false })
+            clearLegacyAuthStorage()
+            set({
+              user: null,
+              profile: {},
+              healthProfile: {},
+              vitals: [],
+              notifications: [],
+              token: null,
+              refreshToken: null,
+              isAuthenticated: false,
+              isEmailVerified: false,
+              onboardingStep: 1,
+              onboardingDone: false,
+              role: 'user',
+              isHydrated: true,
+              isHydratingAuth: false
+            }, false, 'hydrateAuth_no_token')
             return
           }
 
           // Atomic: if an explicit token was passed, set it together with
           // isHydratingAuth=true so guards never see the ghost-token state.
           if (tokenOverride !== null) {
-            set({ token: tokenOverride, isHydratingAuth: true }, false, 'hydrateAuth_start')
+            get().setToken(tokenOverride)
+            set({ isHydratingAuth: true }, false, 'hydrateAuth_start')
           } else {
             set({ isHydratingAuth: true })
           }
@@ -422,7 +465,7 @@ export const useAuthStore = create(
               // 401/403: token is dead → wipe everything, user must re-login
               set(
                 {
-                  user: {}, token: null, refreshToken: null,
+                  user: null, token: null, refreshToken: null,
                   profile: {},
                   healthProfile: {},
                   vitals: [],
@@ -433,7 +476,7 @@ export const useAuthStore = create(
                 },
                 false, 'hydrateAuth_HARD_FAIL'
               )
-              localStorage.removeItem('arogyaai-auth')
+              clearLegacyAuthStorage()
             } else {
               // Transient failure (backend 500, network down, etc.).
               // Keep the token: don't log the user out for a temporary error.
@@ -475,7 +518,7 @@ export const useAuthStore = create(
           // 1. Wipe all Zustand state back to absolute zero (No stale state remains)
           set(
             {
-              user: {},
+              user: null,
               profile: {},
               healthProfile: {},
               vitals: [],
@@ -496,9 +539,9 @@ export const useAuthStore = create(
             'logout'
           )
 
-          // 2. Nuke the Zustand persist localStorage key entirely
-          localStorage.removeItem('arogyaai-auth')
-          sessionStorage.clear()
+          // 2. Remove the token-only localStorage session and any legacy leftovers
+          clearLegacyAuthStorage()
+          sessionStorage.removeItem('user')
 
           // 3. Redirect user to "/" (landing page)
           window.location.href = '/'
@@ -514,7 +557,7 @@ export const useAuthStore = create(
           // 1. Wipe all Zustand state back to absolute zero
           set(
             {
-              user: {},
+              user: null,
               profile: {},
               healthProfile: {},
               vitals: [],
@@ -534,52 +577,9 @@ export const useAuthStore = create(
             false,
             'hardReset'
           )
-          // 2. Nuke the Zustand persist localStorage key entirely
-          localStorage.removeItem('arogyaai-auth')
-          sessionStorage.clear()
+          // 2. Clear the token-only session and legacy storage keys
+          clearLegacyAuthStorage()
+          sessionStorage.removeItem('user')
         }
-      }),
-      {
-        name: 'arogyaai-auth',                   // ← exact key — must match this
-        onRehydrateStorage: () => (state) => {
-          // ── Patch 7 + Race-Fix ──────────────────────────────────────────────
-          // PROBLEM: Previously, setHydrated() set isHydrated=true without setting
-          // isHydratingAuth=true. Guards would unblock on the FIRST render and
-          // route on stale localStorage state before hydrateAuth() ran.
-          //
-          // FIX: If a token is present, atomically set BOTH flags so guards are
-          // blocked from the very first render. hydrateAuth() then runs immediately
-          // (not after a render cycle via useEffect) and clears the lock when done.
-          // ─────────────────────────────────────────────────────────────────────
-          if (!state) return;
-
-          const token = state.token;
-          if (token) {
-            // Token exists → server sync needed → lock guards immediately
-            state.isHydrated = true;
-            state.isHydratingAuth = true;
-            // Call hydrateAuth synchronously (it is async internally)
-            // This fires BEFORE any React renders, preventing the stale-state window.
-            state.hydrateAuth();
-          } else {
-            // No token → no server sync needed → unlock guards directly
-            state.setHydrated();
-          }
-        },
-        // ── persisted fields ──
-        partialize: (state) => ({
-          token: state.token,
-          refreshToken: state.refreshToken,
-          user: state.user,
-          profile: state.profile,
-          healthProfile: state.healthProfile,
-          isAuthenticated: state.isAuthenticated,
-          isEmailVerified: state.isEmailVerified,
-          onboardingDone: state.onboardingDone,
-          onboardingStep: state.onboardingStep,
-          role: state.role,
-        }),
-      }
-    )
-  )
+      }), { name: 'arogyaai-auth' })
 )

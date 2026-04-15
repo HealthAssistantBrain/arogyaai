@@ -59,7 +59,7 @@ const getLoginRedirectPath = (pathname, search) => {
     : ROUTES.LOGIN
 }
 
-export default function AuthGuard() {
+export default function ProtectedRoute() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const onboardingDone = useAuthStore((s) => s.onboardingDone)
   const onboardingStep = useAuthStore((s) => s.onboardingStep)
@@ -82,13 +82,13 @@ export default function AuthGuard() {
   // ── TOKEN PARITY: catch desync between isAuthenticated and token ─────────
   if (hasTokenParityError(isAuthenticated, token)) {
     logout()
-    return <SafeNavigate to={ROUTES.HOME} replace />
+    return <SafeNavigate to={ROUTES.LOGIN} replace />
   }
 
   // ── STRICT ROUTING WATERFALL (Phase 1) ──────────────────────────────
-  // Rule 1: Not authenticated → landing page
+  // Rule 1: Not authenticated → login page
   if (!isAuthenticated) {
-    return <SafeNavigate to={ROUTES.HOME} replace />
+    return <SafeNavigate to={ROUTES.LOGIN} replace />
   }
 
   // Rule 2 (Phase 1): Email verification NOT enforced.

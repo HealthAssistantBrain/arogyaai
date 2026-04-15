@@ -13,11 +13,13 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import toast from 'react-hot-toast';
+import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 import { ROUTES } from '../router/routes';
-import api, { setAuthFlow } from '../lib/axios';
+import { setAuthFlow } from '../lib/axios';
 import { lockSystem, unlockSystem } from '../lib/systemLock';
 import { triggerAuthRevalidation } from '../lib/authRevalidator';
+import { getApiUrl } from '../lib/apiBaseUrl';
 
 const signupSchema = z.object({
   fullName: z.string().min(2, 'Name must be at least 2 characters'),
@@ -25,6 +27,20 @@ const signupSchema = z.object({
   password: z.string().min(8, 'Password must be at least 8 characters'),
   dob: z.string().min(1, 'Date of birth is required'),
 });
+
+const API_URL = getApiUrl(
+  import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+);
+
+const getCookie = (name) => {
+  if (typeof document === 'undefined') return null;
+
+  const match = document.cookie
+    .split('; ')
+    .find((entry) => entry.startsWith(`${name}=`));
+
+  return match ? decodeURIComponent(match.split('=').slice(1).join('=')) : null;
+};
 
 
 
@@ -53,11 +69,22 @@ const Signup = () => {
     setAuthFlow(true);
 
     try {
-      const response = await api.post('/auth/signup', {
+      const payload = {
         email: data.email,
         password: data.password,
         full_name: data.fullName,
         dob: data.dob
+      };
+
+      console.log('SIGNUP REQUEST:', payload);
+
+      const csrfToken = getCookie('csrf_token');
+      const response = await axios.post(`${API_URL}/auth/signup`, payload, {
+        withCredentials: true,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+        },
       });
 
       console.log("SIGNUP RESPONSE:", response.data);
@@ -94,6 +121,8 @@ const Signup = () => {
 
       if (status === 409) {
         setApiError('This email is already registered. Please sign in instead.');
+      } else if (status === 400) {
+        setApiError(err.response?.data?.detail || 'This email is already registered. Please sign in instead.');
       } else if (status === 422) {
         setApiError('Please check your details and try again.');
       } else {
