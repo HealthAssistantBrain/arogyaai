@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { ROUTES } from '../router/routes';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
 import { openCommandPalette } from '../components/CommandPalette';
+import { 
   LayoutDashboard, 
   Brain, 
   FlaskConical, 

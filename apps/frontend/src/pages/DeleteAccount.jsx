@@ -6,8 +6,8 @@ import api from '../lib/axios';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import React from 'react';
-import {
 import { openCommandPalette } from '../components/CommandPalette';
+import {
     LayoutDashboard,
     Brain,
     FlaskConical,

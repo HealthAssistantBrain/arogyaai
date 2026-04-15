@@ -6,8 +6,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { motion, AnimatePresence } from 'framer-motion';
 import React from 'react';
-import { 
 import { openCommandPalette } from '../components/CommandPalette';
+import { 
   LayoutDashboard, 
   Brain, 
   FlaskConical, 

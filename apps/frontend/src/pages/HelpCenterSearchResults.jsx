@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../router/routes';
+import { openCommandPalette } from '../components/CommandPalette';
 import { motion, AnimatePresence } from 'framer-motion';
 import React from 'react';
-import { 
-import { openCommandPalette } from '../components/CommandPalette';
+import {
   LayoutDashboard, 
   Brain, 
   FlaskConical, 

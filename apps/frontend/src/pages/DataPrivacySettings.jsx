@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../router/routes';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
 import { openCommandPalette } from '../components/CommandPalette';
+import {
     LayoutDashboard,
     Brain,
     FlaskConical,

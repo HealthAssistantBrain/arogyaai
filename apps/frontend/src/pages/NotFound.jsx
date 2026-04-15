@@ -1,8 +1,8 @@
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../router/routes';
 import { motion } from 'framer-motion';
-import { 
 import { openCommandPalette } from '../components/CommandPalette';
+import { 
   Dna, 
   SearchX, 
   ArrowLeft, 
