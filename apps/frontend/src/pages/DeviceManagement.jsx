@@ -20,7 +20,6 @@ import { syncGoogleFit } from '../lib/googleFitApi';
 import useDeviceStore from '../store/deviceStore';
 import {
   fetchConnectedDeviceSummaries,
-  fetchSupportedDeviceIntegrations,
   GOOGLE_FIT_PROVIDER,
 } from '../lib/deviceApi';
 import { refreshAfterGoogleFitSync } from '../lib/googleFitRefresh';
@@ -258,8 +257,6 @@ const DeviceManagement = () => {
   const [error, setError] = useState('');
   const [syncingDeviceId, setSyncingDeviceId] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [availableIntegrations, setAvailableIntegrations] = useState([]);
-  const [availableIntegrationsLoaded, setAvailableIntegrationsLoaded] = useState(false);
 
   const loadDevices = async ({ silent = false } = {}) => {
     if (!silent) {
@@ -277,30 +274,6 @@ const DeviceManagement = () => {
       if (!silent) {
         setIsLoading(false);
       }
-    }
-  };
-
-  const loadAvailableIntegrations = async () => {
-    if (availableIntegrationsLoaded) {
-      return;
-    }
-
-    try {
-      const items = await fetchSupportedDeviceIntegrations(handleConnectGoogleFit);
-      setAvailableIntegrations(items);
-    } catch {
-      setAvailableIntegrations([
-        {
-          id: GOOGLE_FIT_PROVIDER,
-          name: 'Google Fit',
-          description: 'Connect or reconnect Google Fit using the existing backend flow.',
-          actionLabel: 'Connect Google Fit',
-          icon: Watch,
-          onSelect: handleConnectGoogleFit,
-        },
-      ]);
-    } finally {
-      setAvailableIntegrationsLoaded(true);
     }
   };
 
@@ -385,13 +358,8 @@ const DeviceManagement = () => {
     navigate(ROUTES.GOOGLE_FIT_SETTINGS);
   };
 
-  const handleConnectGoogleFit = () => {
-    window.location.href = '/device-settings/google-fit';
-  };
-
   const handleOpenAddModal = () => {
     setShowAddModal(true);
-    void loadAvailableIntegrations();
   };
 
   return (
@@ -562,7 +530,6 @@ const DeviceManagement = () => {
       <AddDeviceModal
         open={showAddModal}
         onClose={() => setShowAddModal(false)}
-        integrations={availableIntegrations}
       />
     </>
   );
