@@ -4,52 +4,52 @@ import { useAuthStore } from '../store/authStore';
 import { ROUTES } from '../router/routes';
 import { motion, AnimatePresence } from 'framer-motion';
 import { openCommandPalette } from '../components/CommandPalette';
-import { 
-  LayoutDashboard, 
-  Brain, 
-  FlaskConical, 
-  History, 
-  Activity, 
-  FileText, 
-  Settings, 
-  Bell, 
-  Smartphone,
-  User,
-  Waves,
-  ShieldCheck,
-  CheckCircle2,
-  Lock,
-  ChevronRight,
-  HelpCircle,
-  Search,
-  MoreVertical,
-  Database,
-  CreditCard,
-  FileDown,
-  ShieldPlus,
-  Network,
-  Cloud,
-  HeartPulse,
-  UserCheck,
-  BellRing,
-  Box,
-  Key,
-  Eye,
-  LogOut,
-  Trash2,
-  Sparkles,
-  Zap,
-  Star,
-  Clock,
-  Briefcase,
-  ExternalLink,
-  ChevronDown,
-  Moon
+import {
+    LayoutDashboard,
+    Brain,
+    FlaskConical,
+    History,
+    Activity,
+    FileText,
+    Settings,
+    Bell,
+    Smartphone,
+    User,
+    Waves,
+    ShieldCheck,
+    CheckCircle2,
+    Lock,
+    ChevronRight,
+    HelpCircle,
+    Search,
+    MoreVertical,
+    Database,
+
+    FileDown,
+    ShieldPlus,
+    Network,
+    Cloud,
+    HeartPulse,
+    UserCheck,
+    BellRing,
+    Box,
+    Key,
+    Eye,
+    LogOut,
+    Trash2,
+    Sparkles,
+    Zap,
+    Star,
+    Clock,
+    Briefcase,
+    ExternalLink,
+    ChevronDown,
+    Moon
 } from 'lucide-react';
 
 const SettingsHub = () => {
     const navigate = useNavigate();
-    const logout   = useAuthStore((s) => s.logout);
+    const logout = useAuthStore((s) => s.logout);
     const [activeSection, setActiveSection] = useState('Profile');
 
     // Step 1: Logout must clear state AND redirect home with replace
@@ -71,15 +71,15 @@ const SettingsHub = () => {
     ];
 
     const internalSegments = [
-        { label: 'Profile',         icon: User,       path: ROUTES.SETTINGS_PROFILE },
-        { label: 'Security',        icon: ShieldCheck, path: ROUTES.SETTINGS_SECURITY },
-        { label: 'Privacy',         icon: Lock,        path: ROUTES.SETTINGS_PRIVACY },
-        { label: 'Notifications',   icon: BellRing,    path: ROUTES.SETTINGS_NOTIFICATIONS },
-        { label: 'Data & Export',   icon: Database },
-        { label: 'Billing',         icon: CreditCard },
+        { label: 'Profile', icon: User, path: ROUTES.SETTINGS_PROFILE },
+        { label: 'Security', icon: ShieldCheck, path: ROUTES.SETTINGS_SECURITY },
+        { label: 'Privacy', icon: Lock, path: ROUTES.SETTINGS_PRIVACY },
+        { label: 'Notifications', icon: BellRing, path: ROUTES.SETTINGS_NOTIFICATIONS },
+        { label: 'Data & Export', icon: Database },
+
         // Step 1 & 2: Logout and Delete Account must be reachable from Settings Hub
-        { label: 'Delete Account',  icon: Trash2,      path: ROUTES.SETTINGS_DELETE },
-        { label: 'Log Out',         icon: LogOut,      path: null, action: handleLogout },
+        { label: 'Delete Account', icon: Trash2, path: ROUTES.SETTINGS_DELETE },
+        { label: 'Log Out', icon: LogOut, path: null, action: handleLogout },
     ];
 
     const overviewCards = [
@@ -94,7 +94,7 @@ const SettingsHub = () => {
                         <span className="text-[#6143f4]">85%</span>
                     </div>
                     <div className="h-2 w-full bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden border border-slate-200/20 shadow-inner">
-                        <motion.div 
+                        <motion.div
                             initial={{ width: 0 }}
                             animate={{ width: '85%' }}
                             transition={{ duration: 1, ease: "easeOut" }}
@@ -135,18 +135,7 @@ const SettingsHub = () => {
             action: 'Update',
             path: ROUTES.SETTINGS_NOTIFICATIONS,
         },
-        {
-            icon: CreditCard, bg: 'bg-[#009cde]/10', color: 'text-[#009cde]',
-            title: 'Billing & Enterprise',
-            desc: 'View your current Premium plan, download invoices, and manage payment methods.',
-            extra: (
-                <div className="mt-6 flex items-center gap-3">
-                    <Clock size={12} className="text-slate-400" />
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Next Cycle: Oct 12, 2026</p>
-                </div>
-            ),
-            action: 'Upgrade',
-        },
+
     ];
 
     const integrations = [
@@ -167,7 +156,7 @@ const SettingsHub = () => {
                         <div className="flex-1 max-w-xl">
                             <div className="relative group/search">
                                 <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within/search:text-[#6143f4] transition-colors" size={18} />
-                                <input className="w-full pl-14 pr-6 py-4 bg-slate-100 dark:bg-white/5 border border-transparent rounded-[1.5rem] focus:ring-4 focus:ring-[#6143f4]/10 focus:border-[#6143f4]/30 transition-all text-[13px] text-[#13082a] dark:text-white placeholder:text-slate-400 font-bold uppercase tracking-tight" placeholder="Search for settings, integrations, or security logs..." type="text"/>
+                                <input className="w-full pl-14 pr-6 py-4 bg-slate-100 dark:bg-white/5 border border-transparent rounded-[1.5rem] focus:ring-4 focus:ring-[#6143f4]/10 focus:border-[#6143f4]/30 transition-all text-[13px] text-[#13082a] dark:text-white placeholder:text-slate-400 font-bold uppercase tracking-tight" placeholder="Search for settings, integrations, or security logs..." type="text" />
                             </div>
                         </div>
                         <div className="flex items-center gap-5 ml-8">
@@ -178,14 +167,14 @@ const SettingsHub = () => {
                             <button onClick={() => navigate(ROUTES.HELP)} className="size-12 flex items-center justify-center rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 hover:bg-[#6143f4]/10 hover:text-[#6143f4] transition-all active:scale-95 group shadow-sm">
                                 <HelpCircle size={20} />
                             </button>
-                            
+
                         </div>
                     </header>
 
                     {/* Scrollable Content Area */}
                     <div className="flex-1 p-10 lg:p-12 custom-scrollbar">
                         <div className="max-w-6xl mx-auto space-y-12 pb-16">
-                            
+
                             {/* Page Header */}
                             <div className="space-y-4 pb-4 border-b border-[#6143f4]/5">
                                 <h2 className="text-5xl font-black text-[#13082a] dark:text-white tracking-tighter uppercase italic leading-none">Settings Hub</h2>
@@ -198,17 +187,16 @@ const SettingsHub = () => {
                                     {internalSegments.map((segment) => (
                                         <button
                                             key={segment.label}
-                                            onClick={() => { 
+                                            onClick={() => {
                                                 setActiveSection(segment.label);
                                                 // Step 1 & 2: support both path navigation and direct action (logout)
                                                 if (segment.action) segment.action();
                                                 else if (segment.path) navigate(segment.path);
                                             }}
-                                            className={`w-full flex items-center justify-between px-6 py-4.5 rounded-[1.5rem] transition-all group ${
-                                                activeSection === segment.label
-                                                ? 'bg-white dark:bg-[#131022] shadow-[0_20px_40px_-10px_rgba(97,67,244,0.12)] border border-[#6143f4]/10 text-[#6143f4] font-black'
-                                                : 'text-slate-400 dark:text-slate-500 hover:bg-[#6143f4]/5 hover:text-[#6143f4] font-bold'
-                                            }`}
+                                            className={`w-full flex items-center justify-between px-6 py-4.5 rounded-[1.5rem] transition-all group ${activeSection === segment.label
+                                                    ? 'bg-white dark:bg-[#131022] shadow-[0_20px_40px_-10px_rgba(97,67,244,0.12)] border border-[#6143f4]/10 text-[#6143f4] font-black'
+                                                    : 'text-slate-400 dark:text-slate-500 hover:bg-[#6143f4]/5 hover:text-[#6143f4] font-bold'
+                                                }`}
                                         >
                                             <div className="flex items-center gap-4">
                                                 <segment.icon size={18} className={activeSection === segment.label ? 'text-[#6143f4]' : 'text-slate-400 group-hover:text-[#6143f4]'} />
@@ -221,7 +209,7 @@ const SettingsHub = () => {
 
                                 {/* Main Hub Content Area */}
                                 <div className="flex-1 space-y-12">
-                                    
+
                                     {/* Quick Impact Actions */}
                                     <section className="space-y-8">
                                         <div className="flex items-center justify-between">
@@ -233,7 +221,7 @@ const SettingsHub = () => {
                                         </div>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                             {/* Action: Export */}
-                                            <motion.div 
+                                            <motion.div
                                                 whileHover={{ y: -5 }}
                                                 className="relative group/action bg-gradient-to-br from-[#6143f4] to-[#7e65f7] p-8 lg:p-10 rounded-[3rem] text-white shadow-[0_30px_60px_-15px_rgba(97,67,244,0.3)] cursor-pointer overflow-hidden transition-all active:scale-[0.98]"
                                             >
@@ -253,7 +241,7 @@ const SettingsHub = () => {
                                             </motion.div>
 
                                             {/* Action: 2FA */}
-                                            <motion.div 
+                                            <motion.div
                                                 whileHover={{ y: -5 }}
                                                 onClick={() => navigate(ROUTES.SETTINGS_SECURITY)}
                                                 className="relative group/action bg-gradient-to-br from-[#009cde] to-[#00b4ff] p-8 lg:p-10 rounded-[3rem] text-white shadow-[0_30px_60px_-15px_rgba(0,156,222,0.3)] cursor-pointer overflow-hidden transition-all active:scale-[0.98]"
@@ -312,40 +300,40 @@ const SettingsHub = () => {
 
                                     {/* Data Ecosystem Integrations Card */}
                                     <section className="bg-white dark:bg-[#131022] rounded-[4rem] p-10 lg:p-14 shadow-sm border border-[#6143f4]/5 relative overflow-hidden group/ecosystem">
-                                         <div className="absolute top-[-50px] right-[-50px] size-[300px] bg-[#6143f4] blur-[150px] opacity-[0.03] pointer-events-none"></div>
-                                         <div className="relative z-10 flex flex-col md:flex-row items-center gap-12 mb-10">
-                                             <div className="size-20 bg-[#6143f4]/10 rounded-[2rem] flex items-center justify-center text-[#6143f4] border border-[#6143f4]/20 shadow-xl group-hover/ecosystem:rotate-12 transition-transform shrink-0">
-                                                 <Network size={40} strokeWidth={2.5} />
-                                             </div>
-                                             <div className="flex-1 text-center md:text-left space-y-2">
-                                                 <h4 className="text-3xl font-black text-[#13082a] dark:text-white tracking-tighter uppercase italic leading-none">Diagnostic Ecosystem Hub</h4>
-                                                 <p className="text-lg text-slate-500 dark:text-slate-400 font-bold uppercase tracking-tight opacity-80">Sync and control your high-precision clinical data pipelines across wearable and cloud platforms.</p>
-                                             </div>
-                                         </div>
-                                         <div className="grid grid-cols-1 gap-6 relative z-10">
-                                             {integrations.map((item) => (
-                                                 <div key={item.title} className="flex flex-col md:flex-row items-center justify-between gap-6 p-8 bg-slate-50/50 dark:bg-white/5 rounded-[2.5rem] border border-slate-100 dark:border-white/5 hover:border-[#6143f4]/20 hover:shadow-xl hover:shadow-[#6143f4]/5 transition-all group/item">
-                                                     <div className="flex flex-col md:flex-row items-center gap-8">
-                                                         <div className="size-16 rounded-[1.25rem] bg-white dark:bg-[#131022] flex items-center justify-center shadow-lg border border-slate-100 dark:border-white/10 group-hover/item:scale-110 transition-transform shrink-0">
-                                                             <item.icon size={30} className={item.iconColor} strokeWidth={2.5} />
-                                                         </div>
-                                                         <div className="text-center md:text-left space-y-1">
-                                                             <p className="text-lg font-black text-[#13082a] dark:text-white uppercase leading-none">{item.title}</p>
-                                                             <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed mt-1 opacity-80">{item.desc}</p>
-                                                         </div>
-                                                     </div>
-                                                     <div className="flex items-center gap-8 w-full md:w-auto shrink-0 justify-between md:justify-end border-t md:border-t-0 pt-6 md:pt-0 border-slate-100 dark:border-white/5">
-                                                         <div className="flex items-center gap-3 bg-emerald-500/10 px-6 py-2.5 rounded-full border border-emerald-500/10 shadow-sm leading-none">
-                                                             <div className="size-1.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>
-                                                             <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-[0.25em] mt-0.5">{item.status}</span>
-                                                         </div>
-                                                         <button className="size-12 rounded-2xl bg-white dark:bg-white/5 text-slate-400 hover:text-[#6143f4] hover:bg-[#6143f4]/10 transition-all border border-slate-100 dark:border-white/10 flex items-center justify-center shadow-sm">
-                                                             <Settings size={22} className="group-hover/item:rotate-90 transition-transform duration-700" />
-                                                         </button>
-                                                     </div>
-                                                 </div>
-                                             ))}
-                                         </div>
+                                        <div className="absolute top-[-50px] right-[-50px] size-[300px] bg-[#6143f4] blur-[150px] opacity-[0.03] pointer-events-none"></div>
+                                        <div className="relative z-10 flex flex-col md:flex-row items-center gap-12 mb-10">
+                                            <div className="size-20 bg-[#6143f4]/10 rounded-[2rem] flex items-center justify-center text-[#6143f4] border border-[#6143f4]/20 shadow-xl group-hover/ecosystem:rotate-12 transition-transform shrink-0">
+                                                <Network size={40} strokeWidth={2.5} />
+                                            </div>
+                                            <div className="flex-1 text-center md:text-left space-y-2">
+                                                <h4 className="text-3xl font-black text-[#13082a] dark:text-white tracking-tighter uppercase italic leading-none">Diagnostic Ecosystem Hub</h4>
+                                                <p className="text-lg text-slate-500 dark:text-slate-400 font-bold uppercase tracking-tight opacity-80">Sync and control your high-precision clinical data pipelines across wearable and cloud platforms.</p>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-1 gap-6 relative z-10">
+                                            {integrations.map((item) => (
+                                                <div key={item.title} className="flex flex-col md:flex-row items-center justify-between gap-6 p-8 bg-slate-50/50 dark:bg-white/5 rounded-[2.5rem] border border-slate-100 dark:border-white/5 hover:border-[#6143f4]/20 hover:shadow-xl hover:shadow-[#6143f4]/5 transition-all group/item">
+                                                    <div className="flex flex-col md:flex-row items-center gap-8">
+                                                        <div className="size-16 rounded-[1.25rem] bg-white dark:bg-[#131022] flex items-center justify-center shadow-lg border border-slate-100 dark:border-white/10 group-hover/item:scale-110 transition-transform shrink-0">
+                                                            <item.icon size={30} className={item.iconColor} strokeWidth={2.5} />
+                                                        </div>
+                                                        <div className="text-center md:text-left space-y-1">
+                                                            <p className="text-lg font-black text-[#13082a] dark:text-white uppercase leading-none">{item.title}</p>
+                                                            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed mt-1 opacity-80">{item.desc}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-8 w-full md:w-auto shrink-0 justify-between md:justify-end border-t md:border-t-0 pt-6 md:pt-0 border-slate-100 dark:border-white/5">
+                                                        <div className="flex items-center gap-3 bg-emerald-500/10 px-6 py-2.5 rounded-full border border-emerald-500/10 shadow-sm leading-none">
+                                                            <div className="size-1.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>
+                                                            <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-[0.25em] mt-0.5">{item.status}</span>
+                                                        </div>
+                                                        <button className="size-12 rounded-2xl bg-white dark:bg-white/5 text-slate-400 hover:text-[#6143f4] hover:bg-[#6143f4]/10 transition-all border border-slate-100 dark:border-white/10 flex items-center justify-center shadow-sm">
+                                                            <Settings size={22} className="group-hover/item:rotate-90 transition-transform duration-700" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </section>
                                 </div>
                             </div>
@@ -353,7 +341,7 @@ const SettingsHub = () => {
                     </div>
                 </main>
             </div>
-            
+
             {/* Status Footer - Standardized HIPAA Dashboard Style */}
             <footer className="h-20 shrink-0 border-t border-[#6143f4]/10 bg-white/60 dark:bg-[#0B0819]/60 backdrop-blur-3xl flex flex-col md:flex-row items-center justify-between px-10 gap-4 text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">
                 <div className="flex flex-wrap items-center justify-center md:justify-start gap-10">
@@ -369,7 +357,8 @@ const SettingsHub = () => {
                 </div>
             </footer>
 
-            <style dangerouslySetInnerHTML={{ __html: `
+            <style dangerouslySetInnerHTML={{
+                __html: `
                 .no-scrollbar::-webkit-scrollbar { display: none; }
                 .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
                 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
