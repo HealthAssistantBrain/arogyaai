@@ -1,7 +1,10 @@
-"""Utility placeholders for the SHAP pipeline."""
+"""Utility helpers for the SHAP pipeline."""
 
-def build_shap_pipeline_context() -> None:
-    """Placeholder helper for future SHAP pipeline wiring."""
+from __future__ import annotations
 
-    ...
 
+def build_shap_pipeline_context() -> dict[str, str]:
+    return {
+        "pipeline": "shap_pipeline",
+        "mode": "conditional_explainability",
+    }

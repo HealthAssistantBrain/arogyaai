@@ -1,9 +1,15 @@
 from logging.config import fileConfig
+import sys
+from pathlib import Path
 
 from sqlalchemy import create_engine
 from sqlalchemy import pool
 
 from alembic import context
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 # Import your app DB + models
 from database.session import DATABASE_URL

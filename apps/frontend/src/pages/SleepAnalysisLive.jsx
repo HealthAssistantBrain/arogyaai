@@ -14,6 +14,7 @@ import { useAuthStore } from '../store/authStore';
 import useSleepStore from '../store/sleepStore';
 import UserProfileBadge from '../components/UserProfileBadge';
 import SleepStackedChart from '../components/charts/SleepStackedChart';
+import { safeArray } from '../utils/safeData';
 
 const STAGE_COLORS = {
   rem: '#6143f4',
@@ -377,7 +378,7 @@ const SleepAnalysisLive = () => {
                     <div className="text-[9px] font-bold text-white bg-[#6143f4] px-3 py-1 rounded-full uppercase tracking-widest">Live Pipeline</div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1">
-                    {(summary?.insights || []).slice(0, 2).map((insight) => {
+                    {safeArray(summary?.insights).slice(0, 2).map((insight) => {
                       const toneClass = insightToneClasses[insight?.type] || insightToneClasses.info;
                       return (
                         <div key={insight.title} className={`p-6 bg-slate-50 dark:bg-[#0B0819] border rounded-2xl flex flex-col sm:flex-row gap-5 ${toneClass}`}>
@@ -391,7 +392,7 @@ const SleepAnalysisLive = () => {
                         </div>
                       );
                     })}
-                    {(!summary?.insights || summary.insights.length === 0) && (
+                    {safeArray(summary?.insights).length === 0 && (
                       <div className="p-6 bg-slate-50 dark:bg-[#0B0819] border border-slate-100 dark:border-white/5 rounded-2xl flex items-center gap-4 md:col-span-2">
                         <div className="size-12 bg-[#6143f4]/10 rounded-2xl flex items-center justify-center text-[#6143f4] shrink-0">
                           <Activity size={20} />
@@ -408,7 +409,7 @@ const SleepAnalysisLive = () => {
                 <div className="bg-white dark:bg-[#131022] rounded-[2rem] p-8 shadow-sm border border-slate-100 dark:border-white/5">
                   <h3 className="font-bold text-[#13082a] dark:text-white text-lg mb-6">Protocol Recommendations</h3>
                   <div className="space-y-4">
-                    {(summary?.recommendations || []).slice(0, 2).map((item) => (
+                    {safeArray(summary?.recommendations).slice(0, 2).map((item) => (
                       <div
                         key={item.title}
                         className="p-5 bg-slate-50 dark:bg-[#0B0819] border border-slate-100 dark:border-white/5 rounded-2xl flex flex-row items-center justify-between border-l-4 border-l-rose-500"
@@ -422,7 +423,7 @@ const SleepAnalysisLive = () => {
                         </div>
                       </div>
                     ))}
-                    {(!summary?.recommendations || summary.recommendations.length === 0) && (
+                    {safeArray(summary?.recommendations).length === 0 && (
                       <div className="p-5 bg-slate-50 dark:bg-[#0B0819] border border-slate-100 dark:border-white/5 rounded-2xl text-sm text-slate-500">
                         No recommendations yet. Once data lands, the pipeline will generate practical next steps.
                       </div>

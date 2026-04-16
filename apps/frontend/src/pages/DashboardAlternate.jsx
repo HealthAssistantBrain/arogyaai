@@ -48,6 +48,7 @@ import {
 } from 'recharts';
 import { ROUTES } from '../router/routes';
 import { openCommandPalette } from '../components/CommandPalette';
+import { safeArray } from '../utils/safeData';
 
 // Mock Data
 const metabolicTrendData = [
@@ -174,7 +175,7 @@ const DashboardAlternate = () => {
                     </div>
                     <div className="h-10 w-24">
                        <ResponsiveContainer width="100%" height="100%">
-                         <LineChart data={m.data.map((v, i) => ({ value: v }))}>
+                         <LineChart data={safeArray(m.data).map((v) => ({ value: v }))}>
                            <Line 
                              type="monotone" 
                              dataKey="value" 

@@ -60,12 +60,12 @@ def _envelope(data: dict, status: str, source: str, error: Optional[str] = None)
 # Private data fetchers (swap these out for real ML calls)
 # ─────────────────────────────────────────────────────────────────────────────
 
-from integrations.prediction_client import PredictionClient
 from integrations.wearable_client import WearableClient
 from integrations.rag_client import RAGClient
+from pipelines.storage_pipeline.service import StoragePipelineService
+from database.session import SessionLocal
 
 # Initialize clients
-prediction_client = PredictionClient()
 wearable_client = WearableClient()
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -73,10 +73,22 @@ wearable_client = WearableClient()
 # ─────────────────────────────────────────────────────────────────────────────
 
 async def _fetch_ml_health_score(user: User) -> Optional[dict]:
-    """Delegates to PredictionClient."""
-    response = await prediction_client.get_prediction({"user_id": str(user.id)})
-    if response.get("success") and response.get("status") == "ready":
-        return response.get("data")
+    """Reads the latest persisted health score first."""
+    db = SessionLocal()
+    try:
+        latest = StoragePipelineService.latest_health_score(db, user)
+        if latest is not None:
+            return {
+                "score": float(latest.score),
+                "risk_component": float(latest.risk_component) if latest.risk_component is not None else None,
+                "lifestyle_component": float(latest.lifestyle_component) if latest.lifestyle_component is not None else None,
+                "vitals_component": float(latest.vitals_component) if latest.vitals_component is not None else None,
+                "sleep_component": float(latest.sleep_component) if latest.sleep_component is not None else None,
+                "health_payload": latest.health_payload or {},
+                "calculated_at": latest.calculated_at.isoformat() if latest.calculated_at else None,
+            }
+    finally:
+        db.close()
     return None
 
 
@@ -89,10 +101,24 @@ async def _fetch_wearable_history(user: User) -> Optional[dict]:
 
 
 async def _fetch_ml_prediction(user: User) -> Optional[dict]:
-    """Delegates to PredictionClient."""
-    response = await prediction_client.get_trajectory(str(user.id))
-    if response.get("success") and response.get("status") == "ready":
-        return response.get("data")
+    """Reads the latest persisted risk score first."""
+    db = SessionLocal()
+    try:
+        latest = StoragePipelineService.latest_risk_score(db, user)
+        if latest is not None:
+            return {
+                "prediction_id": str(latest.id),
+                "risk_score": float(latest.overall_score),
+                "risk_level": latest.risk_level.value if hasattr(latest.risk_level, "value") else str(latest.risk_level),
+                "confidence": float(latest.confidence_score) if latest.confidence_score is not None else None,
+                "drivers": latest.risk_payload.get("drivers", []) if latest.risk_payload else [],
+                "recommendations": latest.risk_payload.get("recommendations", []) if latest.risk_payload else [],
+                "analysis": latest.risk_payload.get("analysis") if latest.risk_payload else None,
+                "feature_snapshot": latest.feature_snapshot or {},
+                "last_updated": latest.calculated_at.isoformat() if latest.calculated_at else None,
+            }
+    finally:
+        db.close()
     return None
 
 

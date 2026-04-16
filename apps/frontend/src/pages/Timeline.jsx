@@ -29,11 +29,12 @@ import {
 import { ROUTES } from '../router/routes';
 import { openCommandPalette } from '../components/CommandPalette';
 
+import { useFetchLock } from '../hooks/useFetchLock';
+
 const API_BASE_URL = getApiUrl(import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000');
 
 const Timeline = () => {
     const navigate = useNavigate();
-    const token = useAuthStore((state) => state.token);
     const profileLoading = useAuthStore((state) => state.profileLoading);
     const [activeFilter, setActiveFilter] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
@@ -41,14 +42,19 @@ const Timeline = () => {
     const [timelineEvents, setTimelineEvents] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const { acquireLock, releaseLock } = useFetchLock();
 
     useEffect(() => {
+        let isMounted = true;
         const fetchTimeline = async () => {
-            if (!token) return;
+            const currentToken = useAuthStore.getState().token;
+            if (!currentToken) return;
+            if (!acquireLock('timeline_fetch')) return;
+
             try {
-                setLoading(true);
+                if (isMounted) setLoading(true);
                 const res = await fetch(`${API_BASE_URL}/health/timeline`, {
-                    headers: { Authorization: `Bearer ${token}` }
+                    headers: { Authorization: `Bearer ${currentToken}` }
                 });
                 if (!res.ok) throw new Error('Failed to fetch timeline data');
                 const json = await res.json();
@@ -96,20 +102,26 @@ const Timeline = () => {
                     };
                 });
 
-                setTimelineEvents(mappedEvents);
-
-                if (mappedEvents.length > 0) {
-                    setExpandedEvents({ [mappedEvents[0].id]: true });
+                if (isMounted) {
+                    setTimelineEvents(mappedEvents);
+                    if (mappedEvents.length > 0) {
+                        setExpandedEvents({ [mappedEvents[0].id]: true });
+                    }
                 }
             } catch (err) {
                 console.error("fetch timeline error:", err);
-                setError(err.message);
+                if (isMounted) setError(err.message);
             } finally {
-                setLoading(false);
+                if (isMounted) setLoading(false);
+                releaseLock('timeline_fetch');
             }
         };
         fetchTimeline();
-    }, [token]);
+
+        return () => {
+            isMounted = false;
+        };
+    }, [acquireLock, releaseLock]);
 
     const toggleEvent = (id) => {
         setExpandedEvents(prev => ({ ...prev, [id]: !prev[id] }));

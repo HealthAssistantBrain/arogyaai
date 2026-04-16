@@ -1,4 +1,4 @@
-"""Entry point scaffold for the storage pipeline."""
+"""Entry point for the storage pipeline."""
 
 from .schema import StoragePipelineRequest, StoragePipelineResponse
 from .service import StoragePipelineService
@@ -10,4 +10,3 @@ __all__ = [
     "StoragePipelineService",
     "build_storage_pipeline_context",
 ]
-

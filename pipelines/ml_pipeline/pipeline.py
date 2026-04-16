@@ -1,12 +1,14 @@
-"""Entry point scaffold for the ML pipeline."""
+"""Entry point for the ML pipeline."""
 
-from .inference import MLPipelineInference
-from .model_loader import ModelLoader
+from .inference import InferenceResult, MLPipelineInference
+from .model_loader import LoadedModel, ModelLoader
 from .schema import MLPipelineRequest, MLPipelineResponse
 from .service import MLPipelineService
 from .utils import build_ml_pipeline_context
 
 __all__ = [
+    "InferenceResult",
+    "LoadedModel",
     "MLPipelineInference",
     "MLPipelineRequest",
     "MLPipelineResponse",
@@ -14,4 +16,3 @@ __all__ = [
     "ModelLoader",
     "build_ml_pipeline_context",
 ]
-

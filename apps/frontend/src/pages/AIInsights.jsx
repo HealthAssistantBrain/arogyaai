@@ -21,6 +21,7 @@ import { ROUTES } from '../router/routes';
 import { useAuthStore } from '../store/authStore';
 import { useInsightsData } from '../hooks/useInsightsData';
 import { openCommandPalette } from '../components/CommandPalette';
+import { safeArray } from '../utils/safeData';
 
 const containerVariants = {
   initial: { opacity: 0 },
@@ -106,7 +107,7 @@ const AIInsights = () => {
       return cards;
     }
 
-    return cards.filter((card) => mapRiskToCategory(card.key) === selectedCategory);
+    return safeArray(cards).filter((card) => mapRiskToCategory(card.key) === selectedCategory);
   }, [cards, selectedCategory]);
   const isInsufficientData = status === 'insufficient_data';
 
@@ -117,8 +118,8 @@ const AIInsights = () => {
 
   const topCards = filteredCards.slice(0, 3);
   const hasRiskCards = !isInsufficientData && topCards.length > 0;
-  const hasDrivers = !isInsufficientData && drivers.length > 0;
-  const hasRecommendations = !isInsufficientData && recommendations.length > 0;
+  const hasDrivers = !isInsufficientData && safeArray(drivers).length > 0;
+  const hasRecommendations = !isInsufficientData && safeArray(recommendations).length > 0;
   const hasAnalysis = !isInsufficientData && Boolean(analysis?.trim());
 
   if (profileLoading || loading) {
@@ -226,7 +227,7 @@ const AIInsights = () => {
                         : 'text-slate-600 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-white/5'
                     }`}
                   >
-                    {tab.label}
+                  {tab.label}
                   </button>
                 ))}
               </div>
@@ -242,7 +243,7 @@ const AIInsights = () => {
 
             {hasRiskCards ? (
               <motion.div variants={containerVariants} initial="initial" animate="animate" className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {topCards.map((risk) => {
+                {safeArray(topCards).map((risk) => {
                   const theme = riskStyles[risk.key] || riskStyles.cad;
                   const levelClass = levelStyles[risk.riskLevel] || levelStyles.LOW;
                   const trendIcon = risk.deltaFromNeutral >= 0 ? <ArrowUp size={12} /> : <ArrowDown size={12} />;
@@ -310,7 +311,7 @@ const AIInsights = () => {
 
                 <div className="space-y-6">
                   {hasDrivers ? (
-                    drivers.map((driver, index) => (
+                    safeArray(drivers).map((driver, index) => (
                       <div key={driver.key || driver.label} className="relative group/bar">
                         <div className="flex justify-between mb-1 text-sm font-bold tracking-tight">
                           <span className="text-slate-700 dark:text-slate-300">{driver.label}</span>
@@ -364,7 +365,7 @@ const AIInsights = () => {
                   </h4>
                   <div className="space-y-4">
                     {hasRecommendations ? (
-                      recommendations.map((item) => (
+                      safeArray(recommendations).map((item) => (
                         <div key={`${item.title}-${item.category}`} className="flex gap-3 group">
                           <div className="size-2 bg-[#009CDE] rounded-full mt-1.5 shrink-0 group-hover:scale-125 transition-transform" />
                           <div>

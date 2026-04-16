@@ -6,7 +6,11 @@ import logging
 from typing import Any
 
 from fastapi import HTTPException, UploadFile
-from pypdf import PdfReader
+
+try:
+    from pypdf import PdfReader
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    PdfReader = None
 from sqlalchemy.orm import Session
 
 from integrations.prediction_client import PredictionClient
@@ -127,6 +131,8 @@ async def analyze_report_upload(
 
 
 def _extract_text_from_pdf(file_bytes: bytes) -> str:
+    if PdfReader is None:
+        raise HTTPException(status_code=503, detail="PDF parsing is unavailable in this environment.")
     try:
         reader = PdfReader(BytesIO(file_bytes))
         pages = [page.extract_text() or "" for page in reader.pages]

@@ -1,13 +1,19 @@
-"""DTO placeholders for the SHAP pipeline."""
+"""SHAP pipeline DTOs."""
+from __future__ import annotations
 
-class ShapPipelineRequest:
-    """Placeholder request DTO."""
+from typing import Any
 
-    ...
+from pydantic import BaseModel, Field
 
 
-class ShapPipelineResponse:
-    """Placeholder response DTO."""
+class ShapPipelineRequest(BaseModel):
+    prediction_id: str
+    user_id: str
+    risk_payload: dict[str, Any] = Field(default_factory=dict)
 
-    ...
 
+class ShapPipelineResponse(BaseModel):
+    success: bool = True
+    status: str = "ready"
+    error: str | None = None
+    data: dict[str, Any] = Field(default_factory=dict)

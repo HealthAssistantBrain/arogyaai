@@ -1,4 +1,4 @@
-"""Entry point scaffold for the SHAP pipeline."""
+"""Entry point for the SHAP pipeline."""
 
 from .explainer import ShapExplainer
 from .schema import ShapPipelineRequest, ShapPipelineResponse
@@ -12,4 +12,3 @@ __all__ = [
     "ShapPipelineService",
     "build_shap_pipeline_context",
 ]
-

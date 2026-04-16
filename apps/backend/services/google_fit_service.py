@@ -612,7 +612,7 @@ class GoogleFitService:
     @staticmethod
     async def _fetch_heart_rate_payload(access_token: str, timezone_name: str | None = None) -> dict[str, Any]:
         timezone_name = timezone_name or settings.GOOGLE_FIT_DEFAULT_TIMEZONE
-        _, start_millis, end_millis = GoogleFitService._build_bucket_window(timezone_name, 1)
+        start_millis, end_millis = GoogleFitService._build_bucket_window(timezone_name, 1)
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
@@ -993,6 +993,11 @@ class GoogleFitService:
             data_source_id=GOOGLE_FIT_DATASOURCE_ID,
         )
         GoogleFitService._log_raw_google_fit_response("steps", response_json)
+        logger.info(
+            "[GFit] steps aggregate response | user_buckets=%s | datasource=%s",
+            len(response_json.get("bucket", [])),
+            GOOGLE_FIT_DATASOURCE_ID,
+        )
 
         records: list[dict[str, Any]] = []
         for bucket in response_json.get("bucket", []):
@@ -1010,10 +1015,45 @@ class GoogleFitService:
                     "timezone": timezone_name,
                 }
             )
+
+        # Fallback: if the specific datasource returned no data, retry with the generic dataTypeName.
+        # Some devices write to different datasource IDs but all aggregate under the dataTypeName.
         if not records:
-            logger.warning("[GFit] STEPS DATA NOT AVAILABLE FROM GOOGLE FIT")
+            logger.warning(
+                "[GFit] No steps from datasource_id=%s — retrying with dataTypeName aggregate | user=%s",
+                GOOGLE_FIT_DATASOURCE_ID,
+                user.id if hasattr(user, 'id') else 'unknown',
+            )
+            fallback_response = await GoogleFitService._aggregate_fit_data(
+                access_token,
+                "com.google.step_count.delta",
+                start_millis,
+                end_millis,
+                24 * 60 * 60 * 1000,
+                data_source_id=None,  # Use dataTypeName, not dataSourceId
+            )
+            GoogleFitService._log_raw_google_fit_response("steps_fallback", fallback_response)
+            for bucket in fallback_response.get("bucket", []):
+                timestamp = GoogleFitService._extract_bucket_start_millis(bucket)
+                value = GoogleFitService._extract_step_count(bucket)
+                if timestamp is None or value is None:
+                    continue
+                records.append(
+                    {
+                        "type": UserVitalTypeEnum.STEPS.value,
+                        "value": value,
+                        "unit": "count",
+                        "timestamp": datetime.fromtimestamp(timestamp / 1000, tz=timezone.utc),
+                        "source": "google_fit",
+                        "timezone": timezone_name,
+                    }
+                )
+
+        if not records:
+            logger.warning("[GFit] STEPS DATA NOT AVAILABLE FROM GOOGLE FIT (both datasource and fallback returned empty)")
             return None
 
+        logger.info("[GFit] Steps records fetched: %s entries", len(records))
         return records
 
     @staticmethod

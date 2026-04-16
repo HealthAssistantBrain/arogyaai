@@ -1,7 +1,10 @@
-"""Utility placeholders for the orchestration pipeline."""
+"""Utility helpers for the orchestration pipeline."""
 
-def build_orchestration_pipeline_context() -> None:
-    """Placeholder helper for future orchestration wiring."""
+from __future__ import annotations
 
-    ...
 
+def build_orchestration_pipeline_context() -> dict[str, str]:
+    return {
+        "pipeline": "orchestration_pipeline",
+        "mode": "celery_chain",
+    }

@@ -94,8 +94,62 @@ def _dashboard_last_updated(payload: dict[str, Any]) -> str | None:
     return _latest_iso(*candidates)
 
 
+def _safe_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _safe_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _extract_latest_steps(bundle: dict[str, Any]) -> int:
+    google_fit = _safe_dict(bundle.get("googleFit"))
+    google_fit_data = _safe_dict(google_fit.get("data"))
+    latest_day = _safe_dict(_safe_dict(google_fit_data.get("stats")).get("latest_day"))
+    latest_steps = latest_day.get("steps")
+    try:
+        return max(0, int(round(float(latest_steps))))
+    except (TypeError, ValueError):
+        pass
+
+    vitals = _safe_dict(bundle.get("vitals"))
+    steps_slice = _safe_dict(vitals.get("steps:24h"))
+    steps_data = _safe_list(steps_slice.get("data"))
+    for item in reversed(steps_data):
+        try:
+            return max(0, int(round(float(_safe_dict(item).get("value")))))
+        except (TypeError, ValueError):
+            continue
+
+    return 0
+
+
+def _dashboard_flat_contract(bundle: dict[str, Any]) -> dict[str, Any]:
+    history_data = _safe_dict(_safe_dict(bundle.get("history")).get("data"))
+    prediction_data = _safe_dict(_safe_dict(bundle.get("prediction")).get("data"))
+    health_score_data = _safe_dict(_safe_dict(bundle.get("healthScore")).get("data"))
+
+    sleep_records = _safe_list(history_data.get("sleep"))
+    insights = _safe_list(prediction_data.get("recommendations"))
+    vitals = _safe_dict(bundle.get("vitals"))
+
+    return {
+        **bundle,
+        "health_score": float(health_score_data.get("score") or 0),
+        "steps": _extract_latest_steps(bundle),
+        "sleep": sleep_records,
+        "insights": insights,
+        "vitals": vitals,
+    }
+
+
 def _serialize_vitals_slice(db: Session, current_user: User, vital_type: str, range_value: str = "24h") -> dict[str, Any]:
-    payload = UserDataService.list_vitals(db, current_user, vital_type=vital_type, range_value=range_value)
+    try:
+        payload = UserDataService.list_vitals(db, current_user, vital_type=vital_type, range_value=range_value)
+    except Exception as e:
+        logger.error(f"Error fetching vitals slice {vital_type}: {e}")
+        payload = {}
+        
     vitals = payload.get("data", {}).get("vitals", []) if isinstance(payload, dict) else []
     trimmed = vitals[-100:] if len(vitals) > 100 else vitals
     return {
@@ -110,12 +164,25 @@ def _serialize_vitals_slice(db: Session, current_user: User, vital_type: str, ra
     }
 
 
+async def _safe_call(coro, fallback_data=None):
+    try:
+        return await coro
+    except Exception as e:
+        logger.error(f"Pipeline component error: {e}")
+        return {
+            "success": False,
+            "status": "fallback",
+            "source": "error",
+            "error": str(e),
+            "data": fallback_data if fallback_data is not None else {}
+        }
+
 async def build_dashboard_bundle(db: Session, current_user: User) -> dict[str, Any]:
-    health_score = await dashboard_svc.get_health_score(current_user, db)
-    history = await dashboard_svc.get_health_history(current_user, db)
-    prediction = await dashboard_svc.get_latest_prediction(current_user, db)
-    profile = await dashboard_svc.get_user_profile(current_user, db)
-    alerts = await dashboard_svc.get_alerts(current_user, db)
+    health_score = await _safe_call(dashboard_svc.get_health_score(current_user, db))
+    history = await _safe_call(dashboard_svc.get_health_history(current_user, db))
+    prediction = await _safe_call(dashboard_svc.get_latest_prediction(current_user, db))
+    profile = await _safe_call(dashboard_svc.get_user_profile(current_user, db))
+    alerts = await _safe_call(dashboard_svc.get_alerts(current_user, db))
     google_fit = {
         "success": True,
         "status": "ready",
@@ -138,7 +205,7 @@ async def build_dashboard_bundle(db: Session, current_user: User) -> dict[str, A
         },
     }
     bundle["last_updated"] = _dashboard_last_updated(bundle)
-    return bundle
+    return _dashboard_flat_contract(bundle)
 
 
 async def build_realtime_payload(db: Session, current_user: User) -> dict[str, Any]:
@@ -159,7 +226,7 @@ async def build_realtime_payload(db: Session, current_user: User) -> dict[str, A
         "googleFit": google_fit,
     }
     payload["last_updated"] = _dashboard_last_updated(payload)
-    return payload
+    return _dashboard_flat_contract(payload)
 
 
 def _build_psycopg2_kwargs() -> dict[str, Any]:

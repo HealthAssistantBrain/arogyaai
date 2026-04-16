@@ -1,9 +1,10 @@
 import { FileText, ShieldCheck } from 'lucide-react';
+import { safeArray } from '../../utils/safeData';
 
 const firstText = (...values) => {
     for (const value of values) {
         if (Array.isArray(value)) {
-            const joined = value.map(toDisplayText).filter(Boolean).join(' ').trim();
+            const joined = safeArray(value).map(toDisplayText).filter(Boolean).join(' ').trim();
             if (joined) return joined;
             continue;
         }
@@ -17,7 +18,7 @@ const firstText = (...values) => {
 
 const toList = (value) => {
     if (Array.isArray(value)) {
-        return value.filter((item) => item !== null && item !== undefined && item !== '');
+        return safeArray(value).filter((item) => item !== null && item !== undefined && item !== '');
     }
 
     if (value === null || value === undefined || value === '') {
@@ -26,11 +27,11 @@ const toList = (value) => {
 
     if (typeof value === 'object') {
         if (Array.isArray(value.items)) {
-            return value.items.filter((item) => item !== null && item !== undefined && item !== '');
+            return safeArray(value.items).filter((item) => item !== null && item !== undefined && item !== '');
         }
 
         if (Array.isArray(value.data)) {
-            return value.data.filter((item) => item !== null && item !== undefined && item !== '');
+            return safeArray(value.data).filter((item) => item !== null && item !== undefined && item !== '');
         }
     }
 
@@ -201,9 +202,9 @@ const ReportSummary = ({ data = {}, className = '' }) => {
     const normalizedStatus = summaryData.status.toLowerCase();
     const statusLabel = normalizedStatus.includes('success') || normalizedStatus.includes('complete') ? 'Success' : summaryData.status;
     const safeSummary = summaryData.summary || 'Summary not available for this report';
-    const riskItems = summaryData.risk_analysis.map(toDisplayText).filter(Boolean);
-    const recommendationItems = summaryData.recommendations.map(toDisplayText).filter(Boolean);
-    const extractedItems = summaryData.extracted_values.map(normalizeExtractedValue);
+    const riskItems = safeArray(summaryData.risk_analysis).map(toDisplayText).filter(Boolean);
+    const recommendationItems = safeArray(summaryData.recommendations).map(toDisplayText).filter(Boolean);
+    const extractedItems = safeArray(summaryData.extracted_values).map(normalizeExtractedValue);
 
     return (
         <div className={`space-y-8 ${className}`.trim()}>

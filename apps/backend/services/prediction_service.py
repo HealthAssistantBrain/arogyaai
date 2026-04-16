@@ -1,25 +1,33 @@
-from integrations.prediction_client import PredictionClient
+from __future__ import annotations
+
+from typing import Any, Dict
+
+from sqlalchemy.orm import Session
+
+from models import User
+from pipelines.ml_pipeline.service import MLPipelineService
 from schemas.api_models import PredictionRequest
-from typing import Dict, Any
 
-prediction_client = PredictionClient()
 
-async def get_health_prediction(user_id: str, data: PredictionRequest) -> Dict[str, Any]:
+async def get_health_prediction(
+    user_id: str,
+    data: PredictionRequest,
+    db: Session | None = None,
+    current_user: User | None = None,
+) -> Dict[str, Any]:
     """
-    Coordinates health risk prediction.
-    Calls Prediction Microservice via integration layer with fallback logic.
+    Coordinates health risk prediction through the local hybrid pipeline.
+
+    If a DB session and resolved user are provided, the pipeline persists
+    feature, risk, SHAP, and health-score outputs. Otherwise it returns a safe
+    fallback envelope.
     """
-    # Prepare internal payload
     payload = data.model_dump()
     payload["user_id"] = user_id
-    
-    # Call integration
-    response = await prediction_client.get_prediction(payload)
-    
-    if response.get("success") and response.get("status") == "ready":
-        return response
-        
-    # Fallback/Smart Mock Logic
+
+    if db is not None and current_user is not None:
+        return MLPipelineService.predict(db, current_user, payload)
+
     return {
         "success": True,
         "status": "fallback",
@@ -31,7 +39,7 @@ async def get_health_prediction(user_id: str, data: PredictionRequest) -> Dict[s
             "recommendations": [
                 "Maintain current activity level",
                 "Schedule a routine check-up in 6 months",
-                "Focus on consistent sleep patterns"
-            ]
-        }
+                "Focus on consistent sleep patterns",
+            ],
+        },
     }

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import api from '../lib/axios';
+import { safeArray, safeNumber, safeObject, deepEqual, safeText } from '../utils/safeData';
 
 /**
  * Pipeline-aware dashboard store.
@@ -23,9 +24,10 @@ let dashboardFetchSeq = 0;
 
 const emptySlice = () => ({ data: null, status: 'fallback', source: 'db', last_updated: null });
 const vitalKey = (type, range) => `${type}:${range}`;
+const isPlainObject = (value) => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 
-const buildNoCacheConfig = (cacheBust) => ({
-    params: { ts: cacheBust },
+const buildNoCacheConfig = (cacheBust, params = {}) => ({
+    params: { ...params, ts: cacheBust },
     headers: NO_CACHE_HEADERS,
 });
 
@@ -45,6 +47,10 @@ const dashboardSignature = (bundle) => JSON.stringify({
     heartRate: bundle?.vitals?.[vitalKey('heart_rate', DEFAULT_VITAL_RANGE)]?.data ?? null,
     steps: bundle?.vitals?.[vitalKey('steps', DEFAULT_VITAL_RANGE)]?.data ?? null,
     sleep: bundle?.vitals?.[vitalKey('sleep', DEFAULT_VITAL_RANGE)]?.data ?? null,
+    health_score: bundle?.health_score ?? null,
+    flatSteps: bundle?.steps ?? null,
+    flatSleep: bundle?.sleep ?? null,
+    insights: bundle?.insights ?? null,
 });
 
 const extractPayloadTimestamp = (payload) => {
@@ -73,6 +79,18 @@ const extractPayloadTimestamp = (payload) => {
     return null;
 };
 
+const coerceVitalSlice = (slice, type, range) => {
+    if (Array.isArray(slice)) {
+        return normalizeVitals({ data: slice }, type, range);
+    }
+
+    if (isPlainObject(slice)) {
+        return normalizeVitals(slice, type, range);
+    }
+
+    return normalizeVitals({}, type, range);
+};
+
 const buildDashboardState = (currentState, payload = {}, replace = false) => {
     const currentVitals = replace ? {} : { ...(currentState.vitals || {}) };
     const nextDashboardData = replace
@@ -86,6 +104,13 @@ const buildDashboardState = (currentState, payload = {}, replace = false) => {
     if (payload.alerts) nextDashboardData.alerts = payload.alerts;
     if (payload.googleFit) nextDashboardData.googleFit = payload.googleFit;
     if (payload.vitals) nextDashboardData.vitals = payload.vitals;
+    if (payload.health_score !== undefined) nextDashboardData.health_score = payload.health_score;
+    if (payload.steps !== undefined) nextDashboardData.steps = payload.steps;
+    if (payload.sleep !== undefined) nextDashboardData.sleep = payload.sleep;
+    // Normalize insights immediately so no raw object ever enters nextDashboardData.
+    if (payload.insights !== undefined) {
+        nextDashboardData.insights = safeArray(payload.insights).map((item) => safeText(item)).filter(Boolean);
+    }
 
     if (payload.healthScore) currentState = { ...currentState, healthScore: payload.healthScore };
     if (payload.history) currentState = { ...currentState, history: payload.history };
@@ -96,24 +121,49 @@ const buildDashboardState = (currentState, payload = {}, replace = false) => {
 
     if (payload.vitals) {
         Object.entries(payload.vitals).forEach(([key, slice]) => {
-            currentVitals[key] = slice;
+            const [type = key, range = DEFAULT_VITAL_RANGE] = key.split(':');
+            currentVitals[key] = coerceVitalSlice(slice, type, range);
         });
     }
 
-    if (payload.steps) {
-        currentVitals[vitalKey('steps', DEFAULT_VITAL_RANGE)] = payload.steps;
+    if (payload.steps !== undefined) {
+        currentVitals[vitalKey('steps', DEFAULT_VITAL_RANGE)] = coerceVitalSlice(payload.steps, 'steps', DEFAULT_VITAL_RANGE);
     }
-    if (payload.heart_rate) {
-        currentVitals[vitalKey('heart_rate', DEFAULT_VITAL_RANGE)] = payload.heart_rate;
+    if (payload.heart_rate !== undefined) {
+        currentVitals[vitalKey('heart_rate', DEFAULT_VITAL_RANGE)] = coerceVitalSlice(payload.heart_rate, 'heart_rate', DEFAULT_VITAL_RANGE);
     }
-    if (payload.sleep) {
-        currentVitals[vitalKey('sleep', DEFAULT_VITAL_RANGE)] = payload.sleep;
+    if (payload.sleep !== undefined) {
+        currentVitals[vitalKey('sleep', DEFAULT_VITAL_RANGE)] = coerceVitalSlice(payload.sleep, 'sleep', DEFAULT_VITAL_RANGE);
     }
+
+    const canonicalHealthScore = safeNumber(
+        payload.health_score ?? payload.healthScore?.data?.score ?? currentState.healthScore?.data?.score,
+        0
+    );
+    const canonicalStepsSlice = currentVitals[vitalKey('steps', DEFAULT_VITAL_RANGE)] ?? coerceVitalSlice({}, 'steps', DEFAULT_VITAL_RANGE);
+    const canonicalSleepSlice = currentVitals[vitalKey('sleep', DEFAULT_VITAL_RANGE)] ?? coerceVitalSlice({}, 'sleep', DEFAULT_VITAL_RANGE);
+    // Normalize insight/recommendation items to strings so React can render them safely.
+    // Backend may return { title, detail, category, priority } objects.
+    const canonicalInsights = safeArray(payload.insights ?? payload.prediction?.data?.recommendations)
+        .map((item) => safeText(item))
+        .filter(Boolean);
+    const canonicalStepData = safeArray(canonicalStepsSlice.data);
+    const latestStepEntry = canonicalStepData.length > 0 ? canonicalStepData[canonicalStepData.length - 1] : null;
+    const latestStepValue = Number(latestStepEntry?.value);
 
     const nextState = {
         ...currentState,
         vitals: currentVitals,
-        dashboardData: nextDashboardData,
+        dashboardData: {
+            ...nextDashboardData,
+            health_score: canonicalHealthScore,
+            steps: payload.steps != null && Number.isFinite(Number(payload.steps))
+                ? Number(payload.steps)
+                : (Number.isFinite(latestStepValue) ? Math.round(latestStepValue) : 0),
+            sleep: safeArray(canonicalSleepSlice.data),
+            insights: canonicalInsights,
+            vitals: safeObject(currentVitals),
+        },
     };
 
     nextState.dashboardSignature = dashboardSignature(nextState);
@@ -122,7 +172,7 @@ const buildDashboardState = (currentState, payload = {}, replace = false) => {
 };
 
 const normalizeVitals = (payload, type, range) => {
-    const rawRecords = Array.isArray(payload?.data) ? payload.data : [];
+    const rawRecords = safeArray(payload?.data);
     const sorted = rawRecords
         .filter((item) => item && item.timestamp && item.value !== null && item.value !== undefined)
         .slice()
@@ -180,28 +230,28 @@ const useDashboardStore = create(
                 if (!silent) {
                     set((state) => ({
                         vitals: {
-                            ...(state.vitals || {}),
+                            ...(safeObject(state.vitals)),
                             [key]: {
-                                ...(state.vitals?.[key] || {}),
+                                ...(safeObject(state.vitals?.[key])),
                                 type,
                                 range,
                                 status: 'processing',
                                 source: 'db',
-                                data: current?.data ?? [],
+                                data: safeArray(current?.data),
                             },
                         },
                     }), false, `vitals/fetch-start:${key}`);
                 }
 
                 try {
-                    const res = await api.get('/vitals', force ? buildNoCacheConfig(cacheBust ?? `${Date.now()}-${key}`) : { params: { type, range } });
+                    const res = await api.get('/vitals', force ? buildNoCacheConfig(cacheBust ?? `${Date.now()}-${key}`, { type, range }) : { params: { type, range } });
                     const slice = normalizeVitals(res.data, type, range);
                     if (requestId !== null && requestId !== dashboardFetchSeq) {
                         return slice;
                     }
                     set((state) => ({
                         vitals: {
-                            ...(state.vitals || {}),
+                            ...(safeObject(state.vitals)),
                             [key]: slice,
                         },
                     }), false, `vitals/fetch-success:${key}`);
@@ -220,7 +270,7 @@ const useDashboardStore = create(
                     };
                     set((state) => ({
                         vitals: {
-                            ...(state.vitals || {}),
+                            ...(safeObject(state.vitals)),
                             [key]: fallbackSlice,
                         },
                     }), false, `vitals/fetch-error:${key}`);
@@ -236,11 +286,11 @@ const useDashboardStore = create(
                 const next = buildDashboardState(current, payload, replace);
                 const isStalePayload = currentUpdatedAt !== null && incomingUpdatedAt !== null && incomingUpdatedAt < currentUpdatedAt;
 
-                if (isStalePayload && next.dashboardSignature !== current.dashboardSignature) {
+                if (isStalePayload && !deepEqual(next.dashboardData, current.dashboardData)) {
                     return current.dashboardData;
                 }
 
-                if (next.dashboardSignature === current.dashboardSignature) {
+                if (deepEqual(next.dashboardData, current.dashboardData)) {
                     set(
                         {
                             loading: false,
@@ -282,7 +332,8 @@ const useDashboardStore = create(
 
                 try {
                     const response = await api.get('/dashboard', buildNoCacheConfig(cacheBust));
-                    const bundle = response.data?.data ?? {};
+                    console.log('[Dashboard] response', response.data);
+                    const bundle = response.data?.data ?? response.data ?? {};
                     if (requestId !== dashboardFetchSeq) {
                         return bundle;
                     }

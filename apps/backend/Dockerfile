@@ -24,12 +24,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends tzdata curl ca-
     fi && \
     rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY apps/backend/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-COPY docker/backend-entrypoint.sh /usr/local/bin/backend-entrypoint
+COPY . /app
+ENV PYTHONPATH=/app:/app/apps/backend
+WORKDIR /app/apps/backend
+COPY apps/backend/docker/backend-entrypoint.sh /usr/local/bin/backend-entrypoint
 RUN chmod +x /usr/local/bin/backend-entrypoint
 
 ENTRYPOINT ["/usr/local/bin/backend-entrypoint"]
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=12 CMD curl --fail --silent --show-error http://localhost:8000/health || exit 1

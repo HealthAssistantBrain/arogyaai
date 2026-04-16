@@ -5,21 +5,18 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from models import User
-from services.feature_service import FeatureService
-from services.risk_engine import RiskEngine
+from pipelines.ml_pipeline.service import MLPipelineService
 
 
 class InsightsService:
     @staticmethod
     def get_insights(db: Session, user: User) -> dict[str, Any]:
-        features = FeatureService.build_feature_snapshot(db, user)
-        payload = RiskEngine.evaluate(features, user_id=str(user.id))
-
+        payload = MLPipelineService.predict(db, user, {"user_id": str(user.id), "data_points": {}})
         return {
             "success": True,
             "status": payload.get("status", "ready"),
-            "source": "db+rule_engine",
-            "error": None,
-            "data": payload,
+            "source": payload.get("source", "db+rule_engine"),
+            "error": payload.get("error"),
+            "data": payload.get("data", {}),
             "last_updated": payload.get("last_updated"),
         }

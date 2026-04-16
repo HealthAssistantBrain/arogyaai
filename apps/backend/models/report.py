@@ -41,3 +41,5 @@ class Report(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # ── Relationships ──────────────────────────────────────────
     user       = relationship("User", back_populates="reports")
     risk_score = relationship("RiskScore", back_populates="report", uselist=False)
+    lab_values = relationship("LabValue", back_populates="report")
+    feature_snapshots = relationship("FeatureSnapshotRecord", back_populates="report")

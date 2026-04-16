@@ -13,6 +13,7 @@ import {
 import { ROUTES } from '../router/routes';
 import { apiClient } from '../lib/apiClient';
 import { openCommandPalette } from '../components/CommandPalette';
+import { safeArray } from '../utils/safeData';
 
 const FILTERS = [
   { label: 'All', value: 'all' },
@@ -31,8 +32,7 @@ const toNumber = (value) => {
 };
 
 const normalizeTrend = (trend) => {
-  if (!Array.isArray(trend)) return [];
-  return trend.map(toNumber).filter((value) => Number.isFinite(value));
+  return safeArray(trend).map(toNumber).filter((value) => Number.isFinite(value));
 };
 
 const normalizeLabResult = (item, index) => ({
@@ -164,8 +164,8 @@ const LabResults = () => {
   }, []);
 
   const filteredResults = activeFilter === 'all'
-    ? labResults
-    : labResults.filter((item) => item.category?.toLowerCase() === activeFilter);
+    ? safeArray(labResults)
+    : safeArray(labResults).filter((item) => item.category?.toLowerCase() === activeFilter);
 
   const activeResult = filteredResults[0] ?? labResults[0] ?? null;
 
@@ -258,7 +258,9 @@ const LabResults = () => {
                         </tr>
                       ) : (
                         filteredResults.map((item, index) => {
-                          const trendSeries = item.trend.length ? item.trend : [item.value].filter((value) => Number.isFinite(value));
+                          const trendSeries = safeArray(item.trend).length
+                            ? safeArray(item.trend)
+                            : [item.value].filter((value) => Number.isFinite(value));
                           const barClass = getTrendBarClass(item.status);
 
                           return (
@@ -337,7 +339,9 @@ const LabResults = () => {
                           </span>
                         </div>
                         <div className="h-44 w-full bg-slate-50 dark:bg-black/20 rounded-[2rem] flex items-end justify-between px-8 pb-6 border border-slate-100 dark:border-white/5 shadow-inner group/chart overflow-hidden">
-                          {(activeResult?.trend.length ? activeResult.trend : [activeResult?.value].filter((value) => Number.isFinite(value))).map((h, i, series) => (
+                          {(safeArray(activeResult?.trend).length
+                            ? safeArray(activeResult?.trend)
+                            : [activeResult?.value].filter((value) => Number.isFinite(value))).map((h, i, series) => (
                             <div
                               key={`${activeResult?.id || 'active'}-hist-${i}`}
                               className={`w-2.5 rounded-t-full transition-all duration-1000 ${i === series.length - 1 ? 'bg-[#6143f4] shadow-xl shadow-[#6143f4]/30' : 'bg-[#6143f4]/20 group-hover/chart:bg-[#6143f4]/40'

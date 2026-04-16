@@ -7,7 +7,11 @@ from typing import Any
 from urllib.parse import urlparse
 
 from fastapi import HTTPException, UploadFile, status
-from pypdf import PdfReader
+
+try:
+    from pypdf import PdfReader
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    PdfReader = None
 from sqlalchemy.orm import Session
 
 from core.config import settings
@@ -191,6 +195,11 @@ class ReportService:
 
     @staticmethod
     def _extract_pdf_text(file_bytes: bytes) -> str:
+        if PdfReader is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="PDF parsing is unavailable in this environment.",
+            )
         reader = PdfReader(BytesIO(file_bytes))
         text_parts = []
         for page in reader.pages:

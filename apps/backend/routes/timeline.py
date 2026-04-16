@@ -17,14 +17,31 @@ def get_timeline(
 ):
     user_id = current_user.id
     
-    # Query Data
-    wearables = db.query(WearableData).filter(WearableData.user_id == user_id).order_by(WearableData.recorded_at.desc()).limit(30).all()
-    vitals = db.query(VitalsData).filter(VitalsData.user_id == user_id).order_by(VitalsData.recorded_at.desc()).limit(30).all()
-    labs = db.query(LabResult).filter(LabResult.user_id == user_id).order_by(LabResult.timestamp.desc()).limit(30).all()
-    alerts = db.query(Notification).filter(
-        Notification.user_id == user_id, 
-        Notification.notification_type == NotificationTypeEnum.HEALTH_ALERT
-    ).order_by(Notification.created_at.desc()).limit(30).all()
+    # Query Data safely with isolation
+    wearables, vitals, labs, alerts = [], [], [], []
+    
+    try:
+        wearables = db.query(WearableData).filter(WearableData.user_id == user_id).order_by(WearableData.recorded_at.desc()).limit(30).all()
+    except Exception as e:
+        print(f"Error fetching wearables for timeline: {e}")
+        
+    try:
+        vitals = db.query(VitalsData).filter(VitalsData.user_id == user_id).order_by(VitalsData.recorded_at.desc()).limit(30).all()
+    except Exception as e:
+        print(f"Error fetching vitals for timeline: {e}")
+        
+    try:
+        labs = db.query(LabResult).filter(LabResult.user_id == user_id).order_by(LabResult.timestamp.desc()).limit(30).all()
+    except Exception as e:
+        print(f"Error fetching labs for timeline: {e}")
+        
+    try:
+        alerts = db.query(Notification).filter(
+            Notification.user_id == user_id, 
+            Notification.notification_type == NotificationTypeEnum.HEALTH_ALERT
+        ).order_by(Notification.created_at.desc()).limit(30).all()
+    except Exception as e:
+        print(f"Error fetching alerts for timeline: {e}")
     
     timeline_events = []
     
@@ -97,4 +114,12 @@ def get_timeline(
 
     # Sort descending by timestamp
     timeline_events.sort(key=lambda x: x["timestamp"] or "", reverse=True)
-    return {"success": True, "data": timeline_events}
+    
+    return {
+        "success": True,
+        "status": "ready" if timeline_events else "empty",
+        "source": "db",
+        "error": None,
+        "data": timeline_events,
+        "last_updated": timeline_events[0]["timestamp"] if timeline_events else None
+    }

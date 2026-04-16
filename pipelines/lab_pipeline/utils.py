@@ -1,7 +1,10 @@
-"""Utility placeholders for the lab pipeline."""
+"""Utility helpers for the lab pipeline."""
 
-def build_lab_pipeline_context() -> None:
-    """Placeholder helper for future lab pipeline wiring."""
+from __future__ import annotations
 
-    ...
 
+def build_lab_pipeline_context() -> dict[str, str]:
+    return {
+        "pipeline": "lab_pipeline",
+        "mode": "biomarker_extraction",
+    }

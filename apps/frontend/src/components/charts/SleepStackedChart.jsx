@@ -9,9 +9,10 @@ import {
     Tooltip,
     Legend
 } from 'recharts';
+import { safeArray } from '../../utils/safeData';
 
 const SleepStackedChart = ({ data = [], height = 240 }) => {
-    const safeData = Array.isArray(data) ? data : [];
+    const safeData = safeArray(data);
     return (
         <div className="w-full" style={{ height }}>
             <ResponsiveContainer width="100%" height="100%">

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import api from '../lib/axios';
+import { safeArray, safeNumber } from '../utils/safeData';
 
 const useHeartRateStore = create((set) => ({
   heartRateData: [],
@@ -15,10 +16,10 @@ const useHeartRateStore = create((set) => ({
       const response = await api.get('/vitals', {
         params: { type: 'heart_rate', range: '24h' },
       });
-      const records = Array.isArray(response.data?.data) ? response.data.data : [];
+      const records = safeArray(response.data?.data);
       set({
         heartRateData: records.map((item) => ({
-          bpm: Number(item.value ?? 0),
+          bpm: safeNumber(item?.value, 0),
           time: item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '--',
           timestamp: item.timestamp,
         })),

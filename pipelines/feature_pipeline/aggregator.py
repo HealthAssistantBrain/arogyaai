@@ -1,7 +1,11 @@
-"""Feature aggregation scaffold."""
+"""Feature aggregation helpers."""
+
+from __future__ import annotations
+
 
 class FeatureAggregator:
-    """Placeholder for feature aggregation logic."""
-
-    ...
-
+    @staticmethod
+    def summarize(snapshot) -> dict[str, object]:
+        if hasattr(snapshot, "to_dict"):
+            return snapshot.to_dict()
+        return dict(snapshot or {})

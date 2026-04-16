@@ -1,13 +1,18 @@
-"""DTO placeholders for the storage pipeline."""
+"""Storage pipeline DTOs."""
+from __future__ import annotations
 
-class StoragePipelineRequest:
-    """Placeholder request DTO."""
+from typing import Any
 
-    ...
+from pydantic import BaseModel, Field
 
 
-class StoragePipelineResponse:
-    """Placeholder response DTO."""
+class StoragePipelineRequest(BaseModel):
+    user_id: str
+    payload: dict[str, Any] = Field(default_factory=dict)
 
-    ...
 
+class StoragePipelineResponse(BaseModel):
+    success: bool = True
+    status: str = "ready"
+    error: str | None = None
+    data: dict[str, Any] = Field(default_factory=dict)

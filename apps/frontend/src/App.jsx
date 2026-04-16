@@ -18,9 +18,14 @@ export default function App() {
       .then((result) => {
         if (!isMounted) return
 
-        if (result?.route && result.route !== window.location.pathname) {
-          window.location.replace(result.route)
-          return
+        if (result?.route) {
+          const currentPath = window.location.pathname.replace(/\/$/, '') || '/'
+          const targetRoute = result.route.replace(/\/$/, '') || '/'
+
+          if (targetRoute !== currentPath) {
+            window.location.replace(result.route)
+            return
+          }
         }
 
         setInitComplete(true)

@@ -1,7 +1,10 @@
-"""Utility placeholders for the ML pipeline."""
+"""Utility helpers for the ML pipeline."""
 
-def build_ml_pipeline_context() -> None:
-    """Placeholder helper for future ML pipeline wiring."""
+from __future__ import annotations
 
-    ...
 
+def build_ml_pipeline_context() -> dict[str, str]:
+    return {
+        "pipeline": "ml_pipeline",
+        "mode": "hybrid_safe",
+    }

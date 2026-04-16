@@ -62,7 +62,7 @@ def is_data_sufficient(features: Any) -> bool:
         "activity": ("activity_level", "activity"),
         "sleep": ("sleep_score", "sleep_duration", "sleep"),
     }
-    return all(_feature_value(features, *aliases) is not None for aliases in required.values())
+    return any(_feature_value(features, *aliases) is not None for aliases in required.values())
 
 
 def _has_valid_model() -> bool:
@@ -274,7 +274,7 @@ class RiskEngine:
 
     @staticmethod
     def evaluate(features: FeatureSnapshot, user_id: str | None = None) -> dict[str, Any]:
-        if not is_data_sufficient(features) or not _has_valid_model():
+        if not is_data_sufficient(features):
             return RiskEngine._empty_payload(features, user_id=user_id)
 
         hrv = features.avg_hrv

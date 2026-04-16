@@ -1,19 +1,20 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import api from '../lib/axios';
+import { safeArray, safeNumber, safeObject } from '../utils/safeData';
 
 const VALID_RANGES = new Set(['24h', '7d', '30d']);
 const REFRESH_INTERVAL_MS = 60_000;
 
 const normalizeStages = (stages = {}) => ({
-  rem: Number(stages.rem ?? 0),
-  deep: Number(stages.deep ?? 0),
-  light: Number(stages.light ?? 0),
-  awake: Number(stages.awake ?? 0),
+  rem: safeNumber(stages.rem, 0),
+  deep: safeNumber(stages.deep, 0),
+  light: safeNumber(stages.light, 0),
+  awake: safeNumber(stages.awake, 0),
 });
 
 const normalizeSleepSummary = (payload) => {
-  const data = payload?.data ?? payload ?? {};
+  const data = safeObject(payload?.data ?? payload);
 
   return {
     ...data,
@@ -24,10 +25,10 @@ const normalizeSleepSummary = (payload) => {
     hrv: data.hrv ?? null,
     rhr: data.rhr ?? null,
     recovery_score: data.recovery_score ?? null,
-    timeline_data: Array.isArray(data.timeline_data) ? data.timeline_data : [],
-    weekly_data: Array.isArray(data.weekly_data) ? data.weekly_data : [],
-    insights: Array.isArray(data.insights) ? data.insights : [],
-    recommendations: Array.isArray(data.recommendations) ? data.recommendations : [],
+    timeline_data: safeArray(data.timeline_data),
+    weekly_data: safeArray(data.weekly_data),
+    insights: safeArray(data.insights),
+    recommendations: safeArray(data.recommendations),
     empty: Boolean(data.empty),
     range: data.range ?? '24h',
     timezone: data.timezone ?? null,
@@ -39,7 +40,7 @@ const normalizeSleepSummary = (payload) => {
     target_sleep_hours: data.target_sleep_hours ?? 8.0,
     circadian_phase: data.circadian_phase ?? null,
     circadian_alignment: data.circadian_alignment ?? null,
-    data_sources: Array.isArray(data.data_sources) ? data.data_sources : [],
+    data_sources: safeArray(data.data_sources),
     avg_heart_rate: data.avg_heart_rate ?? null,
   };
 };

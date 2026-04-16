@@ -1,4 +1,4 @@
-"""Entry point scaffold for the baseline pipeline."""
+"""Entry point for the baseline pipeline."""
 
 from .schema import BaselinePipelineRequest, BaselinePipelineResponse
 from .service import BaselinePipelineService
@@ -10,4 +10,3 @@ __all__ = [
     "BaselinePipelineService",
     "build_baseline_pipeline_context",
 ]
-

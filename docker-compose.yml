@@ -13,7 +13,8 @@ services:
 
   backend:
     build:
-      context: ./apps/backend
+      context: ./
+      dockerfile: apps/backend/Dockerfile
       args:
         HTTP_PROXY: ${HTTP_PROXY:-}
         HTTPS_PROXY: ${HTTPS_PROXY:-}
@@ -26,7 +27,7 @@ services:
     networks:
       - arogyaai_net
     volumes:
-      - ./apps/backend:/app
+      - ./:/app
     depends_on:
       postgres:
         condition: service_healthy
@@ -38,6 +39,30 @@ services:
       timeout: 5s
       retries: 12
       start_period: 60s
+
+  celery-worker:
+    build:
+      context: ./
+      dockerfile: apps/backend/Dockerfile
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,backend,postgres,redis,qdrant,prediction-service,rag-service,wearable-service}
+        CUSTOM_CA_CERT_B64: ${CUSTOM_CA_CERT_B64:-}
+    command: ["celery", "-A", "pipelines.orchestration_pipeline.celery_app:celery_app", "worker", "--loglevel=INFO", "-Q", "ingestion,feature,ml,shap"]
+    env_file:
+      - .env
+    networks:
+      - arogyaai_net
+    volumes:
+      - ./:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      disable: true
 
   prediction-service:
     build:

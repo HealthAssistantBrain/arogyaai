@@ -56,32 +56,36 @@ import HeartRateCard from '../components/HeartRateCard';
 import UserProfileBadge from '../components/UserProfileBadge';
 import { CommandPaletteTrigger } from '../components/CommandPalette';
 import { refreshAfterGoogleFitSync } from '../lib/googleFitRefresh';
+import { safeArray, safeNumber, safeObject, safeText } from '../utils/safeData';
+import { useFetchLock } from '../hooks/useFetchLock';
+
 const Dashboard = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('Dashboard');
   const [syncing, setSyncing] = useState(false);
-  const refreshInFlightRef = useRef(false);
+  const [hasAttemptedDashboardLoad, setHasAttemptedDashboardLoad] = useState(false);
+  const { acquireLock, releaseLock } = useFetchLock();
 
   // ── Store ─────────────────────────────────────────────────────────────────
   const { healthScore, prediction, profile, alerts,
     loading, error, fetchDashboardData, googleFit } = useDashboardStore();
   const vitals = useDashboardStore((s) => s.vitals);
+  const dashboardData = useDashboardStore((s) => s.dashboardData);
   const authUser = useAuthStore((s) => s.user);
 
   const refreshDashboard = async ({ silent = true } = {}) => {
-    if (refreshInFlightRef.current) {
-      return;
-    }
+    if (!acquireLock('dashboard_refresh')) return;
 
-    refreshInFlightRef.current = true;
     try {
       await fetchDashboardData({ force: true, silent });
+    } catch (err) {
+      console.error('Refresh dashboard error:', err);
     } finally {
-      refreshInFlightRef.current = false;
+      releaseLock('dashboard_refresh');
     }
   };
 
   useEffect(() => {
+    setHasAttemptedDashboardLoad(true);
     void refreshDashboard({ silent: false });
 
     const interval = window.setInterval(() => {
@@ -118,30 +122,31 @@ const Dashboard = () => {
   const hsData = healthScore?.data;
   const predData = prediction?.data;
   const profData = profile?.data;
-  const alertsData = alerts?.data?.alerts ?? [];
+  const alertsData = safeArray(alerts?.data?.alerts);
+  const hasDashboardData = Boolean(safeObject(dashboardData) && Object.keys(safeObject(dashboardData)).length > 0);
 
   const stepsSlice = vitals?.['steps:24h'] ?? {};
   const sleepSlice = vitals?.['sleep:24h'] ?? {};
-  const stepsVitals = stepsSlice?.data ?? [];
-  const sleepVitals = sleepSlice?.data ?? [];
+  const stepsVitals = safeArray(stepsSlice?.data);
+  const sleepVitals = safeArray(sleepSlice?.data);
   const failedGoogleFitMetrics = Array.isArray(googleFit?.data?.raw_json?.failed_metrics)
     ? googleFit.data.raw_json.failed_metrics
     : [];
   const sleepUnavailable = failedGoogleFitMetrics.includes('sleep') && sleepVitals.length === 0;
 
   // ── Derived display values ────────────────────────────────────────────────
-  const score = hsData?.score ?? 75;
+  const score = safeNumber(hsData?.score, 75);
   const scoreLabel = hsData?.label ?? '…';
   const riskScoreData = [
     { name: 'Score', value: score },
     { name: 'Remaining', value: 100 - score },
   ];
-  const displayName = profData?.full_name ?? authUser?.full_name ?? 'User';
   const bioAgeDelta = predData?.biological_age_delta ?? '—';
   const metabolicRate = predData?.metabolic_rate ?? '—';
   const trajectilePercentile = predData?.trajectory_percentile ?? '—';
-  const predRecs = predData?.recommendations ?? [];
-  const hasProfileData = Boolean(profData && Object.keys(profData).length > 0);
+  // Normalize recommendations — backend may return strings or {title, detail, ...} objects.
+  const predRecs = safeArray(predData?.recommendations).map((r) => safeText(r)).filter(Boolean);
+  const hasProfileData = Boolean(safeObject(profData) && Object.keys(safeObject(profData)).length > 0);
 
   const googleFitLatestDaySteps = googleFit?.data?.stats?.latest_day?.steps;
   const canonicalGoogleFitSteps = Number.isFinite(Number(googleFitLatestDaySteps))
@@ -156,7 +161,19 @@ const Dashboard = () => {
   const gfCalories = gfSteps !== null ? Math.round(gfSteps * 0.050759) : null;
   const gfProgress = gfSteps !== null ? Math.min((gfSteps / 10000) * 100, 100).toFixed(2) : null;
 
-  const sleepData = sleepVitals.reduce((acc, item) => {
+  if (import.meta.env.DEV) {
+    console.log('DEBUG DATA:', {
+      dashboardDataType: Array.isArray(dashboardData) ? 'array' : typeof dashboardData,
+      dashboardDataKeys: safeObject(dashboardData) ? Object.keys(safeObject(dashboardData)) : [],
+      vitalsKeys: Object.keys(safeObject(vitals)),
+      sleepVitalsType: Array.isArray(sleepVitals) ? 'array' : typeof sleepVitals,
+      sleepVitalsLength: sleepVitals.length,
+      alertsType: Array.isArray(alertsData) ? 'array' : typeof alertsData,
+      alertsLength: alertsData.length,
+    });
+  }
+
+  const sleepData = safeArray(sleepVitals).reduce((acc, item) => {
     const date = new Date(item.timestamp);
     if (Number.isNaN(date.getTime())) return acc;
     const day = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
@@ -171,7 +188,7 @@ const Dashboard = () => {
     return acc;
   }, []);
   const avgSleep = sleepVitals.length > 0
-    ? (sleepVitals.reduce((sum, item) => sum + Number(item.value), 0) / sleepVitals.length).toFixed(1)
+    ? (safeArray(sleepVitals).reduce((sum, item) => sum + Number(item.value), 0) / sleepVitals.length).toFixed(1)
     : '—';
 
   const sidebarLinks = [
@@ -200,6 +217,37 @@ const Dashboard = () => {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f6f5f8] dark:bg-[#131022] text-sm font-bold text-slate-500">
         Loading...
+      </div>
+    );
+  }
+
+  if (hasAttemptedDashboardLoad && !loading && !error && !hasDashboardData) {
+    return (
+      <div className="bg-[#f6f5f8] dark:bg-[#131022] font-display text-[#13082A] dark:text-slate-100 min-h-screen flex items-center justify-center antialiased p-8">
+        <div className="w-full max-w-2xl rounded-[2rem] border border-slate-200 bg-white p-8 shadow-xl dark:border-white/5 dark:bg-slate-900">
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#6143f4] mb-3">Dashboard Sync</p>
+          <h1 className="text-3xl font-black tracking-tight text-[#13082A] dark:text-white">
+            No dashboard data yet
+          </h1>
+          <p className="mt-4 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+            We did not receive a dashboard bundle for this account. You can retry the fetch or sync your wearable
+            data to repopulate the page safely.
+          </p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <button
+              onClick={() => void refreshDashboard({ silent: false })}
+              className="rounded-xl bg-[#6143f4] px-5 py-3 text-xs font-black uppercase tracking-[0.2em] text-white"
+            >
+              Retry Fetch
+            </button>
+            <button
+              onClick={handleSync}
+              className="rounded-xl bg-slate-100 px-5 py-3 text-xs font-black uppercase tracking-[0.2em] text-slate-700 dark:bg-white/5 dark:text-slate-300"
+            >
+              Sync Data
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -243,7 +291,7 @@ const Dashboard = () => {
           {/* Error Banner — Added Post-Audit */}
           <AnimatePresence>
             {error && (
-                <motion.div
+              <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
@@ -295,8 +343,10 @@ const Dashboard = () => {
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-5xl font-black text-[#13082A] dark:text-white leading-none">84</span>
-                  <span className="text-slate-400 font-bold text-sm tracking-tight mt-1">Optimal</span>
+                  <span className="text-5xl font-black text-[#13082A] dark:text-white leading-none">
+                    {Number.isFinite(Number(score)) ? Math.round(Number(score)) : '--'}
+                  </span>
+                  <span className="text-slate-400 font-bold text-sm tracking-tight mt-1">{scoreLabel}</span>
                 </div>
               </div>
 

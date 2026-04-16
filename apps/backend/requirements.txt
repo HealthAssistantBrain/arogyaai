@@ -16,3 +16,4 @@ cryptography
 APScheduler
 pypdf
 python-multipart
+celery

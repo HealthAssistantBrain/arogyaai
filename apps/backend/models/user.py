@@ -43,6 +43,11 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     logs            = relationship("Log", back_populates="user")
     google_fit_connection = relationship("GoogleFitConnection", back_populates="user", uselist=False)
     lab_results          = relationship("LabResult", back_populates="user")
+    lab_values           = relationship("LabValue", back_populates="user")
+    feature_snapshots    = relationship("FeatureSnapshotRecord", back_populates="user")
+    baseline_metrics     = relationship("BaselineMetricRecord", back_populates="user")
+    shap_values          = relationship("ShapValueRecord", back_populates="user")
+    health_scores        = relationship("HealthScoreRecord", back_populates="user")
 
     def __repr__(self):
         return f"<User id={self.id} email={self.email}>"

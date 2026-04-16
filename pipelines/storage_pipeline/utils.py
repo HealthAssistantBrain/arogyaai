@@ -1,7 +1,10 @@
-"""Utility placeholders for the storage pipeline."""
+"""Utility helpers for the storage pipeline."""
 
-def build_storage_pipeline_context() -> None:
-    """Placeholder helper for future storage pipeline wiring."""
+from __future__ import annotations
 
-    ...
 
+def build_storage_pipeline_context() -> dict[str, str]:
+    return {
+        "pipeline": "storage_pipeline",
+        "mode": "db_write",
+    }

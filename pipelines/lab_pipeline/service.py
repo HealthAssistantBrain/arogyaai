@@ -1,7 +1,9 @@
-"""Core service placeholder for the lab pipeline."""
+"""Lab pipeline service wrapper."""
+
+from __future__ import annotations
+
+from .pipeline import run_lab_pipeline
+
 
 class LabPipelineService:
-    """Placeholder for lab result processing."""
-
-    ...
-
+    run_lab_pipeline = staticmethod(run_lab_pipeline)

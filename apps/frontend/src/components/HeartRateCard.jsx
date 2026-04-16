@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import HeartRateChart from './charts/HeartRateChart';
 import { ROUTES } from '../router/routes';
 import useDashboardStore from '../store/dashboardStore';
+import { safeArray } from '../utils/safeData';
 
 const HeartRateCard = () => {
   const navigate = useNavigate();
@@ -11,7 +12,7 @@ const HeartRateCard = () => {
   const googleFitSlice = useDashboardStore((s) => s.googleFit);
 
 
-  const heartRateData = Array.isArray(heartRateSlice?.data) ? heartRateSlice.data : [];
+  const heartRateData = safeArray(heartRateSlice?.data);
   const loading = heartRateSlice?.status === 'processing';
   const error = heartRateSlice?.error ?? null;
   const message = heartRateSlice?.message ?? null;

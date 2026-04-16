@@ -1,6 +1,8 @@
 import React from 'react';
 import { ROUTES } from '../../router/routes';
 
+const ERROR_RETRY_FLAG = 'arogyaai:app-error-boundary-retried';
+
 class AppErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -15,11 +17,26 @@ class AppErrorBoundary extends React.Component {
     if (typeof console !== 'undefined' && console.error) {
       console.error('[AppErrorBoundary]', error, info);
     }
+
+    if (typeof window !== 'undefined') {
+      const hasRetried = window.sessionStorage.getItem(ERROR_RETRY_FLAG) === '1';
+      if (!hasRetried) {
+        window.sessionStorage.setItem(ERROR_RETRY_FLAG, '1');
+        // Auto-reloading hides the underlying React crash and can cause infinite loops.
+        // Disabled window.location.reload() to allow the fallback UI to render.
+      }
+    }
   }
 
   handleReset = () => {
+    window.sessionStorage.removeItem(ERROR_RETRY_FLAG);
     this.setState({ hasError: false });
     window.location.assign(ROUTES.HOME);
+  };
+
+  handleManualReload = () => {
+    window.sessionStorage.removeItem(ERROR_RETRY_FLAG);
+    window.location.reload();
   };
 
   render() {
@@ -42,7 +59,7 @@ class AppErrorBoundary extends React.Component {
                 Go Home
               </button>
               <button
-                onClick={() => window.location.reload()}
+                onClick={this.handleManualReload}
                 className="px-5 py-3 rounded-xl bg-slate-100 dark:bg-white/5 text-xs font-black uppercase tracking-[0.2em] text-slate-700 dark:text-slate-300"
               >
                 Reload

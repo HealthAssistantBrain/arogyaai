@@ -1,7 +1,10 @@
-"""Utility placeholders for the baseline pipeline."""
+"""Utility helpers for the baseline pipeline."""
 
-def build_baseline_pipeline_context() -> None:
-    """Placeholder helper for future baseline pipeline wiring."""
+from __future__ import annotations
 
-    ...
 
+def build_baseline_pipeline_context() -> dict[str, str]:
+    return {
+        "pipeline": "baseline_pipeline",
+        "mode": "rolling_metrics",
+    }

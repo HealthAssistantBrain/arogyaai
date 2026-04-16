@@ -9,12 +9,14 @@ import {
     Tooltip,
     Cell
 } from 'recharts';
+import { safeArray } from '../../utils/safeData';
 
 const StepsBarChart = ({ data, height = 200 }) => {
+    const safeData = safeArray(data);
     return (
         <div className="w-full" style={{ height }}>
             <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <BarChart data={safeData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="4 4" stroke="#E8E8E8" vertical={false} />
                     <XAxis
                         dataKey="day"

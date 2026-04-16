@@ -71,13 +71,13 @@ def get_lab_results(
     category: str | None = Query(None, description="Filter by category (hematology, biochemistry, etc.)"),
     current_user: User = Depends(get_current_user_from_header),
     db: Session = Depends(get_db),
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
     """
     Return the latest lab result for each tracked parameter for the current user.
     Also attaches the last 6 measured values as `trend`.
 
     Data is sourced from the `lab_results` table populated by the lab pipeline
-    at report-upload time.  Returns [] if no data has been processed yet.
+    at report-upload time. Returns empty state if no data has been processed yet.
     """
     # Build query — always filter by user, optionally by category
     query = db.query(LabResult).filter(LabResult.user_id == current_user.id)
@@ -88,23 +88,45 @@ def get_lab_results(
             query = query.filter(LabResult.category == normalised_cat)
 
     # Fetch all rows ordered oldest-first so trend lists are chronological
-    rows: list[LabResult] = query.order_by(LabResult.timestamp.asc()).all()
+    try:
+        rows: list[LabResult] = query.order_by(LabResult.timestamp.asc()).all()
+    except Exception as e:
+        return {
+            "success": False,
+            "status": "failed",
+            "source": "db",
+            "error": str(e),
+            "data": [],
+            "last_updated": None
+        }
 
     if not rows:
-        return []
+        return {
+            "success": True,
+            "status": "empty",
+            "source": "db",
+            "error": None,
+            "data": [],
+            "last_updated": None
+        }
 
     # Group by parameter name; collect all values in chronological order
     history: dict[str, list[LabResult]] = defaultdict(list)
     for row in rows:
-        history[row.name].append(row)
+        if row.name:
+            history[row.name].append(row)
 
     lab_results: list[dict[str, Any]] = []
+    latest_timestamp = None
 
     for name, records in history.items():
         # trend = last 6 measured values (chronologically, oldest → newest)
         trend_records = records[-6:]
         trend = [round(r.value, 1) for r in trend_records]
         latest = records[-1]
+        
+        if not latest_timestamp or (latest.timestamp and latest.timestamp > latest_timestamp):
+            latest_timestamp = latest.timestamp
 
         lab_results.append(
             {
@@ -118,4 +140,11 @@ def get_lab_results(
             }
         )
 
-    return lab_results
+    return {
+        "success": True,
+        "status": "ready",
+        "source": "db",
+        "error": None,
+        "data": lab_results,
+        "last_updated": latest_timestamp.isoformat() if latest_timestamp else None
+    }
