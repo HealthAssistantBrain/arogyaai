@@ -25,7 +25,6 @@ const signupSchema = z.object({
   fullName: z.string().min(2, 'Name must be at least 2 characters'),
   email: z.string().email('Invalid email address'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
-  dob: z.string().min(1, 'Date of birth is required'),
 });
 
 const API_URL = getApiUrl(
@@ -56,7 +55,7 @@ const Signup = () => {
     formState: { isSubmitting },
   } = useForm({
     resolver: zodResolver(signupSchema),
-    defaultValues: { fullName: '', email: '', password: '', dob: '' },
+    defaultValues: { fullName: '', email: '', password: '' },
   });
 
   const onSubmit = async (data) => {
@@ -72,8 +71,7 @@ const Signup = () => {
       const payload = {
         email: data.email,
         password: data.password,
-        full_name: data.fullName,
-        dob: data.dob
+        full_name: data.fullName
       };
 
       console.log('SIGNUP REQUEST:', payload);
@@ -113,6 +111,8 @@ const Signup = () => {
         sessionStorage.setItem('hasSeenEmailVerification', 'true');
         navigate(ROUTES.EMAIL_VERIFICATION, { replace: true });
         // finally block handles unlockSystem()
+      } else {
+        navigate('/onboarding', { replace: true });
       }
 
     } catch (err) {
@@ -138,8 +138,7 @@ const Signup = () => {
   const handleValidationErrors = (errors) => {
     const errorMsg = errors.fullName?.message ||
       errors.email?.message ||
-      errors.password?.message ||
-      errors.dob?.message;
+      errors.password?.message;
     if (errorMsg) toast.error(errorMsg);
   };
 
@@ -262,33 +261,22 @@ const Signup = () => {
                   />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 ml-1">Password</label>
-                    <div className="relative">
-                      <input
-                        {...register('password')}
-                        className="w-full px-4 py-3 rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-[#6143f4]/20 focus:border-[#6143f4] transition-all outline-none text-slate-900 dark:text-slate-100 placeholder-slate-400"
-                        placeholder="••••••••"
-                        type={showPassword ? 'text' : 'password'}
-                      />
-                      <button
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
-                        type="button"
-                      >
-                        {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 ml-1">Date of Birth</label>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 ml-1">Password</label>
+                  <div className="relative">
                     <input
-                      {...register('dob')}
-                      className="w-full px-4 py-3 rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-[#6143f4]/20 focus:border-[#6143f4] transition-all outline-none text-slate-900 dark:text-slate-100 placeholder-slate-400 appearance-none"
-                      type="date"
+                      {...register('password')}
+                      className="w-full px-4 py-3 rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-[#6143f4]/20 focus:border-[#6143f4] transition-all outline-none text-slate-900 dark:text-slate-100 placeholder-slate-400"
+                      placeholder="••••••••"
+                      type={showPassword ? 'text' : 'password'}
                     />
+                    <button
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+                      type="button"
+                    >
+                      {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    </button>
                   </div>
                 </div>
 
@@ -303,7 +291,7 @@ const Signup = () => {
                   )}
                   <button
                     disabled={isSubmitting}
-                    className="w-full py-4 bg-[#6143f4] hover:bg-[#6143f4]/90 text-white font-bold rounded-lg shadow-lg shadow-[#6143f4]/30 transition-all active:scale-[0.98] disabled:opacity-70 flex items-center justify-center gap-2"
+                    className="w-full mt-2 py-4 bg-[#6143f4] hover:bg-[#6143f4]/90 text-white font-bold rounded-lg shadow-lg shadow-[#6143f4]/30 transition-all active:scale-[0.98] disabled:opacity-70 flex items-center justify-center gap-2"
                     type="submit"
                   >
                     {isSubmitting ? 'Creating Account...' : 'Create Account'}
