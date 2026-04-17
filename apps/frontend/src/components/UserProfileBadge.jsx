@@ -55,11 +55,11 @@ export default function UserProfileBadge({
   return (
     <div
       className={`${config.wrapper} ${className}`.trim()}
-      onClick={() => navigate(ROUTES.PROFILE)}
+      onClick={() => navigate(ROUTES.SETTINGS_PROFILE)}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
-          navigate(ROUTES.PROFILE);
+          navigate(ROUTES.SETTINGS_PROFILE);
         }
       }}
       role="button"

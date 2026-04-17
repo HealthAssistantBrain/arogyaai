@@ -155,7 +155,7 @@ const AIInsights = () => {
                 <Bell size={20} />
               </button>
               <div className="h-8 w-[1px] bg-slate-200 dark:bg-slate-800 mx-2" />
-              <div className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => navigate(ROUTES.PROFILE)}>
+              <div className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => navigate(ROUTES.SETTINGS_PROFILE)}>
                 <div className="text-right hidden sm:block">
                   <p className="text-xs font-bold text-[#13082A] dark:text-white leading-none">{displayName}</p>
                   <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">Live profile</p>
@@ -221,13 +221,12 @@ const AIInsights = () => {
                   <button
                     key={tab.label}
                     onClick={() => setSelectedCategory(tab.value)}
-                    className={`px-6 py-2 rounded-lg text-sm font-bold transition-all duration-300 ${
-                      selectedCategory === tab.value
+                    className={`px-6 py-2 rounded-lg text-sm font-bold transition-all duration-300 ${selectedCategory === tab.value
                         ? 'bg-white dark:bg-[#6043F4] text-[#6043F4] dark:text-white shadow-sm'
                         : 'text-slate-600 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-white/5'
-                    }`}
+                      }`}
                   >
-                  {tab.label}
+                    {tab.label}
                   </button>
                 ))}
               </div>
@@ -235,152 +234,151 @@ const AIInsights = () => {
 
             {!isInsufficientData ? (
               <>
-            {error ? (
-              <div className="rounded-2xl border border-amber-300/40 bg-amber-50 dark:bg-amber-500/10 px-5 py-4 text-sm text-amber-900 dark:text-amber-100">
-                {error}
-              </div>
-            ) : null}
+                {error ? (
+                  <div className="rounded-2xl border border-amber-300/40 bg-amber-50 dark:bg-amber-500/10 px-5 py-4 text-sm text-amber-900 dark:text-amber-100">
+                    {error}
+                  </div>
+                ) : null}
 
-            {hasRiskCards ? (
-              <motion.div variants={containerVariants} initial="initial" animate="animate" className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {safeArray(topCards).map((risk) => {
-                  const theme = riskStyles[risk.key] || riskStyles.cad;
-                  const levelClass = levelStyles[risk.riskLevel] || levelStyles.LOW;
-                  const trendIcon = risk.deltaFromNeutral >= 0 ? <ArrowUp size={12} /> : <ArrowDown size={12} />;
+                {hasRiskCards ? (
+                  <motion.div variants={containerVariants} initial="initial" animate="animate" className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {safeArray(topCards).map((risk) => {
+                      const theme = riskStyles[risk.key] || riskStyles.cad;
+                      const levelClass = levelStyles[risk.riskLevel] || levelStyles.LOW;
+                      const trendIcon = risk.deltaFromNeutral >= 0 ? <ArrowUp size={12} /> : <ArrowDown size={12} />;
 
-                  return (
-                    <motion.div
-                      key={risk.key}
-                      variants={itemVariants}
-                      className={`bg-white dark:bg-slate-900/50 p-6 rounded-xl border shadow-sm hover:border-[#6043F4]/20 transition-all cursor-pointer group ${theme.ring}`}
-                    >
-                      <div className="flex justify-between items-start mb-4">
-                        <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">{risk.title}</p>
-                        <span className={`${levelClass} text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider`}>
-                          {risk.status}
-                        </span>
+                      return (
+                        <motion.div
+                          key={risk.key}
+                          variants={itemVariants}
+                          className={`bg-white dark:bg-slate-900/50 p-6 rounded-xl border shadow-sm hover:border-[#6043F4]/20 transition-all cursor-pointer group ${theme.ring}`}
+                        >
+                          <div className="flex justify-between items-start mb-4">
+                            <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">{risk.title}</p>
+                            <span className={`${levelClass} text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider`}>
+                              {risk.status}
+                            </span>
+                          </div>
+                          <div className="flex items-baseline gap-2 mb-4">
+                            <span className="text-3xl font-bold text-[#13082A] dark:text-white">{risk.value.toFixed(1)}%</span>
+                            <span className={`text-xs font-bold flex items-center gap-0.5 ${risk.deltaFromNeutral >= 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
+                              {trendIcon}
+                              {risk.trend}
+                            </span>
+                          </div>
+                          <div className="h-10 w-full bg-gradient-to-r from-[#009CDE]/10 to-[#6043F4]/10 rounded flex items-center px-1">
+                            <div className="h-1 w-full bg-slate-200 dark:bg-slate-800 rounded-full relative overflow-hidden">
+                              <motion.div
+                                initial={{ width: 0 }}
+                                animate={{ width: `${risk.progress}%` }}
+                                transition={{ duration: 1, ease: 'easeOut' }}
+                                className={`h-full ${theme.fill} rounded-full`}
+                              />
+                            </div>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </motion.div>
+                ) : (
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-6 text-sm font-medium text-slate-500 dark:text-slate-400 shadow-sm">
+                    No data available
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <motion.div
+                    variants={itemVariants}
+                    initial="initial"
+                    animate="animate"
+                    className="lg:col-span-2 bg-white dark:bg-slate-900/50 p-8 rounded-xl border border-white dark:border-white/5 shadow-sm"
+                  >
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+                      <div>
+                        <h3 className="text-lg font-bold text-[#13082A] dark:text-white">Risk Drivers (SHAP Impact)</h3>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">Biometric factors influencing your current risk score</p>
                       </div>
-                      <div className="flex items-baseline gap-2 mb-4">
-                        <span className="text-3xl font-bold text-[#13082A] dark:text-white">{risk.value.toFixed(1)}%</span>
-                        <span className={`text-xs font-bold flex items-center gap-0.5 ${risk.deltaFromNeutral >= 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
-                          {trendIcon}
-                          {risk.trend}
-                        </span>
-                      </div>
-                      <div className="h-10 w-full bg-gradient-to-r from-[#009CDE]/10 to-[#6043F4]/10 rounded flex items-center px-1">
-                        <div className="h-1 w-full bg-slate-200 dark:bg-slate-800 rounded-full relative overflow-hidden">
-                          <motion.div
-                            initial={{ width: 0 }}
-                            animate={{ width: `${risk.progress}%` }}
-                            transition={{ duration: 1, ease: 'easeOut' }}
-                            className={`h-full ${theme.fill} rounded-full`}
-                          />
+                      <div className="flex gap-4 text-[10px] font-bold uppercase tracking-wider">
+                        <div className="flex items-center gap-1.5">
+                          <span className="size-2 bg-[#009CDE] rounded-full" /> Decreasing Risk
                         </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="size-2 bg-[#6043F4] rounded-full" /> Increasing Risk
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-6">
+                      {hasDrivers ? (
+                        safeArray(drivers).map((driver, index) => (
+                          <div key={driver.key || driver.label} className="relative group/bar">
+                            <div className="flex justify-between mb-1 text-sm font-bold tracking-tight">
+                              <span className="text-slate-700 dark:text-slate-300">{driver.label}</span>
+                              <span className={driver.direction === 'increasing' ? 'text-[#6043F4]' : 'text-[#009CDE]'}>{driver.impact}</span>
+                            </div>
+                            <div className="h-3 w-full bg-slate-100 dark:bg-slate-800 rounded-full flex justify-center items-center relative overflow-hidden shadow-inner">
+                              <motion.div
+                                initial={{ width: 0 }}
+                                animate={{ width: driver.barWidth }}
+                                transition={{ duration: 1, delay: index * 0.08 }}
+                                className={`absolute ${driver.direction === 'increasing' ? 'left-1/2 rounded-r-full' : 'right-1/2 rounded-l-full'} h-full ${driver.direction === 'increasing' ? 'bg-[#6043F4]' : 'bg-[#009CDE]'
+                                  } shadow-sm`}
+                              />
+                              <div className="absolute left-1/2 top-0 h-full w-[1px] bg-slate-300 dark:bg-slate-700 z-10" />
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-slate-500 dark:text-slate-400">No data available</p>
+                      )}
+                    </div>
+                  </motion.div>
+
+                  <div className="space-y-6">
+                    <motion.div
+                      variants={itemVariants}
+                      initial="initial"
+                      animate="animate"
+                      className="bg-[#6043F4] p-8 rounded-xl text-white shadow-xl shadow-[#6043F4]/20 relative overflow-hidden group"
+                    >
+                      <div className="relative z-10">
+                        <Lightbulb size={40} className="mb-4 text-white hover:rotate-12 transition-transform duration-500" />
+                        <h3 className="text-lg font-bold mb-3 tracking-tight">Deep Analysis</h3>
+                        {hasAnalysis ? (
+                          <p className="text-sm leading-relaxed text-white/80 font-medium">{analysis}</p>
+                        ) : (
+                          <p className="text-sm leading-relaxed text-white/80 font-medium">No insights available</p>
+                        )}
+                      </div>
+                      <div className="absolute -bottom-10 -right-10 size-40 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-1000" />
+                    </motion.div>
+
+                    <motion.div
+                      variants={itemVariants}
+                      className="bg-white dark:bg-slate-900/50 p-6 rounded-xl border border-slate-100 dark:border-white/5 shadow-sm"
+                    >
+                      <h4 className="font-bold mb-4 flex items-center gap-2 dark:text-white">
+                        <Rocket size={18} className="text-[#6043F4]" />
+                        Top Recommendations
+                      </h4>
+                      <div className="space-y-4">
+                        {hasRecommendations ? (
+                          safeArray(recommendations).map((item) => (
+                            <div key={`${item.title}-${item.category}`} className="flex gap-3 group">
+                              <div className="size-2 bg-[#009CDE] rounded-full mt-1.5 shrink-0 group-hover:scale-125 transition-transform" />
+                              <div>
+                                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100 leading-relaxed">{item.title}</p>
+                                <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed font-medium">{item.detail}</p>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-slate-500 dark:text-slate-400">No insights available</p>
+                        )}
                       </div>
                     </motion.div>
-                  );
-                })}
-              </motion.div>
-            ) : (
-              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-6 text-sm font-medium text-slate-500 dark:text-slate-400 shadow-sm">
-                No data available
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <motion.div
-                variants={itemVariants}
-                initial="initial"
-                animate="animate"
-                className="lg:col-span-2 bg-white dark:bg-slate-900/50 p-8 rounded-xl border border-white dark:border-white/5 shadow-sm"
-              >
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-                  <div>
-                    <h3 className="text-lg font-bold text-[#13082A] dark:text-white">Risk Drivers (SHAP Impact)</h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Biometric factors influencing your current risk score</p>
-                  </div>
-                  <div className="flex gap-4 text-[10px] font-bold uppercase tracking-wider">
-                    <div className="flex items-center gap-1.5">
-                      <span className="size-2 bg-[#009CDE] rounded-full" /> Decreasing Risk
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="size-2 bg-[#6043F4] rounded-full" /> Increasing Risk
-                    </div>
                   </div>
                 </div>
-
-                <div className="space-y-6">
-                  {hasDrivers ? (
-                    safeArray(drivers).map((driver, index) => (
-                      <div key={driver.key || driver.label} className="relative group/bar">
-                        <div className="flex justify-between mb-1 text-sm font-bold tracking-tight">
-                          <span className="text-slate-700 dark:text-slate-300">{driver.label}</span>
-                          <span className={driver.direction === 'increasing' ? 'text-[#6043F4]' : 'text-[#009CDE]'}>{driver.impact}</span>
-                        </div>
-                        <div className="h-3 w-full bg-slate-100 dark:bg-slate-800 rounded-full flex justify-center items-center relative overflow-hidden shadow-inner">
-                          <motion.div
-                            initial={{ width: 0 }}
-                            animate={{ width: driver.barWidth }}
-                            transition={{ duration: 1, delay: index * 0.08 }}
-                            className={`absolute ${driver.direction === 'increasing' ? 'left-1/2 rounded-r-full' : 'right-1/2 rounded-l-full'} h-full ${
-                              driver.direction === 'increasing' ? 'bg-[#6043F4]' : 'bg-[#009CDE]'
-                            } shadow-sm`}
-                          />
-                          <div className="absolute left-1/2 top-0 h-full w-[1px] bg-slate-300 dark:bg-slate-700 z-10" />
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-slate-500 dark:text-slate-400">No data available</p>
-                  )}
-                </div>
-              </motion.div>
-
-              <div className="space-y-6">
-                <motion.div
-                  variants={itemVariants}
-                  initial="initial"
-                  animate="animate"
-                  className="bg-[#6043F4] p-8 rounded-xl text-white shadow-xl shadow-[#6043F4]/20 relative overflow-hidden group"
-                >
-                  <div className="relative z-10">
-                    <Lightbulb size={40} className="mb-4 text-white hover:rotate-12 transition-transform duration-500" />
-                    <h3 className="text-lg font-bold mb-3 tracking-tight">Deep Analysis</h3>
-                    {hasAnalysis ? (
-                      <p className="text-sm leading-relaxed text-white/80 font-medium">{analysis}</p>
-                    ) : (
-                      <p className="text-sm leading-relaxed text-white/80 font-medium">No insights available</p>
-                    )}
-                  </div>
-                  <div className="absolute -bottom-10 -right-10 size-40 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-1000" />
-                </motion.div>
-
-                <motion.div
-                  variants={itemVariants}
-                  className="bg-white dark:bg-slate-900/50 p-6 rounded-xl border border-slate-100 dark:border-white/5 shadow-sm"
-                >
-                  <h4 className="font-bold mb-4 flex items-center gap-2 dark:text-white">
-                    <Rocket size={18} className="text-[#6043F4]" />
-                    Top Recommendations
-                  </h4>
-                  <div className="space-y-4">
-                    {hasRecommendations ? (
-                      safeArray(recommendations).map((item) => (
-                        <div key={`${item.title}-${item.category}`} className="flex gap-3 group">
-                          <div className="size-2 bg-[#009CDE] rounded-full mt-1.5 shrink-0 group-hover:scale-125 transition-transform" />
-                          <div>
-                            <p className="text-xs font-semibold text-slate-800 dark:text-slate-100 leading-relaxed">{item.title}</p>
-                            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed font-medium">{item.detail}</p>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-slate-500 dark:text-slate-400">No insights available</p>
-                    )}
-                  </div>
-                </motion.div>
-              </div>
-            </div>
 
               </>
             ) : null}
@@ -413,7 +411,8 @@ const AIInsights = () => {
         </main>
       </div>
 
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(96, 67, 244, 0.1); border-radius: 20px; }

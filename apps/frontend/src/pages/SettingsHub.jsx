@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { ROUTES } from '../router/routes';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -75,7 +76,7 @@ const SettingsHub = () => {
         { label: 'Security', icon: ShieldCheck, path: ROUTES.SETTINGS_SECURITY },
         { label: 'Privacy', icon: Lock, path: ROUTES.SETTINGS_PRIVACY },
         { label: 'Notifications', icon: BellRing, path: ROUTES.SETTINGS_NOTIFICATIONS },
-        { label: 'Data & Export', icon: Database },
+        { label: 'Data & Export', icon: Database, action: () => toast('Coming soon — Data & Export is under construction.', { icon: '🔧' }) },
 
         // Step 1 & 2: Logout and Delete Account must be reachable from Settings Hub
         { label: 'Delete Account', icon: Trash2, path: ROUTES.SETTINGS_DELETE },
@@ -194,8 +195,8 @@ const SettingsHub = () => {
                                                 else if (segment.path) navigate(segment.path);
                                             }}
                                             className={`w-full flex items-center justify-between px-6 py-4.5 rounded-[1.5rem] transition-all group ${activeSection === segment.label
-                                                    ? 'bg-white dark:bg-[#131022] shadow-[0_20px_40px_-10px_rgba(97,67,244,0.12)] border border-[#6143f4]/10 text-[#6143f4] font-black'
-                                                    : 'text-slate-400 dark:text-slate-500 hover:bg-[#6143f4]/5 hover:text-[#6143f4] font-bold'
+                                                ? 'bg-white dark:bg-[#131022] shadow-[0_20px_40px_-10px_rgba(97,67,244,0.12)] border border-[#6143f4]/10 text-[#6143f4] font-black'
+                                                : 'text-slate-400 dark:text-slate-500 hover:bg-[#6143f4]/5 hover:text-[#6143f4] font-bold'
                                                 }`}
                                         >
                                             <div className="flex items-center gap-4">
@@ -271,7 +272,10 @@ const SettingsHub = () => {
                                         </div>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                                             {overviewCards.map((card) => (
-                                                <div key={card.title} className="bg-white dark:bg-[#131022] rounded-[3.5rem] p-10 shadow-sm border border-[#6143f4]/5 hover:shadow-[0_40px_80px_-20px_rgba(97,67,244,0.12)] hover:-translate-y-3 transition-all duration-500 group/card relative overflow-hidden flex flex-col">
+                                                <div
+                                                    key={card.title}
+                                                    onClick={() => card.path && navigate(card.path)}
+                                                    className={`bg-white dark:bg-[#131022] rounded-[3.5rem] p-10 shadow-sm border border-[#6143f4]/5 hover:shadow-[0_40px_80px_-20px_rgba(97,67,244,0.12)] hover:-translate-y-3 transition-all duration-500 group/card relative overflow-hidden flex flex-col${card.path ? ' cursor-pointer' : ''}`}>
                                                     <div className="absolute top-0 right-0 p-10 opacity-[0.03] pointer-events-none group-hover/card:scale-125 transition-transform duration-1000 rotate-45">
                                                         <card.icon size={120} className={card.color} />
                                                     </div>

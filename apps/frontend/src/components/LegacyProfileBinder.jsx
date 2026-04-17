@@ -49,14 +49,14 @@ function bindProfileWrapper(wrapper, profile, navigate) {
   const handleClick = (event) => {
     event.preventDefault();
     event.stopPropagation();
-    navigate(ROUTES.PROFILE);
+    navigate(ROUTES.SETTINGS_PROFILE);
   };
 
   const handleKeyDown = (event) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       event.stopPropagation();
-      navigate(ROUTES.PROFILE);
+      navigate(ROUTES.SETTINGS_PROFILE);
     }
   };
 
