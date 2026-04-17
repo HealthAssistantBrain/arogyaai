@@ -1,10 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { motion } from 'framer-motion';
-import { 
-  BarChart3, 
-  User, 
+import {
+  BarChart3,
+  User,
   Contact,
   Calendar,
   Ruler,
@@ -16,6 +16,7 @@ import {
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { ROUTES } from '../router/routes';
+import api from '../lib/axios';
 
 const Onboarding = () => {
   const navigate = useNavigate();
@@ -28,10 +29,12 @@ const Onboarding = () => {
   const normalizedProfileGender = profile?.gender === 'non-binary' ? 'other' : profile?.gender;
   const normalizedHealthGender = healthProfile?.gender === 'non-binary' ? 'other' : healthProfile?.gender;
 
+  const [loading, setLoading] = useState(false);
   const {
     register,
     handleSubmit,
     setValue,
+    getValues,
     watch,
     formState: { errors },
   } = useForm({
@@ -41,6 +44,7 @@ const Onboarding = () => {
       dob: profile?.date_of_birth || profile?.dob || healthProfile?.date_of_birth || '',
       height: profile?.height_cm || healthProfile?.height || '',
       weight: profile?.weight_kg || healthProfile?.weight || '',
+      bloodGroup: profile?.blood_group || healthProfile?.blood_group || '',
     },
   });
 
@@ -57,7 +61,8 @@ const Onboarding = () => {
     setValue('dob', profile?.date_of_birth || profile?.dob || '');
     setValue('height', profile?.height_cm || healthProfile?.height || '');
     setValue('weight', profile?.weight_kg || healthProfile?.weight || '');
-  }, [healthProfile?.height, healthProfile?.weight, normalizedHealthGender, normalizedProfileGender, profile?.date_of_birth, profile?.dob, profile?.full_name, profile?.height_cm, profile?.weight_kg, setValue, user?.full_name, user?.name]);
+    setValue('bloodGroup', profile?.blood_group || healthProfile?.blood_group || '');
+  }, [healthProfile?.blood_group, healthProfile?.height, healthProfile?.weight, normalizedHealthGender, normalizedProfileGender, profile?.blood_group, profile?.date_of_birth, profile?.dob, profile?.full_name, profile?.height_cm, profile?.weight_kg, setValue, user?.full_name, user?.name]);
 
   useEffect(() => {
     if (!stepFromUrl && !stepFromStorage) {
@@ -78,30 +83,62 @@ const Onboarding = () => {
     return null;
   }
 
-  const onSubmit = async (data) => {
-    if (!data.fullName || !data.gender || !data.dob || !data.height || !data.weight) {
-      toast.error('Please fill in all basic profile fields to continue.');
-      return;
+  const validateForm = (data) => {
+    if (!data.fullName || !data.gender || !data.dob || !data.height || !data.weight || !data.bloodGroup) {
+      toast.error('Please fill all required fields');
+      return false;
     }
-    const saved = await saveOnboarding({
+    return true;
+  };
+
+  const saveProfile = async (data) => {
+    const payload = {
       full_name: data.fullName,
       date_of_birth: data.dob,
       gender: data.gender === 'other' ? 'non-binary' : data.gender,
       height_cm: Number(data.height),
       weight_kg: Number(data.weight),
-      onboarding_step: 2,
-    });
-    if (!saved) {
-      toast.error('Unable to save your profile right now.');
-      return;
+      blood_group: data.bloodGroup,
+    };
+    await api.post('/users/profile', payload);
+  };
+
+  const handleContinue = async (data) => {
+    if (!validateForm(data)) return;
+    setLoading(true);
+    try {
+      await saveProfile(data);
+      setOnboardingStep(2);
+      await useAuthStore.getState().fetchProfile();
+
+      toast.success('Profile updated!');
+      if (searchParams.get('return') === 'summary') {
+        navigate(ROUTES.ONBOARDING_SUMMARY);
+      } else {
+        navigate(ROUTES.ONBOARDING_STEP_2);
+      }
+    } catch (err) {
+      toast.error('Failed to save data');
+    } finally {
+      setLoading(false);
     }
-    setOnboardingStep(2);
-    toast.success('Profile updated!');
-    // If editing from summary page, return there instead of advancing
-    if (searchParams.get('return') === 'summary') {
-      navigate(ROUTES.ONBOARDING_SUMMARY);
-    } else {
-      navigate(ROUTES.ONBOARDING_STEP_2);
+  };
+
+  const handleSaveAndExit = async () => {
+    const data = getValues();
+    if (!validateForm(data)) return;
+    setLoading(true);
+    try {
+      await saveProfile(data);
+      await useAuthStore.getState().completeOnboarding();
+      await useAuthStore.getState().fetchProfile();
+
+      toast.success('Profile updated!');
+      navigate('/dashboard');
+    } catch (err) {
+      toast.error('Failed to save data');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -132,7 +169,12 @@ const Onboarding = () => {
           </div>
 
           <div className="flex items-center gap-4">
-            <button className="text-[#6143f4] font-medium hover:bg-[#6143f4]/5 px-4 py-2 rounded-lg transition-colors hidden md:block">
+            <button
+              type="button"
+              onClick={handleSaveAndExit}
+              disabled={loading}
+              className="text-[#6143f4] font-medium hover:bg-[#6143f4]/5 px-4 py-2 rounded-lg transition-colors hidden md:block disabled:opacity-50"
+            >
               Save and Continue later
             </button>
             <div className="h-10 w-10 rounded-full bg-[#6143f4]/10 border border-[#6143f4]/20 flex items-center justify-center overflow-hidden">
@@ -142,13 +184,13 @@ const Onboarding = () => {
         </header>
 
         <main className="flex-1 flex flex-col items-center justify-start py-10 px-4">
-          <motion.div 
+          <motion.div
             variants={containerVariants}
             initial="initial"
             animate="animate"
             className="max-w-[640px] w-full flex flex-col gap-8"
           >
-            
+
             {/* Progress Header */}
             <div className="flex flex-col gap-4">
               <div className="flex justify-between items-end">
@@ -171,17 +213,17 @@ const Onboarding = () => {
 
             {/* Form Card */}
             <div className="bg-white dark:bg-slate-900/50 p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl shadow-[#6143f4]/5 flex flex-col gap-6">
-              <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6">
+              <form onSubmit={handleSubmit(handleContinue)} className="flex flex-col gap-6">
                 {/* Full Name */}
                 <div className="flex flex-col gap-2">
                   <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Full Name</label>
                   <div className="relative group">
                     <Contact size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" />
-                    <input 
+                    <input
                       {...register('fullName')}
-                      className="w-full pl-12 pr-4 py-4 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-[#6143f4] focus:border-transparent outline-none transition-all dark:text-white" 
-                      placeholder="e.g. Alexander Pierce" 
-                      type="text" 
+                      className="w-full pl-12 pr-4 py-4 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-[#6143f4] focus:border-transparent outline-none transition-all dark:text-white"
+                      placeholder="e.g. Alexander Pierce"
+                      type="text"
                     />
                   </div>
                 </div>
@@ -190,21 +232,21 @@ const Onboarding = () => {
                 <div className="flex flex-col gap-2">
                   <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Biological Gender</label>
                   <div className="grid grid-cols-3 gap-3">
-                    <button 
+                    <button
                       type="button"
                       onClick={() => setValue('gender', 'male')}
                       className={selectedGender === 'male' ? activeGenderClass : inactiveGenderClass}
                     >
                       Male
                     </button>
-                    <button 
+                    <button
                       type="button"
                       onClick={() => setValue('gender', 'female')}
                       className={selectedGender === 'female' ? activeGenderClass : inactiveGenderClass}
                     >
                       Female
                     </button>
-                    <button 
+                    <button
                       type="button"
                       onClick={() => setValue('gender', 'other')}
                       className={selectedGender === 'other' ? activeGenderClass : inactiveGenderClass}
@@ -220,10 +262,10 @@ const Onboarding = () => {
                     <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Date of Birth</label>
                     <div className="relative group">
                       <Calendar size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" />
-                      <input 
+                      <input
                         {...register('dob')}
-                        className="w-full pl-12 pr-4 py-4 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-[#6143f4] focus:border-transparent outline-none transition-all dark:text-white" 
-                        type="date" 
+                        className="w-full pl-12 pr-4 py-4 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-[#6143f4] focus:border-transparent outline-none transition-all dark:text-white"
+                        type="date"
                       />
                     </div>
                   </div>
@@ -236,50 +278,77 @@ const Onboarding = () => {
                     </label>
                     <div className="relative group">
                       <Ruler size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" />
-                      <input 
+                      <input
                         {...register('height')}
-                        className="w-full pl-12 pr-16 py-4 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-[#6143f4] focus:border-transparent outline-none transition-all dark:text-white" 
-                        placeholder="180" 
-                        type="number" 
+                        className="w-full pl-12 pr-16 py-4 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-[#6143f4] focus:border-transparent outline-none transition-all dark:text-white"
+                        placeholder="180"
+                        type="number"
                       />
                       <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">cm</span>
                     </div>
                   </div>
                 </div>
 
-                {/* Weight */}
-                <div className="flex flex-col gap-2">
-                  <label className="text-sm font-bold text-slate-700 dark:text-slate-300 flex justify-between">
-                    Current Weight
-                    <span className="text-[#6143f4] cursor-pointer hover:underline text-xs">kg / lbs</span>
-                  </label>
-                  <div className="relative group">
-                    <Weight size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" />
-                    <input 
-                      {...register('weight')}
-                      className="w-full pl-12 pr-16 py-4 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-[#6143f4] focus:border-transparent outline-none transition-all dark:text-white" 
-                      placeholder="75" 
-                      type="number" 
-                    />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">kg</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Weight */}
+                  <div className="flex flex-col gap-2">
+                    <label className="text-sm font-bold text-slate-700 dark:text-slate-300 flex justify-between">
+                      Current Weight
+                      <span className="text-[#6143f4] cursor-pointer hover:underline text-xs">kg / lbs</span>
+                    </label>
+                    <div className="relative group">
+                      <Weight size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" />
+                      <input
+                        {...register('weight')}
+                        className="w-full pl-12 pr-16 py-4 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-[#6143f4] focus:border-transparent outline-none transition-all dark:text-white"
+                        placeholder="75"
+                        type="number"
+                      />
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">kg</span>
+                    </div>
+                  </div>
+
+                  {/* Blood Group */}
+                  <div className="flex flex-col gap-2">
+                    <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Blood Group</label>
+                    <div className="relative group">
+                      <select
+                        {...register('bloodGroup')}
+                        className="w-full pl-4 pr-10 py-4 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-[#6143f4] focus:border-transparent outline-none transition-all dark:text-white appearance-none"
+                      >
+                        <option value="">Select</option>
+                        <option value="A+">A+</option>
+                        <option value="A-">A-</option>
+                        <option value="B+">B+</option>
+                        <option value="B-">B-</option>
+                        <option value="AB+">AB+</option>
+                        <option value="AB-">AB-</option>
+                        <option value="O+">O+</option>
+                        <option value="O-">O-</option>
+                      </select>
+                      <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-400">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
                 {/* Action Buttons */}
                 <div className="flex flex-col sm:flex-row gap-4 justify-between items-center pt-4">
-                  <button 
+                  <button
                     type="button"
-                    onClick={() => navigate(ROUTES.ACCOUNT_CREATED)}
+                    onClick={() => navigate('/')}
                     className="order-2 sm:order-1 text-slate-500 hover:text-[#6143f4] transition-colors flex items-center gap-2 font-medium"
                   >
                     <ArrowLeft size={20} />
                     Back to Welcome
                   </button>
-                  <button 
+                  <button
                     type="submit"
-                    className="order-1 sm:order-2 w-full sm:w-auto px-12 py-4 bg-[#6143f4] text-white font-bold rounded-lg shadow-lg shadow-[#6143f4]/30 hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-3"
+                    disabled={loading}
+                    className="order-1 sm:order-2 w-full sm:w-auto px-12 py-4 bg-[#6143f4] text-white font-bold rounded-lg shadow-lg shadow-[#6143f4]/30 hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
                   >
-                    Continue
+                    {loading ? 'Saving...' : 'Continue'}
                     <ArrowRight size={20} />
                   </button>
                 </div>

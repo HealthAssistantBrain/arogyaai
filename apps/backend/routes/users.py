@@ -82,3 +82,13 @@ def delete_me(
 ):
     """Deactivate user via UserService."""
     return UserService.delete_user_me(db, current_user)
+
+
+@router.post("/profile")
+def update_profile(
+    updates: dict,
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
+    """Upserts extending user profile via UserService."""
+    return UserService.update_user_profile(db, current_user, updates)
