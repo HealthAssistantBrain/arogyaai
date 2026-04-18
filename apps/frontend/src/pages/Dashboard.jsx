@@ -58,6 +58,7 @@ import { CommandPaletteTrigger } from '../components/CommandPalette';
 import { refreshAfterGoogleFitSync } from '../lib/googleFitRefresh';
 import { safeArray, safeNumber, safeObject, safeText } from '../utils/safeData';
 import { useFetchLock } from '../hooks/useFetchLock';
+import useDeviceStore from '../store/deviceStore';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -72,6 +73,9 @@ const Dashboard = () => {
   const dashboardData = useDashboardStore((s) => s.dashboardData);
   const authUser = useAuthStore((s) => s.user);
 
+  const googleFitConnected = useDeviceStore((s) => s.googleFitConnected);
+  const setGoogleFitConnected = useDeviceStore((s) => s.setGoogleFitConnected);
+
   const refreshDashboard = async ({ silent = true } = {}) => {
     if (!acquireLock('dashboard_refresh')) return;
 
@@ -85,8 +89,26 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
+    async function fetchDeviceStatus() {
+      try {
+        const res = await api.get('/user/devices').catch(() => api.get('/devices'));
+        const devices = res.data?.data || res.data || [];
+        const isConnected = Array.isArray(devices) && devices.some(
+          d => (d.name === 'Google Fit' || d.provider === 'google-fit') && (d.status === 'connected' || d.is_connected || d.connected)
+        );
+        setGoogleFitConnected(isConnected);
+      } catch (err) {
+        console.log('Fetch device status skipped or failed', err);
+      }
+    }
+    fetchDeviceStatus();
+  }, [setGoogleFitConnected]);
+
+  useEffect(() => {
     setHasAttemptedDashboardLoad(true);
     void refreshDashboard({ silent: false });
+
+    if (!googleFitConnected) return;
 
     const interval = window.setInterval(() => {
       void refreshDashboard({ silent: true });
@@ -96,7 +118,7 @@ const Dashboard = () => {
       window.clearInterval(interval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [googleFitConnected]);
 
   // ── Sync handler ──────────────────────────────────────────────────────────
   const handleSync = async () => {

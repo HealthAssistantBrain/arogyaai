@@ -141,6 +141,13 @@ async def google_fit_callback(
     return RedirectResponse(url=redirect_url, status_code=302)
 
 
+@router.get("/data-sync")
+def fetch_data(current_user=Depends(get_current_user_from_header)):
+    if not current_user.google_fit_connection:
+        return {"message": "Device not connected"}
+    return {"message": "Device connected"}
+
+
 @router.post("/sync")
 async def sync_google_fit(
     payload: GoogleFitSyncRequest,
@@ -148,6 +155,9 @@ async def sync_google_fit(
     current_user=Depends(get_current_user_from_header),
     db: Session = Depends(get_db),
 ):
+    if not current_user.google_fit_connection:
+        return {"message": "Device not connected"}
+        
     return await GoogleFitService.sync_steps(
         db,
         current_user,

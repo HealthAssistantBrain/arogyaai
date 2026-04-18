@@ -21,6 +21,7 @@ import {
   syncGoogleFit,
 } from '../lib/googleFitApi';
 import { refreshAfterGoogleFitSync } from '../lib/googleFitRefresh';
+import useDeviceStore from '../store/deviceStore';
 
 const DEFAULT_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 const GOOGLE_FIT_DEVICE_ID = 'google-fit';
@@ -97,6 +98,7 @@ const DeviceSettings = () => {
     try {
       const nextStatus = await fetchGoogleFitStatus();
       setStatus(nextStatus);
+      useDeviceStore.getState().setGoogleFitConnected(Boolean(nextStatus?.connected));
     } catch (apiError) {
       setStatus(null);
       setError(extractErrorMessage(apiError, 'Unable to load Google Fit status right now.'));
@@ -166,6 +168,7 @@ const DeviceSettings = () => {
     try {
       await disconnectGoogleFit();
       await loadStatus({ silent: true });
+      useDeviceStore.getState().setGoogleFitConnected(false);
       setNotice('Google Fit disconnected.');
     } catch (apiError) {
       setError(extractErrorMessage(apiError, 'Unable to disconnect Google Fit.'));
@@ -255,11 +258,10 @@ const DeviceSettings = () => {
 
             {(notice || error) && (
               <div
-                className={`mt-4 rounded-2xl border px-4 py-3 text-[13px] font-medium ${
-                  error
+                className={`mt-4 rounded-2xl border px-4 py-3 text-[13px] font-medium ${error
                     ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300'
                     : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300'
-                }`}
+                  }`}
               >
                 {error || notice}
               </div>

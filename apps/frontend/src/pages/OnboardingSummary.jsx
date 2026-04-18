@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -26,16 +27,78 @@ import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { ROUTES } from '../router/routes';
 import api from '../lib/axios';
-import { getUserProfile } from '../lib/userProfile';
+import OnboardingHeader from '../components/OnboardingHeader';
 
 const OnboardingSummary = () => {
   const navigate = useNavigate();
   const setOnboardingStep = useAuthStore((state) => state.setOnboardingStep);
-  const user = useAuthStore((state) => state.user);
-  const profile = useAuthStore((state) => state.profile);
-  const healthProfile = useAuthStore((state) => state.healthProfile);
-  const profileData = getUserProfile({ ...user, profile: profile || healthProfile });
-  const profileRecord = profile || healthProfile || {};
+
+  const [userData, setUserData] = useState(null);
+  const [devices, setDevices] = useState([]);
+
+  useEffect(() => {
+    async function fetchUserProfile() {
+      try {
+        const res = await api.get("/users/me");
+        setUserData(res.data.data);
+      } catch (err) {
+        console.error("Non-blocking error fetching profile:", err);
+      }
+      try {
+        const devRes = await api.get("/users/devices");
+        if (Array.isArray(devRes.data)) {
+          setDevices(devRes.data);
+        }
+      } catch (err) {
+        console.error("Non-blocking error fetching devices:", err);
+      }
+    }
+    fetchUserProfile();
+  }, []);
+
+  const safeValue = (val) => {
+    if (Array.isArray(val)) {
+      return val.length > 0 ? val.join(', ') : '---';
+    }
+    return val && val !== "" ? val : "---";
+  };
+
+  const formatMedicalField = (data) => {
+    if (!data) return "None";
+
+    try {
+      let parsed = data;
+
+      // Handle double stringified JSON (or tripple)
+      if (typeof parsed === "string") {
+        try { parsed = JSON.parse(parsed); } catch (e) { }
+      }
+      if (typeof parsed === "string") {
+        try { parsed = JSON.parse(parsed); } catch (e) { }
+      }
+      if (typeof parsed === "string") {
+        try { parsed = JSON.parse(parsed); } catch (e) { }
+      }
+
+      if (Array.isArray(parsed)) {
+        const valid = parsed.filter(item => typeof item === "string" && item.trim() !== "");
+        return valid.length > 0 ? valid.join(", ") : "None";
+      }
+
+      if (typeof parsed === "string") {
+        const finalStr = parsed.trim();
+        if (finalStr === "" || finalStr === "[]" || finalStr === "{}") return "None";
+        // Guard against any leftover escape characters masking as plain text
+        if (finalStr.includes('\\"') || finalStr.includes('"{')) return "None";
+        return finalStr;
+      }
+
+      return "None";
+    } catch (err) {
+      console.error("Medical array parse failed:", err);
+      return "None";
+    }
+  };
 
   const handleConfirm = async () => {
     try {
@@ -78,25 +141,7 @@ const OnboardingSummary = () => {
   return (
     <div className="bg-[#f6f5f8] dark:bg-[#131022] text-[#13082A] dark:text-slate-100 min-h-screen font-display antialiased flex flex-col">
       {/* Navigation Header - Matched Stitch */}
-      <header className="flex items-center justify-between border-b border-[#6143f4]/10 bg-white/80 dark:bg-[#131022]/80 backdrop-blur-md px-10 py-4 sticky top-0 z-50">
-        <div className="flex items-center gap-4">
-          <div className="bg-[#6143f4] p-2 rounded-lg text-white shadow-lg shadow-[#6143f4]/20 flex items-center justify-center">
-            <BarChart3 size={20} />
-          </div>
-          <h2 className="text-[#13082A] dark:text-white text-xl font-bold tracking-tight">ArogyaAI</h2>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="text-right hidden sm:block">
-            <p className="text-xs font-bold text-[#6143f4] uppercase tracking-widest leading-none">Onboarding</p>
-            <p className="text-sm text-slate-500 mt-1">Step 4 of 4</p>
-          </div>
-          <div className="bg-[#6143f4]/10 rounded-full p-1 border border-[#6143f4]/20">
-            <div className="h-10 w-10 rounded-full bg-[#6143f4]/10 flex items-center justify-center overflow-hidden">
-              <User size={20} className="text-[#6143f4]" />
-            </div>
-          </div>
-        </div>
-      </header>
+      <OnboardingHeader step="Summary" />
 
       <main className="flex-1 flex items-center justify-center p-6 md:p-12">
         <motion.div
@@ -110,11 +155,11 @@ const OnboardingSummary = () => {
             <div className="mb-10">
               <div className="flex justify-between items-end mb-3">
                 <div>
-                  <span className="text-xs font-bold text-[#6143f4] tracking-widest uppercase mb-1 block">Assessment</span>
-                  <h1 className="text-2xl md:text-3xl font-bold">Lifestyle Assessment</h1>
+                  <span className="text-xs font-bold text-[#6143f4] tracking-widest uppercase mb-1 block">Review</span>
+                  <h1 className="text-2xl md:text-3xl font-bold">Onboarding Summary</h1>
                 </div>
                 <div className="text-right">
-                  <span className="text-sm font-bold text-[#6143f4]">75% Complete</span>
+                  <span className="text-sm font-bold text-[#6143f4]">100% Complete</span>
                 </div>
               </div>
               <div className="h-2 w-full bg-[#6143f4]/10 rounded-full overflow-hidden">
@@ -142,16 +187,20 @@ const OnboardingSummary = () => {
                   </button>
                 </div>
                 <div className="space-y-3">
-                  {[
-                    { label: 'Full Name', value: profileData.name },
-                    { label: 'Gender', value: profileRecord?.gender || 'Not provided' },
-                    { label: 'Height/Weight', value: `${profileRecord?.height || profileRecord?.height_cm || '—'}cm / ${profileRecord?.weight || profileRecord?.weight_kg || '—'}kg` }
-                  ].map((field) => (
-                    <div key={field.label} className="flex justify-between text-sm">
-                      <span className="text-slate-500 font-medium">{field.label}</span>
-                      <span className="font-bold text-[#13082A] dark:text-white">{field.value}</span>
-                    </div>
-                  ))}
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500 font-medium">Full Name</span>
+                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.full_name)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500 font-medium">Gender</span>
+                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.gender)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500 font-medium">Height/Weight</span>
+                    <span className="font-bold text-[#13082A] dark:text-white">
+                      {userData?.height && userData?.weight ? `${userData.height} cm / ${userData.weight} kg` : "---"}
+                    </span>
+                  </div>
                 </div>
               </motion.div>
 
@@ -167,16 +216,18 @@ const OnboardingSummary = () => {
                   </button>
                 </div>
                 <div className="space-y-3">
-                  {[
-                    { label: 'Conditions', value: profileRecord?.conditions || 'Not provided' },
-                    { label: 'Allergies', value: profileRecord?.allergies || 'Not provided' },
-                    { label: 'Family History', value: profileRecord?.family_history || 'Not provided' }
-                  ].map((field) => (
-                    <div key={field.label} className="flex justify-between text-sm">
-                      <span className="text-slate-500 font-medium">{field.label}</span>
-                      <span className="font-bold text-[#13082A] dark:text-white">{field.value}</span>
-                    </div>
-                  ))}
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500 font-medium">Conditions</span>
+                    <span className="font-bold text-[#13082A] dark:text-white">{formatMedicalField(userData?.conditions)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500 font-medium">Allergies</span>
+                    <span className="font-bold text-[#13082A] dark:text-white">{formatMedicalField(userData?.allergies)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500 font-medium">Family History</span>
+                    <span className="font-bold text-[#13082A] dark:text-white">{formatMedicalField(userData?.family_history)}</span>
+                  </div>
                 </div>
               </motion.div>
 
@@ -192,16 +243,22 @@ const OnboardingSummary = () => {
                   </button>
                 </div>
                 <div className="space-y-3">
-                  {[
-                    { label: 'Activity', value: profileRecord?.activity || 'Not provided' },
-                    { label: 'Sleep', value: profileRecord?.sleep || 'Not provided' },
-                    { label: 'Stress', value: profileRecord?.stress || 'Not provided' }
-                  ].map((field) => (
-                    <div key={field.label} className="flex justify-between text-sm">
-                      <span className="text-slate-500 font-medium">{field.label}</span>
-                      <span className="font-bold text-[#13082A] dark:text-white">{field.value}</span>
-                    </div>
-                  ))}
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500 font-medium">Activity</span>
+                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.activity)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500 font-medium">Diet</span>
+                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.diet)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500 font-medium">Sleep</span>
+                    <span className="font-bold text-[#13082A] dark:text-white">{userData?.sleep ? `${userData.sleep} hrs` : "---"}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500 font-medium">Stress</span>
+                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.stress)}</span>
+                  </div>
                 </div>
               </motion.div>
 
@@ -217,15 +274,20 @@ const OnboardingSummary = () => {
                   </button>
                 </div>
                 <div className="space-y-3">
-                  {[
-                    { label: 'Google Fit', value: profileRecord?.google_fit || 'Connected', connected: true },
-                    { label: 'Apple Health', value: 'Not Active', connected: false }
-                  ].map((field) => (
-                    <div key={field.label} className="flex justify-between text-sm">
-                      <span className="text-slate-500 font-medium">{field.label}</span>
-                      <span className={`font-bold ${field.connected ? 'text-green-500' : 'text-slate-400'}`}>{field.value}</span>
+                  {devices.length > 0 ? (
+                    devices.map(device => (
+                      <div key={device.name} className="flex justify-between text-sm">
+                        <span className="text-slate-500 font-medium">{device.name}</span>
+                        <span className={`font-bold ${device.status === 'connected' ? 'text-green-500' : 'text-slate-400'}`}>
+                          {device.status === 'connected' ? 'Connected' : 'Not Connected'}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="flex justify-between text-sm">
+                      <span className="font-bold text-[#13082A] dark:text-white">---</span>
                     </div>
-                  ))}
+                  )}
                 </div>
               </motion.div>
             </div>

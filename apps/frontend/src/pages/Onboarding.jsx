@@ -17,6 +17,7 @@ import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { ROUTES } from '../router/routes';
 import api from '../lib/axios';
+import OnboardingHeader from '../components/OnboardingHeader';
 
 const Onboarding = () => {
   const navigate = useNavigate();
@@ -160,28 +161,7 @@ const Onboarding = () => {
     <div className="bg-[#f6f5f8] dark:bg-[#131022] font-display text-slate-900 dark:text-slate-100 min-h-screen">
       <div className="relative flex min-h-screen w-full flex-col">
         {/* Header Section - Matched Stitch */}
-        <header className="flex items-center justify-between border-b border-[#6143f4]/10 px-6 py-4 lg:px-40 bg-white/80 dark:bg-[#131022]/80 backdrop-blur-md sticky top-0 z-50">
-          <div className="flex items-center gap-3">
-            <div className="bg-[#6143f4] p-2 rounded-lg text-white flex items-center justify-center">
-              <BarChart3 size={20} />
-            </div>
-            <h2 className="text-slate-900 dark:text-white text-xl font-bold tracking-tight">ArogyaAI</h2>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <button
-              type="button"
-              onClick={handleSaveAndExit}
-              disabled={loading}
-              className="text-[#6143f4] font-medium hover:bg-[#6143f4]/5 px-4 py-2 rounded-lg transition-colors hidden md:block disabled:opacity-50"
-            >
-              Save and Continue later
-            </button>
-            <div className="h-10 w-10 rounded-full bg-[#6143f4]/10 border border-[#6143f4]/20 flex items-center justify-center overflow-hidden">
-              <User size={20} className="text-[#6143f4]" />
-            </div>
-          </div>
-        </header>
+        <OnboardingHeader step={1} onSaveAndExit={handleSaveAndExit} loading={loading} />
 
         <main className="flex-1 flex flex-col items-center justify-start py-10 px-4">
           <motion.div
@@ -334,22 +314,22 @@ const Onboarding = () => {
                 </div>
 
                 {/* Action Buttons */}
-                <div className="flex flex-col sm:flex-row gap-4 justify-between items-center pt-4">
+                <div className="mt-12 pt-8 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-4 justify-between items-center">
                   <button
                     type="button"
                     onClick={() => navigate('/')}
-                    className="order-2 sm:order-1 text-slate-500 hover:text-[#6143f4] transition-colors flex items-center gap-2 font-medium"
+                    className="w-full sm:w-auto px-8 py-3 rounded-lg border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
                   >
-                    <ArrowLeft size={20} />
-                    Back to Welcome
+                    <ArrowLeft size={18} />
+                    Back
                   </button>
                   <button
                     type="submit"
                     disabled={loading}
-                    className="order-1 sm:order-2 w-full sm:w-auto px-12 py-4 bg-[#6143f4] text-white font-bold rounded-lg shadow-lg shadow-[#6143f4]/30 hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                    className="w-full sm:w-auto px-10 py-3 rounded-lg bg-[#6143f4] text-white font-bold hover:bg-[#6143f4]/90 shadow-lg shadow-[#6143f4]/25 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                   >
-                    {loading ? 'Saving...' : 'Continue'}
-                    <ArrowRight size={20} />
+                    {loading ? 'Saving...' : 'Continue to Step 2'}
+                    <ArrowRight size={18} />
                   </button>
                 </div>
               </form>

@@ -29,6 +29,7 @@ const STEP_ROUTES = {
 const isAllowedDuringOnboarding = (pathname, expectedStep) => {
   const isCompletionAllowed = expectedStep === ROUTES.ONBOARDING_COMPLETION
   return (
+    pathname.startsWith('/onboarding') ||
     pathname === expectedStep ||
     (isCompletionAllowed && pathname === ROUTES.ONBOARDING_COMPLETION) ||
     (isCompletionAllowed && pathname === ROUTES.ACCOUNT_CREATED) ||

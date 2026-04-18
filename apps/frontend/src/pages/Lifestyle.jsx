@@ -2,19 +2,19 @@ import { useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Activity, 
-  TrendingUp, 
-  User, 
-  Save, 
-  Footprints, 
-  Dumbbell, 
-  Utensils, 
-  Moon, 
-  BrainCircuit, 
-  Scale, 
-  Info, 
-  ArrowLeft, 
+import {
+  Activity,
+  TrendingUp,
+  User,
+  Save,
+  Footprints,
+  Dumbbell,
+  Utensils,
+  Moon,
+  BrainCircuit,
+  Scale,
+  Info,
+  ArrowLeft,
   ArrowRight,
   Armchair,
   BarChart3
@@ -22,9 +22,11 @@ import {
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { ROUTES } from '../router/routes';
+import api from '../lib/axios';
+import OnboardingHeader from '../components/OnboardingHeader';
 
 const diets = [
-  'Plant-based', 'High Protein', 'Low Carb', 'Gluten-Free', 
+  'Plant-based', 'High Protein', 'Low Carb', 'Gluten-Free',
   'Ketogenic', 'Mediterranean', 'No Preference'
 ];
 
@@ -33,9 +35,11 @@ const Lifestyle = () => {
   const [searchParams] = useSearchParams();
   const setOnboardingStep = useAuthStore((state) => state.setOnboardingStep);
   const saveOnboarding = useAuthStore((state) => state.saveOnboarding);
-  const [selectedDiets, setSelectedDiets] = useState(['Plant-based', 'Gluten-Free']);
+  const [selectedDiets, setSelectedDiets] = useState([]);
 
-  const { register, handleSubmit, watch, setValue } = useForm({
+  const [loading, setLoading] = useState(false);
+
+  const { register, handleSubmit, watch, getValues } = useForm({
     defaultValues: {
       activity: 'Sedentary',
       sleep: 7.5,
@@ -48,29 +52,66 @@ const Lifestyle = () => {
   const activityValue = watch('activity');
 
   const toggleDiet = (diet) => {
+    if (diet === 'No Preference') {
+      setSelectedDiets(['No Preference']);
+      return;
+    }
+
     if (selectedDiets.includes(diet)) {
       setSelectedDiets(selectedDiets.filter(d => d !== diet));
     } else {
-      setSelectedDiets([...selectedDiets, diet]);
+      setSelectedDiets([...selectedDiets.filter(d => d !== 'No Preference'), diet]);
     }
   };
 
-  const onSubmit = (data) => {
-    console.log("Saving lifestyle profile:", { ...data, selectedDiets });
-    saveOnboarding({ onboarding_step: 4 })
-      .then((saved) => {
-        if (!saved) {
-          toast.error('Unable to save your lifestyle assessment right now.');
-          return;
-        }
-        setOnboardingStep(4);
-        toast.success('Lifestyle assessment saved');
-        if (searchParams.get('return') === 'summary') {
-          navigate(ROUTES.ONBOARDING_SUMMARY);
-        } else {
-          navigate(ROUTES.ONBOARDING_STEP_4);
-        }
+  const onSubmit = async (data) => {
+    setLoading(true);
+    try {
+      await api.post("/users/lifestyle", {
+        activity: data.activity,
+        diet: selectedDiets,
+        sleep: parseFloat(data.sleep),
+        stress: parseInt(data.stress, 10)
       });
+    } catch (err) {
+      console.log("Non-blocking error", err);
+    }
+
+    try {
+      const saved = await saveOnboarding({ onboarding_step: 4 });
+      if (!saved) {
+        toast.error('Unable to save your lifestyle assessment right now.');
+        return;
+      }
+      setOnboardingStep(4);
+      toast.success('Lifestyle assessment saved');
+      if (searchParams.get('return') === 'summary') {
+        navigate(ROUTES.ONBOARDING_SUMMARY);
+      } else {
+        navigate(ROUTES.ONBOARDING_STEP_4);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveAndExit = async () => {
+    setLoading(true);
+    try {
+      const data = getValues();
+      await api.post("/users/lifestyle", {
+        activity: data.activity,
+        diet: selectedDiets,
+        sleep: parseFloat(data.sleep),
+        stress: parseInt(data.stress, 10)
+      });
+      await saveOnboarding({ onboarding_step: 4 });
+    } catch (err) {
+      console.log("Non-blocking error", err);
+    } finally {
+      setLoading(false);
+    }
+    navigate("/dashboard");
   };
 
   const getStressText = (val) => {
@@ -95,28 +136,11 @@ const Lifestyle = () => {
 
   return (
     <div className="bg-[#f6f5f8] dark:bg-[#131022] font-display text-[#13082A] dark:text-slate-100 min-h-screen flex flex-col">
-      {/* Header Section - Standardized with Stitch */}
-      <header className="flex items-center justify-between border-b border-[#6143f4]/10 px-6 py-4 lg:px-40 bg-white/80 dark:bg-[#131022]/80 backdrop-blur-md sticky top-0 z-50">
-        <Link to={ROUTES.LANDING} className="flex items-center gap-3">
-          <div className="bg-[#6143f4] p-2 rounded-lg text-white shadow-lg shadow-[#6143f4]/20">
-            <BarChart3 size={20} />
-          </div>
-          <h2 className="text-[#13082A] dark:text-white text-xl font-bold tracking-tight">ArogyaAI</h2>
-        </Link>
-
-        <div className="flex items-center gap-4">
-          <div className="text-right hidden sm:block">
-            <p className="text-xs font-bold text-[#6143f4] uppercase tracking-widest">Onboarding</p>
-            <p className="text-sm text-slate-500">Step 3 of 4</p>
-          </div>
-          <div className="h-10 w-10 rounded-full bg-[#6143f4]/10 border border-[#6143f4]/20 flex items-center justify-center overflow-hidden">
-             <User size={20} className="text-[#6143f4]" />
-          </div>
-        </div>
-      </header>
+      {/* Header Section - Standardized */}
+      <OnboardingHeader step={3} onSaveAndExit={handleSaveAndExit} loading={loading} />
 
       <main className="flex-1 flex items-center justify-center p-6 md:p-12">
-        <motion.div 
+        <motion.div
           variants={containerVariants}
           initial="initial"
           animate="animate"
@@ -134,7 +158,7 @@ const Lifestyle = () => {
                 </div>
               </div>
               <div className="h-2 w-full bg-[#6143f4]/10 rounded-full overflow-hidden">
-                <motion.div 
+                <motion.div
                   initial={{ width: '50%' }}
                   animate={{ width: '75%' }}
                   transition={{ duration: 1, ease: "easeOut" }}
@@ -157,11 +181,11 @@ const Lifestyle = () => {
                     { id: 'Very Active', label: 'Very Active', sub: 'Intense physical training.', icon: Dumbbell }
                   ].map((item) => (
                     <label key={item.id} className="relative cursor-pointer group">
-                      <input 
-                        {...register('activity')} 
-                        value={item.id} 
-                        className="peer sr-only" 
-                        type="radio" 
+                      <input
+                        {...register('activity')}
+                        value={item.id}
+                        className="peer sr-only"
+                        type="radio"
                       />
                       <div className="p-5 rounded-lg border-2 border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 transition-all peer-checked:border-[#6143f4] peer-checked:bg-[#6143f4]/5 group-hover:bg-[#6143f4]/5">
                         <div className="flex flex-col items-center text-center gap-3">
@@ -188,7 +212,7 @@ const Lifestyle = () => {
                 <div className="flex flex-wrap gap-3">
                   <AnimatePresence mode="popLayout">
                     {diets.map(diet => (
-                      <motion.button 
+                      <motion.button
                         layout
                         initial={{ scale: 0.9, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
@@ -217,10 +241,10 @@ const Lifestyle = () => {
                       <span>6h</span>
                       <span>12h+</span>
                     </div>
-                    <input 
-                      {...register('sleep')} 
-                      className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-[#6143f4]" 
-                      max="12" min="0" step="0.5" type="range" 
+                    <input
+                      {...register('sleep')}
+                      className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-[#6143f4]"
+                      max="12" min="0" step="0.5" type="range"
                     />
                     <div className="mt-4 text-center">
                       <span className="text-3xl font-bold text-[#6143f4]">{sleepValue}</span>
@@ -241,10 +265,10 @@ const Lifestyle = () => {
                       <span>Moderate</span>
                       <span>Very High</span>
                     </div>
-                    <input 
-                      {...register('stress')} 
-                      className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-[#6143f4]" 
-                      max="5" min="1" step="1" type="range" 
+                    <input
+                      {...register('stress')}
+                      className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-[#6143f4]"
+                      max="5" min="1" step="1" type="range"
                     />
                     <div className="mt-4 flex justify-center items-center gap-2">
                       <Scale size={20} className="text-amber-500" />
@@ -264,7 +288,7 @@ const Lifestyle = () => {
 
               {/* Action Buttons */}
               <div className="mt-12 pt-8 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-4 justify-between items-center">
-                <button 
+                <button
                   type="button"
                   onClick={() => navigate(ROUTES.ONBOARDING_STEP_2)}
                   className="w-full sm:w-auto px-8 py-3 rounded-lg border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
@@ -272,7 +296,7 @@ const Lifestyle = () => {
                   <ArrowLeft size={18} />
                   Back
                 </button>
-                <button 
+                <button
                   type="submit"
                   className="w-full sm:w-auto px-10 py-3 rounded-lg bg-[#6143f4] text-white font-bold hover:bg-[#6143f4]/90 shadow-lg shadow-[#6143f4]/25 transition-all flex items-center justify-center gap-2"
                 >
@@ -284,7 +308,7 @@ const Lifestyle = () => {
           </div>
         </motion.div>
       </main>
-      
+
       <footer className="py-8 px-10 text-center text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-auto">
         © 2024 ArogyaAI Health Systems. All data is encrypted and HIPAA compliant.
       </footer>

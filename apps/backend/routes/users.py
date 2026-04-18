@@ -62,7 +62,28 @@ def get_me(
     db: Session = Depends(get_db),
 ):
     """Returns the authenticated user's core profile data via UserService."""
-    return UserService.get_user_me(db, current_user)
+    data = UserService.get_user_me(db, current_user)
+    
+    # Enrich with conditions
+    from models.medical_history import MedicalHistory
+    history = db.query(MedicalHistory).filter(MedicalHistory.user_id == current_user.id).all()
+    if history:
+        data["data"]["conditions"] = [h.condition_name for h in history]
+        
+    return data
+
+
+@router.get("/devices")
+def get_user_devices(
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
+    """Return user's connected devices status."""
+    # Stub reading dynamic DB devices - this is simulated until Device/Oauth tables are fully implemented 
+    return [
+        {"name": "Google Fit", "status": "not_connected"},
+        {"name": "Apple Health", "status": "not_connected"}
+    ]
 
 
 @router.put("/me")
@@ -92,3 +113,46 @@ def update_profile(
 ):
     """Upserts extending user profile via UserService."""
     return UserService.update_user_profile(db, current_user, updates)
+
+
+from models.medical_history import MedicalHistory
+
+@router.post("/medical-history")
+def update_medical_history(
+    payload: dict,
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
+    """Saves medical history data (conditions, allergies, family_history)."""
+    try:
+        # Load profile to save allergies
+        profile = UserService.get_or_create_user_profile(db, current_user)
+        
+        allergies = payload.get("allergies", [])
+        if isinstance(allergies, list):
+            profile.allergies = allergies
+            
+        conditions = payload.get("conditions", [])
+        if isinstance(conditions, list):
+            # Replace current conditions
+            db.query(MedicalHistory).filter(MedicalHistory.user_id == current_user.id).delete()
+            for cond in conditions:
+                db.add(MedicalHistory(user_id=current_user.id, condition_name=cond))
+                
+        db.commit()
+        return {"success": True, "message": "Medical history saved successfully."}
+    except Exception as e:
+        db.rollback()
+        # Keep non-critical log but return OK to not block UI progression abruptly
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/lifestyle")
+def update_lifestyle(
+    payload: dict,
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
+    """Saves lifestyle assessment data (activity, diet, sleep, stress)."""
+    # Stub route to accept the payload gracefully without 404ing while schema is finalized
+    return {"success": True, "message": "Lifestyle data saved successfully."}

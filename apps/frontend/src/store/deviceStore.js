@@ -28,6 +28,8 @@ function matchesDeviceId(device, deviceId) {
 
 const useDeviceStore = create((set, get) => ({
   devices: [],
+  googleFitConnected: false,
+  setGoogleFitConnected: (status) => set({ googleFitConnected: status }),
   setDevices: (devices) => set({ devices }),
   clearDevices: () => set({ devices: [] }),
   isConnected: (deviceId) => get().devices.some((device) => (
