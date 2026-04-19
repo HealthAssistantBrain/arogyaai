@@ -143,11 +143,34 @@ async def google_fit_callback(
 
 @router.get("/data-sync")
 async def fetch_data(
+    request: Request,
+    response: Response,
     current_user=Depends(get_current_user_from_header),
     db: Session = Depends(get_db)
 ):
     if not current_user.google_fit_connection:
         raise HTTPException(status_code=400, detail="Google Fit not connected")
+        
+    connection = GoogleFitService.get_connection(db, current_user)
+    
+    if connection and connection.last_synced_at:
+        # 1. ETag validation
+        current_etag = f'W/"{int(connection.last_synced_at.timestamp())}"'
+        if_none_match = request.headers.get("If-None-Match")
+        if if_none_match and if_none_match == current_etag:
+            return Response(status_code=304)
+            
+        # 2. If-Modified-Since validation
+        if_modified_since = request.headers.get("If-Modified-Since")
+        if if_modified_since:
+            try:
+                from email.utils import parsedate_to_datetime
+                client_date = parsedate_to_datetime(if_modified_since)
+                last_mod_floored = connection.last_synced_at.replace(microsecond=0)
+                if last_mod_floored <= client_date:
+                    return Response(status_code=304)
+            except Exception:
+                pass
     
     result = await GoogleFitService.sync_steps(
         db=db,
@@ -156,7 +179,17 @@ async def fetch_data(
         silent=True
     )
     
-    return {"status": result.get("status", "fresh"), "data": result}
+    # Re-fetch connection to get the latest sync time
+    connection = GoogleFitService.get_connection(db, current_user)
+    last_updated = None
+    if connection and connection.last_synced_at:
+        from email.utils import format_datetime
+        response.headers["Last-Modified"] = format_datetime(connection.last_synced_at)
+        response.headers["ETag"] = f'W/"{int(connection.last_synced_at.timestamp())}"'
+        response.headers["Cache-Control"] = "private, max-age=0, must-revalidate"
+        last_updated = connection.last_synced_at.isoformat()
+    
+    return {"status": result.get("status", "fresh"), "lastUpdated": last_updated, "data": result}
 
 
 @router.post("/sync")

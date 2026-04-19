@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -60,10 +60,13 @@ import { refreshAfterGoogleFitSync } from '../lib/googleFitRefresh';
 import { safeArray, safeNumber, safeObject, safeText } from '../utils/safeData';
 import { useFetchLock } from '../hooks/useFetchLock';
 import useDeviceStore from '../store/deviceStore';
+import { useSmartSync } from '../hooks/useSmartSync';
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const [syncing, setSyncing] = useState(false);
+  const isSyncing = useHealthStore((s) => s.isSyncing);
+  const setSyncing = useHealthStore((s) => s.setSyncing);
+  const setConnection = useHealthStore((s) => s.setConnection);
   const [hasAttemptedDashboardLoad, setHasAttemptedDashboardLoad] = useState(false);
   const { acquireLock, releaseLock } = useFetchLock();
 
@@ -74,9 +77,10 @@ const Dashboard = () => {
   const dashboardData = useDashboardStore((s) => s.dashboardData);
   const authUser = useAuthStore((s) => s.user);
 
-  const googleFitConnected = useDeviceStore((s) => s.googleFitConnected);
   const setGoogleFitConnected = useDeviceStore((s) => s.setGoogleFitConnected);
-  const debounceTimerRef = useRef(null);
+
+  // Initialize Smart Sync Engine
+  useSmartSync();
 
   const refreshDashboard = async ({ silent = true } = {}) => {
     if (!acquireLock('dashboard_refresh')) return;
@@ -99,57 +103,18 @@ const Dashboard = () => {
           d => (d.name === 'Google Fit' || d.provider === 'google-fit') && (d.status === 'connected' || d.is_connected || d.connected)
         );
         setGoogleFitConnected(isConnected);
+        setConnection(isConnected);
       } catch (err) {
         console.log('Fetch device status skipped or failed', err);
       }
     }
     fetchDeviceStatus();
-  }, [setGoogleFitConnected]);
-
-  const fetchGoogleFitData = async () => {
-    const currentLastFetch = useHealthStore.getState().lastFetch;
-    if (currentLastFetch && Date.now() - currentLastFetch < 30000) {
-      console.log("Using cached frontend data");
-      return;
-    }
-
-    try {
-      const res = await api.get("/google-fit/data-sync");
-      console.log("Fetch status:", res.data?.status);
-      if (res.data?.data) {
-        useHealthStore.getState().setGoogleFitData(res.data.data);
-      }
-    } catch (err) {
-      console.error("Fetch error:", err);
-    }
-  };
-
-  const fetchDataDebounced = () => {
-    clearTimeout(debounceTimerRef.current);
-    debounceTimerRef.current = setTimeout(() => {
-      fetchGoogleFitData();
-    }, 500);
-  };
+  }, [setGoogleFitConnected, setConnection]);
 
   useEffect(() => {
     setHasAttemptedDashboardLoad(true);
     void refreshDashboard({ silent: false });
-
-    console.log("Google Fit connected:", googleFitConnected);
-    if (!googleFitConnected) return;
-
-    fetchGoogleFitData();
-
-    const interval = window.setInterval(() => {
-      fetchDataDebounced();
-    }, 30000); // 30 sec
-
-    return () => {
-      window.clearInterval(interval);
-      clearTimeout(debounceTimerRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [googleFitConnected]);
+  }, []);
 
   // ── Sync handler ──────────────────────────────────────────────────────────
   const handleSync = async () => {
@@ -325,11 +290,11 @@ const Dashboard = () => {
           <div className="flex items-center ml-6">
             <button
               onClick={handleSync}
-              disabled={syncing}
+              disabled={isSyncing}
               className="flex items-center gap-2 bg-[#6143f4] text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-[#6143f4]/20 hover:shadow-xl transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              <Plus size={16} strokeWidth={3} className={syncing ? 'animate-spin' : ''} />
-              {syncing ? 'Syncing...' : 'Sync Data'}
+              <Plus size={16} strokeWidth={3} className={isSyncing ? 'animate-spin' : ''} />
+              {isSyncing ? 'Syncing...' : 'Sync Data'}
             </button>
           </div>
         </header>
