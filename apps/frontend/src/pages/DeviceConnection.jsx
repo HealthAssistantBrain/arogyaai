@@ -99,13 +99,15 @@ const DeviceConnection = () => {
   useEffect(() => {
     if (googleFitStatus === 'connected') {
       setConnectionBanner('Google Fit Connected ✅');
+      setGoogleFitConnected(true);
+      setGoogleFitConnectedStore(true);
       toast.success('Successfully connected to Google Fit!');
       window.history.replaceState({}, '', window.location.pathname);
     } else if (googleFitStatus === 'error') {
       toast.error(googleFitMessage || 'Failed to connect Google Fit');
       window.history.replaceState({}, '', window.location.pathname);
     }
-  }, [googleFitStatus, googleFitMessage]);
+  }, [googleFitStatus, googleFitMessage, setGoogleFitConnectedStore]);
 
   const handleConnectGoogleFit = () => {
     setOnboardingStep(4);
@@ -220,8 +222,8 @@ const DeviceConnection = () => {
                 <div
                   key={connection.id}
                   className={`rounded-2xl border p-4 flex items-center justify-between gap-4 ${connection.connected
-                      ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10'
-                      : 'border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/40'
+                    ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10'
+                    : 'border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/40'
                     }`}
                 >
                   <div>

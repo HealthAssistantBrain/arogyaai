@@ -1246,6 +1246,28 @@ class GoogleFitService:
 
         resolved_timezone = GoogleFitService._resolve_timezone(timezone_name or connection.default_timezone)
         connection.default_timezone = resolved_timezone
+
+        now = datetime.now(timezone.utc)
+        if silent and connection.last_synced_at and (now - connection.last_synced_at).total_seconds() < 30:
+            logger.info("[GFit] Sync skipped, using cache for user=%s", user.id)
+            status_data = GoogleFitService.get_status(db, user, resolved_timezone)
+            return {
+                "success": True,
+                "status": "cached",
+                "error": None,
+                "partial": False,
+                "message": "Used cached Google Fit data",
+                "connected": True,
+                "data": [],
+                "stats": status_data.get("stats", GoogleFitService._build_stats([])),
+                "raw_json": connection.raw_last_response,
+                "google_email": connection.google_email,
+                "last_synced_at": connection.last_synced_at.isoformat(),
+                "last_sync_status": connection.last_sync_status,
+                "data_source_id": GOOGLE_FIT_DATASOURCE_ID,
+                "timezone": resolved_timezone,
+            }
+
         access_token = await GoogleFitService.get_valid_access_token(db, user)
         if not access_token:
             logger.warning("[GFit] Sync requested for user=%s but Google Fit access token is unavailable", user.id)

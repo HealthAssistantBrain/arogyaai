@@ -142,10 +142,21 @@ async def google_fit_callback(
 
 
 @router.get("/data-sync")
-def fetch_data(current_user=Depends(get_current_user_from_header)):
+async def fetch_data(
+    current_user=Depends(get_current_user_from_header),
+    db: Session = Depends(get_db)
+):
     if not current_user.google_fit_connection:
-        return {"message": "Device not connected"}
-    return {"message": "Device connected"}
+        raise HTTPException(status_code=400, detail="Google Fit not connected")
+    
+    result = await GoogleFitService.sync_steps(
+        db=db,
+        user=current_user,
+        days=1,
+        silent=True
+    )
+    
+    return {"status": result.get("status", "fresh"), "data": result}
 
 
 @router.post("/sync")
@@ -156,7 +167,7 @@ async def sync_google_fit(
     db: Session = Depends(get_db),
 ):
     if not current_user.google_fit_connection:
-        return {"message": "Device not connected"}
+        raise HTTPException(status_code=400, detail="Google Fit not connected")
         
     return await GoogleFitService.sync_steps(
         db,

@@ -51,6 +51,7 @@ import {
 import { ROUTES } from '../router/routes';
 import useDashboardStore from '../store/dashboardStore';
 import { useAuthStore } from '../store/authStore';
+import useHealthStore from '../store/healthStore';
 import api from '../lib/axios';
 import HeartRateCard from '../components/HeartRateCard';
 import UserProfileBadge from '../components/UserProfileBadge';
@@ -75,6 +76,7 @@ const Dashboard = () => {
 
   const googleFitConnected = useDeviceStore((s) => s.googleFitConnected);
   const setGoogleFitConnected = useDeviceStore((s) => s.setGoogleFitConnected);
+  const debounceTimerRef = useRef(null);
 
   const refreshDashboard = async ({ silent = true } = {}) => {
     if (!acquireLock('dashboard_refresh')) return;
@@ -104,18 +106,47 @@ const Dashboard = () => {
     fetchDeviceStatus();
   }, [setGoogleFitConnected]);
 
+  const fetchGoogleFitData = async () => {
+    const currentLastFetch = useHealthStore.getState().lastFetch;
+    if (currentLastFetch && Date.now() - currentLastFetch < 30000) {
+      console.log("Using cached frontend data");
+      return;
+    }
+
+    try {
+      const res = await api.get("/google-fit/data-sync");
+      console.log("Fetch status:", res.data?.status);
+      if (res.data?.data) {
+        useHealthStore.getState().setGoogleFitData(res.data.data);
+      }
+    } catch (err) {
+      console.error("Fetch error:", err);
+    }
+  };
+
+  const fetchDataDebounced = () => {
+    clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(() => {
+      fetchGoogleFitData();
+    }, 500);
+  };
+
   useEffect(() => {
     setHasAttemptedDashboardLoad(true);
     void refreshDashboard({ silent: false });
 
+    console.log("Google Fit connected:", googleFitConnected);
     if (!googleFitConnected) return;
 
+    fetchGoogleFitData();
+
     const interval = window.setInterval(() => {
-      void refreshDashboard({ silent: true });
-    }, 30000);
+      fetchDataDebounced();
+    }, 30000); // 30 sec
 
     return () => {
       window.clearInterval(interval);
+      clearTimeout(debounceTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [googleFitConnected]);
