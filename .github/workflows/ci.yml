@@ -2,21 +2,21 @@ name: ArogyaAI CI
 
 on:
   push:
-    branches: [master, develop]
+    branches: [ master, develop ]
   pull_request:
-    branches: [master, develop]
+    branches: [ master, develop ]
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   # Secrets should be configured in GitHub repository settings.
   # Fallback values are safe dummy values for CI only.
-  POSTGRES_USER: user
+  POSTGRES_USER: postgres
   POSTGRES_PASSWORD: password
   POSTGRES_DB: arogyaai
   SECRET_KEY: ci-secret-key-not-for-production
   ALGORITHM: HS256
   REDIS_URL: redis://localhost:6379/0
-  DATABASE_URL: postgresql+psycopg2://user:password@localhost:5432/arogyaai
+  DATABASE_URL: postgresql+psycopg2://postgres:password@localhost:5432/arogyaai
   VITE_API_URL: http://localhost:8000
 
 jobs:
@@ -80,17 +80,32 @@ jobs:
       - name: Create CI .env
         run: |
           cat > .env <<'EOF'
-          POSTGRES_USER=user
+          POSTGRES_USER=postgres
           POSTGRES_PASSWORD=password
           POSTGRES_DB=arogyaai
           SECRET_KEY=ci-secret-key-not-for-production
           ALGORITHM=HS256
           REDIS_URL=redis://redis:6379/0
-          DATABASE_URL=postgresql+psycopg2://user:password@postgres:5432/arogyaai
+          DATABASE_URL=postgresql+psycopg2://postgres:password@postgres:5432/arogyaai
           VITE_API_URL=http://localhost:8000
           PGADMIN_DEFAULT_EMAIL=admin@arogyaai.com
           PGADMIN_DEFAULT_PASSWORD=admin
           EOF
+
+      - name: Create backend .env
+        run: |
+          mkdir -p apps/backend
+          cat <<EOF > apps/backend/.env
+          SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_BUCKET_NAME=reports
+          DATABASE_URL=postgresql://postgres:password@postgres:5432/arogyaai
+          REDIS_URL=redis://redis:6379
+          SECRET_KEY=test-secret
+          EOF
+
+      - name: Debug env
+        run: cat apps/backend/.env
 
       # ── STAGE 3: Docker Build ───────────────────────────────────────────────
       - name: Stage 3 — Build all services

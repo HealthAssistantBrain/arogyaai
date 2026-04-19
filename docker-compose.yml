@@ -6,7 +6,8 @@ services:
     ports:
       - "5173:5173"
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       - VITE_API_URL=http://localhost:8000
       - VITE_GOOGLE_FIT_DEFAULT_TIMEZONE=Asia/Kolkata
@@ -27,7 +28,8 @@ services:
     ports:
       - "8000:8000"
     env_file:
-      - ./apps/backend/.env
+      - path: ./apps/backend/.env
+        required: false
     environment:
       - RUN_MIGRATIONS=true
     networks:
@@ -57,7 +59,8 @@ services:
         CUSTOM_CA_CERT_B64: ${CUSTOM_CA_CERT_B64:-}
     command: ["celery", "-A", "pipelines.orchestration_pipeline.celery_app:celery_app", "worker", "--loglevel=INFO", "-Q", "ingestion,feature,ml,shap"]
     env_file:
-      - ./apps/backend/.env
+      - path: ./apps/backend/.env
+        required: false
     environment:
       - RUN_MIGRATIONS=false
     networks:
@@ -84,7 +87,8 @@ services:
     ports:
       - "8001:8000"
     env_file:
-      - .env
+      - path: .env
+        required: false
     networks:
       - arogyaai_net
 
@@ -100,7 +104,8 @@ services:
     ports:
       - "8002:8000"
     env_file:
-      - .env
+      - path: .env
+        required: false
     networks:
       - arogyaai_net
 
@@ -116,7 +121,8 @@ services:
     ports:
       - "8003:8000"
     env_file:
-      - .env
+      - path: .env
+        required: false
     networks:
       - arogyaai_net
 
@@ -124,7 +130,8 @@ services:
     image: timescale/timescaledb:latest-pg15
     command: ["postgres", "-c", "shared_preload_libraries=timescaledb"]
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
@@ -146,7 +153,8 @@ services:
   pgadmin:
     image: dpage/pgadmin4:latest
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@arogyaai.com}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
