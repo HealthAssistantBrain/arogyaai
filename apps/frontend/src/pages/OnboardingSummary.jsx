@@ -47,7 +47,7 @@ const OnboardingSummary = () => {
       try {
         const devRes = await api.get("/users/devices");
         if (Array.isArray(devRes.data)) {
-          setDevices(devRes.data);
+          setDevices(devRes.data.filter((device) => device.name !== 'Gmail' && device.name !== 'Apple ID'));
         }
       } catch (err) {
         console.error("Non-blocking error fetching devices:", err);
@@ -62,6 +62,19 @@ const OnboardingSummary = () => {
     }
     return val && val !== "" ? val : "---";
   };
+
+  const authConnections = [
+    {
+      name: 'Gmail',
+      connected: !!userData?.gmail_connected,
+      value: userData?.gmail_connected ? 'Connected' : '---',
+    },
+    {
+      name: 'Apple ID',
+      connected: !!userData?.apple_connected,
+      value: userData?.apple_connected ? 'Connected' : '---',
+    },
+  ];
 
   const formatMedicalField = (data) => {
     if (!data) return "None";
@@ -274,6 +287,14 @@ const OnboardingSummary = () => {
                   </button>
                 </div>
                 <div className="space-y-3">
+                  {authConnections.map((connection) => (
+                    <div key={connection.name} className="flex justify-between text-sm">
+                      <span className="text-slate-500 font-medium">{connection.name}</span>
+                      <span className={`font-bold ${connection.connected ? 'text-green-500' : 'text-slate-400'}`}>
+                        {connection.value}
+                      </span>
+                    </div>
+                  ))}
                   {devices.length > 0 ? (
                     devices.map(device => (
                       <div key={device.name} className="flex justify-between text-sm">

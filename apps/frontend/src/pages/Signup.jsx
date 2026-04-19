@@ -20,6 +20,7 @@ import { setAuthFlow } from '../lib/axios';
 import { lockSystem, unlockSystem } from '../lib/systemLock';
 import { triggerAuthRevalidation } from '../lib/authRevalidator';
 import { getApiUrl } from '../lib/apiBaseUrl';
+import { startSupabaseOAuth } from '../lib/supabaseOAuth';
 
 const signupSchema = z.object({
   fullName: z.string().min(2, 'Name must be at least 2 characters'),
@@ -142,6 +143,20 @@ const Signup = () => {
     if (errorMsg) toast.error(errorMsg);
   };
 
+  const handleOAuthSignup = async (provider) => {
+    lockSystem();
+    setAuthFlow(true);
+
+    try {
+      await startSupabaseOAuth(provider);
+    } catch (err) {
+      console.error('[Signup] Supabase OAuth failed:', err);
+      toast.error(err?.message || 'Unable to start social sign-in');
+      unlockSystem();
+      setAuthFlow(false);
+    }
+  };
+
   // Animation variants
   const containerVariants = {
     initial: { opacity: 0 },
@@ -224,11 +239,19 @@ const Signup = () => {
 
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
-                <button type="button" className="flex items-center justify-center gap-2 py-2.5 px-4 border border-slate-200 dark:border-slate-800 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors group">
+                <button
+                  type="button"
+                  onClick={() => handleOAuthSignup('google')}
+                  className="flex items-center justify-center gap-2 py-2.5 px-4 border border-slate-200 dark:border-slate-800 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors group"
+                >
                   <img className="size-5" alt="Google logo icon" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDLMoqt3nK-zF0ILK1NFHrv6ocsmHsm-WpkG-eLPZ26H0DRO_mlYygzDfwJgt6OI92ObRd-xlkvAk1ZfjwCyGVAbGj1p8OiS3O_rAM0yL14RhrzTUprC2fQwQAHWdfSUHBqGzTG8JiIsW0Z06uz_l5wQMeJlTDoYJxF3atYPIwMIbMAbzKZhHaJseBbbQno5j48gyfVbtMbUCMD5plwCbk2JwxenEAwwcR5rPQn3w5r7aolesNf6LTH-CSaC2SPazcKLfoUmuihuaHB" />
                   <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Google</span>
                 </button>
-                <button type="button" className="flex items-center justify-center gap-2 py-2.5 px-4 border border-slate-200 dark:border-slate-800 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors group">
+                <button
+                  type="button"
+                  onClick={() => handleOAuthSignup('apple')}
+                  className="flex items-center justify-center gap-2 py-2.5 px-4 border border-slate-200 dark:border-slate-800 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors group"
+                >
                   <Apple size={20} className="text-slate-700 dark:text-slate-200 group-hover:text-[#6143f4] transition-colors" />
                   <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Apple</span>
                 </button>

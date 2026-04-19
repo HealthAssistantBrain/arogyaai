@@ -17,3 +17,4 @@ APScheduler
 pypdf
 python-multipart
 celery
+requests

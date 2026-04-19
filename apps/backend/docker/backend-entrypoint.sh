@@ -3,8 +3,6 @@ set -eu
 
 DB_WAIT_RETRIES="${DB_WAIT_RETRIES:-30}"
 DB_WAIT_SLEEP_SECONDS="${DB_WAIT_SLEEP_SECONDS:-2}"
-MIGRATION_RETRIES="${MIGRATION_RETRIES:-5}"
-MIGRATION_SLEEP_SECONDS="${MIGRATION_SLEEP_SECONDS:-3}"
 
 if [ "$#" -eq 0 ]; then
   set -- uvicorn main:app --host 0.0.0.0 --port 8000
@@ -51,22 +49,13 @@ PY
 }
 
 run_migrations() {
-  attempt=1
-  while [ "$attempt" -le "$MIGRATION_RETRIES" ]; do
-    echo "[startup] Running Alembic migrations (attempt $attempt/$MIGRATION_RETRIES)"
-    if alembic upgrade head; then
-      echo "[startup] Migrations complete"
-      return 0
-    fi
+  echo "[startup] Running Alembic migrations once"
+  if alembic upgrade heads; then
+    echo "[startup] Migrations complete"
+    return 0
+  fi
 
-    echo "[startup] Alembic migration attempt $attempt failed"
-    attempt=$((attempt + 1))
-    if [ "$attempt" -le "$MIGRATION_RETRIES" ]; then
-      sleep "$MIGRATION_SLEEP_SECONDS"
-    fi
-  done
-
-  echo "[startup] Alembic migrations failed after $MIGRATION_RETRIES attempts"
+  echo "[startup] Alembic migrations failed"
   return 1
 }
 

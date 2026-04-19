@@ -19,6 +19,8 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     is_email_verified  = Column(Boolean, default=False, nullable=False)
     is_onboarding_done = Column(Boolean, default=False, nullable=False)
     onboarding_step    = Column(Integer, default=1, nullable=False)
+    gmail_connected    = Column(Boolean, default=False, nullable=False)
+    apple_connected    = Column(Boolean, default=False, nullable=False)
     is_deleted         = Column(Boolean, default=False, nullable=False)
     
     # ── Tracking ───────────────────────────────────────────────

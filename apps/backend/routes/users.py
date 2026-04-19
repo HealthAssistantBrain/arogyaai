@@ -79,10 +79,24 @@ def get_user_devices(
     db: Session = Depends(get_db),
 ):
     """Return user's connected devices status."""
-    # Stub reading dynamic DB devices - this is simulated until Device/Oauth tables are fully implemented 
+    # Source-of-truth connection status is stored on the user record.
     return [
-        {"name": "Google Fit", "status": "not_connected"},
-        {"name": "Apple Health", "status": "not_connected"}
+        {
+            "name": "Gmail",
+            "status": "connected" if current_user.gmail_connected else "not_connected",
+        },
+        {
+            "name": "Apple ID",
+            "status": "connected" if current_user.apple_connected else "not_connected",
+        },
+        {
+            "name": "Google Fit",
+            "status": "connected" if current_user.google_fit_connection else "not_connected",
+        },
+        {
+            "name": "Apple Health",
+            "status": "not_connected",
+        },
     ]
 
 

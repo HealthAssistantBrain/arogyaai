@@ -1,21 +1,250 @@
 import uuid
 import secrets
 import logging
+from functools import lru_cache
 from datetime import datetime, timezone
 from typing import Optional, Tuple
 
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
+import jwt
+from jwt import algorithms
+import requests
+import json
 
 from models import User, UserProfile, UserSetting, Session as DBSession
-from schemas.api_models import UserCreate, UserLogin, TokenResponse
+from schemas.api_models import OAuthLoginRequest, UserCreate, UserLogin, TokenResponse
 from core.security import verify_password, get_password_hash, create_access_token, create_refresh_token
+from core.config import settings
 from core.utils import safe_input
 from services.event_service import emit_event
+from services.user_service import UserService
 
 logger = logging.getLogger("auth_service")
 
+
+
+
 class AuthService:
+    @staticmethod
+    def _issue_session(db: Session, user: User) -> tuple[str, str, datetime]:
+        access_token = create_access_token(subject=user.id)
+        refresh_token, refresh_expire = create_refresh_token(subject=user.id)
+
+        session = DBSession(
+            user_id=user.id,
+            refresh_token_hash=get_password_hash(refresh_token),
+            expires_at=refresh_expire,
+        )
+        db.add(session)
+        db.commit()
+
+        return access_token, refresh_token, refresh_expire
+
+    @staticmethod
+    def _ensure_user_profile_and_settings(db: Session, user: User, full_name: str | None = None) -> None:
+        profile = db.query(UserProfile).filter(UserProfile.user_id == user.id).first()
+        if not profile:
+            profile = UserProfile(
+                user_id=user.id,
+                full_name=safe_input(full_name) if full_name else user.full_name,
+            )
+            db.add(profile)
+        elif full_name and not profile.full_name:
+            profile.full_name = safe_input(full_name)
+
+        setting = db.query(UserSetting).filter(UserSetting.user_id == user.id).first()
+        if not setting:
+            db.add(
+                UserSetting(
+                    user_id=user.id,
+                    auto_fetch_enabled=False,
+                    fetch_interval_minutes=15,
+                )
+            )
+
+    @staticmethod
+    def _serialize_user(user: User) -> dict:
+        return {
+            "id": str(user.id),
+            "email": user.email,
+            "full_name": user.full_name,
+            "is_onboarding_done": user.is_onboarding_done,
+            "onboarding_step": user.onboarding_step,
+            "is_email_verified": user.is_email_verified,
+            "gmail_connected": bool(getattr(user, "gmail_connected", False)),
+            "apple_connected": bool(getattr(user, "apple_connected", False)),
+        }
+
+    @staticmethod
+    def _decode_supabase_token(token: str) -> dict:
+        # ── Diagnostic logging — always visible in docker logs ───────────────
+        supabase_url = settings.SUPABASE_URL or ''
+        audience = settings.SUPABASE_AUDIENCE or ''
+        token_preview = f"{token[:12]}...{token[-8:]}" if len(token) > 20 else token
+        print(f"[Auth] SUPABASE_URL='{supabase_url}'")
+        print(f"[Auth] SUPABASE_AUDIENCE='{audience}'")
+        print(f"[Auth] Decoding token: {token_preview}")
+
+        if not supabase_url:
+            print("[Auth] ERROR: SUPABASE_URL is empty — set it in your .env file")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Supabase OAuth is not configured (SUPABASE_URL missing)",
+            )
+
+        try:
+            jwks_url = f"{supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
+            print(f"NEW JWKS URL: {jwks_url}")
+            
+            headers = {}
+            if settings.SUPABASE_ANON_KEY:
+                headers["apikey"] = settings.SUPABASE_ANON_KEY
+                
+            response = requests.get(jwks_url, headers=headers, timeout=10)
+            if response.status_code != 200:
+                print("JWKS fetch failed:", response.text)
+                raise HTTPException(401, "Failed to fetch JWKS")
+                
+            jwks = response.json()
+            
+            unverified_header = jwt.get_unverified_header(token)
+            alg = unverified_header.get("alg", "RS256")
+            kid = unverified_header.get("kid")
+            print("JWT ALG:", alg)
+            print("JWT KID:", kid)
+            
+            matching_key = next(
+                (k for k in jwks.get("keys", []) if k.get("kid") == kid),
+                None
+            )
+            if not matching_key:
+                raise HTTPException(401, "JWK not found")
+
+            print("Using key type:", matching_key.get("kty"))
+            
+            # Dynamically choose RSA or EC key based on token header alg
+            if alg.startswith("RS"):
+                public_key = algorithms.RSAAlgorithm.from_jwk(json.dumps(matching_key))
+            elif alg.startswith("ES"):
+                public_key = algorithms.ECAlgorithm.from_jwk(json.dumps(matching_key))
+            else:
+                raise HTTPException(401, f"Unsupported algorithm: {alg}")
+
+            issuer = f"{supabase_url.rstrip('/')}/auth/v1"
+            print(f"[Auth] Verifying with issuer='{issuer}' audience='{audience}' alg={alg}")
+            decoded = jwt.decode(
+                token,
+                public_key,
+                algorithms=[alg],
+                audience=audience,
+                issuer=issuer,
+            )
+            print(f"[Auth] Token decoded OK — sub={decoded.get('sub')} email={decoded.get('email')}")
+            print("JWT decoded successfully")
+        except HTTPException:
+            raise
+        except jwt.PyJWTError as exc:
+            print("JWT ERROR:", str(exc))
+            print(f"[Auth] PyJWTError ({type(exc).__name__}): {exc}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Invalid Supabase OAuth token: {exc}",
+            ) from exc
+        except Exception as exc:
+            print("JWT ERROR:", str(exc))
+            print(f"[Auth] Exception ({type(exc).__name__}): {exc}")
+            logger.exception("[Auth] Failed to decode Supabase OAuth token")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Invalid Supabase OAuth token: {exc}",
+            ) from exc
+
+        return decoded
+
+    @staticmethod
+    def oauth_login(db: Session, oauth_data: OAuthLoginRequest) -> dict:
+        decoded = AuthService._decode_supabase_token(oauth_data.access_token)
+
+        provider = str(
+            oauth_data.provider
+            or decoded.get("app_metadata", {}).get("provider")
+            or ""
+        ).strip().lower()
+
+        token_provider = str(decoded.get("app_metadata", {}).get("provider") or "").strip().lower()
+        if token_provider and provider and token_provider != provider:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="OAuth provider mismatch",
+            )
+
+        if provider not in {"google", "apple"}:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Unsupported OAuth provider",
+            )
+
+        email = str(decoded.get("email") or "").strip().lower()
+        if not email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="OAuth token did not include an email address",
+            )
+
+        metadata = decoded.get("user_metadata") or {}
+        full_name = (
+            metadata.get("full_name")
+            or metadata.get("name")
+            or decoded.get("name")
+        )
+
+        user = db.query(User).filter(User.email == email).first()
+        if user:
+            user.is_deleted = False
+            user.is_email_verified = True
+            if full_name and not user.full_name:
+                user.full_name = safe_input(full_name)
+        else:
+            user = User(
+                email=email,
+                password_hash=get_password_hash(secrets.token_urlsafe(48)),
+                full_name=safe_input(full_name) if full_name else None,
+                is_email_verified=True,
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+
+        if provider == "google":
+            user.gmail_connected = True
+        elif provider == "apple":
+            user.apple_connected = True
+
+        AuthService._ensure_user_profile_and_settings(db, user, full_name=full_name)
+        user.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(user)
+
+        try:
+            emit_event("USER_LOGIN", user.id, {"email": user.email, "provider": provider})
+        except Exception:
+            logger.exception("[Auth] Failed to emit oauth login notification for user=%s", user.id)
+
+        access_token, refresh_token, _ = AuthService._issue_session(db, user)
+
+        return {
+            "success": True,
+            "status": "ready",
+            "error": None,
+            "data": {
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "token_type": "bearer",
+                "user": AuthService._serialize_user(user),
+            },
+        }
+
     @staticmethod
     def signup(db: Session, user_data: UserCreate) -> dict:
         user_exists = db.query(User).filter(User.email == user_data.email).first()
@@ -70,16 +299,7 @@ class AuthService:
                 db.rollback() 
 
 
-        access_token = create_access_token(subject=new_user.id)
-        refresh_token, refresh_expire = create_refresh_token(subject=new_user.id)
-        
-        session = DBSession(
-            user_id=new_user.id,
-            refresh_token_hash=get_password_hash(refresh_token),
-            expires_at=refresh_expire
-        )
-        db.add(session)
-        db.commit()
+        access_token, refresh_token, _ = AuthService._issue_session(db, new_user)
 
         return {
             "success": True,
@@ -107,16 +327,7 @@ class AuthService:
                 detail="Invalid email or password"
             )
         
-        access_token = create_access_token(subject=user.id)
-        refresh_token, refresh_expire = create_refresh_token(subject=user.id)
-        
-        session = DBSession(
-            user_id=user.id,
-            refresh_token_hash=get_password_hash(refresh_token),
-            expires_at=refresh_expire
-        )
-        db.add(session)
-        db.commit()
+        access_token, refresh_token, _ = AuthService._issue_session(db, user)
         try:
             emit_event("USER_LOGIN", user.id, {"email": user.email})
         except Exception:

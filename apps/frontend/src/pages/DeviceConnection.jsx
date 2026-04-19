@@ -25,6 +25,7 @@ import { connectGoogleFit } from '../services/deviceService';
 const DeviceConnection = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const user = useAuthStore((state) => state.user);
   const setOnboardingStep = useAuthStore((state) => state.setOnboardingStep);
 
   const handleFinish = () => {
@@ -41,6 +42,22 @@ const DeviceConnection = () => {
   const googleFitMessage = searchParams.get('message');
   const isGoogleFitConnected = googleFitStatus === 'connected';
   const connectionBanner = googleFitStatus === 'connected' ? 'Google Fit Connected ✅' : null;
+  const authConnections = [
+    {
+      id: 'gmail',
+      name: 'Gmail',
+      status: user?.gmail_connected ? 'Connected' : 'Not Connected',
+      connected: !!user?.gmail_connected,
+      helper: 'Linked through Google OAuth',
+    },
+    {
+      id: 'apple-id',
+      name: 'Apple ID',
+      status: user?.apple_connected ? 'Connected' : 'Not Connected',
+      connected: !!user?.apple_connected,
+      helper: 'Linked through Apple OAuth',
+    },
+  ];
 
   useEffect(() => {
     if (googleFitStatus === 'connected') {
@@ -160,6 +177,29 @@ const DeviceConnection = () => {
             </div>
 
             {/* Integration Grid */}
+            <div className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+              {authConnections.map((connection) => (
+                <div
+                  key={connection.id}
+                  className={`rounded-2xl border p-4 flex items-center justify-between gap-4 ${
+                    connection.connected
+                      ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10'
+                      : 'border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/40'
+                  }`}
+                >
+                  <div>
+                    <p className="text-sm font-bold text-[#13082A] dark:text-white">{connection.name}</p>
+                    <p className="text-[11px] uppercase tracking-[0.2em] font-black text-slate-400 mt-1">
+                      {connection.helper}
+                    </p>
+                  </div>
+                  <span className={`text-xs font-black uppercase tracking-[0.2em] ${connection.connected ? 'text-emerald-600 dark:text-emerald-300' : 'text-slate-400'}`}>
+                    {connection.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+
             {connectionBanner ? (
               <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-sm font-bold text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
                 {connectionBanner}

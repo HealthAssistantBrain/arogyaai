@@ -20,6 +20,7 @@ const ForgotPassword = lazy(() => import('../pages/ForgotPassword'))
 const EmailVerification = lazy(() => import('../pages/EmailVerification'))
 const ResetPassword = lazy(() => import('../pages/ResetPassword'))
 const AccountCreated = lazy(() => import('../pages/AccountCreated'))
+const AuthCallback = lazy(() => import('../pages/AuthCallback'))
 const Step1BasicProfile = lazy(() => import('../pages/Onboarding'))
 const Step2MedHistory = lazy(() => import('../pages/MedicalHistory'))
 const Step3Lifestyle = lazy(() => import('../pages/Lifestyle'))
@@ -82,6 +83,7 @@ export default function AppRouter() {
           <Route path={ROUTES.TERMS} element={<TermsOfService />} />
           <Route path={ROUTES.PRIVACY} element={<PrivacyPolicy />} />
           <Route path={ROUTES.DATA_CONSENT} element={<DataConsent />} />
+          <Route path={ROUTES.AUTH_CALLBACK} element={<AuthCallback />} />
           <Route path={ROUTES.NOT_FOUND} element={<NotFound404 />} />
           <Route path={ROUTES.SERVER_ERROR} element={<ServerError500 />} />
           <Route path={ROUTES.MAINTENANCE} element={<MaintenancePage />} />

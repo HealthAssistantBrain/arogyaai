@@ -24,6 +24,23 @@ class Settings(BaseSettings):
     GOOGLE_FIT_REDIRECT_URI: str = os.getenv("GOOGLE_FIT_REDIRECT_URI", "")
     GOOGLE_FIT_DEFAULT_TIMEZONE: str = os.getenv("GOOGLE_FIT_DEFAULT_TIMEZONE", "Asia/Kolkata")
     APP_ENCRYPTION_KEY: str = os.getenv("APP_ENCRYPTION_KEY", "")
+
+    # SUPABASE OAUTH
+    SUPABASE_URL: str = (
+        os.getenv("SUPABASE_URL", "")
+        .strip()
+        .removeprefix("SUPABASE_URL=")
+        .removeprefix("supabase_url=")
+    )
+    SUPABASE_ANON_KEY: str = (
+        os.getenv("VITE_SUPABASE_ANON_KEY", os.getenv("SUPABASE_ANON_KEY", ""))
+        .strip()
+        .removeprefix("VITE_SUPABASE_ANON_KEY=")
+        .removeprefix("SUPABASE_ANON_KEY=")
+        .removeprefix("vite_supabase_anon_key=")
+        .removeprefix("supabase_anon_key=")
+    )
+    SUPABASE_AUDIENCE: str = os.getenv("SUPABASE_AUDIENCE", "authenticated")
     
     class Config:
         case_sensitive = True

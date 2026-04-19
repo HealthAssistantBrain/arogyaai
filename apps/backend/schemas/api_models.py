@@ -19,6 +19,11 @@ class TokenResponse(BaseModel):
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
+
+class OAuthLoginRequest(BaseModel):
+    provider: Optional[str] = None
+    access_token: str
+
 class HealthDataUpload(BaseModel):
     user_id: str
     heart_rate: Optional[int]

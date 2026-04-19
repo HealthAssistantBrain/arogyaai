@@ -4,7 +4,7 @@ import jwt
 
 from database.session import get_db
 from models import User
-from schemas.api_models import UserLogin, UserCreate, TokenResponse, RefreshTokenRequest
+from schemas.api_models import OAuthLoginRequest, UserLogin, UserCreate, TokenResponse, RefreshTokenRequest
 from core.security import create_access_token
 from core.config import settings
 from services.auth_service import AuthService
@@ -46,6 +46,17 @@ async def login(user_data: UserLogin, response: Response, db: Session = Depends(
     )
     
     return result
+
+
+@router.post("/oauth")
+async def oauth_login(oauth_data: OAuthLoginRequest, db: Session = Depends(get_db)):
+    """Exchange a Supabase OAuth token for a backend-issued JWT session."""
+    token_preview = (
+        f"{oauth_data.access_token[:12]}...{oauth_data.access_token[-8:]}"
+        if len(oauth_data.access_token) > 20 else oauth_data.access_token
+    )
+    print(f"[OAuth Route] provider={oauth_data.provider!r} token={token_preview}")
+    return AuthService.oauth_login(db, oauth_data)
 
 @router.post("/refresh-token")
 async def refresh_access_token(data: RefreshTokenRequest, db: Session = Depends(get_db)):

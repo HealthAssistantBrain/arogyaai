@@ -4,6 +4,7 @@ import { getApiUrl } from '../lib/apiBaseUrl'
 
 const API_BASE_URL = getApiUrl(import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000')
 const ACCESS_TOKEN_STORAGE_KEY = 'access_token'
+const TOKEN_STORAGE_KEY = 'token'
 const LEGACY_AUTH_STORAGE_KEY = 'arogyaai-auth'
 const LEGACY_USER_STORAGE_KEY = 'user'
 
@@ -13,6 +14,7 @@ const clearLegacyAuthStorage = () => {
   if (!isBrowser()) return
 
   window.localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY)
+  window.localStorage.removeItem(TOKEN_STORAGE_KEY)
   window.localStorage.removeItem(LEGACY_AUTH_STORAGE_KEY)
   window.localStorage.removeItem(LEGACY_USER_STORAGE_KEY)
 }
@@ -22,10 +24,12 @@ const persistAccessToken = (token) => {
 
   if (token && typeof token === 'string' && token.trim() !== '') {
     window.localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, token)
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, token)
     window.localStorage.removeItem(LEGACY_AUTH_STORAGE_KEY)
     window.localStorage.removeItem(LEGACY_USER_STORAGE_KEY)
   } else {
     window.localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY)
+    window.localStorage.removeItem(TOKEN_STORAGE_KEY)
   }
 }
 

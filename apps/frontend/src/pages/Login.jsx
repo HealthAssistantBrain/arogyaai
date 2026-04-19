@@ -16,6 +16,7 @@ import { ROUTES } from '../router/routes';
 import api, { setAuthFlow } from '../lib/axios';
 import { lockSystem, unlockSystem } from '../lib/systemLock';
 import { triggerAuthRevalidation } from '../lib/authRevalidator';
+import { startSupabaseOAuth } from '../lib/supabaseOAuth';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -38,6 +39,20 @@ const Login = () => {
     resolver: zodResolver(loginSchema),
     defaultValues: { email: '', password: '' },
   });
+
+  const handleOAuthLogin = async (provider) => {
+    lockSystem();
+    setAuthFlow(true);
+
+    try {
+      await startSupabaseOAuth(provider);
+    } catch (err) {
+      console.error('[Login] Supabase OAuth failed:', err);
+      toast.error(err?.message || 'Unable to start social sign-in');
+      unlockSystem();
+      setAuthFlow(false);
+    }
+  };
 
   const onSubmit = async (data) => {
     // ── STRICT EXECUTION BOUNDARY ───────────────────────────────────────────
@@ -156,6 +171,7 @@ const Login = () => {
         isHydratingAuth: false,
       });
       localStorage.removeItem('access_token');
+      localStorage.removeItem('token');
       localStorage.removeItem('arogyaai-auth');
       localStorage.removeItem('user');
       toast.error(err.message || 'Invalid email or password');
@@ -211,11 +227,19 @@ const Login = () => {
 
         {/* Social Login */}
         <div className="px-8 pb-4 flex flex-col gap-3">
-          <button type="button" className="w-full flex items-center justify-center gap-3 h-12 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors duration-200 group">
+          <button
+            type="button"
+            onClick={() => handleOAuthLogin('google')}
+            className="w-full flex items-center justify-center gap-3 h-12 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors duration-200 group"
+          >
             <UserIcon size={20} className="text-slate-500 group-hover:text-[#6143f4] transition-colors" />
             <span className="text-slate-700 dark:text-slate-200 font-medium">Continue with Google</span>
           </button>
-          <button type="button" className="w-full flex items-center justify-center gap-3 h-12 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors duration-200 group">
+          <button
+            type="button"
+            onClick={() => handleOAuthLogin('apple')}
+            className="w-full flex items-center justify-center gap-3 h-12 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors duration-200 group"
+          >
             <Apple size={20} className="text-slate-500 group-hover:text-[#6143f4] transition-colors" />
             <span className="text-slate-700 dark:text-slate-200 font-medium">Continue with Apple</span>
           </button>

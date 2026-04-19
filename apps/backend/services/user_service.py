@@ -41,6 +41,8 @@ def _serialize_profile(user: User, profile: Optional[UserProfile]) -> dict:
         "is_email_verified": user.is_email_verified,
         "is_onboarding_done": user.is_onboarding_done,
         "onboarding_step": user.onboarding_step,
+        "gmail_connected": bool(getattr(user, "gmail_connected", False)),
+        "apple_connected": bool(getattr(user, "apple_connected", False)),
         "role": "user",
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "updated_at": (
