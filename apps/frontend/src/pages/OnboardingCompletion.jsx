@@ -57,24 +57,7 @@ const OnboardingCompletion = () => {
     <div className="bg-[#EAEAEA] dark:bg-[#131022] min-h-screen flex flex-col font-display antialiased text-[#13082A] dark:text-slate-100 items-center justify-center p-6 lg:p-12 overflow-hidden">
       <div className="layout-container flex h-full grow flex-col w-full max-w-[1200px]">
         {/* Navigation Header - Matched Stitch */}
-        <header className="flex items-center justify-between whitespace-nowrap px-6 md:px-10 py-6 mb-4">
-          <div className="flex items-center gap-3">
-            <div className="size-8 bg-[#6143f4] rounded-lg flex items-center justify-center text-white shadow-lg shadow-[#6143f4]/20">
-              <BarChart3 size={20} />
-            </div>
-            <h2 className="text-[#13082A] dark:text-white text-xl font-bold leading-tight tracking-tight">ArogyaAI</h2>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="bg-[#6143f4]/10 p-2 rounded-full hidden md:block border border-[#6143f4]/20">
-              <span className="text-[#6143f4] text-xs font-bold px-2 uppercase tracking-widest leading-none">Enterprise Access</span>
-            </div>
-            <div className="bg-[#6143f4]/10 rounded-full p-1 border border-[#6143f4]/20">
-              <div className="h-10 w-10 rounded-full bg-[#6143f4]/10 flex items-center justify-center overflow-hidden shadow-sm">
-                <User size={20} className="text-[#6143f4]" />
-              </div>
-            </div>
-          </div>
-        </header>
+        
 
         <main className="flex-1 flex flex-col items-center justify-center">
           <motion.div

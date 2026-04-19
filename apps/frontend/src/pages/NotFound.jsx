@@ -19,40 +19,7 @@ const NotFound = () => {
   return (
     <div className="bg-[#f6f5f8] dark:bg-[#13082a] text-[#13082a] font-display min-h-screen flex flex-col antialiased transition-colors duration-500 overflow-hidden h-screen">
       {/* Optimized Header (Standardized Dashboard Style) */}
-      <header className="h-24 bg-white/80 dark:bg-[#13082A]/80 backdrop-blur-2xl border-b border-slate-200 dark:border-white/5 px-10 flex items-center justify-between shrink-0 sticky top-0 z-50">
-        <div className="flex items-center gap-4 cursor-pointer" onClick={() => navigate(ROUTES.DASHBOARD)}>
-          <div className="bg-gradient-to-br from-[#6143f4] to-[#009CDE] size-11 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-[#6143f4]/20 transform hover:rotate-12 transition-transform">
-            <Activity size={24} strokeWidth={2.5} />
-          </div>
-          <div>
-            <h1 className="text-2xl font-black tracking-tighter text-[#13082A] dark:text-white uppercase leading-none italic">Arogya<span className="text-[#6143f4]">AI</span></h1>
-            <p className="text-[9px] font-black text-[#009CDE] uppercase tracking-widest mt-1 italic opacity-70">Predictive Health</p>
-          </div>
-        </div>
-
-        <nav className="hidden lg:flex items-center gap-12">
-          {['Diagnostics', 'Records', 'Support'].map((item) => (
-            <button key={item} className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 hover:text-[#6143f4] transition-colors italic" type="button">{item}</button>
-          ))}
-        </nav>
-
-        <div className="flex items-center gap-8 pl-10 border-l border-slate-200 dark:border-white/10 ml-10">
-          <button className="relative p-3.5 text-slate-400 hover:text-[#6143f4] transition-all group" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
-            <Bell size={20} strokeWidth={2.5} />
-            <span className="absolute top-3.5 right-3.5 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-white dark:ring-[#13082A]"></span>
-          </button>
-          <div className="flex items-center gap-4 cursor-pointer group">
-            <div className="text-right hidden xl:block">
-              <p className="text-[10px] font-black text-[#13082A] dark:text-white uppercase tracking-widest leading-none mb-1 group-hover:text-[#6143f4] transition-colors italic">Elena Smith</p>
-              <p className="text-[9px] font-black text-[#009CDE] uppercase tracking-widest leading-none opacity-80 italic">Verified Node</p>
-            </div>
-            <div className="size-11 rounded-2xl bg-gradient-to-tr from-[#6143f4] to-[#009CDE] p-[2px] shadow-lg shadow-[#6143f4]/20 transform group-hover:scale-105 transition-transform">
-               <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtUF7rDszaKWnU4spXfT8-Qr3kMrRMSi601P0wbsVaRFaUw1wvLoQ11WFXLHECfRlS0AHBeeEWdgZCIMsDXI-RQhlQ2ADI8MYAwxDZtHGlIt1gMgcVWnKoH7MWh6C8LGzwzsmPEAIs30k82rc21e8g2HOmjfvnj45oImCcshimNh2J9Mb99JBkRjkXrDmF_IKfQw-BMQhlxmcLueluJHdA6Hvx4qsmEE1bcslk48rRb3AJmNmxNlhGsSwayHWKDkceETbHU3K0LObc" alt="User" className="size-full object-cover rounded-2xl border-2 border-white dark:border-white/10" />
-            </div>
-            <ChevronDown size={14} className="text-slate-400 group-hover:text-[#6143f4] transition-colors" />
-          </div>
-        </div>
-      </header>
+      
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col items-center justify-center relative px-8 overflow-hidden">

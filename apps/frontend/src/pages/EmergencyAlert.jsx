@@ -73,7 +73,7 @@ const EmergencyAlert = () => {
 
             {/* Context Mock */}
             <div className="flex-1 flex flex-col h-full bg-[#f6f5f8] dark:bg-[#0B0819]">
-                <header className="h-24 border-b border-slate-200 dark:border-white/5"></header>
+                
                 <div className="flex-1 p-10">
                     <div className="h-full w-full bg-white dark:bg-white/5 rounded-[2.5rem]"></div>
                 </div>

@@ -363,30 +363,7 @@ const Reports = () => {
                 {/* Main Content Area */}
                 <div className="flex-1 flex flex-col min-w-0">
                     {/* Top Navbar */}
-                    <header className="h-24 bg-white/40 dark:bg-[#131022]/40 backdrop-blur-2xl border-b border-[#6143f4]/10 flex items-center justify-between px-10 shrink-0 z-10">
-                        <div className="flex items-center gap-6 flex-1 max-w-2xl">
-                            <div className="relative w-full group">
-                                <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" size={20} />
-                                <input className="w-full pl-14 pr-7 py-4 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/5 rounded-[1.75rem] focus:ring-4 focus:ring-[#6143f4]/10 outline-none transition-all shadow-xl shadow-slate-200/30 dark:shadow-none placeholder:text-slate-400 font-medium" placeholder="Search reports, clinics, or diagnosis..." type="text" />
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-8">
-                            <button className="relative size-12 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-white/5 rounded-2xl transition-all shadow-xl shadow-slate-200/30 dark:shadow-none active:scale-95 group" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
-                                <Bell size={22} />
-                                <span className="absolute top-3.5 right-3.5 size-2.5 bg-red-500 rounded-full border-2 border-white dark:border-[#131022] animate-pulse"></span>
-                            </button>
-                            <div className="h-10 w-px bg-slate-200 dark:bg-white/5 hidden sm:block"></div>
-                            <div className="flex items-center gap-4 group cursor-pointer" onClick={() => navigate(ROUTES.SETTINGS)}>
-                                <div className="text-right hidden sm:block">
-                                    <p className="text-sm font-black text-[#13082a] dark:text-white leading-none uppercase group-hover:text-[#6143f4] transition-colors tracking-tight italic">Dr. Sarah Chen</p>
-                                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1.5 opacity-80 leading-none">Head of Cardiology</p>
-                                </div>
-                                <div className="size-12 rounded-[1.25rem] bg-[#6143f4]/10 overflow-hidden border-2 border-transparent group-hover:border-[#6143f4] shadow-2xl transition-all group-hover:scale-110 group-active:scale-95 group-hover:rotate-3">
-                                    <img className="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAq6-7j0ca9q9TIm8c_65_71OK_end-RsZzJ-J-ZRyUq8frKpBG3_cusF7FwKlQ1TXdIhnz04w6gN1FZNDlCFYxWXZswJcAwEZcfgM_AGNKGehADmBKbzDD357dAd17Obt03b0MXiw68tGcZ0Vr95mLzjQ_61NVq62x7xGp6SbdhqF3kScuEbRTtIm_zn_fzPBtzZ54LFxJBRpDVGG5-oyVNWpuyiCL1yJTmyzb6zKkAhu-0xlWykdN1GZpk4kw2VtwNugx6IiI5Zj8" alt="Dr. Sarah Chen" />
-                                </div>
-                            </div>
-                        </div>
-                    </header>
+                    
 
                     {/* Content Section */}
                     <div className="flex-1 overflow-hidden flex flex-col">

@@ -26,37 +26,7 @@ const SystemMaintenance = () => {
 
       <div className="relative flex h-full grow flex-col z-10">
         {/* Standardized Dashboard Header */}
-        <header className="h-24 bg-white/80 dark:bg-[#13082A]/80 backdrop-blur-2xl border-b border-slate-200 dark:border-white/5 px-10 flex items-center justify-between shrink-0 sticky top-0 z-50">
-          <div className="flex items-center gap-4 cursor-pointer" onClick={() => navigate(ROUTES.DASHBOARD)}>
-            <div className="bg-gradient-to-br from-[#6143f4] to-[#009CDE] size-11 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-[#6143f4]/20 transform hover:rotate-12 transition-transform">
-              <Activity size={24} strokeWidth={2.5} />
-            </div>
-            <div>
-              <h1 className="text-2xl font-black tracking-tighter text-[#13082A] dark:text-white uppercase leading-none italic">Arogya<span className="text-[#6143f4]">AI</span></h1>
-              <p className="text-[9px] font-black text-[#009CDE] uppercase tracking-widest mt-1 italic opacity-70">Predictive Health</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-4 px-6 py-2.5 bg-[#6143f4]/10 rounded-full border border-[#6143f4]/20 shadow-inner group">
-              <span className="relative flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#6143f4] opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-[#6143f4]"></span>
-              </span>
-              <span className="text-[10px] font-black text-[#6143f4] uppercase tracking-widest italic group-hover:tracking-[0.2em] transition-all">Node Synchronizing</span>
-            </div>
-            <div className="h-10 w-px bg-slate-200 dark:bg-white/10 mx-4 hidden md:block"></div>
-            <div className="hidden md:flex items-center gap-8 pl-4">
-              <div className="text-right">
-                <p className="text-[10px] font-black text-[#13082A] dark:text-white uppercase tracking-widest leading-none mb-1 italic">Elena Smith</p>
-                <p className="text-[9px] font-black text-[#009CDE] uppercase tracking-widest leading-none opacity-80 italic">Root Authority</p>
-              </div>
-              <div className="size-11 rounded-2xl bg-gradient-to-tr from-[#6143f4] to-[#009CDE] p-[2px] shadow-lg shadow-[#6143f4]/20 transform group-hover:scale-105 transition-transform">
-                <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtUF7rDszaKWnU4spXfT8-Qr3kMrRMSi601P0wbsVaRFaUw1wvLoQ11WFXLHECfRlS0AHBeeEWdgZCIMsDXI-RQhlQ2ADI8MYAwxDZtHGlIt1gMgcVWnKoH7MWh6C8LGzwzsmPEAIs30k82rc21e8g2HOmjfvnj45oImCcshimNh2J9Mb99JBkRjkXrDmF_IKfQw-BMQhlxmcLueluJHdA6Hvx4qsmEE1bcslk48rRb3AJmNmxNlhGsSwayHWKDkceETbHU3K0LObc" alt="User" className="size-full object-cover rounded-2xl border-2 border-white dark:border-white/10" />
-              </div>
-            </div>
-          </div>
-        </header>
+        
 
         {/* Main Content Area */}
         <main className="flex-1 flex flex-col items-center justify-center p-12">

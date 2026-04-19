@@ -54,8 +54,6 @@ import { useAuthStore } from '../store/authStore';
 import useHealthStore from '../store/healthStore';
 import api from '../lib/axios';
 import HeartRateCard from '../components/HeartRateCard';
-import UserProfileBadge from '../components/UserProfileBadge';
-import { CommandPaletteTrigger } from '../components/CommandPalette';
 import { refreshAfterGoogleFitSync } from '../lib/googleFitRefresh';
 import { safeArray, safeNumber, safeObject, safeText } from '../utils/safeData';
 import { useFetchLock } from '../hooks/useFetchLock';
@@ -279,15 +277,17 @@ const Dashboard = () => {
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
 
-        {/* Top Header Navbar - Matched Stitch */}
-        <header className="h-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-8 flex items-center justify-between sticky top-0 z-20">
-          {/* Global search trigger — left side */}
-          <div className="flex items-center flex-1">
-            <CommandPaletteTrigger onClick={openPalette} />
-          </div>
-
-          {/* Actions — right side */}
-          <div className="flex items-center ml-6">
+        {/* Dashboard Content Container */}
+        <motion.div
+          variants={containerVariants}
+          initial="initial"
+          animate="animate"
+          className="p-8 space-y-8 max-w-7xl mx-auto w-full"
+        >
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-2">
+            <div>
+              <h2 className="text-3xl font-black text-[#13082A] dark:text-white tracking-tight">Overview</h2>
+            </div>
             <button
               onClick={handleSync}
               disabled={isSyncing}
@@ -297,15 +297,6 @@ const Dashboard = () => {
               {isSyncing ? 'Syncing...' : 'Sync Data'}
             </button>
           </div>
-        </header>
-
-        {/* Dashboard Content Container */}
-        <motion.div
-          variants={containerVariants}
-          initial="initial"
-          animate="animate"
-          className="p-8 space-y-8 max-w-7xl mx-auto w-full"
-        >
           {/* Error Banner — Added Post-Audit */}
           <AnimatePresence>
             {error && (
@@ -632,13 +623,6 @@ const Dashboard = () => {
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #6143f422; border-radius: 20px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #6143f444; }
       `}} />
-
-      <div className="hidden lg:block fixed left-6 bottom-6 z-30">
-        <UserProfileBadge
-          variant="sidebar"
-          userOverride={profData ?? authUser}
-        />
-      </div>
     </div >
   );
 };

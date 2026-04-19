@@ -179,21 +179,7 @@ const DeviceSettings = () => {
 
   return (
     <div className="min-h-screen bg-[#f6f5f8] text-[#13082a] dark:bg-[#0B0819] dark:text-slate-100">
-      <header className="sticky top-0 z-20 border-b border-[#6143f4]/10 bg-white/80 px-8 py-4 backdrop-blur-xl dark:bg-[#0B0819]/80">
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4">
-          <button
-            onClick={() => navigate(ROUTES.DEVICES)}
-            className="inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 transition-colors hover:text-[#6143f4]"
-            type="button"
-          >
-            <ArrowLeft size={16} />
-            Back to Device Manager
-          </button>
-          <div className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
-            {isGoogleFit ? 'Google Fit settings' : 'No live device profile'}
-          </div>
-        </div>
-      </header>
+      
 
       <main className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10">
         {!isGoogleFit ? (

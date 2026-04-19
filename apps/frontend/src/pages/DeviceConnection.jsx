@@ -157,25 +157,7 @@ const DeviceConnection = () => {
   return (
     <div className="bg-[#f6f5f8] dark:bg-[#131022] font-display text-[#13082A] dark:text-slate-100 min-h-screen flex flex-col antialiased">
       {/* Navigation Header - Matched Stitch */}
-      <header className="flex items-center justify-between border-b border-[#6143f4]/10 bg-white/80 dark:bg-[#131022]/80 backdrop-blur-md px-10 py-4 sticky top-0 z-50">
-        <div className="flex items-center gap-4">
-          <div className="bg-[#6143f4] p-2 rounded-lg text-white shadow-lg shadow-[#6143f4]/20 flex items-center justify-center">
-            <BarChart3 size={20} />
-          </div>
-          <h2 className="text-[#13082A] dark:text-white text-xl font-bold tracking-tight">ArogyaAI</h2>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="text-right hidden sm:block">
-            <p className="text-xs font-bold text-[#6143f4] uppercase tracking-widest leading-none">Onboarding</p>
-            <p className="text-sm text-slate-500 mt-1">Step 4 of 4</p>
-          </div>
-          <div className="bg-[#6143f4]/10 rounded-full p-1 border border-[#6143f4]/20">
-            <div className="h-10 w-10 rounded-full bg-[#6143f4]/10 flex items-center justify-center overflow-hidden">
-              <User size={20} className="text-[#6143f4]" />
-            </div>
-          </div>
-        </div>
-      </header>
+      
 
       <main className="flex-1 flex items-center justify-center p-6 md:p-12">
         <motion.div

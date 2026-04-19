@@ -175,30 +175,7 @@ const LabResults = () => {
     <div className="bg-[#f6f5f8] dark:bg-[#131022] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased">
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="h-20 bg-white/80 dark:bg-[#131022]/80 backdrop-blur-md border-b border-[#6143f4]/10 flex items-center justify-between px-10 shrink-0 z-10">
-            <div className="flex-1 max-w-xl">
-              <div className="relative group">
-                <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" size={18} />
-                <input className="w-full pl-12 pr-6 py-3 bg-slate-100 dark:bg-white/5 border-none rounded-2xl text-sm font-medium focus:ring-2 focus:ring-[#6143f4]/20 transition-all placeholder:text-slate-400 outline-none" placeholder="Search lab parameters, dates or providers..." type="text" />
-              </div>
-            </div>
-            <div className="flex items-center gap-8">
-              <button className="size-11 flex items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/5 text-slate-500 hover:bg-[#6143f4]/10 hover:text-[#6143f4] transition-all relative active:scale-90 group" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
-                <Bell size={20} />
-                <span className="absolute top-3 right-3 size-2.5 bg-red-500 rounded-full border-2 border-white dark:border-[#131022] group-hover:scale-110 transition-transform"></span>
-              </button>
-              <div className="h-8 w-px bg-slate-200 dark:bg-slate-800 hidden md:block"></div>
-              <div className="flex items-center gap-4 cursor-pointer group" onClick={() => navigate(ROUTES.SETTINGS)}>
-                <div className="text-right hidden sm:block">
-                  <p className="text-sm font-black text-[#13082a] dark:text-white leading-none uppercase group-hover:text-[#6143f4] transition-colors">{displayName}</p>
-                  <p className="text-[9px] text-slate-500 mt-1.5 uppercase tracking-[0.2em] font-black opacity-70">Patient ID: {patientId}</p>
-                </div>
-                <div className="size-11 rounded-2xl bg-[#6143f4]/10 border-2 border-transparent group-hover:border-[#6143f4] overflow-hidden transition-all shadow-md group-hover:scale-110">
-                  <img className="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBSNEjoorIjStYduz4toUoH9taRezR9gUmeBlfZqgLvFpq-7Dpa-im_yfn3lhwmaedZOiCg-PEuJeDdpULcssnht9u6CnykpHhZffrOhUXsuZ9iTanq55ms_jcerh6Lq3TN4Or7exJuJ0BaCCElRYRK3NBThOT8RXKoJqVsW5ZC_1R8GCbXb1IaZTElgrP9NB2hNpAClQTc6gsxVwCZJx56bTPuLyvxxphaTbQKe2pAiZg6dxh0LvCzzUm-NNDqI7e0fgO5Z4StDAON" alt="User Profile" />
-                </div>
-              </div>
-            </div>
-          </header>
+          
 
           <div className="flex-1 overflow-y-auto p-10 custom-scrollbar bg-[#f6f5f8] dark:bg-[#131022]">
             <div className="max-w-7xl mx-auto space-y-12 pb-12">

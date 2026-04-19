@@ -53,37 +53,7 @@ const WhatsNew = () => {
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-full overflow-hidden relative z-10 bg-[#F6F6F6] dark:bg-[#0F0D19]">
         {/* Header */}
-        <header className="bg-white/80 dark:bg-[#13082A]/80 backdrop-blur-2xl border-b border-slate-200 dark:border-white/5 h-24 px-10 flex items-center justify-between shrink-0 sticky top-0 z-50">
-          <div className="flex-1 max-w-2xl relative">
-            <div className="relative group">
-              <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" size={18} />
-              <input 
-                className="w-full pl-16 pr-6 py-4 bg-slate-100/50 dark:bg-white/5 border-none rounded-2xl focus:outline-none focus:ring-4 focus:ring-[#6143f4]/10 transition-all text-[11px] font-bold text-[#13082A] dark:text-white uppercase tracking-[0.2em] italic placeholder:text-slate-400" 
-                placeholder="Search updates, protocols or features..." 
-                type="text"
-              />
-            </div>
-          </div>
-          <div className="flex items-center gap-8 pl-10">
-            <div className="flex items-center gap-3">
-              <button className="relative p-3.5 text-slate-500 hover:bg-[#6143f4]/10 hover:text-[#6143f4] dark:hover:bg-white/5 rounded-2xl transition-all group" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
-                <Bell size={20} strokeWidth={2.5} />
-                <span className="absolute top-3.5 right-3.5 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-white dark:ring-[#13082A] animate-pulse"></span>
-              </button>
-            </div>
-            <div className="h-10 w-px bg-slate-200 dark:bg-white/10"></div>
-            <div className="flex items-center gap-4 cursor-pointer group">
-               <div className="text-right hidden xl:block">
-                <p className="text-[10px] font-black text-[#13082A] dark:text-white uppercase tracking-widest leading-none mb-1 group-hover:text-[#6143f4] transition-colors italic">Elena Smith</p>
-                <p className="text-[9px] font-black text-[#009CDE] uppercase tracking-widest leading-none opacity-80 italic">Verified Node</p>
-              </div>
-              <div className="relative size-12 transform group-hover:scale-105 transition-all duration-300">
-                <div className="absolute inset-0 bg-gradient-to-tr from-[#6143f4] to-[#009CDE] rounded-2xl blur-md opacity-0 group-hover:opacity-40 transition-opacity"></div>
-                <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuA3Bdli7Qdd69ZkJQoWmQ0ix2YhA5GXiazo1huJuC-WOj_rqlZqTY62oootlelD1jPdsnS_G-5LAj9unkPs76nczKSVJxv4flOsfxSH8JqPZ3jndQeDtSpzKngHGu5qxWihbOzPO4xvk9zScxUsp7WUNC-SqRji1gdDnK6rRO-5IO7rQu2jHkW2yO16PwfzU80U9jvBGSSsnJV1ev6SBude2H6OGhNuyiJC4WC14KOdMlSDLOQVdazk5lFg2e71qTIQC3BhLeBbZQRp" alt="Admin" className="size-full object-cover rounded-2xl border-2 border-white dark:border-white/10 shadow-lg relative z-10" />
-              </div>
-            </div>
-          </div>
-        </header>
+        
 
         {/* Scrollable Area */}
         <section className="flex-1 overflow-y-auto p-12 custom-scrollbar">

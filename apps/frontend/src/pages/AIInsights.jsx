@@ -134,42 +134,7 @@ const AIInsights = () => {
     <div className="bg-[#EAEAEA] dark:bg-[#13082A] text-[#13082A] dark:text-slate-100 min-h-screen font-display antialiased leading-normal">
       <div className="flex h-screen overflow-hidden">
         <main className="flex-1 flex flex-col overflow-y-auto bg-mesh custom-scrollbar">
-          <header className="h-16 bg-white dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-8 shrink-0 sticky top-0 z-30 backdrop-blur-md">
-            <div className="max-w-md w-full">
-              <div className="relative group">
-                <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6043F4] transition-colors" size={18} />
-                <input
-                  className="w-full pl-10 pr-4 py-2 bg-slate-100 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-[#6043F4]/20 text-sm font-medium transition-all outline-none"
-                  placeholder="Search analytics or records..."
-                  type="text"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <button
-                className="size-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400 hover:bg-slate-200 transition-colors"
-                type="button"
-                onClick={() => navigate(ROUTES.NOTIFICATIONS)}
-              >
-                <Bell size={20} />
-              </button>
-              <div className="h-8 w-[1px] bg-slate-200 dark:bg-slate-800 mx-2" />
-              <div className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => navigate(ROUTES.SETTINGS_PROFILE)}>
-                <div className="text-right hidden sm:block">
-                  <p className="text-xs font-bold text-[#13082A] dark:text-white leading-none">{displayName}</p>
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">Live profile</p>
-                </div>
-                {avatarUrl ? (
-                  <img className="size-10 rounded-full border-2 border-[#6043F4]/20 p-0.5 object-cover" src={avatarUrl} alt={displayName} />
-                ) : (
-                  <div className="size-10 rounded-full border-2 border-[#6043F4]/20 p-0.5 flex items-center justify-center bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-white font-bold">
-                    {avatarInitials}
-                  </div>
-                )}
-              </div>
-            </div>
-          </header>
+          
 
           <div className="p-8 space-y-8 max-w-7xl mx-auto w-full">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">

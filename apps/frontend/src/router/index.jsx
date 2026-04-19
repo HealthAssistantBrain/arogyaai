@@ -46,12 +46,17 @@ const GoogleFitSettings = lazy(() => import('../pages/GoogleFitSettings'))
 const UploadMedicalReport = lazy(() => import('../pages/UploadReport'))
 const ReportProcessing = lazy(() => import('../pages/ReportProcessing'))
 const UploadSuccess = lazy(() => import('../pages/UploadSuccess'))
-const SettingsHub = lazy(() => import('../pages/SettingsHub'))
-const UserProfile = lazy(() => import('../pages/UserProfile'))
-const SecurityAudit = lazy(() => import('../pages/SecurityAudit'))
-const DataPrivacy = lazy(() => import('../pages/DataPrivacySettings'))
-const NotificationSettings = lazy(() => import('../pages/NotificationSettings'))
-const ChangePassword = lazy(() => import('../pages/ChangePassword'))
+const SettingsLayout = lazy(() => import('../pages/settings/SettingsLayout'))
+const SettingsProfile = lazy(() => import('../pages/settings/profile/index'))
+const SettingsSecurity = lazy(() => import('../pages/settings/security/index'))
+const SettingsDevices = lazy(() => import('../pages/settings/devices/index'))
+const SettingsData = lazy(() => import('../pages/settings/data/index'))
+const SettingsIntegrations = lazy(() => import('../pages/settings/integrations/index'))
+const SettingsNotifications = lazy(() => import('../pages/settings/notifications/index'))
+const SettingsAI = lazy(() => import('../pages/settings/ai/index'))
+const SettingsSystem = lazy(() => import('../pages/settings/system/index'))
+
+// Legacy settings pages removed — functionality in /settings/* sub-routes
 const DeleteAccount = lazy(() => import('../pages/DeleteAccount'))
 const LogoutConfirmation = lazy(() => import('../pages/LogoutConfirmation'))
 const NotificationCentre = lazy(() => import('../pages/NotificationCentre'))
@@ -138,14 +143,19 @@ export default function AppRouter() {
                 <Route path={ROUTES.UPLOAD} element={<UploadMedicalReport />} />
                 <Route path={ROUTES.REPORT_PROCESSING} element={<ReportProcessing />} />
                 <Route path={ROUTES.UPLOAD_SUCCESS} element={<UploadSuccess />} />
-                <Route path={ROUTES.SETTINGS} element={<SettingsHub />} />
-                <Route path={ROUTES.PROFILE} element={<UserProfile />} />
-                <Route path={ROUTES.SETTINGS_PROFILE} element={<UserProfile />} />
-                <Route path={ROUTES.SETTINGS_SECURITY} element={<SecurityAudit />} />
-                <Route path={ROUTES.SETTINGS_PRIVACY} element={<DataPrivacy />} />
-                <Route path={ROUTES.SETTINGS_NOTIFICATIONS} element={<NotificationSettings />} />
-                <Route path={ROUTES.SETTINGS_PASSWORD} element={<ChangePassword />} />
-                <Route path={ROUTES.SETTINGS_DELETE} element={<DeleteAccount />} />
+                <Route path={ROUTES.SETTINGS} element={<SettingsLayout />}>
+                  <Route index element={<Navigate to={ROUTES.SETTINGS_PROFILE} replace />} />
+                  <Route path="profile" element={<SettingsProfile />} />
+                  <Route path="security" element={<SettingsSecurity />} />
+                  <Route path="devices" element={<SettingsDevices />} />
+                  <Route path="data" element={<SettingsData />} />
+                  <Route path="integrations" element={<SettingsIntegrations />} />
+                  <Route path="notifications" element={<SettingsNotifications />} />
+                  <Route path="ai" element={<SettingsAI />} />
+                  <Route path="system" element={<SettingsSystem />} />
+                </Route>
+
+                <Route path={ROUTES.PROFILE} element={<Navigate to={ROUTES.SETTINGS_PROFILE} replace />} />
                 <Route path={ROUTES.LOGOUT} element={<LogoutConfirmation />} />
                 <Route path={ROUTES.NOTIFICATIONS} element={<NotificationCentre />} />
                 <Route path={ROUTES.NOTIFICATIONS_HISTORY} element={<NotificationHistory />} />
@@ -157,8 +167,7 @@ export default function AppRouter() {
                 <Route path={ROUTES.HELP_SEARCH} element={<HelpCenterSearch />} />
                 <Route path={ROUTES.HELP_ARTICLE} element={<HelpCenterArticle />} />
                 <Route path={ROUTES.STATUS} element={<SystemStatus />} />
-                {/* Security Audit is also accessible via /settings/security-audit */}
-                <Route path={ROUTES.SECURITY_AUDIT} element={<SecurityAudit />} />
+                {/* /settings/security-audit → handled by nested settings route */}
               </Route>
             </Route>
           </Route>

@@ -111,37 +111,7 @@ const PrivacyPolicy = () => {
     return (
         <div className="bg-[#f6f5f8] dark:bg-[#0B0819] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-col antialiased transition-colors duration-500 overflow-x-hidden pt-24 text-[14px]">
             {/* Standardized Header Navigation */}
-            <header className="h-24 bg-white/80 dark:bg-[#0B0819]/80 backdrop-blur-3xl border-b border-[#6143f4]/10 flex items-center justify-between px-10 shrink-0 fixed top-0 left-0 right-0 z-50">
-                <div className="flex items-center gap-4 cursor-pointer group" onClick={() => navigate(ROUTES.DASHBOARD)}>
-                    <div className="size-11 bg-[#6143f4] rounded-xl flex items-center justify-center text-white shadow-lg shadow-[#6143f4]/20 transition-transform group-hover:scale-110">
-                        <Waves size={24} strokeWidth={2.5} />
-                    </div>
-                    <div>
-                        <h1 className="text-xl font-black tracking-tight leading-none uppercase">ArogyaAI</h1>
-                        <p className="text-[10px] text-[#6143f4] font-bold uppercase tracking-[0.2em] mt-1 italic">Legal Framework</p>
-                    </div>
-                </div>
-
-                <div className="flex-1 max-w-xl mx-8 hidden lg:block">
-                    <div className="relative group/search bg-slate-100 dark:bg-white/5 rounded-2xl border border-transparent focus-within:border-[#6143f4]/20 transition-all">
-                        <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                        <input className="w-full pl-14 pr-6 py-3.5 bg-transparent text-[13px] text-[#13082a] dark:text-white placeholder:text-slate-400 font-bold uppercase tracking-tight" placeholder="Search legal documentation..." type="text" />
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-5">
-                    <button className="size-11 flex items-center justify-center rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 hover:text-[#6143f4] transition-all relative active:scale-95" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
-                        <Bell size={20} />
-                        <span className="absolute top-3 right-3 size-2 bg-[#009cde] rounded-full ring-2 ring-white dark:ring-[#0B0819]"></span>
-                    </button>
-                    <div className="h-10 w-px bg-slate-200 dark:bg-white/10 hidden sm:block"></div>
-                    <button onClick={() => navigate(ROUTES.SETTINGS_PROFILE)} className="flex items-center gap-3 pl-2 group">
-                        <div className="size-11 rounded-xl border-2 border-[#6143f4]/20 p-0.5 bg-white overflow-hidden shadow-lg transition-transform group-hover:scale-105">
-                            <img className="size-full rounded-[9px] object-cover" alt="User profile" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCWYSlNlSNAxqMG6yxHyhoy2lynvDCUNglOcZsHjrngmLnO_MO9lgvp0UuhucFt2aDz9IsukoenIzgBMlFTeSF_XMyppjKn2RWQR0A4wUk6rfUyBe5wKlkG8k7FAm8n-7_qgE09kp903s6HpuzxFiqGnB7ZglE3DCzhedgpIEtFSsU7w0VG6t1Bkre1zW9N64xH707TkswUzFt7spKKM7KRfsTU275Y5_TQSLISnxRbbhqT9ZMEkL4KqOb0YOGB1KqugoPTkeWf_nSm"/>
-                        </div>
-                    </button>
-                </div>
-            </header>
+            
 
             <main className="flex-1 w-full max-w-7xl mx-auto px-10 py-20 lg:py-24 grid grid-cols-1 lg:grid-cols-12 gap-16 relative">
                 {/* Background Decoration */}

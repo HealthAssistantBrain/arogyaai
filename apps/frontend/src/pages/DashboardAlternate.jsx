@@ -109,45 +109,7 @@ const DashboardAlternate = () => {
         <main className="flex-1 flex flex-col overflow-hidden relative">
           
           {/* Top Header Navbar - Matched Stitch */}
-          <header className="h-20 bg-white/50 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-8 shrink-0 backdrop-blur-md z-30">
-            <div className="w-96">
-              <div className="relative group">
-                <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6043F4] transition-colors" size={18} />
-                <input 
-                  className="w-full bg-slate-100/50 dark:bg-slate-800 border-none rounded-xl pl-10 pr-4 py-2 focus:ring-2 focus:ring-[#6043F4]/20 text-sm font-medium transition-all outline-none" 
-                  placeholder="Search biometrics, patients, or alerts..." 
-                  type="text"
-                />
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-2">
-                <button className="size-10 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors relative" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
-                  <Bell size={20} className="text-slate-600 dark:text-slate-400" />
-                  <span className="absolute top-2.5 right-2.5 size-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900 shadow-sm"></span>
-                </button>
-                <button className="size-10 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                  <MessageSquare size={20} className="text-slate-600 dark:text-slate-400" />
-                </button>
-              </div>
-              <div className="h-8 w-[1px] bg-slate-200 dark:bg-slate-800"></div>
-              
-              <div className="flex items-center gap-3">
-                <div className="text-right hidden sm:block">
-                  <p className="text-sm font-bold leading-none">Dr. Elena Kostic</p>
-                  <p className="text-[10px] text-slate-500 font-medium mt-1 uppercase tracking-widest">Head of Cardiology</p>
-                </div>
-                <div className="size-10 rounded-full bg-[#6043F4]/20 overflow-hidden border-2 border-white dark:border-slate-700 shadow-sm">
-                  <img 
-                    className="w-full h-full object-cover" 
-                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuAFvQx4D6Pg2Vup_aFO8U62tnxOuNdrKQQmb5f1tT4GYlWHxaJx67XDwQZRYXKeotUnWQmwOAQXw16X9A8s9NqHgUtnNM8Y30BpyDuqj_mTUyU_pc_boJSOO9iDoAiEzsChzgSc85o18ysKdCylmw1q75ulSCmMB61VbjMtSFgpSh4qVLfEnjTHaXLyl321Jut1N44NOVHrMKh8IFUXtV-chqs_gFsvzl0F9BVcHsi_qnmkmoTsYAYOEcPO0AUaG_jlBAK51UPnNWGW" 
-                    alt="Elena Kostic Profile" 
-                  />
-                </div>
-              </div>
-            </div>
-          </header>
+          
 
           {/* Main Context Area - Matched Stitch Layout */}
           <div className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar relative z-10">

@@ -89,6 +89,20 @@ const Onboarding = () => {
       toast.error('Please fill all required fields');
       return false;
     }
+
+    const h = Number(data.height);
+    const w = Number(data.weight);
+
+    if (isNaN(h) || h < 50 || h > 300) {
+      toast.error('Height must be between 50 and 300 cm');
+      return false;
+    }
+
+    if (isNaN(w) || w < 20 || w > 300) {
+      toast.error('Weight must be between 20 and 300 kg');
+      return false;
+    }
+
     return true;
   };
 
@@ -259,13 +273,20 @@ const Onboarding = () => {
                     <div className="relative group">
                       <Ruler size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" />
                       <input
-                        {...register('height')}
-                        className="w-full pl-12 pr-16 py-4 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-[#6143f4] focus:border-transparent outline-none transition-all dark:text-white"
+                        {...register('height', {
+                          required: 'Height is required',
+                          min: { value: 50, message: 'Must be between 50 and 300 cm' },
+                          max: { value: 300, message: 'Must be between 50 and 300 cm' }
+                        })}
+                        className={`w-full pl-12 pr-16 py-4 rounded-lg bg-slate-50 dark:bg-slate-900 border ${errors.height ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-[#6143f4] focus:border-transparent'} outline-none transition-all dark:text-white`}
                         placeholder="180"
                         type="number"
+                        min="50"
+                        max="300"
                       />
                       <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">cm</span>
                     </div>
+                    {errors.height && <p className="text-red-500 text-xs font-medium">{errors.height.message}</p>}
                   </div>
                 </div>
 
@@ -279,13 +300,20 @@ const Onboarding = () => {
                     <div className="relative group">
                       <Weight size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" />
                       <input
-                        {...register('weight')}
-                        className="w-full pl-12 pr-16 py-4 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-[#6143f4] focus:border-transparent outline-none transition-all dark:text-white"
+                        {...register('weight', {
+                          required: 'Weight is required',
+                          min: { value: 20, message: 'Must be between 20 and 300 kg' },
+                          max: { value: 300, message: 'Must be between 20 and 300 kg' }
+                        })}
+                        className={`w-full pl-12 pr-16 py-4 rounded-lg bg-slate-50 dark:bg-slate-900 border ${errors.weight ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-[#6143f4] focus:border-transparent'} outline-none transition-all dark:text-white`}
                         placeholder="75"
                         type="number"
+                        min="20"
+                        max="300"
                       />
                       <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">kg</span>
                     </div>
+                    {errors.weight && <p className="text-red-500 text-xs font-medium">{errors.weight.message}</p>}
                   </div>
 
                   {/* Blood Group */}

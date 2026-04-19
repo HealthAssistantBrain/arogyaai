@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import AppRouter from './router'
 import { Toaster } from 'react-hot-toast'
 import GlobalStateValidator from './components/guards/GlobalStateValidator'
-import LegacyProfileBinder from './components/LegacyProfileBinder'
 import AppErrorBoundary from './components/guards/AppErrorBoundary'
 import BrowserNotificationBootstrap from './components/BrowserNotificationBootstrap'
 import CommandPalette from './components/CommandPalette'
@@ -67,7 +66,6 @@ export default function App() {
   return (
     <AppErrorBoundary>
       <GlobalStateValidator />
-      <LegacyProfileBinder />
       <BrowserNotificationBootstrap />
       <CommandPalette />
       <AppRouter />

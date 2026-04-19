@@ -4,10 +4,9 @@
 // Usage: <AppSidebar activePath={ROUTES.DASHBOARD} />
 
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Waves, MoreVertical }       from 'lucide-react'
-import { ROUTES }                    from '../router/routes'
-import sidebarConfig                 from '../config/sidebarConfig'
-import UserProfileBadge              from './UserProfileBadge'
+import { Waves, MoreVertical } from 'lucide-react'
+import { ROUTES } from '../router/routes'
+import sidebarConfig from '../config/sidebarConfig'
 
 export default function AppSidebar({ activePath }) {
   const navigate = useNavigate()
@@ -46,11 +45,10 @@ export default function AppSidebar({ activePath }) {
                 <button
                   key={link.label}
                   onClick={() => navigate(link.path)}
-                  className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-[1.25rem] transition-all group ${
-                    isActive
+                  className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-[1.25rem] transition-all group ${isActive
                       ? 'bg-[#6143f4] text-white shadow-2xl shadow-[#6143f4]/30 font-black'
                       : 'text-slate-500 dark:text-slate-400 hover:bg-[#6143f4]/5 hover:text-[#6143f4] font-bold'
-                  }`}
+                    }`}
                 >
                   <link.icon
                     size={18}
@@ -66,15 +64,6 @@ export default function AppSidebar({ activePath }) {
         ))}
       </nav>
 
-      {/* Profile Bottom Card — FIX: clicking navigates to ROUTES.SETTINGS_PROFILE */}
-      <div className="p-6 border-t border-slate-100 dark:border-white/5">
-        <div className="flex items-center gap-2">
-          <div data-app-sidebar-profile>
-            <UserProfileBadge variant="sidebar" />
-          </div>
-          <MoreVertical size={14} className="text-slate-400" />
-        </div>
-      </div>
     </aside>
   )
 }

@@ -58,34 +58,7 @@ const DataConsent = () => {
                 <div className="absolute top-0 right-0 w-[40rem] h-[40rem] bg-[#6143f4]/5 blur-[120px] rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none opacity-50"></div>
 
                 {/* Top Navigation */}
-                <header className="bg-white/80 dark:bg-[#0B0819]/80 backdrop-blur-3xl border-b border-[#6143f4]/10 h-24 px-12 flex items-center justify-between shrink-0 sticky top-0 z-50">
-                    <div className="flex-1 max-w-2xl">
-                        <div className="relative group/search bg-slate-100 dark:bg-white/5 rounded-2xl border border-transparent focus-within:border-[#6143f4]/20 transition-all">
-                            <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                            <input 
-                                className="w-full pl-14 pr-6 py-4 bg-transparent border-none outline-none text-[12px] font-bold text-[#13082a] dark:text-white placeholder:text-slate-400 uppercase tracking-tight" 
-                                placeholder="Search insights, labs, or records..." 
-                                type="text"
-                            />
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-10 pl-10">
-                        <button onClick={() => navigate(ROUTES.NOTIFICATIONS)} className="relative p-3 text-slate-400 hover:text-[#6143f4] hover:bg-white dark:hover:bg-white/5 rounded-2xl transition-all group active:scale-95 shadow-sm">
-                            <Bell size={22} strokeWidth={2.5} />
-                            <span className="absolute top-3 right-3 size-2.5 bg-red-500 rounded-full ring-2 ring-white dark:ring-[#0B0819] animate-pulse shadow-[0_0_10px_#ef4444]"></span>
-                        </button>
-                        <div className="h-10 w-px bg-slate-200 dark:bg-white/10 hidden sm:block"></div>
-                        <div className="flex items-center gap-5 cursor-pointer group" onClick={() => navigate(ROUTES.SETTINGS_PROFILE)}>
-                            <div className="text-right hidden md:block">
-                                <p className="text-[11px] font-black text-[#13082A] dark:text-white uppercase tracking-widest leading-none mb-1 group-hover:text-[#6143f4] transition-colors italic">Dr. Sarah Chen</p>
-                                <p className="text-[10px] font-black text-[#009CDE] uppercase tracking-widest leading-none opacity-80 italic">Premium Member</p>
-                            </div>
-                            <div className="size-12 rounded-2xl border-2 border-[#6143f4]/20 p-0.5 bg-white overflow-hidden shadow-xl transition-transform group-hover:scale-110">
-                                <img src="https://lh3.googleusercontent.com/yeyfV6p69X2WpY_XN1v8q_8oO9t9T7hT8vP0V9T8vP0V9T8vP0V9T8vP0V9T8vP0V9T8vP0V9T8vP0V9T8vP0V9T8vP0V9T8vP0V9T8vP0V9T8vP0V9T8vP0V9T8V=s96-c" alt="Avatar" className="size-full object-cover rounded-[calc(1rem-2px)]" />
-                            </div>
-                        </div>
-                    </div>
-                </header>
+                
 
                 {/* Scrollable Content */}
                 <div className="flex-1 overflow-y-auto px-12 py-16 custom-scrollbar relative z-10 shrink-0">

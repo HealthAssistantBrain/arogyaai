@@ -12,7 +12,6 @@ import {
 import { ROUTES } from '../router/routes';
 import { useAuthStore } from '../store/authStore';
 import useSleepStore from '../store/sleepStore';
-import UserProfileBadge from '../components/UserProfileBadge';
 import SleepStackedChart from '../components/charts/SleepStackedChart';
 import { safeArray } from '../utils/safeData';
 
@@ -173,51 +172,7 @@ const SleepAnalysisLive = () => {
     <div className="bg-[#f6f5f8] dark:bg-[#0B0819] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased">
       <div className="flex flex-1 overflow-hidden">
         <main className="flex-1 flex flex-col h-full relative overflow-y-auto custom-scrollbar bg-[#f6f5f8] dark:bg-[#0B0819]">
-          <header className="h-20 bg-white/80 dark:bg-[#0B0819]/80 backdrop-blur-md border-b border-slate-200 dark:border-white/5 flex items-center justify-between px-10 sticky top-0 z-20">
-            <div className="flex items-center">
-              <button
-                type="button"
-                onClick={handleRefresh}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/10 transition-colors tracking-widest outline-none"
-              >
-                <Calendar size={14} className="text-slate-400" />
-                {formatDateLabel(summary)}
-                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg" className="ml-2 opacity-50">
-                  <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-            </div>
-            <div className="flex items-center gap-6">
-              <button type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)} className="text-slate-400 hover:text-[#6143f4] transition-colors" aria-label="Open notifications">
-                <Bell size={18} />
-              </button>
-              <button type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS_HISTORY)} className="text-slate-400 hover:text-[#6143f4] transition-colors" aria-label="Open notification history">
-                <History size={18} />
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate(ROUTES.EMERGENCY_ALERT)}
-                className="px-5 py-2 border border-rose-500 text-rose-500 rounded-full text-[11px] font-bold tracking-wide hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
-              >
-                Emergency
-              </button>
-              <button
-                type="button"
-                onClick={handleRefresh}
-                className="px-5 py-2 bg-[#6143f4] text-white rounded-full text-[11px] font-bold tracking-wide hover:bg-[#4a34c1] shadow-md shadow-[#6143f4]/20 transition-all flex items-center gap-2"
-              >
-                <RefreshCw size={14} />
-                New Analysis
-              </button>
-              {loading ? (
-                <div className="hidden md:flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-[#6143f4] bg-[#6143f4]/10 px-3 py-2 rounded-full">
-                  <span className="size-2 rounded-full bg-[#6143f4] animate-pulse" />
-                  Syncing live data
-                </div>
-              ) : null}
-              <UserProfileBadge variant="standard" className="shrink-0" />
-            </div>
-          </header>
+
 
           <div className="p-10 max-w-[1400px] mx-auto w-full">
             {error ? (
@@ -444,11 +399,10 @@ const SleepAnalysisLive = () => {
                         key={option.value}
                         type="button"
                         onClick={() => handleRangeChange(option.value)}
-                        className={`px-5 py-2 text-[10px] font-bold rounded shadow-sm uppercase tracking-widest transition-colors ${
-                          activeRange === option.value
+                        className={`px-5 py-2 text-[10px] font-bold rounded shadow-sm uppercase tracking-widest transition-colors ${activeRange === option.value
                             ? 'text-[#6143f4] bg-white dark:bg-[#131022] border border-slate-200 dark:border-white/5'
                             : 'text-slate-500 hover:text-slate-700'
-                        }`}
+                          }`}
                       >
                         {option.label}
                       </button>

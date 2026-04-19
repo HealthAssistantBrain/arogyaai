@@ -228,47 +228,7 @@ const GoogleFitSettings = () => {
   return (
     <div className="min-h-screen bg-[#f6f5f8] text-[#13082a] dark:bg-[#0B0819] dark:text-slate-100">
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-6 py-8 md:px-10">
-        <header className="rounded-[2rem] border border-slate-200/70 bg-white px-6 py-6 shadow-sm dark:border-white/10 dark:bg-white/[0.03]">
-          <button
-            onClick={() => navigate(ROUTES.DEVICES)}
-            className="mb-5 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 transition-colors hover:text-[#6143f4]"
-          >
-            <ArrowLeft size={16} />
-            Back To Device Manager
-          </button>
-
-          <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
-            <div>
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400">
-                <CheckCircle2 size={14} />
-                Google Fit Estimated Steps
-              </div>
-              <h1 className="text-[30px] font-black leading-tight tracking-tight text-[#13082a] dark:text-white">
-                Google Fit steps inside ArogyaAI Device Manager
-              </h1>
-              <p className="mt-3 max-w-3xl text-[14px] leading-relaxed text-slate-500 dark:text-slate-400">
-                This page uses the Google Fit estimated steps datasource with timezone-aware daily buckets so the
-                numbers stay as close as possible to the Google Fit app for your selected local timezone.
-              </p>
-            </div>
-
-            <div className="rounded-[1.75rem] border border-slate-200/70 bg-slate-50/80 p-5 dark:border-white/10 dark:bg-[#131022]">
-              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Connection</p>
-              <p className="mt-3 text-[22px] font-black tracking-tight text-[#13082a] dark:text-white">
-                {data?.connected ? 'Connected' : 'Not connected'}
-              </p>
-              <p className="mt-2 text-[13px] text-slate-500 dark:text-slate-400">
-                {data?.google_email || 'Connect your Google account to fetch steps.'}
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2 text-[12px] text-slate-500 dark:text-slate-400">
-                <span className="rounded-full bg-white px-3 py-1 dark:bg-white/5">Timezone: {data?.timezone || timezone}</span>
-                <span className="rounded-full bg-white px-3 py-1 dark:bg-white/5">
-                  Last sync: {data?.last_synced_at ? formatDate(data.last_synced_at, data?.timezone || timezone) : 'Never'}
-                </span>
-              </div>
-            </div>
-          </div>
-        </header>
+        
 
         {(notice || error) && (
           <div

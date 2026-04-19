@@ -111,29 +111,7 @@ const HelpCenterSearchResults = () => {
                 {/* Main Content Area */}
                 <main className="flex-1 flex flex-col h-full relative overflow-y-auto no-scrollbar bg-[#f6f5f8] dark:bg-[#0B0819]">
                     {/* Top Navigation Bar */}
-                    <header className="h-24 bg-white/80 dark:bg-[#0B0819]/80 backdrop-blur-3xl border-b border-[#6143f4]/10 flex items-center justify-between px-10 shrink-0 sticky top-0 z-30">
-                        <div className="flex-1 max-w-2xl">
-                            <div className="relative group/search">
-                                <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within/search:text-[#6143f4] transition-colors" size={18} />
-                                <input className="w-full pl-14 pr-6 py-4 bg-slate-100 dark:bg-white/5 border border-transparent rounded-[1.25rem] focus:ring-4 focus:ring-[#6143f4]/10 focus:border-[#6143f4]/30 transition-all text-[13px] text-[#13082a] dark:text-white placeholder:text-slate-400 font-bold uppercase tracking-tight" placeholder="Search documentation, guides, and tutorials..." type="text"/>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-5 ml-8">
-                            <button className="size-12 flex items-center justify-center rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 hover:bg-[#6143f4]/10 hover:text-[#6143f4] transition-all relative active:scale-95 shadow-sm" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
-                                <Bell size={20} />
-                                <span className="absolute top-3.5 right-3.5 size-2.5 bg-[#009cde] rounded-full ring-2 ring-white dark:ring-[#0B0819] animate-pulse"></span>
-                            </button>
-                            <div className="flex items-center gap-4 ml-2 pl-4 border-l border-slate-200 dark:border-white/10">
-                                <div className="text-right hidden sm:block">
-                                    <p className="text-xs font-black text-[#13082a] dark:text-white uppercase leading-none">Dr. James Wilson</p>
-                                    <p className="text-[9px] text-slate-400 uppercase tracking-widest font-black leading-none mt-1">Platform Admin</p>
-                                </div>
-                                <div className="size-12 rounded-2xl border-2 border-[#6143f4]/20 p-1 bg-white overflow-hidden shadow-xl shadow-[#6143f4]/10 transition-all cursor-pointer hover:scale-105 active:scale-95" onClick={() => navigate(ROUTES.SETTINGS_PROFILE)}>
-                                    <img className="size-full rounded-xl object-cover" alt="Dr. James Wilson" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBDNgv-r8OdTi18rWQxEhbBRKIXb4WfZZZVYtYD3eobWvB2VLrmuPeJANJ1_JHvYWmD4oLQZN-uxOOk-dEqsMTejBOlfgMZdYcv7X1sEDh1VLHWIGweM2-UBx00wqJA2BhngxNBebQ_bymxulsSWvSZRjfhQH3UpDpg3RYnoh700MnByZJjW3uHw6yiicNZC5HVcigEhiOibS2-C4rGKSnKBUSEZKJr3Vt9gJrcPE5vG53PlvAERpOAFHTwhUdAqAKlrQ_rKKQ_ILUA"/>
-                                </div>
-                            </div>
-                        </div>
-                    </header>
+                    
 
                     {/* Scrollable Content */}
                     <div className="flex-1 custom-scrollbar overflow-y-auto no-scrollbar p-10 lg:p-16">

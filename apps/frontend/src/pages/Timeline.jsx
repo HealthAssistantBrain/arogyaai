@@ -200,38 +200,7 @@ const Timeline = () => {
 
             {/* Main Content Area */}
             <main className="flex-1 flex flex-col min-w-0 bg-[#f6f5f8] dark:bg-[#0f0c1d] overflow-hidden">
-                <header className="h-20 bg-white/80 dark:bg-[#131022]/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-8 z-20 shrink-0">
-                    <div className="flex items-center gap-8 flex-1">
-                        <h2 className="text-xl font-bold flex items-center gap-2 leading-none tracking-tight">
-                            <History size={24} className="text-[#6143f4]" strokeWidth={2.5} />
-                            Health Timeline
-                        </h2>
-                        <div className="max-w-md w-full relative group hidden md:block">
-                            <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" size={18} />
-                            <input
-                                className="w-full bg-slate-100 dark:bg-slate-800/50 border-none rounded-xl pl-11 pr-4 py-2 text-sm font-semibold focus:ring-2 focus:ring-[#6143f4]/20 transition-all outline-none"
-                                placeholder="Search events, diseases, or lab notes..."
-                                type="text"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                            />
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <button className="size-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400 hover:bg-slate-200 transition-colors relative active:scale-95" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
-                            <Bell size={20} />
-                            <span className="absolute top-2.5 right-2.5 size-2 bg-red-500 rounded-full border-2 border-white dark:border-[#131022]"></span>
-                        </button>
-                        <div className="h-8 w-px bg-slate-200 dark:bg-slate-800"></div>
-                        <div className="flex items-center gap-3 cursor-pointer group" onClick={() => navigate(ROUTES.SETTINGS)}>
-                            <div className="text-right hidden sm:block">
-                                <p className="text-sm font-bold leading-none group-hover:text-[#6143f4] transition-colors">Alex Rivera</p>
-                                <p className="text-[10px] text-slate-500 font-semibold mt-1">Patient ID: 8824-00</p>
-                            </div>
-                            <img alt="Profile" className="size-10 rounded-full object-cover border-2 border-[#6143f4]/20 shadow-lg group-hover:scale-110 transition-transform duration-300" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC8dibqMqPtCHag1WSI0OHQexIlA9Yqthi-MKnBGwAmN14ST4JCyjQA6hgAhBxjG7eyPx_sZLMaZS_ZeBUGsJBOd9KRRTuQI9epgTea_BM5U-hm0ZI8GwN0u5cUk1oEA3VwoFPG-CQ-hTivozfc0QTCxTE7gQEateeH9a0ojEzU4ZPMD2VJuIEQWV1IZz0r5jEnWNc3qOh3CKnSfwIQdhcx3EB6aF_ZOpZSOZLUzCWWVtLcGgvfI5tWCAn0EKFbdkQP__E3otIjfutW" />
-                        </div>
-                    </div>
-                </header>
+                
 
                 <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
                     <div className="max-w-5xl mx-auto space-y-8">

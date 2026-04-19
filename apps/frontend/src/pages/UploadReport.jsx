@@ -47,25 +47,7 @@ const UploadReport = () => {
         <div className="bg-[#f6f5f8] dark:bg-[#0B0819] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased">
             <div className="flex flex-1 overflow-hidden">
                 <main className="flex-1 flex flex-col h-full relative overflow-y-auto custom-scrollbar bg-[#f6f5f8] dark:bg-[#0B0819]">
-                    <header className="h-24 bg-white/70 dark:bg-[#0B0819]/70 backdrop-blur-3xl border-b border-[#6143f4]/10 flex items-center justify-between px-10 shrink-0 sticky top-0 z-20">
-                        <div className="flex items-center gap-8 flex-1 max-w-2xl">
-                            <button onClick={() => navigate(ROUTES.MEDICAL_REPORTS)} className="size-12 flex items-center justify-center rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 hover:bg-[#6143f4]/10 hover:text-[#6143f4] transition-all shadow-sm">
-                                <ArrowLeft size={20} strokeWidth={3} />
-                            </button>
-                            <div className="relative group flex-1">
-                                <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-                                <input className="w-full h-14 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl pl-12 pr-6 text-sm font-medium outline-none dark:text-white shadow-sm" placeholder="Search reports, insights or doctor notes..." type="text"/>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-6">
-                            <button className="size-12 flex items-center justify-center rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 shadow-sm">
-                                <Bell size={22} />
-                            </button>
-                            <button className="size-12 flex items-center justify-center rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 shadow-sm">
-                                <HelpCircle size={22} />
-                            </button>
-                        </div>
-                    </header>
+                    
 
                     <div className="p-10 space-y-12 max-w-[1100px] mx-auto w-full relative z-10 pb-20">
                         <div className="flex flex-col gap-4">

@@ -69,28 +69,7 @@ const TermsOfService = () => {
   return (
     <div className="bg-[#f6f5f8] dark:bg-[#0B0819] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-col antialiased transition-colors duration-500 overflow-x-hidden">
       {/* Premium Top Navigation Bar */}
-      <header className="w-full border-b border-[#6143f4]/10 bg-white/80 dark:bg-[#131022]/80 backdrop-blur-2xl sticky top-0 z-50 px-6">
-        <div className="max-w-7xl mx-auto h-24 flex items-center justify-between">
-          <div className="flex items-center gap-4 cursor-pointer group" onClick={() => navigate(ROUTES.DASHBOARD)}>
-            <div className="size-11 bg-[#6143f4] rounded-xl flex items-center justify-center text-white shadow-xl shadow-[#6143f4]/20 transition-transform group-hover:scale-110">
-              <Waves size={24} strokeWidth={2.5} />
-            </div>
-            <div>
-                <h2 className="text-[#13082A] dark:text-white text-xl font-black tracking-tighter uppercase leading-none">ArogyaAI</h2>
-                <p className="text-[10px] text-[#6143f4] font-bold uppercase tracking-[0.2em] mt-1 italic">Legal Council</p>
-            </div>
-          </div>
-          <nav className="hidden lg:flex items-center gap-12">
-            {['Platform', 'Solutions', 'Security', 'Company'].map((item) => (
-              <button key={item} className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-500 hover:text-[#6143f4] transition-colors italic">{item}</button>
-            ))}
-          </nav>
-          <div className="flex items-center gap-5">
-            <button onClick={() => navigate(ROUTES.LOGIN)} className="text-[11px] font-black uppercase tracking-widest px-8 py-4 rounded-2xl border border-[#6143f4]/20 hover:bg-[#6143f4]/5 transition-all text-[#6143f4] italic">Log In</button>
-            <button onClick={() => navigate(ROUTES.SIGNUP)} className="text-[11px] font-black uppercase tracking-widest px-8 py-4 rounded-2xl bg-[#6143f4] text-white shadow-2xl shadow-[#6143f4]/30 hover:scale-105 active:scale-95 transition-all italic">Sign Up</button>
-          </div>
-        </div>
-      </header>
+      
 
       <main className="flex-1 flex flex-col items-center py-20 px-6 relative">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[600px] bg-gradient-to-b from-white to-transparent dark:from-white/5 opacity-40 pointer-events-none"></div>

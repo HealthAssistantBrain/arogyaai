@@ -248,51 +248,7 @@ const AQIMonitor = () => {
       <main className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto custom-scrollbar">
         
         {/* Header */}
-        <header className="h-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-10 flex items-center justify-between sticky top-0 z-30">
-          <div className="flex items-center gap-4">
-            <button 
-              onClick={() => navigate(-1)}
-              className="size-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 hover:bg-slate-200 transition-all active:scale-95"
-            >
-              <ArrowLeft size={18} />
-            </button>
-            <h2 className="text-xl font-black tracking-tight italic uppercase">Air Quality Risk Monitor</h2>
-          </div>
-          <div className="flex items-center gap-4">
-             <button
-                type="button"
-                onClick={handleLocationClick}
-                disabled={isLoading}
-                className="flex items-center gap-2 bg-[#6143f4]/10 px-4 py-2 rounded-xl border border-[#6143f4]/20 transition-all hover:bg-[#6143f4]/15 disabled:opacity-60 disabled:cursor-not-allowed"
-             >
-                <Navigation size={14} className="text-[#6143f4]" />
-                <span className="text-xs font-black text-[#6143f4] uppercase tracking-widest">{isLoading ? 'Fetching...' : activeLocation}</span>
-             </button>
-              <button
-                type="button"
-                onClick={() => {
-                  window.open(`https://www.openstreetmap.org/?mlat=${coords.lat}&mlon=${coords.lng}#map=11/${coords.lat}/${coords.lng}`, '_blank', 'noopener,noreferrer');
-                }}
-               className="flex items-center gap-1 px-3 py-2 text-xs font-black uppercase tracking-widest rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/20"
-             >
-               <MapPin size={14} /> Open In OSM
-             </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setCoords({ lat: DELHI_LAT, lng: DELHI_LNG });
-                  fetchAQIData(DELHI_LAT, DELHI_LNG);
-                }}
-                className="size-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 hover:bg-slate-200 transition-all active:scale-90"
-              >
-               <Navigation size={18} />
-             </button>
-             <button className="size-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 relative active:scale-90 transition-all" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
-                <Bell size={20} />
-                <span className="absolute top-2.5 right-2.5 size-2 bg-red-500 rounded-full ring-2 ring-white dark:ring-slate-900"></span>
-             </button>
-          </div>
-        </header>
+        
 
         <div className="p-10 space-y-8 max-w-7xl mx-auto w-full">
           

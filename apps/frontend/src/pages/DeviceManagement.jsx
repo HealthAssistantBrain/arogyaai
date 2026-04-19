@@ -364,57 +364,7 @@ const DeviceManagement = () => {
 
   return (
     <>
-      <header className="sticky top-0 z-20 flex h-[64px] items-center justify-between border-b border-slate-100 bg-white/90 px-8 backdrop-blur-xl dark:border-white/5 dark:bg-[#0B0819]/70">
-        <div className="max-w-md flex-1">
-          <div className="relative">
-            <Search
-              onClick={openCommandPalette}
-              style={{ cursor: 'pointer', pointerEvents: 'auto' }}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-              size={16}
-            />
-            <input
-              className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-4 text-[13px] font-medium placeholder:text-slate-400 outline-none transition-all focus:border-[#6143f4]/30 focus:ring-2 focus:ring-[#6143f4]/20 dark:border-white/10 dark:bg-white/5 dark:text-white"
-              placeholder="Search connected devices and integrations..."
-              type="text"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 transition-all hover:text-[#6143f4] dark:border-white/10 dark:bg-white/5"
-            type="button"
-            onClick={() => navigate(ROUTES.NOTIFICATIONS)}
-          >
-            <Bell size={16} />
-            <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full border-[1.5px] border-white bg-red-500 dark:border-[#0B0819]" />
-          </button>
-          <div className="mx-0.5 h-5 w-px bg-slate-200 dark:bg-white/10" />
-          <div
-            className="flex cursor-pointer items-center gap-2.5 group"
-            onClick={() => navigate(ROUTES.SETTINGS_PROFILE)}
-          >
-            <div className="text-right">
-              <p className="text-[12px] font-bold leading-tight text-[#13082a] transition-colors group-hover:text-[#6143f4] dark:text-white">
-                Alex Rivera
-              </p>
-              <p className="mt-0.5 text-[8px] font-bold uppercase tracking-wider text-[#6143f4] opacity-80">
-                Premium User
-              </p>
-            </div>
-            <div className="h-9 w-9 overflow-hidden rounded-lg border-2 border-transparent bg-[#6143f4]/10 transition-all group-hover:border-[#6143f4]">
-              <img
-                className="h-full w-full object-cover"
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuBPXRQiJMy2AjUx1s7i8PF4VDCzzfdMwtRfXLHjRrgzSIQ81oYqk6GcXc_Tm6Ib463MN9qj5KL1eXMwKaIUQqZyLXkCGGM0RK7qH6_iMVzNLpTGdw_hpYS5eDo18scXpzHZLuA8PvMMwFaC9CelQUkXVlVugIOSU1LjxQxNnTgdaAoSC7uRYkemunPnF3SOoLmjXYVC4OpM1LtTBr1anc-24LOv7M9ZO_rUwQce_duaAsBqEKaY9ovz3riujUqxQDIK68cUxpyCDQox"
-                alt="Alex Rivera"
-              />
-            </div>
-          </div>
-        </div>
-      </header>
+      
 
       <div className="mx-auto w-full max-w-[1440px] p-8 pb-16">
         <div className="mb-7 flex flex-col justify-between gap-4 md:flex-row md:items-end">

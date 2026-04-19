@@ -82,41 +82,7 @@ const PreventiveRecommendations = () => {
     return (
         <div className="flex-1 flex flex-col min-w-0 bg-[#f6f5f8] dark:bg-[#131022] text-[#13082a] dark:text-slate-100 min-h-screen antialiased">
             {/* Top Header */}
-            <header className="h-20 bg-white/80 dark:bg-[#131022]/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-8 flex items-center justify-between sticky top-0 z-40 shrink-0">
-                <div className="relative w-full max-w-md group">
-                    <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} 
-                        className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors"
-                        size={18}
-                    />
-                    <input
-                        className="w-full bg-slate-100 dark:bg-white/5 border-none rounded-xl py-2.5 pl-11 pr-4 text-sm font-medium focus:ring-2 focus:ring-[#6143f4]/20 transition-all outline-none text-[#13082a] dark:text-white"
-                        placeholder="Search insights, labs, or metrics..."
-                        type="text"
-                    />
-                </div>
-                <div className="flex items-center gap-4">
-                    <button className="size-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 relative shadow-inner active:scale-90 transition-all" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
-                        <Bell size={20} />
-                        <span className="absolute top-2.5 right-2.5 size-2 bg-[#6143f4] rounded-full border-2 border-white dark:border-[#131022]"></span>
-                    </button>
-                    <div
-                        className="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-slate-800 cursor-pointer group"
-                        onClick={() => navigate(ROUTES.SETTINGS)}
-                    >
-                        <div className="text-right hidden sm:block">
-                            <p className="text-sm font-black text-[#13082a] dark:text-white group-hover:text-[#6143f4] transition-colors">
-                                Alex Johnson
-                            </p>
-                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">
-                                Premium Member
-                            </p>
-                        </div>
-                        <div className="size-10 rounded-full border-2 border-[#6143f4] overflow-hidden shadow-lg group-hover:scale-110 transition-transform bg-[#6143f4]/20 flex items-center justify-center text-[#6143f4] font-bold text-sm">
-                            AJ
-                        </div>
-                    </div>
-                </div>
-            </header>
+            
 
             {/* Page Content */}
             <div className="p-8 max-w-7xl mx-auto w-full space-y-12">

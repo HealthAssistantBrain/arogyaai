@@ -50,37 +50,7 @@ const AIRiskReport = () => {
     return (
         <div className="bg-[#f6f5f8] dark:bg-[#131022] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-col antialiased">
             {/* Top Navigation Bar - Standardized */}
-            <header className="sticky top-0 z-50 flex items-center justify-between border-b border-[#6143f4]/10 bg-white/80 dark:bg-[#131022]/80 backdrop-blur-md px-6 py-3 lg:px-12">
-                <div className="flex items-center gap-8">
-                    <div className="flex items-center gap-3 text-[#6143f4] cursor-pointer group" onClick={() => navigate(ROUTES.DASHBOARD)}>
-                        <div className="size-9 bg-[#6143f4] rounded-lg flex items-center justify-center text-white shadow-lg shadow-[#6143f4]/20 transition-transform group-hover:scale-110">
-                            <HeartPulse size={20} />
-                        </div>
-                        <h2 className="text-[#13082a] dark:text-white text-xl font-black tracking-tight leading-none uppercase">ArogyaAI</h2>
-                    </div>
-                    <div className="hidden md:flex relative h-10 w-64 group">
-                        <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" size={18} />
-                        <input className="w-full h-full pl-10 pr-4 rounded-xl border-none bg-slate-100 dark:bg-white/5 focus:ring-2 focus:ring-[#6143f4]/20 text-sm font-medium outline-none transition-all" placeholder="Search records..." type="text"/>
-                    </div>
-                </div>
-                <div className="flex items-center gap-6">
-                    <nav className="hidden lg:flex items-center gap-8">
-                        <Link to={ROUTES.DASHBOARD} className="text-xs font-black text-[#6143f4] uppercase tracking-widest">Dashboard</Link>
-                        <Link to={ROUTES.MEDICAL_REPORTS} className="text-xs font-bold text-slate-500 hover:text-[#6143f4] transition-colors uppercase tracking-widest">Reports</Link>
-                        <button className="text-xs font-bold text-slate-500 hover:text-[#6143f4] transition-colors uppercase tracking-widest" type="button">Patients</button>
-                        <Link to={ROUTES.INSIGHTS} className="text-xs font-bold text-slate-500 hover:text-[#6143f4] transition-colors uppercase tracking-widest">AI Insights</Link>
-                    </nav>
-                    <div className="flex items-center gap-3 border-l border-slate-200 dark:border-slate-800 pl-6">
-                        <button className="p-2 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 hover:bg-[#6143f4]/10 hover:text-[#6143f4] transition-all active:scale-95 relative" type="button" onClick={() => navigate(ROUTES.NOTIFICATIONS)}>
-                            <Bell size={20} />
-                            <span className="absolute top-2 right-2 size-2 bg-[#6143f4] rounded-full border-2 border-white dark:border-[#131022]"></span>
-                        </button>
-                        <div className="size-9 rounded-full bg-[#6143f4]/20 border-2 border-[#6143f4] overflow-hidden cursor-pointer hover:scale-110 transition-transform shadow-md" onClick={() => navigate(ROUTES.SETTINGS)}>
-                            <img className="h-full w-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBSNEjoorIjStYduz4toUoH9taRezR9gUmeBlfZqgLvFpq-7Dpa-im_yfn3lhwmaedZOiCg-PEuJeDdpULcssnht9u6CnykpHhZffrOhUXsuZ9iTanq55ms_jcerh6Lq3TN4Or7exJuJ0BaCCElRYRK3NBThOT8RXKoJqVsW5ZC_1R8GCbXb1IaZTElgrP9NB2hNpAClQTc6gsxVwCZJx56bTPuLyvxxphaTbQKe2pAiZg6dxh0LvCzzUm-NNDqI7e0fgO5Z4StDAON" alt="User Profile" />
-                        </div>
-                    </div>
-                </div>
-            </header>
+            
 
             <div className="flex flex-1 overflow-hidden">
                 {/* Sidebar Navigation */}

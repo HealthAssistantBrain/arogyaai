@@ -27,26 +27,7 @@ const UploadSuccess = () => {
         <div className="bg-[#f6f5f8] dark:bg-[#0B0819] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased text-[14px]">
             <div className="flex flex-1 overflow-hidden">
                 <main className="flex-1 flex flex-col h-full relative overflow-y-auto custom-scrollbar bg-[#f6f5f8] dark:bg-[#0B0819]">
-                    <header className="h-24 bg-white/70 dark:bg-[#0B0819]/70 backdrop-blur-3xl border-b border-[#6143f4]/10 flex items-center justify-between px-10 shrink-0 sticky top-0 z-20">
-                        <div className="flex items-center gap-6">
-                            <button onClick={() => navigate(ROUTES.MEDICAL_REPORTS)} className="size-12 flex items-center justify-center rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 shadow-sm">
-                                <ArrowLeft size={18} strokeWidth={3} />
-                            </button>
-                            <nav className="flex items-center gap-4">
-                                <span className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em]">Reports</span>
-                                <ChevronRight size={14} className="text-slate-300" />
-                                <span className="text-[#13082a] dark:text-white font-black text-[10px] uppercase tracking-[0.2em]">Analysis Complete</span>
-                            </nav>
-                        </div>
-                        <div className="flex items-center gap-6">
-                            <button className="size-12 flex items-center justify-center rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 shadow-sm">
-                                <Bell size={20} />
-                            </button>
-                            <button className="size-12 flex items-center justify-center rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 shadow-sm">
-                                <HelpCircle size={20} />
-                            </button>
-                        </div>
-                    </header>
+                    
 
                     <div className="flex-1 p-10 space-y-10 max-w-4xl mx-auto w-full relative z-10 pb-20 pt-16">
                         <div className="bg-white dark:bg-[#131022] rounded-[3.5rem] shadow-[0_40px_100px_-20px_rgba(0,0,0,0.08)] overflow-hidden border border-slate-100 dark:border-white/5 relative">

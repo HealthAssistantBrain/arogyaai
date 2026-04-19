@@ -156,27 +156,7 @@ const Simulate = () => {
   return (
     <div className="min-h-screen bg-[#13082A] text-slate-100 antialiased">
       <main className="flex-1 flex flex-col overflow-y-auto bg-[radial-gradient(circle_at_top_left,_rgba(96,67,244,0.18),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(0,156,222,0.12),_transparent_32%),linear-gradient(180deg,_#140a2c_0%,_#0f0820_100%)]">
-        <header className="h-16 flex items-center justify-between px-8 bg-[#140c2d]/80 backdrop-blur-md sticky top-0 z-30 border-b border-white/5">
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.28em] text-white/40 font-bold">Clinical Sandbox</p>
-            <h1 className="text-2xl font-black tracking-tight text-white">Disease Simulator</h1>
-          </div>
-          <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
-            {PERIODS.map((period) => (
-              <button
-                key={period.label}
-                onClick={() => setSelectedPeriod(period.label)}
-                className={`px-4 py-2 text-sm font-bold rounded-lg transition-all ${
-                  period.label === selectedPeriod
-                    ? 'bg-[#6043F4] text-white shadow-md'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                {period.label}
-              </button>
-            ))}
-          </div>
-        </header>
+        
 
         <div className="p-8 max-w-[1400px] mx-auto w-full space-y-6">
           {error ? (
