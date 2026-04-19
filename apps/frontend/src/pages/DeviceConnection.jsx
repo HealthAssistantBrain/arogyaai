@@ -1,6 +1,8 @@
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { fetchGoogleFitStatus } from '../lib/googleFitApi';
+import useDeviceStore from '../store/deviceStore';
 import {
   BarChart3,
   User,
@@ -27,6 +29,11 @@ const DeviceConnection = () => {
   const [searchParams] = useSearchParams();
   const user = useAuthStore((state) => state.user);
   const setOnboardingStep = useAuthStore((state) => state.setOnboardingStep);
+  const setGoogleFitConnectedStore = useDeviceStore((s) => s.setGoogleFitConnected);
+
+  const [googleFitConnected, setGoogleFitConnected] = useState(false);
+  const [statusLoading, setStatusLoading] = useState(true);
+  const [connectionBanner, setConnectionBanner] = useState(null);
 
   const handleFinish = () => {
     setOnboardingStep(5);
@@ -40,8 +47,6 @@ const DeviceConnection = () => {
 
   const googleFitStatus = searchParams.get('googleFit');
   const googleFitMessage = searchParams.get('message');
-  const isGoogleFitConnected = googleFitStatus === 'connected';
-  const connectionBanner = googleFitStatus === 'connected' ? 'Google Fit Connected ✅' : null;
   const authConnections = [
     {
       id: 'gmail',
@@ -59,8 +64,41 @@ const DeviceConnection = () => {
     },
   ];
 
+  // Fetch real Google Fit connection status from the backend.
+  // Runs on mount and whenever returning from the OAuth callback.
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchStatus = async () => {
+      setStatusLoading(true);
+      try {
+        const data = await fetchGoogleFitStatus(
+          Intl.DateTimeFormat().resolvedOptions().timeZone
+        );
+        console.log('[DeviceConnection] Google Fit status:', data);
+        const isConnected = Boolean(data?.connected);
+        if (!cancelled) {
+          setGoogleFitConnected(isConnected);
+          setGoogleFitConnectedStore(isConnected);
+        }
+      } catch (err) {
+        console.error('[DeviceConnection] Status fetch failed:', err);
+      } finally {
+        if (!cancelled) setStatusLoading(false);
+      }
+    };
+
+    fetchStatus();
+
+    return () => { cancelled = true; };
+    // Re-run when returning from OAuth (googleFitStatus changes)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [googleFitStatus]);
+
+  // Handle toast notifications and clean up the URL params.
   useEffect(() => {
     if (googleFitStatus === 'connected') {
+      setConnectionBanner('Google Fit Connected ✅');
       toast.success('Successfully connected to Google Fit!');
       window.history.replaceState({}, '', window.location.pathname);
     } else if (googleFitStatus === 'error') {
@@ -90,10 +128,10 @@ const DeviceConnection = () => {
     {
       id: 'google-fit',
       name: 'Google Fit',
-      status: isGoogleFitConnected ? 'Connected' : 'Not Connected',
+      status: statusLoading ? 'Checking…' : (googleFitConnected ? 'Connected' : 'Not Connected'),
       logo: googleFitLogo,
-      color: isGoogleFitConnected ? 'text-green-500' : 'text-red-500',
-      bgColor: isGoogleFitConnected ? 'bg-green-50 dark:bg-green-500/10' : 'bg-red-50 dark:bg-red-500/10',
+      color: googleFitConnected ? 'text-green-500' : 'text-red-500',
+      bgColor: googleFitConnected ? 'bg-green-50 dark:bg-green-500/10' : 'bg-red-50 dark:bg-red-500/10',
       action: handleConnectGoogleFit
     },
     {
@@ -181,11 +219,10 @@ const DeviceConnection = () => {
               {authConnections.map((connection) => (
                 <div
                   key={connection.id}
-                  className={`rounded-2xl border p-4 flex items-center justify-between gap-4 ${
-                    connection.connected
+                  className={`rounded-2xl border p-4 flex items-center justify-between gap-4 ${connection.connected
                       ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10'
                       : 'border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/40'
-                  }`}
+                    }`}
                 >
                   <div>
                     <p className="text-sm font-bold text-[#13082A] dark:text-white">{connection.name}</p>
