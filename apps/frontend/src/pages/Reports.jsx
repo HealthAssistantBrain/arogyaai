@@ -1,24 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  FileText, 
-  Search, 
-  Bell, 
-  Plus, 
-  Eye, 
-  Download, 
-  Image as LucideImage, 
-  Loader2,
-  AlertCircle,
+    FileText,
+    Search,
+    Bell,
+    Plus,
+    Eye,
+    Download,
+    Image as LucideImage,
+    Loader2,
+    AlertCircle,
 } from 'lucide-react';
 import ReportSummary, { hasReportSummaryContent, normalizeReportSummaryData } from '../components/reports/ReportSummary';
 import { apiClient } from '../lib/apiClient';
-import { getUploadedReportHistory, getUploadedReportSession } from '../lib/reportUpload';
 import { buildSummaryPdfFileName, generateStyledSummaryPdf } from '../utils/generateStyledSummaryPdf';
 import { ROUTES } from '../router/routes';
 import { openCommandPalette } from '../components/CommandPalette';
-
-const REPORT_HISTORY_FALLBACK = [];
 
 const stripQuery = (value = '') => String(value).split('?')[0].split('#')[0];
 
@@ -94,39 +91,6 @@ const normalizeTextList = (value) => {
     return text ? [text] : [];
 };
 
-const normalizePatientInfo = (report = {}) => {
-    const rawInfo = report?.patientInfo ?? report?.patient_info;
-    if (rawInfo && typeof rawInfo === 'object' && !Array.isArray(rawInfo)) {
-        return Object.entries(rawInfo)
-            .map(([label, value]) => ({
-                label: label
-                    .replace(/_/g, ' ')
-                    .replace(/\b\w/g, (char) => char.toUpperCase()),
-                value: toText(value),
-            }))
-            .filter((item) => item.value);
-    }
-
-    const text = toText(report?.parsedText ?? report?.parsed_text ?? report?.ocrText ?? report?.ocr_text);
-    if (!text) return [];
-
-    const patterns = [
-        { label: 'Patient Name', pattern: /(?:patient name|name)\s*[:-]\s*([^\n,;|]{2,80})/i },
-        { label: 'Age', pattern: /(?:age)\s*[:-]\s*([0-9]{1,3}(?:\s*(?:years?|yrs?))?)/i },
-        { label: 'Gender', pattern: /(?:sex|gender)\s*[:-]\s*([A-Za-z]{3,10})/i },
-        { label: 'Patient ID', pattern: /(?:patient id|id)\s*[:-]\s*([A-Za-z0-9-]{2,40})/i },
-        { label: 'Report Date', pattern: /(?:report date|date of report|date)\s*[:-]\s*([-A-Za-z0-9,/ ]{4,40})/i },
-    ];
-
-    return patterns
-        .map(({ label, pattern }) => {
-            const match = text.match(pattern);
-            return match
-                ? { label, value: toText(match[1]) }
-                : null;
-        })
-        .filter(Boolean);
-};
 
 const normalizeMarkers = (value) => {
     if (!Array.isArray(value)) return [];
@@ -141,80 +105,8 @@ const normalizeMarkers = (value) => {
         .filter((item) => item.name || item.value || item.unit || item.flag);
 };
 
-const isFallbackSummary = (report = {}) => {
-    const source = toText(report?.summarySource ?? report?.summary_source ?? report?.source ?? '');
-    if (source.toLowerCase().includes('fallback')) {
-        return true;
-    }
-
-    const text = [
-        ...(normalizeTextList(report?.summary ?? report?.patientSummary ?? report?.patient_summary)),
-        ...normalizeTextList(report?.ocrText ?? report?.ocr_text ?? report?.parsedText ?? report?.parsed_text),
-    ]
-        .join(' ')
-        .toLowerCase();
-
-    return (
-        text.includes('no text could be extracted') ||
-        text.includes('image ocr is not configured') ||
-        text.includes('free mode currently supports direct text extraction') ||
-        text.includes('pdf uploaded and stored successfully') ||
-        text.includes('report uploaded and text extracted successfully')
-    );
-};
-
-const normalizeSummaryView = (report = {}) => {
-    const rawView = report?.summaryView ?? report?.summary_view;
-    const summarySource = toText(report?.summarySource ?? report?.summary_source ?? rawView?.source ?? '');
-
-    if (rawView && typeof rawView === 'object' && !Array.isArray(rawView)) {
-        const combinedReport = {
-            ...report,
-            summary: rawView.summary ?? rawView.keyFindings ?? rawView.key_findings,
-            summarySource: summarySource || rawView.source || '',
-            ocrText: rawView.ocrText ?? rawView.ocr_text ?? report?.ocrText ?? report?.ocr_text,
-            parsedText: rawView.parsedText ?? rawView.parsed_text ?? report?.parsedText ?? report?.parsed_text,
-        };
-        if (isFallbackSummary(combinedReport)) {
-            return {
-                title: toText(rawView.title ?? report?.title ?? report?.fileName),
-                patientInfo: [],
-                keyFindings: [],
-                biomarkers: [],
-                abnormalValues: [],
-                notes: [],
-                source: summarySource,
-            };
-        }
-
-        return {
-            title: toText(rawView.title ?? report?.title ?? report?.fileName),
-            patientInfo: normalizePatientInfo({
-                patientInfo: rawView.patientInfo ?? rawView.patient_info,
-                parsedText: rawView.parsedText ?? rawView.parsed_text ?? report?.parsedText ?? report?.parsed_text,
-                ocrText: rawView.ocrText ?? rawView.ocr_text ?? report?.ocrText ?? report?.ocr_text,
-            }),
-            keyFindings: normalizeTextList(rawView.keyFindings ?? rawView.key_findings ?? rawView.summary ?? rawView.findings),
-            biomarkers: normalizeMarkers(rawView.biomarkers ?? rawView.markers),
-            abnormalValues: normalizeTextList(rawView.abnormalValues ?? rawView.abnormal_values),
-            notes: normalizeTextList(rawView.notes),
-            source: summarySource,
-        };
-    }
-
-    const sourceLooksFallback = isFallbackSummary(report) || summarySource.toLowerCase().includes('fallback');
-
-    return {
-        title: toText(report?.title ?? report?.fileName),
-        patientInfo: sourceLooksFallback ? [] : normalizePatientInfo(report),
-        keyFindings: sourceLooksFallback ? [] : normalizeTextList(report?.summary ?? report?.patientSummary ?? report?.patient_summary),
-        biomarkers: sourceLooksFallback ? [] : normalizeMarkers(report?.markers),
-        abnormalValues: sourceLooksFallback ? [] : normalizeTextList(report?.abnormalValues ?? report?.abnormal_values),
-        notes: sourceLooksFallback ? [] : normalizeTextList(report?.notes ?? report?.ocrText ?? report?.ocr_text ?? report?.parsedText ?? report?.parsed_text),
-        source: summarySource,
-    };
-};
-
+// Backend now serves summaryView ready-to-use via summary_data.
+// We just perform basic safety checks.
 const hasSummaryContent = (summaryView = {}) => (
     (summaryView.patientInfo?.length ?? 0) > 0 ||
     (summaryView.keyFindings?.length ?? 0) > 0 ||
@@ -222,16 +114,6 @@ const hasSummaryContent = (summaryView = {}) => (
     (summaryView.abnormalValues?.length ?? 0) > 0 ||
     (summaryView.notes?.length ?? 0) > 0
 );
-
-const mergeSummaryViews = (current = {}, next = {}) => ({
-    title: next.title || current.title || '',
-    patientInfo: next.patientInfo?.length ? next.patientInfo : current.patientInfo || [],
-    keyFindings: next.keyFindings?.length ? next.keyFindings : current.keyFindings || [],
-    biomarkers: next.biomarkers?.length ? next.biomarkers : current.biomarkers || [],
-    abnormalValues: next.abnormalValues?.length ? next.abnormalValues : current.abnormalValues || [],
-    notes: next.notes?.length ? next.notes : current.notes || [],
-    source: next.source || current.source || '',
-});
 
 const normalizeReport = (report) => {
     const fileUrl = report?.fileUrl ?? report?.file_url ?? report?.url ?? '';
@@ -248,14 +130,15 @@ const normalizeReport = (report) => {
     const reportType = String(report?.reportType ?? report?.report_type ?? report?.type ?? 'OTHER').toUpperCase();
     const summarySource = toText(report?.summarySource ?? report?.summary_source ?? '');
     const parsedText = report?.parsedText ?? report?.parsed_text ?? '';
-    const summaryView = normalizeSummaryView({
-        ...report,
-        fileName,
-        title: report?.title ?? fileName,
-        parsedText,
-        parsed_text: parsedText,
-        summarySource,
-    });
+    const summaryView = report?.summaryView ?? report?.summary_view ?? {
+        title: fileName,
+        patientInfo: [],
+        keyFindings: [],
+        biomarkers: [],
+        abnormalValues: [],
+        notes: [],
+        source: summarySource
+    };
     const markers = normalizeMarkers(report?.markers ?? summaryView.biomarkers);
     const summaryData = normalizeReportSummaryData({
         ...report,
@@ -291,51 +174,9 @@ const normalizeReport = (report) => {
     };
 };
 
-const mergeReportEntries = (current, next) => ({
-    ...current,
-    ...next,
-    id: next.id ?? current.id,
-    fileName: next.fileName || current.fileName,
-    title: next.title || current.title,
-    fileUrl: next.fileUrl || current.fileUrl,
-    reportType: next.reportType || current.reportType,
-    reportKind: next.reportKind || current.reportKind,
-    status: next.status || current.status,
-    createdAt: next.createdAt || current.createdAt,
-    updatedAt: next.updatedAt || current.updatedAt,
-    fileSize: next.fileSize ?? current.fileSize ?? null,
-    summary: Array.isArray(next.summary) && next.summary.length ? next.summary : current.summary,
-    summaryView: mergeSummaryViews(current.summaryView, next.summaryView),
-    summaryData: next.summaryData && hasReportSummaryContent(next.summaryData) ? next.summaryData : current.summaryData || normalizeReportSummaryData(current),
-    markers: Array.isArray(next.markers) && next.markers.length ? next.markers : current.markers || [],
-    ocrText: next.ocrText || current.ocrText,
-    parsedText: next.parsedText || current.parsedText || '',
-    abnormalValues: Array.isArray(next.abnormalValues) && next.abnormalValues.length ? next.abnormalValues : current.abnormalValues || [],
-    patientSummary: next.patientSummary || current.patientSummary || '',
-    risks: Array.isArray(next.risks) && next.risks.length ? next.risks : current.risks || [],
-    recommendations: Array.isArray(next.recommendations) && next.recommendations.length ? next.recommendations : current.recommendations || [],
-    source: next.source || current.source,
-    summarySource: next.summarySource || current.summarySource || '',
-});
-
 const normalizeReportList = (items = []) => {
-    const map = new Map();
-
-    items.forEach((item) => {
-        if (!item) return;
-
-        const report = normalizeReport(item);
-        const key = report.id || report.fileUrl || report.fileName;
-        if (!key) return;
-
-        const existing = map.get(key);
-        map.set(key, existing ? mergeReportEntries(existing, report) : report);
-    });
-
-    return [...map.values()].sort((left, right) => {
-        const leftTime = new Date(left.createdAt || 0).getTime();
-        const rightTime = new Date(right.createdAt || 0).getTime();
-        return rightTime - leftTime;
+    return items.filter(Boolean).map(normalizeReport).sort((left, right) => {
+        return new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime();
     });
 };
 
@@ -349,15 +190,6 @@ const extractReportsArray = (payload) => {
     return [];
 };
 
-const readLocalReports = () => {
-    const history = getUploadedReportHistory();
-    const session = getUploadedReportSession();
-    return normalizeReportList([
-        ...REPORT_HISTORY_FALLBACK,
-        ...(Array.isArray(history) ? history : []),
-        ...(session ? [session] : []),
-    ]);
-};
 
 const getStatusStyles = (status = '') => {
     const normalized = String(status).toUpperCase();
@@ -380,29 +212,25 @@ const getStatusStyles = (status = '') => {
 const Reports = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const [reports, setReports] = useState(() => readLocalReports());
+    const [reports, setReports] = useState([]);
     const [selectedReport, setSelectedReport] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [selectedReportLoading, setSelectedReportLoading] = useState(false);
     const focusedReportId = location.state?.reportId;
 
     const loadReports = useCallback(async () => {
-        const localReports = readLocalReports();
-        setReports(localReports);
         setIsLoading(true);
 
         try {
             const response = await apiClient.get('/reports', { timeout: 12000 });
             console.log('REPORTS FETCH:', response.data);
             const remoteReports = normalizeReportList(extractReportsArray(response.data));
-            const mergedReports = normalizeReportList([...remoteReports, ...localReports]);
-            setReports(mergedReports);
+            setReports(remoteReports);
         } catch (error) {
             const status = error?.response?.status;
             if (status !== 404 && status !== 405) {
                 console.warn('[Reports] Failed to load reports:', error);
             }
-            setReports(localReports);
         } finally {
             setIsLoading(false);
         }
@@ -459,7 +287,7 @@ const Reports = () => {
             return;
         }
 
-        const currentSummary = selectedReport.summaryData ?? selectedReport.summaryView ?? normalizeSummaryView(selectedReport);
+        const currentSummary = selectedReport.summaryData ?? selectedReport.summaryView ?? {};
         const source = toText(selectedReport.summarySource ?? currentSummary.source).toLowerCase();
         const hasText = Boolean(toText(selectedReport.parsedText ?? selectedReport.parsed_text ?? selectedReport.ocrText ?? selectedReport.ocr_text));
 
@@ -477,9 +305,8 @@ const Reports = () => {
                 if (!active) return;
 
                 const detailedReport = normalizeReport(response.data?.data ?? response.data ?? {});
-                const mergedReport = mergeReportEntries(selectedReport, detailedReport);
-                setReports((currentReports) => currentReports.map((report) => (report.id === mergedReport.id ? mergedReport : report)));
-                setSelectedReport(mergedReport);
+                setReports((currentReports) => currentReports.map((report) => (report.id === detailedReport.id ? detailedReport : report)));
+                setSelectedReport(detailedReport);
             } catch (error) {
                 if (active) {
                     console.warn('[Reports] Failed to load report details:', error);
@@ -540,7 +367,7 @@ const Reports = () => {
                         <div className="flex items-center gap-6 flex-1 max-w-2xl">
                             <div className="relative w-full group">
                                 <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" size={20} />
-                                <input className="w-full pl-14 pr-7 py-4 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/5 rounded-[1.75rem] focus:ring-4 focus:ring-[#6143f4]/10 outline-none transition-all shadow-xl shadow-slate-200/30 dark:shadow-none placeholder:text-slate-400 font-medium" placeholder="Search reports, clinics, or diagnosis..." type="text"/>
+                                <input className="w-full pl-14 pr-7 py-4 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/5 rounded-[1.75rem] focus:ring-4 focus:ring-[#6143f4]/10 outline-none transition-all shadow-xl shadow-slate-200/30 dark:shadow-none placeholder:text-slate-400 font-medium" placeholder="Search reports, clinics, or diagnosis..." type="text" />
                             </div>
                         </div>
                         <div className="flex items-center gap-8">
@@ -568,7 +395,7 @@ const Reports = () => {
                                 <h2 className="text-4xl lg:text-5xl font-black tracking-tighter uppercase text-[#13082a] dark:text-white leading-none italic">Medical Reports Hub</h2>
                                 <p className="text-slate-400 font-bold uppercase tracking-[0.25em] text-[11px] mt-4 opacity-80 leading-none">Manage and analyze clinical diagnostics via AI Extraction engines</p>
                             </div>
-                            <button 
+                            <button
                                 onClick={() => navigate(ROUTES.UPLOAD)}
                                 className="bg-[#6143f4] hover:bg-[#4a34c1] text-white px-9 py-5 rounded-[1.5rem] font-black text-[11px] uppercase tracking-[0.25em] flex items-center gap-4 transition-all shadow-2xl shadow-[#6143f4]/40 active:scale-95 group leading-none"
                             >
@@ -620,16 +447,14 @@ const Reports = () => {
                                             key={report.id}
                                             type="button"
                                             onClick={() => handleSelectReport(report)}
-                                            className={`p-6 rounded-[2.25rem] border transition-all cursor-pointer flex items-center gap-5 group shadow-xl text-left ${
-                                                isSelected
-                                                    ? 'bg-white dark:bg-white/10 border-[#6143f4] shadow-[#6143f4]/15'
-                                                    : 'bg-white/60 dark:bg-white/5 border-transparent hover:border-slate-200 dark:hover:border-white/10 shadow-slate-200/30 dark:shadow-none'
-                                            }`}
+                                            className={`p-6 rounded-[2.25rem] border transition-all cursor-pointer flex items-center gap-5 group shadow-xl text-left ${isSelected
+                                                ? 'bg-white dark:bg-white/10 border-[#6143f4] shadow-[#6143f4]/15'
+                                                : 'bg-white/60 dark:bg-white/5 border-transparent hover:border-slate-200 dark:hover:border-white/10 shadow-slate-200/30 dark:shadow-none'
+                                                }`}
                                         >
                                             <div
-                                                className={`size-14 rounded-[1.25rem] flex items-center justify-center shadow-inner transition-transform group-hover:scale-110 ${
-                                                    report.reportKind === 'pdf' ? 'bg-red-50 text-red-500' : 'bg-[#009cde]/10 text-[#009cde]'
-                                                }`}
+                                                className={`size-14 rounded-[1.25rem] flex items-center justify-center shadow-inner transition-transform group-hover:scale-110 ${report.reportKind === 'pdf' ? 'bg-red-50 text-red-500' : 'bg-[#009cde]/10 text-[#009cde]'
+                                                    }`}
                                             >
                                                 {icon}
                                             </div>
@@ -725,7 +550,8 @@ const Reports = () => {
                 </div>
             </div>
 
-            <style dangerouslySetInnerHTML={{ __html: `
+            <style dangerouslySetInnerHTML={{
+                __html: `
                 .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
                 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
                 .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(97, 67, 244, 0.1); border-radius: 20px; }

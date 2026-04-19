@@ -27,7 +27,9 @@ services:
     ports:
       - "8000:8000"
     env_file:
-      - .env
+      - ./apps/backend/.env
+    environment:
+      - RUN_MIGRATIONS=true
     networks:
       - arogyaai_net
     volumes:
@@ -55,7 +57,9 @@ services:
         CUSTOM_CA_CERT_B64: ${CUSTOM_CA_CERT_B64:-}
     command: ["celery", "-A", "pipelines.orchestration_pipeline.celery_app:celery_app", "worker", "--loglevel=INFO", "-Q", "ingestion,feature,ml,shap"]
     env_file:
-      - .env
+      - ./apps/backend/.env
+    environment:
+      - RUN_MIGRATIONS=false
     networks:
       - arogyaai_net
     volumes:

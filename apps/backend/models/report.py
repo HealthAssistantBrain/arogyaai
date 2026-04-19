@@ -5,7 +5,7 @@ Report model — maps to the `reports` table.
 import enum
 
 from sqlalchemy import Column, String, Text, Boolean, Enum, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 
 from .base import Base, UUIDPrimaryKeyMixin, TimestampMixin
@@ -35,11 +35,15 @@ class Report(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     report_type = Column(Enum(ReportTypeEnum, name="report_type_enum"), nullable=False)
     file_url    = Column(Text, nullable=False)
     parsed_text = Column(Text)
+    summary_data = Column(JSONB(astext_type=Text()), nullable=True)
     status      = Column(Enum(ReportStatusEnum, name="report_status_enum"), default=ReportStatusEnum.PENDING, index=True)
     is_deleted  = Column(Boolean, default=False)
+    storage_bucket = Column(String(64), nullable=True)
+    storage_path = Column(Text, nullable=True)
 
     # ── Relationships ──────────────────────────────────────────
     user       = relationship("User", back_populates="reports")
     risk_score = relationship("RiskScore", back_populates="report", uselist=False)
     lab_values = relationship("LabValue", back_populates="report")
     feature_snapshots = relationship("FeatureSnapshotRecord", back_populates="report")
+

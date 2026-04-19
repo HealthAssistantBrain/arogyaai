@@ -61,7 +61,12 @@ run_migrations() {
 
 echo "[startup] Waiting for database before starting backend"
 wait_for_database
-run_migrations
+
+if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
+  run_migrations
+else
+  echo "[startup] Skipping migrations (RUN_MIGRATIONS != true)"
+fi
 
 echo "[startup] Starting backend: $*"
 exec "$@"

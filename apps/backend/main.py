@@ -10,7 +10,6 @@ if str(ROOT_DIR) not in sys.path:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from starlette.requests import Request
 
 # Import modular routers
@@ -33,8 +32,20 @@ app = FastAPI(
     version="1.0.0"
 )
 
-Path(settings.REPORT_UPLOAD_DIR).parent.mkdir(parents=True, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
+# ── Anti-local-storage guard ──────────────────────────────────────────────────
+# Raise at startup if the Supabase storage key is not set.
+# Local file storage has been removed — this prevents silent upload failures.
+if not settings.SUPABASE_SERVICE_ROLE_KEY:
+    import warnings
+    warnings.warn(
+        "SUPABASE_SERVICE_ROLE_KEY is not set. "
+        "Report uploads will fail until this key is configured. "
+        "Set SUPABASE_SERVICE_ROLE_KEY in your .env file.",
+        RuntimeWarning,
+        stacklevel=2,
+    )
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 app.add_middleware(

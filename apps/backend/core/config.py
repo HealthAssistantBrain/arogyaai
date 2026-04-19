@@ -16,7 +16,11 @@ class Settings(BaseSettings):
     # APP URLS
     FRONTEND_APP_URL: str = os.getenv("FRONTEND_APP_URL", "http://localhost:5173")
     BACKEND_PUBLIC_URL: str = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000")
-    REPORT_UPLOAD_DIR: str = os.getenv("REPORT_UPLOAD_DIR", str(Path("uploads") / "reports"))
+    REPORT_UPLOAD_DIR: str = os.getenv("REPORT_UPLOAD_DIR", str(Path("uploads") / "reports"))  # DEPRECATED — use Supabase Storage
+
+    # SUPABASE STORAGE
+    SUPABASE_BUCKET_NAME: str = os.getenv("SUPABASE_BUCKET_NAME", "medical-reports")
+    SUPABASE_SERVICE_ROLE_KEY: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 
     # GOOGLE FIT
     GOOGLE_FIT_CLIENT_ID: str = os.getenv("GOOGLE_FIT_CLIENT_ID", "")

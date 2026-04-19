@@ -15,6 +15,7 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency
 from sqlalchemy.orm import Session
 
 from core.config import settings
+from integrations.supabase_storage import upload_report as _supabase_upload_report
 from models import Report, ReportStatusEnum, ReportTypeEnum, User
 
 
@@ -61,9 +62,7 @@ class ReportService:
 
         try:
             analysis = await cls._analyze_report(file.filename or "report", file.content_type, file_bytes)
-            report.parsed_text = analysis["ocr_text"]
-            report.status = ReportStatusEnum.COMPLETED
-            db.commit()
+            cls.persist_report(db, str(report.id), analysis.get("ocr_text", ""), analysis)
             db.refresh(report)
         except Exception as exc:
             report.status = ReportStatusEnum.FAILED
@@ -161,16 +160,28 @@ class ReportService:
         return cls._serialize_report(report)
 
     @classmethod
-    def _persist_file(cls, user_id: Any, original_name: str, file_bytes: bytes) -> tuple[Path, str]:
-        safe_name = cls._safe_filename(original_name)
-        user_dir = Path(settings.REPORT_UPLOAD_DIR) / str(user_id)
-        user_dir.mkdir(parents=True, exist_ok=True)
-        storage_path = user_dir / f"{uuid.uuid4()}-{safe_name}"
-        storage_path.write_bytes(file_bytes)
+    def persist_report(cls, db: Session, report_id: str, parsed_text: str, summary_data: dict[str, Any]) -> Report | None:
+        """
+        Updates an existing report with the extracted text and AI-generated summary data.
+        """
+        report = db.query(Report).filter(Report.id == report_id).first()
+        if not report:
+            return None
+            
+        report.parsed_text = parsed_text
+        report.summary_data = summary_data
+        report.status = ReportStatusEnum.COMPLETED
+        db.commit()
+        db.refresh(report)
+        return report
 
-        relative_path = storage_path.as_posix().lstrip("./")
-        public_url = f"{settings.BACKEND_PUBLIC_URL.rstrip('/')}/{relative_path}"
-        return storage_path, public_url
+    @classmethod
+    def _persist_file(cls, user_id: Any, original_name: str, file_bytes: bytes) -> tuple[str, str]:
+        """
+        Upload a file to Supabase Storage.
+        Returns (storage_path, public_url) — same contract as before.
+        """
+        return _supabase_upload_report(user_id, original_name, file_bytes)
 
     @classmethod
     async def _analyze_report(cls, filename: str, content_type: str | None, file_bytes: bytes) -> dict[str, Any]:
@@ -308,8 +319,37 @@ class ReportService:
         file_size = None
         parsed_path = urlparse(report.file_url or "").path.lstrip("/")
         parsed_text = (report.parsed_text or "").strip()
-        if parsed_text and not cls._looks_like_fallback_text(parsed_text):
+        if report.summary_data:
+            summary_data = report.summary_data
+            ocr_text = summary_data.get("ocr_text", parsed_text)
+            raw_summary = summary_data.get("summary") or summary_data.get("patient_summary") or []
+            summary_lines = raw_summary if isinstance(raw_summary, list) else [raw_summary]
+            
+            analysis = {
+                "title": summary_data.get("title", file_name),
+                "summary": summary_lines,
+                "ocr_text": ocr_text,
+                "markers": summary_data.get("markers") or summary_data.get("biomarkers") or [],
+                "source": summary_data.get("summary_source", "prediction-service"),
+            }
+            summary_view = {
+                "title": analysis["title"],
+                "patient_info": summary_data.get("patient_info", {}),
+                "key_findings": analysis["summary"],
+                "biomarkers": analysis["markers"],
+                "abnormal_values": summary_data.get("abnormal_values") or [],
+                "notes": summary_data.get("notes", []),
+                "source": analysis["source"],
+            }
+        elif parsed_text and not cls._looks_like_fallback_text(parsed_text):
             analysis = cls._build_local_analysis(file_name, parsed_text)
+            summary_view = cls._build_summary_view(
+                analysis["ocr_text"],
+                analysis["summary"],
+                analysis["markers"],
+                analysis["title"],
+                analysis["source"],
+            )
         elif parsed_text:
             analysis = {
                 "title": file_name,
@@ -318,21 +358,22 @@ class ReportService:
                 "markers": [],
                 "source": "local-fallback",
             }
+            summary_view = cls._build_summary_view(
+                analysis["ocr_text"], [], [], file_name, "local-fallback"
+            )
         else:
             analysis = {
-            "title": file_name,
-            "summary": [],
-            "ocr_text": "",
-            "markers": [],
-            "source": "stored-empty",
+                "title": file_name,
+                "summary": [],
+                "ocr_text": "",
+                "markers": [],
+                "source": "stored-empty",
             }
+            summary_view = cls._build_summary_view("", [], [], file_name, "stored-empty")
         if parsed_path:
-            file_path = Path(parsed_path)
-            if file_path.exists():
-                try:
-                    file_size = file_path.stat().st_size
-                except OSError:
-                    file_size = None
+            # File is now in Supabase Storage — cannot stat remote files.
+            # file_size was already captured at upload time and stored by callers.
+            file_size = None
 
         return {
             "id": str(report.id),
@@ -349,13 +390,8 @@ class ReportService:
             "summary": analysis["summary"],
             "markers": analysis["markers"],
             "summary_source": analysis["source"],
-            "summary_view": cls._build_summary_view(
-                analysis["ocr_text"],
-                analysis["summary"],
-                analysis["markers"],
-                analysis["title"],
-                analysis["source"],
-            ),
+            "summary_view": summary_view,
+            "summary_data": report.summary_data or {},
         }
 
     @classmethod

@@ -17,29 +17,8 @@ export const resolveReportType = (file) => {
 
 export const saveUploadedReportSession = (payload) => {
   if (typeof window !== 'undefined') {
+    // Only keep session state for immediate transition; NO long-term caching
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-
-    try {
-      const rawHistory = localStorage.getItem(HISTORY_KEY);
-      const history = rawHistory ? JSON.parse(rawHistory) : [];
-      const normalizedHistory = Array.isArray(history) ? history : [];
-      const nextEntry = {
-        ...payload,
-        source: payload?.source || 'upload',
-      };
-      const nextHistory = [
-        nextEntry,
-        ...normalizedHistory.filter((item) => {
-          const currentKey = item?.id || item?.fileUrl || item?.file_url || item?.fileName || item?.title;
-          const nextKey = nextEntry.id || nextEntry.fileUrl || nextEntry.file_url || nextEntry.fileName || nextEntry.title;
-          return currentKey !== nextKey;
-        }),
-      ];
-
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(nextHistory));
-    } catch (error) {
-      console.warn('[reportUpload] Failed to persist report history', error);
-    }
   }
 };
 
@@ -58,16 +37,8 @@ export const getUploadedReportSession = () => {
 };
 
 export const getUploadedReportHistory = () => {
-  if (typeof window === 'undefined') return [];
-
-  try {
-    const raw = localStorage.getItem(HISTORY_KEY);
-    const history = raw ? JSON.parse(raw) : [];
-    return Array.isArray(history) ? history : [];
-  } catch (error) {
-    console.warn('[reportUpload] Failed to read report history', error);
-    return [];
-  }
+  // Legacy function - History is now 100% DB driven
+  return [];
 };
 
 export const clearUploadedReportSession = () => {
