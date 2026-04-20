@@ -15,7 +15,8 @@ import ReportSummary, { hasReportSummaryContent, normalizeReportSummaryData } fr
 import { apiClient } from '../lib/apiClient';
 import { buildSummaryPdfFileName, generateStyledSummaryPdf } from '../utils/generateStyledSummaryPdf';
 import { ROUTES } from '../router/routes';
-import { openCommandPalette } from '../components/CommandPalette';
+import HeartLoader from '../components/ui/HeartLoader';
+import Skeleton from '../components/ui/Skeleton';
 
 const stripQuery = (value = '') => String(value).split('?')[0].split('#')[0];
 
@@ -363,7 +364,7 @@ const Reports = () => {
                 {/* Main Content Area */}
                 <div className="flex-1 flex flex-col min-w-0">
                     {/* Top Navbar */}
-                    
+
 
                     {/* Content Section */}
                     <div className="flex-1 overflow-hidden flex flex-col">
@@ -385,13 +386,11 @@ const Reports = () => {
                             {/* Report Sidebar List - 35% Width */}
                             <div className="w-full md:w-[35%] flex flex-col gap-4 overflow-y-auto pr-4 custom-scrollbar">
                                 {isLoading && reports.length === 0 ? (
-                                    <div className="flex min-h-[18rem] items-center justify-center rounded-[2.25rem] border border-dashed border-slate-200 dark:border-white/10 bg-white/60 dark:bg-white/5 p-8">
-                                        <div className="flex flex-col items-center gap-4 text-center">
-                                            <Loader2 size={28} className="animate-spin text-[#6143f4]" />
-                                            <p className="text-[11px] font-black uppercase tracking-[0.3em] text-slate-400">
-                                                Loading uploaded reports
-                                            </p>
-                                        </div>
+                                    <div className="w-full flex flex-col gap-4">
+                                        <Skeleton height={88} className="w-full" />
+                                        <Skeleton height={88} className="w-full" />
+                                        <Skeleton height={88} className="w-full" />
+                                        <Skeleton height={88} className="w-full" />
                                     </div>
                                 ) : null}
 
@@ -485,8 +484,8 @@ const Reports = () => {
                                                 {selectedReportLoading ? (
                                                     <div className="flex-1 flex items-center justify-center px-6 text-center">
                                                         <div className="max-w-sm">
-                                                            <Loader2 size={34} className="mx-auto animate-spin text-[#6143f4]" />
-                                                            <p className="mt-5 text-[11px] font-black uppercase tracking-[0.3em] text-slate-500">
+                                                            <div className="h-12 flex justify-center mb-4"><HeartLoader size={48} /></div>
+                                                            <p className="mt-5 text-[11px] font-black uppercase tracking-[0.3em] text-slate-400">
                                                                 Loading extracted summary
                                                             </p>
                                                             <p className="mt-3 text-[13px] text-slate-500 dark:text-slate-400 leading-6">

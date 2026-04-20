@@ -5,13 +5,15 @@ import {
   Brain,
   HeartPulse,
   Info,
-  LoaderCircle,
   SlidersHorizontal,
   Sparkles,
   Stethoscope,
   TrendingUp,
 } from 'lucide-react';
 import api from '../lib/axios';
+import HeartLoader from '../components/ui/HeartLoader';
+import { useUserStore } from '../store/userStore';
+import { calculateAge, calculateBMI } from '../utils/userDerived';
 
 const PERIODS = [
   { label: '1 Month', value: 1 },
@@ -46,14 +48,16 @@ const formatValue = (value, unit) => {
   return unit ? `${prettyValue} ${unit}` : prettyValue;
 };
 
-const getSliderPercent = (value, min, max) => {
-  if (max <= min) return 0;
-  return ((Number(value) - min) / (max - min)) * 100;
-};
 
 const Simulate = () => {
+  // Centralized user store
+  const { user } = useUserStore();
+
+  console.log("GLOBAL USER (Simulator):", user);
+
+  const age = calculateAge(user?.dob);
+
   const [baseline, setBaseline] = useState(null);
-  const [profile, setProfile] = useState(null);
   const [medicalConditions, setMedicalConditions] = useState([]);
   const [assumptions, setAssumptions] = useState([]);
   const [focusOptions, setFocusOptions] = useState(['cardiovascular', 'diabetes', 'respiratory']);
@@ -82,7 +86,6 @@ const Simulate = () => {
 
         setBaseline(nextBaseline);
         setParams(nextBaseline);
-        setProfile(payload?.profile || null);
         setMedicalConditions(payload?.medical_conditions || []);
         setAssumptions(payload?.assumptions || []);
         setFocusOptions(nextFocusOptions);
@@ -144,9 +147,9 @@ const Simulate = () => {
 
   if (loadingBaseline) {
     return (
-      <div className="min-h-screen bg-[#13082A] text-white flex items-center justify-center">
-        <div className="flex items-center gap-3 text-sm font-semibold tracking-wide text-white/80">
-          <LoaderCircle className="animate-spin" size={18} />
+      <div className="flex flex-col items-center justify-center p-12">
+        <div className="flex flex-col items-center gap-4 text-sm font-semibold tracking-wide text-slate-500 dark:text-white/80">
+          <HeartLoader size={48} color="#6143f4" />
           Loading disease simulator...
         </div>
       </div>
@@ -154,170 +157,174 @@ const Simulate = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#13082A] text-slate-100 antialiased">
-      <main className="flex-1 flex flex-col overflow-y-auto bg-[radial-gradient(circle_at_top_left,_rgba(96,67,244,0.18),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(0,156,222,0.12),_transparent_32%),linear-gradient(180deg,_#140a2c_0%,_#0f0820_100%)]">
-        
+    <div className="min-h-screen bg-[#f1f3f7] pb-12 antialiased">
+      <main className="max-w-[1600px] mx-auto p-4 md:p-8">
+        {error && (
+          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700 flex items-start gap-3 shadow-md">
+            <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
 
-        <div className="p-8 max-w-[1400px] mx-auto w-full space-y-6">
-          {error ? (
-            <div className="rounded-2xl border border-red-400/20 bg-red-500/10 px-5 py-4 text-sm text-red-100 flex items-start gap-3">
-              <AlertTriangle size={18} className="mt-0.5 shrink-0" />
-              <span>{error}</span>
-            </div>
-          ) : null}
-
-          <div className="grid grid-cols-12 gap-6">
-            <div className="col-span-12 lg:col-span-4 space-y-6">
-              <section className="bg-white/5 border border-white/10 rounded-3xl p-6 shadow-2xl shadow-black/20">
-                <div className="flex items-center gap-3 mb-5">
-                  <div className="size-11 rounded-2xl bg-[#6043F4]/20 border border-[#6043F4]/30 flex items-center justify-center">
-                    <HeartPulse className="text-[#8B75FF]" size={22} />
+        <div className="bg-[#e9ecf2] rounded-[2rem] p-6 md:p-8 border border-white/60 shadow-inner">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
+            {/* LEFT PANEL: INPUT CONTROLS */}
+            <div className="md:col-span-4 space-y-6">
+              <section className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-lg hover:shadow-xl transition-all duration-300 p-7 border border-white/60">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="size-12 rounded-2xl bg-purple-50 flex items-center justify-center border border-purple-100/50">
+                    <SlidersHorizontal className="text-purple-600" size={22} />
                   </div>
                   <div>
-                    <p className="text-xs uppercase tracking-[0.24em] text-white/40 font-bold">Focus Disease</p>
-                    <h2 className="text-lg font-black text-white">Scenario Setup</h2>
+                    <h2 className="text-lg font-extrabold text-gray-900">Simulation Controls</h2>
+                    <p className="text-xs text-gray-500 uppercase tracking-widest font-bold">Scenario Setup</p>
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-sm font-semibold text-white/70 block mb-2">Condition to simulate</label>
-                    <select
-                      value={focusCondition}
-                      onChange={(e) => setFocusCondition(e.target.value)}
-                      className="w-full rounded-2xl border border-white/10 bg-[#20103f] px-4 py-3 text-sm font-semibold text-white outline-none"
-                    >
-                      {focusOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {FOCUS_LABELS[option] || option}
-                        </option>
-                      ))}
-                    </select>
+                <div className="space-y-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-semibold text-gray-700 block mb-2">Condition</label>
+                      <select
+                        value={focusCondition}
+                        onChange={(e) => setFocusCondition(e.target.value)}
+                        className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-medium text-gray-900 outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all"
+                      >
+                        {focusOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {FOCUS_LABELS[option] || option}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-semibold text-gray-700 block mb-2">Timeframe</label>
+                      <select
+                        value={selectedPeriod}
+                        onChange={(e) => setSelectedPeriod(e.target.value)}
+                        className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-medium text-gray-900 outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all"
+                      >
+                        {PERIODS.map((p) => (
+                          <option key={p.value} value={p.label}>
+                            {p.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
 
-                  <div className="rounded-2xl border border-white/8 bg-black/15 p-4">
-                    <p className="text-[11px] uppercase tracking-[0.22em] text-white/35 font-bold mb-2">Existing health record</p>
+                  <div className="rounded-xl bg-gray-50 border border-gray-100 p-4">
+                    <p className="text-[11px] uppercase tracking-wider text-gray-400 font-bold mb-3">Existing Records</p>
                     <div className="flex flex-wrap gap-2">
                       {medicalConditions.length > 0 ? (
                         medicalConditions.map((condition) => (
-                          <span key={condition} className="px-3 py-1.5 rounded-full bg-white/8 border border-white/10 text-xs font-semibold text-white/80">
+                          <span key={condition} className="px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-xs font-semibold text-gray-700 shadow-sm">
                             {condition}
                           </span>
                         ))
                       ) : (
-                        <span className="text-sm text-white/55">No chronic condition saved yet. Generic risk model use hoga.</span>
+                        <span className="text-sm text-gray-400 italic">No chronic condition saved.</span>
                       )}
                     </div>
                   </div>
-                </div>
-              </section>
 
-              <section className="bg-white/5 border border-white/10 rounded-3xl p-6 shadow-2xl shadow-black/20">
-                <h3 className="font-bold text-lg mb-6 flex items-center gap-2 text-white">
-                  <SlidersHorizontal className="text-[#6043F4]" size={20} />
-                  Adjustable Parameters
-                </h3>
-
-                <div className="space-y-6">
-                  {SLIDERS.map((slider) => (
-                    <div key={slider.key}>
-                      <div className="flex justify-between mb-2">
-                        <label className="text-sm font-bold text-white/70">{slider.label}</label>
-                        <span className="text-sm font-black text-[#8B75FF]">
-                          {formatValue(params?.[slider.key], slider.unit)}
-                        </span>
+                  <div className="space-y-6 pt-4 border-t border-gray-100">
+                    <h3 className="text-sm font-bold text-gray-900 mb-4">Adjust Parameters</h3>
+                    {SLIDERS.map((slider) => (
+                      <div key={slider.key} className="space-y-3">
+                        <div className="flex justify-between items-center">
+                          <label className="text-sm font-semibold text-gray-600">{slider.label}</label>
+                          <span className="text-sm font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-md">
+                            {formatValue(params?.[slider.key], slider.unit)}
+                          </span>
+                        </div>
+                        <div className="relative h-6 flex items-center group">
+                          <input
+                            className="w-full h-2 bg-gray-200 rounded-full appearance-none cursor-pointer accent-purple-600"
+                            type="range"
+                            min={slider.min}
+                            max={slider.max}
+                            step={slider.step}
+                            value={params?.[slider.key] ?? baseline?.[slider.key] ?? slider.min}
+                            onChange={(e) =>
+                              setParams((current) => ({
+                                ...current,
+                                [slider.key]: slider.step < 1 ? parseFloat(e.target.value) : Number(e.target.value),
+                              }))
+                            }
+                          />
+                        </div>
                       </div>
-                      <div className="relative h-8 flex items-center">
-                        <div className="absolute inset-x-0 h-2 rounded-full bg-white/10" />
-                        <div
-                          className="absolute left-0 h-2 rounded-full bg-gradient-to-r from-[#6043F4] to-[#8B75FF]"
-                          style={{
-                            width: `${getSliderPercent(
-                              params?.[slider.key] ?? baseline?.[slider.key] ?? slider.min,
-                              slider.min,
-                              slider.max
-                            )}%`,
-                          }}
-                        />
-                        <input
-                          className="relative z-10 w-full h-8 appearance-none cursor-pointer bg-transparent simulator-slider"
-                          type="range"
-                          min={slider.min}
-                          max={slider.max}
-                          step={slider.step}
-                          value={params?.[slider.key] ?? baseline?.[slider.key] ?? slider.min}
-                          onChange={(e) =>
-                            setParams((current) => ({
-                              ...current,
-                              [slider.key]: slider.step < 1 ? parseFloat(e.target.value) : Number(e.target.value),
-                            }))
-                          }
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
 
-                <button
-                  onClick={runSimulation}
-                  disabled={isSimulating}
-                  className="w-full mt-8 py-3 rounded-2xl bg-[#6043F4] text-white font-bold hover:brightness-110 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  {isSimulating ? 'Running clinical scenario...' : 'Run Simulation'}
-                </button>
+                  <button
+                    onClick={runSimulation}
+                    disabled={isSimulating}
+                    className="w-full mt-6 py-4 rounded-2xl bg-purple-600 text-white font-bold hover:bg-purple-700 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-xl shadow-purple-600/20 text-sm uppercase tracking-wide"
+                  >
+                    {isSimulating ? (
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Running Simulation...
+                      </div>
+                    ) : 'Run Simulation'}
+                  </button>
+                </div>
               </section>
             </div>
 
-            <div className="col-span-12 lg:col-span-8 space-y-6">
-              <section className="bg-white/5 border border-white/10 rounded-3xl p-8">
-                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-8">
-                  <div>
-                    <h3 className="font-bold text-lg flex items-center gap-2 text-white">
-                      <Activity className="text-[#00C2FF]" size={20} />
-                      Risk Comparison: Before vs. After Simulation
-                    </h3>
-                    <p className="text-sm text-white/55 mt-2">
-                      Existing record ke basis par yeh free rule-based engine estimate karta hai ki selected change se risk kitna move karega.
-                    </p>
+            {/* CENTER PANEL: RESULTS + METRICS */}
+            <div className="md:col-span-5 space-y-6">
+              <section className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-lg hover:shadow-xl transition-all duration-300 p-7 border border-white/60">
+                <div className="flex items-center justify-between mb-8">
+                  <div className="flex items-center gap-3">
+                    <div className="size-12 rounded-2xl bg-blue-50 flex items-center justify-center border border-blue-100/50">
+                      <Activity className="text-blue-600" size={22} />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-extrabold text-gray-900">Risk Comparison</h2>
+                      <p className="text-xs text-gray-500 uppercase tracking-widest font-bold">Before vs. After</p>
+                    </div>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.2em] text-white/35 font-bold">Current profile</p>
-                    <p className="text-sm font-semibold text-white/80 mt-1">
-                      Age {profile?.age ?? '--'} • BMI {profile?.bmi ?? '--'} • Weight {profile?.weight_kg ?? '--'} kg
+                  <div className="text-right hidden sm:block">
+                    <p className="text-[10px] text-gray-400 font-bold uppercase">Current Profile</p>
+                    <p className="text-xs font-bold text-gray-600">
+                      Age {age || '--'} • BMI {user?.bmi || calculateBMI(user?.height, user?.weight) || '--'} • {user?.weight || '--'}kg
                     </p>
                   </div>
                 </div>
 
-                <div className="space-y-8">
+                <div className="space-y-10">
                   {riskComparison.map((risk) => (
-                    <div key={risk.key} className="grid grid-cols-12 gap-4 items-center">
-                      <div className="col-span-12 md:col-span-3 text-sm font-black text-white/55 uppercase tracking-tight">
-                        {risk.label}
-                      </div>
-                      <div className="col-span-12 md:col-span-9 space-y-3">
-                        <div className="relative h-11 bg-white/5 rounded-2xl overflow-hidden flex items-center">
-                          <div
-                            className="h-full bg-slate-500/70 flex items-center px-4"
-                            style={{ width: `${clampPercent(risk.current_risk)}%` }}
-                          >
-                            <span className="text-[10px] font-black uppercase tracking-widest text-white/80 whitespace-nowrap">
-                              Current Risk
-                            </span>
+                    <div key={risk.key} className="space-y-4">
+                      <h4 className="text-sm font-bold text-gray-800 uppercase tracking-tight">{risk.label}</h4>
+                      <div className="grid gap-3">
+                        {/* Current Risk Bar */}
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between text-[11px] font-bold">
+                            <span className="text-gray-400 uppercase">Current Risk</span>
+                            <span className="text-gray-500">{risk.current_risk}%</span>
                           </div>
-                          <span className="ml-auto mr-4 text-sm font-black text-white/80">{risk.current_risk}%</span>
+                          <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-gray-400 transition-all duration-500"
+                              style={{ width: `${clampPercent(risk.current_risk)}%` }}
+                            />
+                          </div>
                         </div>
-                        <div className="relative h-11 bg-white/5 rounded-2xl overflow-hidden flex items-center">
-                          <div
-                            className={`h-full bg-[#6043F4]/70 flex items-center px-4 transition-all ${isSimulating ? 'animate-pulse' : ''}`}
-                            style={{ width: `${clampPercent(risk.simulated_risk)}%` }}
-                          >
-                            <span className="text-[10px] font-black uppercase tracking-widest text-white whitespace-nowrap">
-                              Simulated Risk
-                            </span>
+                        {/* Simulated Risk Bar */}
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between text-[11px] font-bold">
+                            <span className="text-purple-400 uppercase">Simulated Risk</span>
+                            <span className={`${risk.delta > 0 ? 'text-red-500' : 'text-purple-600'}`}>{risk.simulated_risk}%</span>
                           </div>
-                          <span className={`ml-auto mr-4 text-sm font-black ${risk.delta > 0 ? 'text-red-300' : 'text-[#8B75FF]'}`}>
-                            {risk.simulated_risk}%
-                          </span>
+                          <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full transition-all duration-500 ${risk.delta > 0 ? 'bg-red-500' : 'bg-purple-600'} ${isSimulating ? 'animate-pulse' : ''}`}
+                              style={{ width: `${clampPercent(risk.simulated_risk)}%` }}
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -325,159 +332,129 @@ const Simulate = () => {
                 </div>
               </section>
 
-              <div className="grid grid-cols-12 gap-6 items-start">
-                <section className="col-span-12 xl:col-span-5 self-start bg-gradient-to-br from-[#6043F4] to-[#009CDE] rounded-3xl p-6 text-white shadow-2xl shadow-[#6043F4]/10">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-[11px] uppercase tracking-[0.25em] text-white/70 font-bold">Projected Recovery</p>
-                      <h3 className="text-xl font-black mt-2">Can you become normal?</h3>
+              <section className="bg-gradient-to-br from-purple-600 to-indigo-600 rounded-3xl p-8 text-white shadow-2xl shadow-purple-900/10 relative overflow-hidden">
+                <div className="absolute -right-6 -top-6 opacity-10">
+                  <Sparkles size={120} />
+                </div>
+
+                <div className="relative z-10">
+                  <p className="text-[11px] uppercase tracking-widest text-purple-100 font-bold mb-1">Projected Recovery</p>
+                  <h3 className="text-xl font-bold mb-6">Low-risk Proximity Score</h3>
+
+                  <div className="flex items-center gap-6">
+                    <div className="text-6xl font-black">{Math.round(progress)}%</div>
+                    <div className="flex-1 space-y-4">
+                      <div className="h-3 bg-white/20 rounded-full overflow-hidden backdrop-blur-sm">
+                        <div className="h-full bg-white rounded-full transition-all duration-1000" style={{ width: `${progress}%` }} />
+                      </div>
+                      <p className="text-xs font-medium text-purple-50 leading-relaxed">
+                        {focusSummary?.headline || 'Simulation required to calculate score.'}
+                      </p>
                     </div>
-                    <Sparkles size={30} className="text-white/85" />
                   </div>
 
-                  <div className="mt-8 flex items-end gap-4">
-                    <div className="text-5xl font-black">{Math.round(progress)}%</div>
-                    <div className="text-sm font-semibold text-white/80 mb-1">
-                      low-risk proximity score
+                  <div className="mt-6 pt-5 border-t border-white/10 grid grid-cols-2 gap-4">
+                    <div className="bg-white/10 rounded-xl p-3">
+                      <p className="text-[10px] uppercase text-purple-100 font-bold">Likelihood</p>
+                      <p className="text-sm font-bold mt-0.5">{focusSummary?.likelihood || '--'}</p>
                     </div>
-                  </div>
-
-                  <div className="mt-6 h-2.5 w-full bg-white/20 rounded-full overflow-hidden">
-                    <div className="h-full bg-white rounded-full" style={{ width: `${progress}%` }} />
-                  </div>
-
-                  <p className="mt-5 text-sm leading-relaxed text-white/90">
-                    {focusSummary?.headline || 'Simulation chalne ke baad yahan normalization insight dikhega.'}
-                  </p>
-                  <p className="mt-3 text-sm font-bold text-white/90">
-                    Likelihood: {focusSummary?.likelihood || '--'} • Risk reduction: {focusSummary?.risk_reduction_points ?? '--'} points
-                  </p>
-                </section>
-
-                <section className="col-span-12 xl:col-span-7 bg-white/5 border border-white/10 rounded-3xl p-8 relative overflow-hidden">
-                  <div className="absolute right-0 top-0 p-6 opacity-5">
-                    <Brain size={120} />
-                  </div>
-                  <h3 className="font-bold text-lg mb-6 flex items-center gap-2 text-white">
-                    <Brain className="text-[#8B75FF]" size={20} />
-                    Scenario Analysis: AI Logic
-                  </h3>
-                  <div className="bg-black/20 p-6 rounded-2xl border-l-4 border-[#6043F4] relative z-10">
-                    <p className="text-[15px] leading-relaxed text-white/85 italic font-medium">
-                      {result?.focus_summary || 'Baseline load hone ke baad model aapke condition-specific scenario ko explain karega.'}
-                    </p>
-                  </div>
-
-                  <div className="mt-6 space-y-3">
-                    {(result?.drivers || []).map((driver) => (
-                      <div key={driver} className="rounded-2xl border border-white/8 bg-white/[0.04] px-4 py-3 text-sm text-white/80">
-                        {driver}
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              </div>
-
-              <div className="grid grid-cols-12 gap-6">
-                <section className="col-span-12 xl:col-span-7 bg-white/5 border border-white/10 rounded-3xl p-8">
-                  <h3 className="font-bold text-lg flex items-center gap-2 text-white">
-                    <TrendingUp className="text-[#8B75FF]" size={20} />
-                    Suggested Targets
-                  </h3>
-                  <div className="mt-6 grid gap-3">
-                    {(result?.recommendations || []).map((recommendation) => (
-                      <div key={recommendation} className="rounded-2xl border border-white/8 bg-black/15 px-4 py-3 text-sm text-white/80">
-                        {recommendation}
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {SLIDERS.slice(0, 4).map((slider) => (
-                      <div key={slider.key} className="rounded-2xl border border-white/8 bg-white/[0.04] p-4">
-                        <p className="text-[11px] uppercase tracking-[0.18em] text-white/35 font-bold">{slider.label}</p>
-                        <p className="mt-3 text-lg font-black text-white">{formatValue(params?.[slider.key], slider.unit)}</p>
-                        <p className="text-xs text-white/45 mt-1">
-                          Baseline {formatValue(baseline?.[slider.key], slider.unit)}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-
-                <section className="col-span-12 xl:col-span-5 bg-[#10091d] border border-white/8 rounded-3xl p-8">
-                  <h3 className="font-bold text-lg flex items-center gap-2 text-white">
-                    <Info className="text-[#00C2FF]" size={20} />
-                    Free Engine Notes
-                  </h3>
-                  <div className="mt-6 space-y-3">
-                    {assumptions.map((assumption) => (
-                      <div key={assumption} className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 text-sm text-white/72">
-                        {assumption}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-8 rounded-2xl border border-[#6043F4]/20 bg-[#6043F4]/10 p-4">
-                    <p className="text-sm text-white/85 leading-relaxed">
-                      Yeh simulator fully free stack par hai: existing database data + explainable rule engine. Koi paid AI API ki zarurat nahi hai.
-                    </p>
-                  </div>
-                </section>
-              </div>
-
-              <section className="flex flex-col md:flex-row items-center justify-between p-8 bg-[#0F081D] rounded-3xl border border-white/8">
-                <div className="flex items-center gap-5 mb-6 md:mb-0">
-                  <div className="w-14 h-14 rounded-2xl bg-[#6043F4] flex items-center justify-center text-white shadow-xl shadow-[#6043F4]/20">
-                    <Stethoscope size={28} />
-                  </div>
-                  <div>
-                    <h4 className="text-white text-xl font-black tracking-tight">Clinical next step</h4>
-                    <p className="text-slate-400 text-sm font-medium mt-1">
-                      Scenario ko doctor review ke liye export ya report screen se connect kiya ja sakta hai.
-                    </p>
+                    <div className="bg-white/10 rounded-xl p-3">
+                      <p className="text-[10px] uppercase text-purple-100 font-bold">Reduction</p>
+                      <p className="text-sm font-bold mt-0.5">-{focusSummary?.risk_reduction_points ?? '--'} pts</p>
+                    </div>
                   </div>
                 </div>
-                <div className="text-sm text-white/75 font-semibold">
-                  Focus: {FOCUS_LABELS[focusCondition] || focusCondition} • Window: {timeframeMonths} months
+              </section>
+            </div>
+
+            {/* RIGHT PANEL: AI INSIGHTS */}
+            <div className="md:col-span-3 space-y-6">
+              <section className="bg-gradient-to-br from-[#0f172a] to-[#1e293b] text-gray-200 rounded-3xl p-7 shadow-2xl border border-slate-700/50 relative overflow-hidden h-full">
+                <div className="absolute right-0 top-0 p-4 opacity-5 rotate-12">
+                  <Brain size={140} />
+                </div>
+
+                <div className="relative z-10 flex flex-col h-full">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="size-12 rounded-2xl bg-white/5 flex items-center justify-center border border-white/10 backdrop-blur-sm">
+                      <Brain className="text-purple-400" size={22} />
+                    </div>
+                    <h3 className="font-extrabold text-lg text-white">AI Insights</h3>
+                  </div>
+
+                  <div className="flex-1 space-y-6">
+                    <div className="bg-purple-500/10 border-l-4 border-purple-500 p-4 rounded-r-xl">
+                      <p className="text-sm leading-relaxed text-purple-50 italic">
+                        "{result?.focus_summary || 'Detailed condition-specific insights will appear here after calculation.'}"
+                      </p>
+                    </div>
+
+                    <div className="space-y-3">
+                      <h4 className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Key Risk Drivers</h4>
+                      <div className="space-y-2">
+                        {(result?.drivers || []).length > 0 ? (
+                          (result?.drivers || []).map((driver) => (
+                            <div key={driver} className="flex items-start gap-2.5 p-3 rounded-xl bg-white/5 border border-white/5 text-xs text-gray-300">
+                              <Info size={14} className="mt-0.5 text-blue-400 shrink-0" />
+                              <span>{driver}</span>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-xs text-gray-500 italic">Drivers will be identified post-simulation.</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 pt-2">
+                      <h4 className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Recommendations</h4>
+                      <div className="space-y-2">
+                        {(result?.recommendations || []).length > 0 ? (
+                          (result?.recommendations || []).map((rec) => (
+                            <div key={rec} className="flex items-start gap-2.5 p-3 rounded-xl bg-green-500/10 border border-green-500/10 text-xs text-green-100">
+                              <TrendingUp size={14} className="mt-0.5 text-green-400 shrink-0" />
+                              <span>{rec}</span>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-xs text-gray-500 italic">Awaiting simulation data...</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 pt-2 border-t border-white/5 mt-4">
+                      <h4 className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Engine Assumptions</h4>
+                      <div className="space-y-2">
+                        {assumptions.length > 0 ? (
+                          assumptions.map((item) => (
+                            <div key={item} className="flex items-start gap-2.5 p-2 rounded-lg bg-white/5 text-[10px] text-gray-400">
+                              <div className="size-1.5 rounded-full bg-purple-500 mt-1 shrink-0" />
+                              <span>{item}</span>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-[10px] text-gray-500 italic">No assumptions provided.</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-auto pt-8">
+                    <div className="p-4 rounded-xl bg-white/5 border border-white/5">
+                      <div className="flex items-center gap-3 mb-2">
+                        <Stethoscope size={18} className="text-blue-400" />
+                        <span className="text-xs font-bold uppercase tracking-tight">Clinical Next Step</span>
+                      </div>
+                      <p className="text-[11px] text-gray-400 leading-relaxed">
+                        This scenario analysis can be exported for medical professional review.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </section>
             </div>
           </div>
         </div>
       </main>
-
-      <style>{`
-        .simulator-slider::-webkit-slider-runnable-track {
-          height: 8px;
-          background: transparent;
-        }
-
-        .simulator-slider::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          appearance: none;
-          margin-top: -6px;
-          width: 20px;
-          height: 20px;
-          border-radius: 9999px;
-          background: #6043F4;
-          border: 2px solid #c4b5fd;
-          box-shadow: 0 0 0 4px rgba(96, 67, 244, 0.18);
-        }
-
-        .simulator-slider::-moz-range-track {
-          height: 8px;
-          background: transparent;
-        }
-
-        .simulator-slider::-moz-range-thumb {
-          width: 20px;
-          height: 20px;
-          border-radius: 9999px;
-          background: #6043F4;
-          border: 2px solid #c4b5fd;
-          box-shadow: 0 0 0 4px rgba(96, 67, 244, 0.18);
-        }
-      `}</style>
     </div>
   );
 };

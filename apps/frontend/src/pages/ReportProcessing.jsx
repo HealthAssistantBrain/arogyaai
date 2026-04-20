@@ -8,6 +8,7 @@ import { ROUTES } from '../router/routes';
 import { useReportUploadStore } from '../store/reportUploadStore';
 import { apiClient } from '../lib/apiClient';
 import { resolveReportType, saveUploadedReportSession } from '../lib/reportUpload';
+import ReportLoader from '../components/ui/ReportLoader';
 
 const PIPELINE_STAGES = [
     { key: 'uploading', label: 'Uploading file', target: 20, detail: 'Sending the PDF securely to ArogyaAI.' },
@@ -184,35 +185,14 @@ const ReportProcessing = () => {
         <div className="bg-[#f6f5f8] dark:bg-[#0B0819] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased text-[14px]">
             <div className="flex flex-1 overflow-hidden">
                 <main className="flex-1 flex flex-col h-full relative overflow-y-auto custom-scrollbar bg-[#f6f5f8] dark:bg-[#0B0819]">
-                    
+
 
                     <div className="flex-1 flex flex-col items-center justify-center p-10 max-w-4xl mx-auto w-full relative z-10 pb-20">
-                        <div className="relative size-64 flex items-center justify-center mb-16">
-                            <svg className="absolute inset-0 size-full -rotate-90">
-                                <circle cx="128" cy="128" r="118" fill="transparent" stroke="currentColor" strokeWidth="6" className="text-slate-100 dark:text-slate-800 opacity-50"></circle>
-                                <circle
-                                    cx="128"
-                                    cy="128"
-                                    r="118"
-                                    fill="transparent"
-                                    stroke="url(#progressGradient)"
-                                    strokeWidth="10"
-                                    strokeDasharray="741.4"
-                                    strokeDashoffset={741.4 - (741.4 * progress) / 100}
-                                    strokeLinecap="round"
-                                    className="transition-all duration-700 ease-in-out"
-                                />
-                                <defs>
-                                    <linearGradient id="progressGradient" x1="0%" x2="100%" y1="0%" y2="0%">
-                                        <stop offset="0%" stopColor="#6143f4" />
-                                        <stop offset="100%" stopColor="#009cde" />
-                                    </linearGradient>
-                                </defs>
-                            </svg>
+                        <div className="relative size-64 flex flex-col items-center justify-center mb-16">
+                            <ReportLoader />
 
-                            <div className="text-center z-10 flex flex-col items-center">
-                                <span className="text-7xl font-black text-[#13082a] dark:text-white tracking-tighter leading-none italic">{progress}%</span>
-                                <div className="mt-4 px-4 py-1.5 bg-[#6143f4]/10 text-[#6143f4] text-[10px] font-black uppercase tracking-[0.25em] rounded-full border border-[#6143f4]/20 shadow-sm leading-none">
+                            <div className="text-center z-10 flex flex-col items-center mt-6">
+                                <div className="px-4 py-1.5 bg-[#6143f4]/10 text-[#6143f4] text-[10px] font-black uppercase tracking-[0.25em] rounded-full border border-[#6143f4]/20 shadow-sm leading-none">
                                     {errorMessage ? 'Processing Failed' : activeStage.label}
                                 </div>
                             </div>
@@ -238,13 +218,12 @@ const ReportProcessing = () => {
 
                                     return (
                                         <div key={step.text} className={`flex items-center gap-6 transition-all duration-500 ${status === 'pending' ? 'opacity-30' : 'opacity-100'}`}>
-                                            <div className={`size-14 rounded-2xl flex items-center justify-center shrink-0 border-2 transition-all ${
-                                                status === 'done'
-                                                    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
-                                                    : status === 'active'
-                                                        ? 'bg-[#6143f4]/10 border-[#6143f4]/20 text-[#6143f4]'
-                                                        : 'bg-slate-50 dark:bg-white/5 border-slate-100 dark:border-white/5 text-slate-400'
-                                            }`}>
+                                            <div className={`size-14 rounded-2xl flex items-center justify-center shrink-0 border-2 transition-all ${status === 'done'
+                                                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
+                                                : status === 'active'
+                                                    ? 'bg-[#6143f4]/10 border-[#6143f4]/20 text-[#6143f4]'
+                                                    : 'bg-slate-50 dark:bg-white/5 border-slate-100 dark:border-white/5 text-slate-400'
+                                                }`}>
                                                 {status === 'done' ? <CheckCircle2 size={24} strokeWidth={2.5} /> : <step.icon size={24} strokeWidth={1.5} />}
                                             </div>
                                             <div className="flex-1">
@@ -266,7 +245,7 @@ const ReportProcessing = () => {
                                         <span className="text-[10px] font-black tracking-[0.3em] uppercase text-slate-400 leading-none">Analysis Status</span>
                                         <p className="text-[9px] font-bold text-[#6143f4] uppercase tracking-widest opacity-60">{errorMessage ? 'Processing failed' : activeStage.label}</p>
                                     </div>
-                                    <span className="text-2xl font-black text-[#6143f4] italic tracking-tighter leading-none">{progress}% COMPLETE</span>
+                                    <span className="text-2xl font-black text-[#6143f4] italic tracking-tighter leading-none">PROCESSING...</span>
                                 </div>
                                 <div className="h-5 w-full bg-slate-100 dark:bg-white/5 rounded-full p-1 border border-slate-200/50 dark:border-white/5 shadow-inner">
                                     <div className="h-full bg-gradient-to-r from-[#6143f4] to-[#009cde] rounded-full transition-all duration-700" style={{ width: `${progress}%` }} />

@@ -15,6 +15,7 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency
 from sqlalchemy.orm import Session
 
 from core.config import settings
+from core.pipeline_logger import log_pipeline
 from integrations.supabase_storage import upload_report as _supabase_upload_report
 from models import Report, ReportStatusEnum, ReportTypeEnum, User
 
@@ -48,7 +49,9 @@ class ReportService:
                 detail="File is too large. Please upload a report smaller than 10 MB.",
             )
 
+        log_pipeline("report", step="upload_file", status="running", data="pending")
         storage_path, public_url = cls._persist_file(current_user.id, file.filename, file_bytes)
+        log_pipeline("report", step="upload_file", status="healthy", data="stored")
 
         report = Report(
             user_id=current_user.id,
@@ -61,13 +64,17 @@ class ReportService:
         db.refresh(report)
 
         try:
+            log_pipeline("report", step="analyze_report", status="running", data="pending")
             analysis = await cls._analyze_report(file.filename or "report", file.content_type, file_bytes)
             cls.persist_report(db, str(report.id), analysis.get("ocr_text", ""), analysis)
             db.refresh(report)
+            log_pipeline("report", step="analyze_report", status="healthy", data="fetched",
+                         extra=f"source={analysis.get('source', '?')}")
         except Exception as exc:
             report.status = ReportStatusEnum.FAILED
             db.commit()
             db.refresh(report)
+            log_pipeline("report", step="analyze_report", status="unhealthy", data="failed")
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"Report was saved, but summarization failed: {exc}",

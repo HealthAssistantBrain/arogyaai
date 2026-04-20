@@ -54,3 +54,12 @@
   font-family: 'DM Sans', sans-serif;
   font-weight: 700;
 }
+
+@keyframes shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: 200px 0;
+  }
+}

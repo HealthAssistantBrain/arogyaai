@@ -2,7 +2,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../router/routes';
 import { useAuthStore } from '../../store/authStore';
 import {
-    User, ShieldCheck, Smartphone, Database, HeartPulse, BellRing, Brain, Activity, LogOut, ArrowLeft
+    User, ShieldCheck, Smartphone, Database, HeartPulse, BellRing, Brain, Activity, LogOut, ArrowLeft, Trash2
 } from 'lucide-react';
 
 const SettingsSidebar = () => {
@@ -45,8 +45,8 @@ const SettingsSidebar = () => {
                             key={item.label}
                             onClick={() => navigate(item.path)}
                             className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all group ${isActive
-                                    ? 'bg-[#6143f4]/10 text-[#6143f4] border border-[#6143f4]/20'
-                                    : 'text-slate-500 hover:bg-slate-50 hover:text-[#13082a] dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-white border border-transparent'
+                                ? 'bg-[#6143f4]/10 text-[#6143f4] border border-[#6143f4]/20'
+                                : 'text-slate-500 hover:bg-slate-50 hover:text-[#13082a] dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-white border border-transparent'
                                 }`}
                         >
                             <item.icon size={18} className={isActive ? 'text-[#6143f4]' : 'text-slate-400 group-hover:text-[#6143f4]'} />
@@ -65,6 +65,13 @@ const SettingsSidebar = () => {
                 >
                     <span className="text-xs font-black uppercase tracking-widest">Log Out</span>
                     <LogOut size={16} className="group-hover:translate-x-1 transition-transform" />
+                </button>
+                <button
+                    onClick={() => navigate(ROUTES.SETTINGS_DELETE_ACCOUNT)}
+                    className="w-full flex items-center justify-between px-4 py-3 rounded-2xl text-red-400 hover:bg-red-500/8 border border-transparent hover:border-red-400/20 transition-all group"
+                >
+                    <span className="text-xs font-black uppercase tracking-widest">Delete Account</span>
+                    <Trash2 size={15} className="group-hover:scale-110 transition-transform" />
                 </button>
             </div>
         </aside>

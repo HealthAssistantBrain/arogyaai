@@ -5,6 +5,8 @@ import { completeSupabaseOAuthSession } from '../lib/supabaseOAuth'
 import { useAuthStore } from '../store/authStore'
 import { ROUTES } from '../router/routes'
 import { getSupabaseClient, supabase } from '../lib/supabaseClient'
+import HeartLoader from '../components/ui/HeartLoader'
+import FullPageSkeleton from '../components/ui/FullPageSkeleton'
 
 const AuthCallback = () => {
   const navigate = useNavigate()
@@ -90,6 +92,21 @@ const AuthCallback = () => {
     }
   }, [navigate])
 
+  // ── Loading state: show skeleton + heart animation while OAuth handshake runs ──
+  if (status === 'checking') {
+    return (
+      <div className="min-h-screen bg-[#f6f5f8] dark:bg-[#13082A] flex items-center justify-center transition-colors duration-500">
+        <FullPageSkeleton />
+        <div className="relative z-10 flex flex-col items-center gap-5">
+          <HeartLoader size={180} color="#6143f4" />
+          <p className="text-xs uppercase tracking-[0.3em] font-black text-[#6143f4] animate-pulse">
+            Finalizing secure sign‑in…
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-[#f6f5f8] dark:bg-[#13082A] flex items-center justify-center p-6 font-display relative overflow-hidden transition-colors duration-500">
       <div className="fixed inset-0 -z-10 overflow-hidden">
@@ -130,3 +147,4 @@ const AuthCallback = () => {
 }
 
 export default AuthCallback
+

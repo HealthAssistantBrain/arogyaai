@@ -3,13 +3,16 @@ import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import AppHeader from './AppHeader';
 import { useAuthStore } from '../../store/authStore';
+import { useUserStore } from '../../store/userStore';
 
 export default function MainLayout() {
     const fetchProfile = useAuthStore((state: any) => state.fetchProfile);
+    const fetchUser = useUserStore((state: any) => state.fetchUser);
 
     useEffect(() => {
         fetchProfile();
-    }, [fetchProfile]);
+        fetchUser();
+    }, [fetchProfile, fetchUser]);
 
     return (
         <div className="bg-[#f6f5f8] dark:bg-[#0B0819] font-display text-[#13082A] dark:text-slate-100 min-h-screen flex antialiased relative">

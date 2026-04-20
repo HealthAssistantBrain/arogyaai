@@ -18,7 +18,7 @@ const api = axios.create({
 // ── Request interceptor: attach Bearer token ─────────────────────────────────
 api.interceptors.request.use(
   (config) => {
-    const token = useAuthStore.getState().token;
+    const token = localStorage.getItem("access_token");
     if (token) config.headers.Authorization = `Bearer ${token}`;
     return config;
   },
@@ -83,7 +83,7 @@ async function checkAndTriggerMaintenance() {
     }
 
     consecutiveHealthFailures = 0; // reset on success
-  } catch (err) {
+  } catch {
     consecutiveHealthFailures += 1;
     console.warn(`[Maintenance] Health failure #${consecutiveHealthFailures}/${MAX_HEALTH_FAILURES}`);
     if (consecutiveHealthFailures >= MAX_HEALTH_FAILURES) {

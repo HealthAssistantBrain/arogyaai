@@ -1,5 +1,5 @@
 """
-Lab pipeline service — processes raw lab report text into structured DB records.
+Lab pipeline service - processes raw lab report text into structured DB records.
 
 Lives inside apps/backend/services/ so it is available inside the Docker container
 without requiring the monorepo pipelines/ directory (which is not COPYed into the image).
@@ -17,11 +17,9 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from pipelines.storage_pipeline.service import StoragePipelineService
+from core.pipeline_logger import log_pipeline
 
 logger = logging.getLogger("uvicorn.error")
-
-# ---------------------------------------------------------------------------
-# Lab parameter catalogue (single source of truth shared with the route)
 # ---------------------------------------------------------------------------
 _LAB_DEFINITIONS: list[dict[str, Any]] = [
     {
@@ -281,12 +279,21 @@ def run_lab_pipeline(
     Full pipeline: extract → normalize → persist.
     Never raises — failures are logged and [] is returned.
     """
+    log_pipeline("lab", step="extract_values", status="running", data="pending")
     try:
         raw = extract_lab_values(text)
         if not raw:
             logger.info("lab_pipeline: no lab values found (report_id=%s)", report_id)
+            log_pipeline("lab", step="extract_values", status="healthy", data="empty",
+                         extra=f"report_id={report_id}")
             return []
+
+        log_pipeline("lab", step="normalize_values", status="running", data="pending")
         normalized = normalize_lab_values(raw)
+        log_pipeline("lab", step="normalize_values", status="healthy",
+                     data=f"{len(normalized)}_markers")
+
+        log_pipeline("lab", step="store_results", status="running", data="pending")
         count = store_lab_results(db, user_id, report_id, normalized)
         from models import User
 
@@ -296,8 +303,12 @@ def run_lab_pipeline(
                 StoragePipelineService.store_lab_values(db, user, normalized, report_id=report_id)
             except Exception:
                 logger.exception("lab_pipeline: lab_values persistence failed for user=%s report=%s", user_id, report_id)
+                log_pipeline("lab", step="storage_pipeline", status="unhealthy", data="failed")
         logger.info("lab_pipeline: stored %d results (user=%s report=%s)", count, user_id, report_id)
+        log_pipeline("lab", step="complete", status="healthy",
+                     data="fetched", extra=f"stored={count}")
         return normalized
     except Exception:
         logger.exception("lab_pipeline: failed for user=%s report=%s", user_id, report_id)
+        log_pipeline("lab", step="run_lab_pipeline", status="unhealthy", data="failed")
         return []

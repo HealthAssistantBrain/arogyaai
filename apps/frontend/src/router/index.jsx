@@ -6,11 +6,10 @@ import {
 import { AnimatePresence } from 'framer-motion'
 import { ROUTES } from './routes'
 import ProtectedRoute from '../components/guards/AuthGuard'
-import OnboardingGuard from '../components/guards/OnboardingGuard'
 import GuestGuard from '../components/guards/GuestGuard'
-import ActiveOnboardingGuard from '../components/guards/ActiveOnboardingGuard'
 import LoadingScreen from '../pages/LoadingScreen'
 import MainLayout from '../components/layout/MainLayout'
+import { useAuthStore } from '../store/authStore'
 
 // ── lazy imports (all 59 pages) ──────────────────────────────────
 const LandingPage = lazy(() => import('../pages/Landing'))
@@ -75,6 +74,11 @@ const NotFound404 = lazy(() => import('../pages/NotFound'))
 const ServerError500 = lazy(() => import('../pages/ServerError'))
 const MaintenancePage = lazy(() => import('../pages/SystemMaintenance'))
 
+function RootRedirect() {
+  const { isAuthenticated } = useAuthStore()
+  return isAuthenticated ? <Navigate to="/dashboard" replace /> : <LandingPage />
+}
+
 export default function AppRouter() {
   const location = useLocation()
 
@@ -84,7 +88,7 @@ export default function AppRouter() {
         <Routes location={location} key={location.pathname}>
 
           {/* ── PUBLIC — no guard ─────────────────────────────── */}
-          <Route path={ROUTES.HOME} element={<LandingPage />} />
+          <Route path={ROUTES.HOME} element={<RootRedirect />} />
           <Route path={ROUTES.TERMS} element={<TermsOfService />} />
           <Route path={ROUTES.PRIVACY} element={<PrivacyPolicy />} />
           <Route path={ROUTES.DATA_CONSENT} element={<DataConsent />} />
@@ -99,6 +103,13 @@ export default function AppRouter() {
             <Route path={ROUTES.SIGNUP} element={<SignUp />} />
             <Route path={ROUTES.FORGOT_PASSWORD} element={<ForgotPassword />} />
             <Route path={ROUTES.RESET_PASSWORD} element={<ResetPassword />} />
+            <Route path={ROUTES.ONBOARDING} element={<Step1BasicProfile />} />
+            <Route path={ROUTES.ONBOARDING_STEP_1} element={<Step1BasicProfile />} />
+            <Route path={ROUTES.ONBOARDING_STEP_2} element={<Step2MedHistory />} />
+            <Route path={ROUTES.ONBOARDING_STEP_3} element={<Step3Lifestyle />} />
+            <Route path={ROUTES.ONBOARDING_STEP_4} element={<Step4DeviceConnect />} />
+            <Route path={ROUTES.ONBOARDING_SUMMARY} element={<OnboardingSummary />} />
+            <Route path={ROUTES.ONBOARDING_COMPLETION} element={<OnboardingCompletion />} />
           </Route>
 
           {/* ── AUTH REQUIRED ─────────────────────────────────── */}
@@ -110,65 +121,52 @@ export default function AppRouter() {
             <Route path={ROUTES.EMAIL_VERIFICATION} element={<EmailVerification />} />
             <Route path={ROUTES.ACCOUNT_CREATED} element={<AccountCreated />} />
 
-            {/* ── ACTIVE ONBOARDING REQUIRED (AND NOT FINISHED) ─ */}
-            <Route element={<ActiveOnboardingGuard />}>
-              <Route path={ROUTES.ONBOARDING} element={<Step1BasicProfile />} />
-              <Route path={ROUTES.ONBOARDING_STEP_1} element={<Step1BasicProfile />} />
-              <Route path={ROUTES.ONBOARDING_STEP_2} element={<Step2MedHistory />} />
-              <Route path={ROUTES.ONBOARDING_STEP_3} element={<Step3Lifestyle />} />
-              <Route path={ROUTES.ONBOARDING_STEP_4} element={<Step4DeviceConnect />} />
-              <Route path={ROUTES.ONBOARDING_SUMMARY} element={<OnboardingSummary />} />
-              <Route path={ROUTES.ONBOARDING_COMPLETION} element={<OnboardingCompletion />} />
-            </Route>
-
-            {/* ── ONBOARDING COMPLETE REQUIRED ─────────────────── */}
-            <Route element={<OnboardingGuard />}>
-              <Route element={<MainLayout />}>
-                <Route path={ROUTES.DASHBOARD} element={<MainDashboard />} />
-                <Route path={ROUTES.DASHBOARD_ALT} element={<DashboardAltView />} />
-                <Route path={`${ROUTES.INSIGHTS}/*`} element={<AIHealthInsights />} />
-                <Route path={`${ROUTES.INSIGHTS_DESKTOP}/*`} element={<AIInsightsDesktop />} />
-                <Route path={`${ROUTES.SIMULATOR}/*`} element={<DiseaseSimulator />} />
-                <Route path={ROUTES.TIMELINE} element={<HealthTimeline />} />
-                <Route path={ROUTES.RISK_EXPLANATION} element={<RiskExplanation />} />
-                <Route path={ROUTES.RECOMMENDATIONS} element={<PreventiveRecs />} />
-                <Route path={ROUTES.RISK_REPORT} element={<AIRiskReport />} />
-                <Route path={ROUTES.AQI_MONITOR} element={<AQIMonitor />} />
-                <Route path={ROUTES.LAB_RESULTS} element={<LabTestResults />} />
-                <Route path={ROUTES.MEDICAL_REPORTS} element={<MedicalReports />} />
-                <Route path={ROUTES.SLEEP} element={<SleepAnalysis />} />
-                <Route path={ROUTES.DEVICES} element={<DeviceManager />} />
-                <Route path={ROUTES.GOOGLE_FIT_SETTINGS} element={<GoogleFitSettings />} />
-                <Route path={ROUTES.DEVICE_SETTINGS} element={<DeviceSettings />} />
-                <Route path={ROUTES.UPLOAD} element={<UploadMedicalReport />} />
-                <Route path={ROUTES.REPORT_PROCESSING} element={<ReportProcessing />} />
-                <Route path={ROUTES.UPLOAD_SUCCESS} element={<UploadSuccess />} />
-                <Route path={ROUTES.SETTINGS} element={<SettingsLayout />}>
-                  <Route index element={<Navigate to={ROUTES.SETTINGS_PROFILE} replace />} />
-                  <Route path="profile" element={<SettingsProfile />} />
-                  <Route path="security" element={<SettingsSecurity />} />
-                  <Route path="devices" element={<SettingsDevices />} />
-                  <Route path="data" element={<SettingsData />} />
-                  <Route path="integrations" element={<SettingsIntegrations />} />
-                  <Route path="notifications" element={<SettingsNotifications />} />
-                  <Route path="ai" element={<SettingsAI />} />
-                  <Route path="system" element={<SettingsSystem />} />
-                </Route>
-
-                <Route path={ROUTES.PROFILE} element={<Navigate to={ROUTES.SETTINGS_PROFILE} replace />} />
-                <Route path={ROUTES.LOGOUT} element={<LogoutConfirmation />} />
-                <Route path={ROUTES.NOTIFICATIONS} element={<NotificationCentre />} />
-                <Route path={ROUTES.NOTIFICATIONS_HISTORY} element={<NotificationHistory />} />
-                <Route path={ROUTES.ALERT_DETAILS} element={<AlertDetails />} />
-                <Route path={ROUTES.EMERGENCY_ALERT} element={<EmergencyAlert />} />
-                <Route path={ROUTES.WHATS_NEW} element={<WhatsNew />} />
-                {/* Help Center/Status inside MainLayout so sidebar renders */}
-                <Route path={ROUTES.HELP} element={<HelpCenterHome />} />
-                <Route path={ROUTES.HELP_SEARCH} element={<HelpCenterSearch />} />
-                <Route path={ROUTES.HELP_ARTICLE} element={<HelpCenterArticle />} />
-                <Route path={ROUTES.STATUS} element={<SystemStatus />} />
-                {/* /settings/security-audit → handled by nested settings route */}
+            <Route element={<MainLayout />}>
+              <Route path={ROUTES.DASHBOARD} element={<MainDashboard />} />
+              <Route path={ROUTES.DASHBOARD_ALT} element={<DashboardAltView />} />
+              <Route path={`${ROUTES.INSIGHTS}/*`} element={<AIHealthInsights />} />
+              <Route path={`${ROUTES.INSIGHTS_DESKTOP}/*`} element={<AIInsightsDesktop />} />
+              <Route path={`${ROUTES.SIMULATOR}/*`} element={<DiseaseSimulator />} />
+              <Route path={ROUTES.TIMELINE} element={<HealthTimeline />} />
+              <Route path={ROUTES.RISK_EXPLANATION} element={<RiskExplanation />} />
+              <Route path={ROUTES.RECOMMENDATIONS} element={<PreventiveRecs />} />
+              <Route path={ROUTES.RISK_REPORT} element={<AIRiskReport />} />
+              <Route path={ROUTES.AQI_MONITOR} element={<AQIMonitor />} />
+              <Route path={ROUTES.LAB_RESULTS} element={<LabTestResults />} />
+              <Route path={ROUTES.MEDICAL_REPORTS} element={<MedicalReports />} />
+              <Route path={ROUTES.SLEEP} element={<SleepAnalysis />} />
+              <Route path={ROUTES.DEVICES} element={<DeviceManager />} />
+              <Route path={ROUTES.GOOGLE_FIT_SETTINGS} element={<GoogleFitSettings />} />
+              <Route path={ROUTES.DEVICE_SETTINGS} element={<DeviceSettings />} />
+              <Route path={ROUTES.UPLOAD} element={<UploadMedicalReport />} />
+              <Route path={ROUTES.REPORT_PROCESSING} element={<ReportProcessing />} />
+              <Route path={ROUTES.UPLOAD_SUCCESS} element={<UploadSuccess />} />
+              <Route path={ROUTES.SETTINGS} element={<SettingsLayout />}>
+                <Route index element={<Navigate to={ROUTES.SETTINGS_PROFILE} replace />} />
+                <Route path="profile" element={<SettingsProfile />} />
+                <Route path="security" element={<SettingsSecurity />} />
+                <Route path="devices" element={<SettingsDevices />} />
+                <Route path="data" element={<SettingsData />} />
+                <Route path="integrations" element={<SettingsIntegrations />} />
+                <Route path="notifications" element={<SettingsNotifications />} />
+                <Route path="ai" element={<SettingsAI />} />
+                <Route path="system" element={<SettingsSystem />} />
+                <Route path="delete-account" element={<DeleteAccount />} />
               </Route>
+
+              <Route path={ROUTES.PROFILE} element={<Navigate to={ROUTES.SETTINGS_PROFILE} replace />} />
+              <Route path={ROUTES.LOGOUT} element={<LogoutConfirmation />} />
+              <Route path={ROUTES.NOTIFICATIONS} element={<NotificationCentre />} />
+              <Route path={ROUTES.NOTIFICATIONS_HISTORY} element={<NotificationHistory />} />
+              <Route path={ROUTES.ALERT_DETAILS} element={<AlertDetails />} />
+              <Route path={ROUTES.EMERGENCY_ALERT} element={<EmergencyAlert />} />
+              <Route path={ROUTES.WHATS_NEW} element={<WhatsNew />} />
+              {/* Help Center/Status inside MainLayout so sidebar renders */}
+              <Route path={ROUTES.HELP} element={<HelpCenterHome />} />
+              <Route path={ROUTES.HELP_SEARCH} element={<HelpCenterSearch />} />
+              <Route path={ROUTES.HELP_ARTICLE} element={<HelpCenterArticle />} />
+              <Route path={ROUTES.STATUS} element={<SystemStatus />} />
+              {/* /settings/security-audit → handled by nested settings route */}
             </Route>
           </Route>
 

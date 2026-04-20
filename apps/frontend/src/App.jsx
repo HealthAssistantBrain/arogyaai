@@ -5,48 +5,24 @@ import GlobalStateValidator from './components/guards/GlobalStateValidator'
 import AppErrorBoundary from './components/guards/AppErrorBoundary'
 import BrowserNotificationBootstrap from './components/BrowserNotificationBootstrap'
 import CommandPalette from './components/CommandPalette'
-import { INIT_RESOLVER } from './router/INIT_RESOLVER'
+import { useAuthStore } from './store/authStore'
+import { useUserStore } from './store/userStore'
 
 export default function App() {
-  const [initComplete, setInitComplete] = useState(false)
+  const { token } = useAuthStore()
+  const { fetchUser } = useUserStore()
+  const [loading, setLoading] = useState(!!token)
 
   useEffect(() => {
-    let isMounted = true
-
-    INIT_RESOLVER()
-      .then((result) => {
-        if (!isMounted) return
-
-        if (result?.route) {
-          const currentPath = window.location.pathname.replace(/\/$/, '') || '/'
-          const targetRoute = result.route.replace(/\/$/, '') || '/'
-
-          if (targetRoute !== currentPath) {
-            window.location.replace(result.route)
-            return
-          }
-        }
-
-        setInitComplete(true)
-      })
-      .catch((err) => {
-        console.error('[INIT_RESOLVER] Fatal error:', err)
-        if (isMounted) setInitComplete(true)
-      })
-
-    const handleRevalidation = () => {
-      INIT_RESOLVER().catch(console.error)
+    if (token) {
+      fetchUser().then(() => setLoading(false)).catch(() => {
+        useAuthStore.getState().logout();
+        setLoading(false);
+      });
     }
+  }, [token, fetchUser])
 
-    window.addEventListener('auth_reval_signal', handleRevalidation)
-
-    return () => {
-      isMounted = false
-      window.removeEventListener('auth_reval_signal', handleRevalidation)
-    }
-  }, [])
-
-  if (!initComplete) {
+  if (loading) {
     return (
       <div
         style={{

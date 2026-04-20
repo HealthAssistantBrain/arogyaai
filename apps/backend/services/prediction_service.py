@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict
 
 from sqlalchemy.orm import Session
 
+from core.pipeline_logger import log_pipeline
 from models import User
 from pipelines.ml_pipeline.service import MLPipelineService
 from schemas.api_models import PredictionRequest
+
+logger = logging.getLogger("uvicorn.error")
 
 
 async def get_health_prediction(
@@ -26,8 +30,17 @@ async def get_health_prediction(
     payload["user_id"] = user_id
 
     if db is not None and current_user is not None:
-        return MLPipelineService.predict(db, current_user, payload)
+        log_pipeline("ml", step="predict", status="running", data="pending")
+        try:
+            result = MLPipelineService.predict(db, current_user, payload)
+            log_pipeline("ml", step="predict", status="healthy", data="fetched")
+            return result
+        except Exception as exc:
+            log_pipeline("ml", step="predict", status="unhealthy", data="failed")
+            logger.exception("MLPipeline prediction failed for user=%s: %s", user_id, exc)
+            raise
 
+    log_pipeline("ml", step="predict", status="healthy", data="fallback")
     return {
         "success": True,
         "status": "fallback",

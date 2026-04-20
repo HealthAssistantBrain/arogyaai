@@ -1,28 +1,27 @@
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../../../store/authStore';
+import { useUserStore } from '../../../store/userStore';
 import { getUserProfile } from '../../../lib/userProfile';
 import {
     User, Ruler, Scale, Droplet, AlertTriangle, Calendar, Phone, Mail, Pencil, CheckCircle2
 } from 'lucide-react';
 import api from '../../../lib/axios';
+import { calculateAge, calculateBMI } from '../../../utils/userDerived';
 
-function getInitials(name) {
-    if (!name) return "U";
-    const parts = name.trim().split(" ");
-    return parts.length === 1
-        ? parts[0][0]
-        : parts[0][0] + parts[parts.length - 1][0];
-}
-
-function calculateBMI(heightCm, weightKg) {
-    if (!heightCm || !weightKg) return null;
-    const heightM = heightCm / 100;
-    return (weightKg / (heightM * heightM)).toFixed(1);
-}
+const getInitials = (name) => {
+    if (!name) return "--";
+    return name
+        .split(" ")
+        .map((n) => n[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2);
+};
 
 const SettingsProfile = () => {
-    const { user, role, profile, healthProfile, fetchProfile, updateProfile, profileLoading, token } = useAuthStore();
+    const { role, profile, healthProfile, fetchProfile, profileLoading, token } = useAuthStore();
+    const { user, fetchUser } = useUserStore();
     const profileRecord = (profile && Object.keys(profile).length > 0)
         ? profile
         : ((healthProfile && Object.keys(healthProfile).length > 0) ? healthProfile : null);
@@ -30,8 +29,8 @@ const SettingsProfile = () => {
     const hasLoadedProfile = Boolean(profileRecord || (user && Object.keys(user).length > 0));
 
     const initials = getInitials(user?.name || user?.full_name);
-    const dob = user?.date_of_birth || user?.dob;
-    const bmi = calculateBMI(profileRecord?.height_cm || profileRecord?.height || user?.height, profileRecord?.weight_kg || profileRecord?.weight || user?.weight);
+    const dob = user?.dob;
+    const bmi = calculateBMI(user?.height, user?.weight);
 
     const [gender, setGender] = useState(profileRecord?.gender || '');
 
@@ -40,6 +39,9 @@ const SettingsProfile = () => {
     const [editForm, setEditForm] = useState({
         full_name: '', phone_number: '', date_of_birth: '', height_cm: '', weight_kg: '', blood_group: '', allergies: ''
     });
+
+    const displayDob = isEditing && editForm.date_of_birth ? editForm.date_of_birth : dob;
+    const age = calculateAge(displayDob);
 
     useEffect(() => {
         if (token) {
@@ -58,6 +60,10 @@ const SettingsProfile = () => {
     }
 
     const handleSaveProfile = async () => {
+        if (!editForm.full_name) {
+            return toast.error("Name is required");
+        }
+
         const h = Number(editForm.height_cm);
         const w = Number(editForm.weight_kg);
 
@@ -75,33 +81,46 @@ const SettingsProfile = () => {
 
         const sanitizedAllergies = editForm.allergies.replace(/[<>]/g, '');
 
-        const saved = await updateProfile({
+        const payload = {
             full_name: editForm.full_name,
-            phone_number: editForm.phone_number,
+            phone: editForm.phone_number,
             date_of_birth: editForm.date_of_birth,
+            height: editForm.height_cm,
+            weight: editForm.weight_kg,
             gender: gender,
-            height_cm: editForm.height_cm,
-            weight_kg: editForm.weight_kg,
             blood_group: editForm.blood_group,
             allergies: sanitizedAllergies
-        });
+        };
 
-        if (!saved) {
-            toast.error("Unable to save profile right now");
-            return;
-        }
+        console.log("Payload:", payload);
 
-        if (email !== user?.email) {
-            try {
+        try {
+            const res = await api.put("/user/profile", payload);
+            console.log("Response:", res.data);
+
+            const updatedData = res.data?.data || res.data || {};
+
+            const mergedUser = {
+                ...user,
+                ...updatedData,
+                dob: updatedData.date_of_birth || updatedData.dob || user?.dob,
+                height: updatedData.height_cm || updatedData.height || user?.height,
+                weight: updatedData.weight_kg || updatedData.weight || user?.weight,
+            };
+
+            useUserStore.getState().setUser(mergedUser);
+
+            if (email !== user?.email) {
                 await api.put("/user/update", { email });
-                await fetchProfile();
-            } catch (error) {
-                console.error("Email update failed", error);
             }
-        }
 
-        setIsEditing(false);
-        toast.success("Profile saved successfully");
+            await fetchUser(); // Ensure final sync from server
+            setIsEditing(false);
+            toast.success("Profile saved successfully");
+        } catch (error) {
+            console.error("Save profile error:", error);
+            toast.error("Unable to save profile right now");
+        }
     };
 
     const healthStats = [
@@ -156,13 +175,13 @@ const SettingsProfile = () => {
                                     setEditForm({
                                         full_name: profileRecord?.full_name || user?.full_name || '',
                                         phone_number: profileRecord?.phone_number || profileRecord?.phone || user?.phone || '',
-                                        date_of_birth: profileRecord?.date_of_birth || profileRecord?.dob || user?.date_of_birth || '',
-                                        height_cm: profileRecord?.height_cm || profileRecord?.height || '',
-                                        weight_kg: profileRecord?.weight_kg || profileRecord?.weight || '',
-                                        blood_group: profileRecord?.blood_group || '',
-                                        allergies: profileRecord?.allergies || ''
+                                        date_of_birth: profileRecord?.date_of_birth || profileRecord?.dob || user?.dob || user?.date_of_birth || '',
+                                        height_cm: profileRecord?.height_cm || profileRecord?.height || user?.height || '',
+                                        weight_kg: profileRecord?.weight_kg || profileRecord?.weight || user?.weight || '',
+                                        blood_group: profileRecord?.blood_group || user?.blood_group || '',
+                                        allergies: profileRecord?.allergies || user?.allergies || ''
                                     });
-                                    if (profileRecord?.gender) setGender(profileRecord.gender);
+                                    if (profileRecord?.gender || user?.gender) setGender(profileRecord?.gender || user?.gender);
                                     setIsEditing(true);
                                 }} className="text-[#6143f4] active:scale-95 text-[10px] font-black uppercase tracking-[0.2em] border border-[#6143f4]/20 hover:bg-[#6143f4]/10 px-4 py-2 rounded-full transition-all flex items-center gap-2">
                                     <Pencil size={12} /> Edit
@@ -173,13 +192,13 @@ const SettingsProfile = () => {
                                         setEditForm({
                                             full_name: profileRecord?.full_name || user?.full_name || '',
                                             phone_number: profileRecord?.phone_number || profileRecord?.phone || user?.phone || '',
-                                            date_of_birth: profileRecord?.date_of_birth || profileRecord?.dob || user?.date_of_birth || '',
-                                            height_cm: profileRecord?.height_cm || profileRecord?.height || '',
-                                            weight_kg: profileRecord?.weight_kg || profileRecord?.weight || '',
-                                            blood_group: profileRecord?.blood_group || '',
-                                            allergies: profileRecord?.allergies || '',
+                                            date_of_birth: profileRecord?.date_of_birth || profileRecord?.dob || user?.dob || user?.date_of_birth || '',
+                                            height_cm: profileRecord?.height_cm || profileRecord?.height || user?.height || '',
+                                            weight_kg: profileRecord?.weight_kg || profileRecord?.weight || user?.weight || '',
+                                            blood_group: profileRecord?.blood_group || user?.blood_group || '',
+                                            allergies: profileRecord?.allergies || user?.allergies || '',
                                         });
-                                        setGender(profileRecord?.gender || '');
+                                        setGender(profileRecord?.gender || user?.gender || '');
                                         setIsEditing(false);
                                     }} className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] border border-slate-200 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/5 active:scale-95 px-4 py-2 rounded-full transition-all">
                                         Cancel
@@ -228,9 +247,9 @@ const SettingsProfile = () => {
                                             </div>
                                         )
                                     ) : (
-                                        <p className={`font-black text-[#13082a] dark:text-white mt-2 leading-none italic ${stat.small && String(profileRecord?.[stat.id] ?? healthProfile?.[stat.id] ?? '').length > 10 ? 'text-xs' : 'text-xl md:text-2xl uppercase tracking-tighter'}`}>
-                                            {profileRecord?.[stat.id] ?? healthProfile?.[stat.id] ? `${profileRecord?.[stat.id] ?? healthProfile?.[stat.id]} ` : '— '}
-                                            {(profileRecord?.[stat.id] ?? healthProfile?.[stat.id]) && stat.suffix && <span className="text-sm tracking-normal not-italic opacity-60 ml-1">{stat.suffix}</span>}
+                                        <p className={`font-black text-[#13082a] dark:text-white mt-2 leading-none italic ${stat.small && String(user?.[stat.id] ?? profileRecord?.[stat.id] ?? healthProfile?.[stat.id] ?? '').length > 10 ? 'text-xs' : 'text-xl md:text-2xl uppercase tracking-tighter'}`}>
+                                            {stat.id === 'height' ? user?.height : stat.id === 'weight' ? user?.weight : (user?.[stat.id] ?? profileRecord?.[stat.id] ?? healthProfile?.[stat.id]) ? `${user?.[stat.id] ?? profileRecord?.[stat.id] ?? healthProfile?.[stat.id]} ` : '— '}
+                                            {(user?.[stat.id] ?? profileRecord?.[stat.id] ?? healthProfile?.[stat.id]) && stat.suffix && <span className="text-sm tracking-normal not-italic opacity-60 ml-1">{stat.suffix}</span>}
                                         </p>
                                     )}
                                 </div>
@@ -291,6 +310,14 @@ const SettingsProfile = () => {
                                                 {dob ? new Date(dob).toLocaleDateString() : "Not set"}
                                             </div>
                                         )}
+                                    </div>
+                                </div>
+                                <div className="space-y-4">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-2 leading-none">Age</label>
+                                    <div className="relative group">
+                                        <div className="w-full px-6 py-5 bg-slate-50 dark:bg-white/5 border border-transparent rounded-[1.5rem] text-sm text-[#13082a] dark:text-white font-black uppercase tracking-tight transition-all">
+                                            {age !== null ? `${age} years` : "--"}
+                                        </div>
                                     </div>
                                 </div>
 

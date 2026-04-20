@@ -17,6 +17,7 @@ from routes import auth, intelligence, users, prediction, dashboard, google_fit,
 
 from database.session import engine
 from core.config import settings
+from core.pipeline_logger import log_pipeline, log_pipeline_section
 from services.dashboard_realtime import start_dashboard_realtime_listener, stop_dashboard_realtime_listener
 from services.health_service import get_system_readiness
 from workers.google_fit_worker import start_google_fit_worker, stop_google_fit_worker
@@ -160,24 +161,34 @@ async def _startup_scheduler():
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
 
+    log_pipeline_section("PIPELINE STARTUP")
+    log_pipeline("system", step="initializing", status="running", data="pending")
+
     try:
         await asyncio.to_thread(_check_db_connection)
         logger.info("DB Connected")
+        log_pipeline("database", step="connection_check", status="healthy", data="ok")
     except Exception as exc:
         logger.warning("DB Connected check failed during startup: %s", exc)
+        log_pipeline("database", step="connection_check", status="unhealthy", data="failed")
 
     try:
         start_google_fit_worker()
         logger.info("Google Fit background worker started")
+        log_pipeline("ingestion", step="google_fit_worker", status="healthy", data="started")
     except Exception as exc:
         logger.exception("Google Fit worker failed to start: %s", exc)
+        log_pipeline("ingestion", step="google_fit_worker", status="unhealthy", data="failed")
 
     try:
         start_dashboard_realtime_listener(asyncio.get_running_loop())
         logger.info("Dashboard realtime listener started")
+        log_pipeline("realtime", step="dashboard_listener", status="healthy", data="started")
     except Exception as exc:
         logger.exception("Dashboard realtime listener failed to start: %s", exc)
+        log_pipeline("realtime", step="dashboard_listener", status="unhealthy", data="failed")
 
+    log_pipeline("system", step="all_pipelines_initialized", status="healthy", data="ready")
     logger.info("App Ready")
 
 

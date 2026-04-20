@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { ROUTES } from '../router/routes';
 import { useAuthStore } from '../store/authStore';
+import { useUserStore } from '../store/userStore';
 import { useInsightsData } from '../hooks/useInsightsData';
 import { openCommandPalette } from '../components/CommandPalette';
 import { safeArray } from '../utils/safeData';
@@ -94,13 +95,12 @@ const mapRiskToCategory = (riskKey) => {
 const AIInsights = () => {
   const navigate = useNavigate();
   const profileLoading = useAuthStore((state) => state.profileLoading);
-  const user = useAuthStore((state) => state.user);
-  const profile = useAuthStore((state) => state.profile);
+  const { user } = useUserStore();
   const { loading, error, data, status, cards, drivers, analysis, recommendations, lastUpdated, confidence, dataPoints } = useInsightsData();
   const [selectedCategory, setSelectedCategory] = useState('all');
 
-  const displayName = profile?.full_name || user?.full_name || 'Your profile';
-  const avatarUrl = profile?.avatar_url || user?.avatar_url || null;
+  const displayName = user?.full_name || user?.name || 'Your profile';
+  const avatarUrl = user?.avatar_url || null;
   const avatarInitials = useMemo(() => initialsFromName(displayName), [displayName]);
   const filteredCards = useMemo(() => {
     if (selectedCategory === 'all') {
@@ -134,7 +134,7 @@ const AIInsights = () => {
     <div className="bg-[#EAEAEA] dark:bg-[#13082A] text-[#13082A] dark:text-slate-100 min-h-screen font-display antialiased leading-normal">
       <div className="flex h-screen overflow-hidden">
         <main className="flex-1 flex flex-col overflow-y-auto bg-mesh custom-scrollbar">
-          
+
 
           <div className="p-8 space-y-8 max-w-7xl mx-auto w-full">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
@@ -187,8 +187,8 @@ const AIInsights = () => {
                     key={tab.label}
                     onClick={() => setSelectedCategory(tab.value)}
                     className={`px-6 py-2 rounded-lg text-sm font-bold transition-all duration-300 ${selectedCategory === tab.value
-                        ? 'bg-white dark:bg-[#6043F4] text-[#6043F4] dark:text-white shadow-sm'
-                        : 'text-slate-600 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-white/5'
+                      ? 'bg-white dark:bg-[#6043F4] text-[#6043F4] dark:text-white shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-white/5'
                       }`}
                   >
                     {tab.label}

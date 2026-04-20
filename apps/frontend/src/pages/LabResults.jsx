@@ -8,12 +8,11 @@ import {
   ChevronRight,
   ExternalLink,
   Beaker,
-  Loader2,
 } from 'lucide-react';
 import { ROUTES } from '../router/routes';
 import { apiClient } from '../lib/apiClient';
-import { openCommandPalette } from '../components/CommandPalette';
 import { safeArray } from '../utils/safeData';
+import HeartLoader from '../components/ui/HeartLoader';
 
 const FILTERS = [
   { label: 'All', value: 'all' },
@@ -111,7 +110,7 @@ const getTrendBarHeight = (value, series = []) => {
 const Loader = () => (
   <div className="bg-[#f6f5f8] dark:bg-[#131022] min-h-screen flex items-center justify-center">
     <div className="flex flex-col items-center gap-4">
-      <Loader2 size={36} className="animate-spin text-[#6143f4]" />
+      <HeartLoader size={64} />
       <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Loading lab results</p>
     </div>
   </div>
@@ -126,12 +125,6 @@ const LabResults = () => {
   // Live user data from auth store — updates immediately after login
   const storeUser = useAuthStore((state) => state.user);
   const storeProfile = useAuthStore((state) => state.profile);
-  const displayName = storeUser?.full_name || storeProfile?.full_name || storeUser?.email || 'My Account';
-  const patientId = storeProfile?.patient_id
-    ? `AR-${String(storeProfile.patient_id).slice(-6).toUpperCase()}`
-    : storeUser?.id
-      ? `AR-${String(storeUser.id).slice(-6).toUpperCase()}`
-      : 'AR-XXXXXX';
 
   useEffect(() => {
     let isMounted = true;
@@ -175,7 +168,7 @@ const LabResults = () => {
     <div className="bg-[#f6f5f8] dark:bg-[#131022] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased">
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 flex flex-col min-w-0">
-          
+
 
           <div className="flex-1 overflow-y-auto p-10 custom-scrollbar bg-[#f6f5f8] dark:bg-[#131022]">
             <div className="max-w-7xl mx-auto space-y-12 pb-12">
@@ -319,16 +312,16 @@ const LabResults = () => {
                           {(safeArray(activeResult?.trend).length
                             ? safeArray(activeResult?.trend)
                             : [activeResult?.value].filter((value) => Number.isFinite(value))).map((h, i, series) => (
-                            <div
-                              key={`${activeResult?.id || 'active'}-hist-${i}`}
-                              className={`w-2.5 rounded-t-full transition-all duration-1000 ${i === series.length - 1 ? 'bg-[#6143f4] shadow-xl shadow-[#6143f4]/30' : 'bg-[#6143f4]/20 group-hover/chart:bg-[#6143f4]/40'
-                                }`}
-                              style={{
-                                height: `${getTrendBarHeight(h, series)}%`,
-                                transitionDelay: `${i * 75}ms`,
-                              }}
-                            ></div>
-                          ))}
+                              <div
+                                key={`${activeResult?.id || 'active'}-hist-${i}`}
+                                className={`w-2.5 rounded-t-full transition-all duration-1000 ${i === series.length - 1 ? 'bg-[#6143f4] shadow-xl shadow-[#6143f4]/30' : 'bg-[#6143f4]/20 group-hover/chart:bg-[#6143f4]/40'
+                                  }`}
+                                style={{
+                                  height: `${getTrendBarHeight(h, series)}%`,
+                                  transitionDelay: `${i * 75}ms`,
+                                }}
+                              ></div>
+                            ))}
                         </div>
                         <div className="flex justify-between mt-5 px-3 text-[10px] text-slate-400 font-black uppercase tracking-[0.25em] opacity-80 leading-none">
                           <span>Oldest</span>
