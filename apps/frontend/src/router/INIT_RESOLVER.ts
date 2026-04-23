@@ -3,6 +3,7 @@ import { isSystemLocked } from '../lib/systemLock';
 import { shouldRevalidate, consumeAuthRevalidation } from '../lib/authRevalidator';
 import { completeSupabaseOAuthSession } from '../lib/supabaseOAuth';
 import { ROUTES } from './routes';
+import api from '../lib/axios';
 
 export type InitResult = { route: string | null; cause: string } | null;
 
@@ -88,90 +89,36 @@ export async function INIT_RESOLVER(): Promise<InitResult> {
     console.warn('[INIT_RESOLVER] Supabase OAuth handoff failed:', err);
   }
 
-  const readBootToken = () => {
-    if (typeof window === 'undefined') return null;
-
-    const accessToken = window.localStorage.getItem('access_token');
-    if (accessToken && accessToken.trim() !== '') {
-      return accessToken;
-    }
-
-    const token = window.localStorage.getItem('token');
-    if (token && token.trim() !== '') {
-      return token;
-    }
-
-    const legacyRaw = window.localStorage.getItem('arogyaai-auth');
-    if (!legacyRaw) return null;
-
-    try {
-      const legacy = JSON.parse(legacyRaw);
-      const legacyToken = legacy?.state?.token ?? legacy?.token ?? null;
-      if (typeof legacyToken === 'string' && legacyToken.trim() !== '') {
-        window.localStorage.setItem('access_token', legacyToken);
-        window.localStorage.removeItem('arogyaai-auth');
-        window.localStorage.removeItem('user');
-        return legacyToken;
-      }
-    } catch {
-      // Ignore malformed legacy payloads and fall through to cleanup.
-    }
-
-    window.localStorage.removeItem('arogyaai-auth');
-    window.localStorage.removeItem('user');
-    return null;
-  };
-
   const store = useAuthStore.getState();
-  const token = readBootToken();
   const isProtectedPath = isProtectedRoute(pathname);
 
-  console.log('TOKEN:', token ? `${token.slice(0, 20)}…` : null);
-
-  // ─── Step 3: No token → login ──────────────────────────────────────────────
-  if (!token) {
-    store.setAccessToken(null);
-    store.setUser(null);
-    store.setRefreshToken(null);
-    store.setEmailVerified(false);
-    store.setOnboardingStatus({ onboardingDone: false, onboardingStep: 1 });
-    store.setHydrated();
-    if (isOAuthCallbackPath) {
-      console.log('[INIT_RESOLVER] OAuth callback has no token yet; leaving page in place for callback handling.');
-      return null;
-    }
-    if (!isProtectedPath) {
-      return null;
-    }
-    // #region agent log (INIT no token decision)
-    fetch('http://127.0.0.1:7242/ingest/b5e6953e-01ca-4b76-858d-bfd42af56294', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'fcf4a1' }, body: JSON.stringify({ sessionId: 'fcf4a1', runId: 'post-fix', hypothesisId: 'H4', location: 'src/router/INIT_RESOLVER.ts:noToken', message: 'INIT no token -> /login', data: { tokenPresent: false }, timestamp: Date.now() }) }).catch(() => { });
-    // #endregion
-    return { route: '/login', cause: 'No token — guest user' };
-  }
-
-  // ─── Step 4: Verify with backend ─────────────────────────────────────────
+  // ── Attempt auto-login via cookie ───────────────────────────────────────
   try {
-    store.setAccessToken(token);
-    await store.hydrateAuth(token);
+    const res = await api.post('/auth/refresh-token');
 
-    if (!store.isAuthenticated) {
-      return { route: '/login', cause: 'Token rejected by server' };
+    store.setAuth(res.data.data);
+    store.setHydrated();
+
+    const currentState = useAuthStore.getState();
+
+    if (!currentState.isAuthenticated) {
+      return { route: '/', cause: 'Token rejected by server' };
     }
 
-    const onboardingRoute = getOnboardingRoute(store.onboardingStep);
+    const onboardingRoute = getOnboardingRoute(currentState.onboardingStep);
     const fullyOnboardedRoute = ROUTES.DASHBOARD;
 
     if (isOAuthCallbackPath) {
-      return store.onboardingDone ? { route: fullyOnboardedRoute, cause: 'OAuth handoff complete' } : { route: onboardingRoute, cause: 'OAuth handoff complete' };
+      return currentState.onboardingDone ? { route: fullyOnboardedRoute, cause: 'OAuth handoff complete' } : { route: onboardingRoute, cause: 'OAuth handoff complete' };
     }
 
     if (!isProtectedPath) {
       return null;
     }
 
-    if (!store.onboardingDone) {
+    if (!currentState.onboardingDone) {
       return {
-        route: getOnboardingRoute(store.onboardingStep),
+        route: getOnboardingRoute(currentState.onboardingStep),
         cause: 'Onboarding incomplete',
       };
     }
@@ -179,11 +126,19 @@ export async function INIT_RESOLVER(): Promise<InitResult> {
     return { route: fullyOnboardedRoute, cause: 'Authenticated and fully onboarded' };
 
   } catch (err: any) {
-    console.warn('INIT_RESOLVER network error:', err?.message);
+    console.warn('INIT_RESOLVER network/auth error:', err?.message);
+    store.reset();
     store.setHydrated();
+
+    if (isOAuthCallbackPath) {
+      console.log('[INIT_RESOLVER] OAuth callback has no token yet; leaving page in place for callback handling.');
+      return null;
+    }
+
     if (!isProtectedPath) {
       return null;
     }
-    return { route: '/login', cause: `Network error: ${err?.message}` };
+
+    return { route: '/', cause: `Failed auth check: ${err?.message}` };
   }
 }

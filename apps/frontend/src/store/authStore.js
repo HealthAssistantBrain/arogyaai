@@ -19,20 +19,6 @@ const clearLegacyAuthStorage = () => {
   window.localStorage.removeItem(LEGACY_USER_STORAGE_KEY)
 }
 
-const persistAccessToken = (token) => {
-  if (!isBrowser()) return
-
-  if (token && typeof token === 'string' && token.trim() !== '') {
-    window.localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, token)
-    window.localStorage.setItem(TOKEN_STORAGE_KEY, token)
-    window.localStorage.removeItem(LEGACY_AUTH_STORAGE_KEY)
-    window.localStorage.removeItem(LEGACY_USER_STORAGE_KEY)
-  } else {
-    window.localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY)
-    window.localStorage.removeItem(TOKEN_STORAGE_KEY)
-  }
-}
-
 const normalizeProfileState = (profile) => ({
   full_name: profile?.full_name ?? null,
   avatar_url: profile?.avatar_url ?? null,
@@ -86,9 +72,9 @@ export const useAuthStore = create(
     notifications: [],
     profileLoading: false,
     profileError: null,
-    token: typeof window !== 'undefined' ? window.localStorage.getItem('access_token') : null,
-    refreshToken: null,      // ← Added for session revocation
-    isAuthenticated: typeof window !== 'undefined' ? !!window.localStorage.getItem('access_token') : false,
+    token: null,
+    refreshToken: null,
+    isAuthenticated: false,
     isEmailVerified: false,
     onboardingStep: 1,       // onboarding starts at step 1
     onboardingDone: false,
@@ -103,23 +89,39 @@ export const useAuthStore = create(
       }, false, 'setUser'),
 
     setToken: (token) => {
-      // ── SECTION 5: TOKEN VALIDATION ──
       if (!token || typeof token !== 'string' || token.trim() === '') {
-        // Invalid token → nullify
-        if (typeof window !== 'undefined') window.localStorage.removeItem('access_token');
         set({ token: null, isAuthenticated: false }, false, 'setToken');
         clearLegacyAuthStorage();
         return;
       }
-      if (typeof window !== 'undefined') window.localStorage.setItem('access_token', token);
       set({ token, isAuthenticated: true }, false, 'setToken');
-      persistAccessToken(token);
     },
 
     setAccessToken: (token) => get().setToken(token),
 
-    setRefreshToken: (refreshToken) => {
-      set({ refreshToken }, false, 'setRefreshToken')
+    setRefreshToken: () => {
+      set({ refreshToken: null }, false, 'setRefreshToken')
+    },
+
+    setAuth: (data) => set({
+      user: data.user,
+      token: data.access_token,
+      isAuthenticated: true,
+      onboardingDone: data.user?.is_onboarding_done ?? false,
+      onboardingStep: data.user?.onboarding_step ?? 1,
+    }, false, 'setAuth'),
+
+    reset: () => {
+      set({
+        user: null,
+        token: null,
+        isAuthenticated: false,
+        profile: {},
+        healthProfile: {},
+        onboardingDone: false,
+        onboardingStep: 1
+      }, false, 'reset');
+      clearLegacyAuthStorage();
     },
 
     setEmailVerified: (isEmailVerified = true) =>
@@ -523,22 +525,21 @@ export const useAuthStore = create(
     // remove localStorage key "arogyaai-auth", redirect to "/".
     // ─────────────────────────────────────────────────────────────────
     logout: async () => {
-      const { refreshToken } = get()
-
       try {
-        if (refreshToken) {
+        if (typeof window !== 'undefined') {
+          // Fallback if refresh token was somewhere else, but typically server clears cookie
           await fetch(`${API_BASE_URL}/auth/logout`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ refresh_token: refreshToken })
+            credentials: 'include'
           })
         }
       } catch (err) {
         console.error('[authStore] Logout request failed:', err)
-        // Continue with local logout regardless of backend success
       }
 
-      if (typeof window !== 'undefined') window.localStorage.removeItem('access_token');
+      get().reset();
+
 
       set(
         {
@@ -566,7 +567,7 @@ export const useAuthStore = create(
       clearLegacyAuthStorage()
       sessionStorage.removeItem('user')
 
-      if (typeof window !== 'undefined') window.location.href = '/login'
+      if (typeof window !== 'undefined') window.location.href = '/'
     },
 
     // ── HARD RESET ────────────────────────────────────────────────────────────────
@@ -576,32 +577,8 @@ export const useAuthStore = create(
     // Reason: A deleted account (or stolen token invalidation) is not a returning-user scenario.
     // ────────────────────────────────────────────────────────────────────
     hardReset: () => {
-      // 1. Wipe all Zustand state back to absolute zero
-      set(
-        {
-          user: null,
-          profile: {},
-          healthProfile: {},
-          vitals: [],
-          notifications: [],
-          profileLoading: false,
-          profileError: null,
-          token: null,
-          refreshToken: null,
-          isAuthenticated: false,
-          isEmailVerified: false,
-          onboardingStep: 1,
-          onboardingDone: false,
-          role: 'user',
-          isHydrated: true,  // Keep true so routing doesn't infinite-loop
-          isHydratingAuth: false,
-        },
-        false,
-        'hardReset'
-      )
-      // 2. Clear the token-only session and legacy storage keys
-      clearLegacyAuthStorage()
-      sessionStorage.removeItem('user')
+      get().reset();
+      set({ isHydrated: true }, false, 'hardReset');
     }
   }), { name: 'arogyaai-auth' })
 )

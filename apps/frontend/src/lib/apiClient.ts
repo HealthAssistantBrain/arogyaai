@@ -76,7 +76,7 @@ apiClient.interceptors.response.use(
       try {
         const { data: envelope } = await axios.post(
           `${API_URL}/auth/refresh-token`,
-          { refresh_token: useAuthStore.getState().refreshToken },
+          {},
           { withCredentials: true }
         );
 

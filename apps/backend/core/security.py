@@ -8,9 +8,18 @@ from cryptography.fernet import Fernet
 
 from core.config import settings
 
+import re
+
 # Passlib context utilizing bcrypt algorithm
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+def validate_password(password: str) -> bool:
+    return bool(
+        len(password) >= 8 and
+        re.search(r"[A-Z]", password) and
+        re.search(r"[0-9]", password) and
+        re.search(r"[!@#$%^&*]", password)
+    )
 
 def _get_fernet() -> Fernet:
     raw_key = settings.APP_ENCRYPTION_KEY.strip() if settings.APP_ENCRYPTION_KEY else ""
@@ -22,7 +31,12 @@ def _get_fernet() -> Fernet:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verifies a plain password against the BCrypt hash stored in the DB."""
-    return pwd_context.verify(plain_password, hashed_password)
+    if hashed_password == "OAUTH_NO_PASSWORD":
+        return False
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except ValueError:
+        return False
 
 def get_password_hash(password: str) -> str:
     """Returns a BCrypt hash of the given password string."""

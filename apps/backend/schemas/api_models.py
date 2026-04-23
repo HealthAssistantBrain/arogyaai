@@ -19,6 +19,10 @@ class TokenResponse(BaseModel):
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
+class PasswordUpdate(BaseModel):
+    password: str
+    confirm_password: str
+
 
 class OAuthLoginRequest(BaseModel):
     provider: Optional[str] = None
@@ -66,6 +70,16 @@ class UserProfileUpdate(BaseModel):
     phone_number: Optional[str] = None
     date_of_birth: Optional[str] = None
     gender: Optional[str] = None
+
+class ProfileUpdateSchema(BaseModel):
+    full_name: str
+    phone: Optional[str] = None
+    date_of_birth: Optional[str] = None
+    height: Optional[float] = None
+    weight: Optional[float] = None
+    gender: Optional[str] = None
+    blood_group: Optional[str] = None
+    allergies: Optional[str] = None
 
 
 class UserOnboardingSave(BaseModel):

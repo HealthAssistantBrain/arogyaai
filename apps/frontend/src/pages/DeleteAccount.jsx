@@ -4,9 +4,7 @@ import { ROUTES } from '../router/routes';
 import { useAuthStore } from '../store/authStore';
 import api from '../lib/axios';
 import toast from 'react-hot-toast';
-import { motion, AnimatePresence } from 'framer-motion';
 import React from 'react';
-import { openCommandPalette } from '../components/CommandPalette';
 import {
     LayoutDashboard,
     Brain,
@@ -37,7 +35,7 @@ import {
 
 const DeleteAccount = () => {
     const navigate = useNavigate();
-    const hardReset = useAuthStore((s) => s.hardReset);
+    const { reset } = useAuthStore();
     const [isConfirmed, setIsConfirmed] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
 
@@ -57,9 +55,8 @@ const DeleteAccount = () => {
             return;
         }
         // API call succeeded — now wipe local state and redirect.
-        hardReset();
-        // Force full browser reset to landing page to avoid guard-race conditions.
-        window.location.href = '/';
+        reset();
+        navigate('/', { replace: true });
     };
 
     const sidebarLinks = [
@@ -107,7 +104,7 @@ const DeleteAccount = () => {
                 {/* Main Content Area */}
                 <main className="flex-1 flex flex-col h-full relative overflow-y-auto no-scrollbar bg-[#f6f5f8] dark:bg-[#0B0819]">
                     {/* Top Navigation Bar */}
-                    
+
 
                     {/* Content Area */}
                     <div className="flex-1 p-10 lg:p-12 custom-scrollbar overflow-y-auto">

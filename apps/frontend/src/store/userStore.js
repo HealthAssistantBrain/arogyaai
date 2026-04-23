@@ -9,11 +9,12 @@ export const useUserStore = create((set) => ({
         set({ loading: true });
         try {
             const res = await axios.get("/user/profile");
+            const userData = res.data?.data || res.data || {};
             const normalizedUser = {
-                ...res.data,
-                dob: res.data.dob || res.data.date_of_birth,
-                height: res.data.height_cm || res.data.height,
-                weight: res.data.weight_kg || res.data.weight,
+                ...userData,
+                dob: userData.dob || userData.date_of_birth,
+                height: userData.height || userData.height_cm,
+                weight: userData.weight || userData.weight_kg,
             };
             console.log("GLOBAL USER:", normalizedUser);
             set({ user: normalizedUser, loading: false });
@@ -24,5 +25,5 @@ export const useUserStore = create((set) => ({
         }
     },
 
-    setUser: (data) => set({ user: data }),
+    setUser: (data) => set((state) => ({ user: typeof data === "function" ? data(state.user) : data })),
 }));

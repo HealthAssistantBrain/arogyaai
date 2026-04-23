@@ -1,17 +1,9 @@
-export function calculateAge(dob) {
-    if (!dob) return null;
+export const calculateAge = (dob) => {
+    if (!dob) return "--";
     const birth = new Date(dob);
-    const today = new Date();
-
-    let age = today.getFullYear() - birth.getFullYear();
-    const m = today.getMonth() - birth.getMonth();
-
-    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
-        age--;
-    }
-
-    return age;
-}
+    const diff = Date.now() - birth.getTime();
+    return new Date(diff).getUTCFullYear() - 1970;
+};
 
 export function calculateBMI(heightCm, weightKg) {
     if (!heightCm || !weightKg) return null;

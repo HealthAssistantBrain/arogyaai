@@ -1,22 +1,28 @@
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../router/routes';
-import { motion } from 'framer-motion';
 import React from 'react';
 import { useAuthStore } from '../store/authStore';
-import { 
-  LogOut, 
-  ArrowRight, 
-  LayoutDashboard, 
-  Waves,
-  ShieldAlert
+import {
+    LogOut,
+    ArrowRight,
+    LayoutDashboard,
+    Waves,
+    ShieldAlert
 } from 'lucide-react';
+import { api } from '../api/axios';
 
 const LogoutConfirmation = () => {
     const navigate = useNavigate();
-    const logout = useAuthStore((state) => state.logout);
+    const reset = useAuthStore((state) => state.reset);
 
     const handleLogout = async () => {
-        await logout();
+        try {
+            await api.post("/auth/logout");
+        } catch (e) {
+            console.error("Logout API failed:", e);
+        }
+        reset();
+        navigate("/", { replace: true });
     };
 
     return (
@@ -42,26 +48,26 @@ const LogoutConfirmation = () => {
                 </div>
 
                 {/* Logout Card - Focused High Fidelity Modal */}
-                <motion.div 
+                <motion.div
                     initial={{ opacity: 0, scale: 0.9, y: 30 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     className="w-full bg-white dark:bg-[#131022] rounded-[3.5rem] shadow-[0_80px_160px_-40px_rgba(0,0,0,0.6)] border border-white/10 overflow-hidden relative group/modal"
                 >
                     {/* Inner Lavender Background Section */}
                     <div className="bg-gradient-to-b from-[#f6f5f8] to-white dark:from-[#1e1a3d] dark:to-[#131022] p-12 lg:p-16 flex flex-col items-center text-center">
-                        
+
                         {/* Avatar & Badge Section */}
                         <div className="mb-10 relative group/avatar">
                             <div className="size-32 rounded-[2.5rem] bg-gradient-to-br from-[#6143f4]/20 to-[#009cde]/20 p-1 transition-transform duration-700 group-hover/avatar:scale-110 group-hover/avatar:rotate-3 shadow-2xl">
                                 <div className="size-full rounded-[2.2rem] overflow-hidden border-4 border-white dark:border-[#131022] bg-white">
-                                    <img 
-                                        className="w-full h-full object-cover grayscale opacity-80 group-hover/avatar:grayscale-0 group-hover/avatar:opacity-100 transition-all duration-700" 
-                                        alt="User profile avatar" 
-                                        src="https://lh3.googleusercontent.com/aida-public/AB6AXuCmca7uoDE5AXEl5Lm8J0kNozFbXew2KmxjvbMH9Uxz6_puV-3M4e6vnlXT3lEb_5cr82WJlJpIhLxX0n3slwWbP57cryd-X1PYojJGyEJFIbxEi5GoRB7BAanTNFGumWZcuLVazL6mqrjhuvUC3gGRtjHZVA9j0pjweqT5KOzZfnYTmtLSNDWzJTJ0I2GNWutesIDE2flIJl8eYqrE_zQxMiy9H-ayg4LdE001a6UkDGckUUtZ533LriYErfK1okd7WRmFj5K6lXvB" 
+                                    <img
+                                        className="w-full h-full object-cover grayscale opacity-80 group-hover/avatar:grayscale-0 group-hover/avatar:opacity-100 transition-all duration-700"
+                                        alt="User profile avatar"
+                                        src="https://lh3.googleusercontent.com/aida-public/AB6AXuCmca7uoDE5AXEl5Lm8J0kNozFbXew2KmxjvbMH9Uxz6_puV-3M4e6vnlXT3lEb_5cr82WJlJpIhLxX0n3slwWbP57cryd-X1PYojJGyEJFIbxEi5GoRB7BAanTNFGumWZcuLVazL6mqrjhuvUC3gGRtjHZVA9j0pjweqT5KOzZfnYTmtLSNDWzJTJ0I2GNWutesIDE2flIJl8eYqrE_zQxMiy9H-ayg4LdE001a6UkDGckUUtZ533LriYErfK1okd7WRmFj5K6lXvB"
                                     />
                                 </div>
                             </div>
-                            <motion.div 
+                            <motion.div
                                 animate={{ y: [0, -5, 0], rotate: [0, 5, -5, 0] }}
                                 transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
                                 className="absolute -bottom-2 -right-2 size-12 bg-[#ef4444] rounded-2xl flex items-center justify-center shadow-[0_10px_30px_-5px_rgba(239,68,68,0.5)] border-4 border-white dark:border-[#131022] text-white"
@@ -80,14 +86,14 @@ const LogoutConfirmation = () => {
 
                         {/* Action Buttons - Premium Standardized Styling */}
                         <div className="w-full flex flex-col gap-4">
-                            <button 
-                                onClick={handleLogout} 
+                            <button
+                                onClick={handleLogout}
                                 className="w-full py-6 bg-[#6143f4] hover:bg-[#4a34c1] text-white font-black text-xs uppercase tracking-[0.25em] rounded-[2rem] transition-all shadow-[0_25px_50px_-15px_rgba(97,67,244,0.4)] flex items-center justify-center gap-4 group/btn active:scale-95 leading-none"
                             >
                                 <span>Log Out</span>
                                 <ArrowRight size={18} strokeWidth={3} className="group-hover/btn:translate-x-2 transition-transform duration-300" />
                             </button>
-                            <button 
+                            <button
                                 onClick={() => navigate(-1)}
                                 className="w-full py-6 bg-transparent hover:bg-slate-50 dark:hover:bg-white/5 text-slate-400 dark:text-slate-500 hover:text-[#13082a] dark:hover:text-white font-black text-xs uppercase tracking-[0.25em] rounded-[2rem] transition-all active:scale-95 leading-none"
                             >
@@ -99,7 +105,7 @@ const LogoutConfirmation = () => {
 
                 {/* Footer Link - Standardized Iconography */}
                 <div className="mt-12 text-center">
-                    <button 
+                    <button
                         onClick={() => navigate(ROUTES.DASHBOARD)}
                         className="inline-flex items-center gap-4 text-slate-400 dark:text-slate-500 hover:text-white transition-all text-[11px] font-black uppercase tracking-[0.3em] group py-2"
                     >
@@ -109,7 +115,8 @@ const LogoutConfirmation = () => {
                 </div>
             </div>
 
-            <style dangerouslySetInnerHTML={{ __html: `
+            <style dangerouslySetInnerHTML={{
+                __html: `
                 .leading-none { line-height: 1 !important; }
                 .italic { font-style: italic; }
                 @keyframes float {

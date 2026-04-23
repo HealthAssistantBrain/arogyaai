@@ -10,7 +10,7 @@ import api from '../../../lib/axios';
 import { calculateAge, calculateBMI } from '../../../utils/userDerived';
 
 const getInitials = (name) => {
-    if (!name) return "--";
+    if (!name) return "NA";
     return name
         .split(" ")
         .map((n) => n[0])
@@ -21,7 +21,7 @@ const getInitials = (name) => {
 
 const SettingsProfile = () => {
     const { role, profile, healthProfile, fetchProfile, profileLoading, token } = useAuthStore();
-    const { user, fetchUser } = useUserStore();
+    const { user } = useUserStore();
     const profileRecord = (profile && Object.keys(profile).length > 0)
         ? profile
         : ((healthProfile && Object.keys(healthProfile).length > 0) ? healthProfile : null);
@@ -41,6 +41,7 @@ const SettingsProfile = () => {
     });
 
     const displayDob = isEditing && editForm.date_of_birth ? editForm.date_of_birth : dob;
+
     const age = calculateAge(displayDob);
 
     useEffect(() => {
@@ -85,36 +86,39 @@ const SettingsProfile = () => {
             full_name: editForm.full_name,
             phone: editForm.phone_number,
             date_of_birth: editForm.date_of_birth,
-            height: editForm.height_cm,
-            weight: editForm.weight_kg,
+            height: editForm.height_cm ? Number(editForm.height_cm) : null,
+            weight: editForm.weight_kg ? Number(editForm.weight_kg) : null,
             gender: gender,
             blood_group: editForm.blood_group,
             allergies: sanitizedAllergies
         };
 
-        console.log("Payload:", payload);
+        console.log("Payload sent:", payload);
 
         try {
             const res = await api.put("/user/profile", payload);
-            console.log("Response:", res.data);
+            console.log("Response received:", res.data);
 
             const updatedData = res.data?.data || res.data || {};
 
-            const mergedUser = {
-                ...user,
-                ...updatedData,
-                dob: updatedData.date_of_birth || updatedData.dob || user?.dob,
-                height: updatedData.height_cm || updatedData.height || user?.height,
-                weight: updatedData.weight_kg || updatedData.weight || user?.weight,
+            // 1. SAFE STATE UPDATE (CRITICAL FIX)
+            useUserStore.getState().setUser((prev) => ({
+                ...prev,
+                ...updatedData
+            }));
+
+            // 6. SYNC WITH BACKEND & FORCE REFRESH (VERY IMPORTANT)
+            const refreshProfile = async () => {
+                const refreshRes = await api.get("/user/profile");
+                const freshData = refreshRes.data?.data || refreshRes.data || {};
+                useUserStore.getState().setUser((prev) => ({
+                    ...prev,
+                    ...freshData
+                }));
             };
 
-            useUserStore.getState().setUser(mergedUser);
+            await refreshProfile();
 
-            if (email !== user?.email) {
-                await api.put("/user/update", { email });
-            }
-
-            await fetchUser(); // Ensure final sync from server
             setIsEditing(false);
             toast.success("Profile saved successfully");
         } catch (error) {
@@ -247,10 +251,22 @@ const SettingsProfile = () => {
                                             </div>
                                         )
                                     ) : (
-                                        <p className={`font-black text-[#13082a] dark:text-white mt-2 leading-none italic ${stat.small && String(user?.[stat.id] ?? profileRecord?.[stat.id] ?? healthProfile?.[stat.id] ?? '').length > 10 ? 'text-xs' : 'text-xl md:text-2xl uppercase tracking-tighter'}`}>
-                                            {stat.id === 'height' ? user?.height : stat.id === 'weight' ? user?.weight : (user?.[stat.id] ?? profileRecord?.[stat.id] ?? healthProfile?.[stat.id]) ? `${user?.[stat.id] ?? profileRecord?.[stat.id] ?? healthProfile?.[stat.id]} ` : '— '}
-                                            {(user?.[stat.id] ?? profileRecord?.[stat.id] ?? healthProfile?.[stat.id]) && stat.suffix && <span className="text-sm tracking-normal not-italic opacity-60 ml-1">{stat.suffix}</span>}
-                                        </p>
+                                        <>
+                                            {stat.id === 'height' ? (
+                                                <p className={`font-black text-[#13082a] dark:text-white mt-2 leading-none italic text-xl md:text-2xl uppercase tracking-tighter`}>
+                                                    {user?.height ? `${user.height} cm` : "--"}
+                                                </p>
+                                            ) : stat.id === 'weight' ? (
+                                                <p className={`font-black text-[#13082a] dark:text-white mt-2 leading-none italic text-xl md:text-2xl uppercase tracking-tighter`}>
+                                                    {user?.weight ? `${user.weight} kg` : "--"}
+                                                </p>
+                                            ) : (
+                                                <p className={`font-black text-[#13082a] dark:text-white mt-2 leading-none italic ${stat.small && String(user?.[stat.id] ?? profileRecord?.[stat.id] ?? healthProfile?.[stat.id] ?? '').length > 10 ? 'text-xs' : 'text-xl md:text-2xl uppercase tracking-tighter'}`}>
+                                                    {(user?.[stat.id] ?? profileRecord?.[stat.id] ?? healthProfile?.[stat.id]) ? `${user?.[stat.id] ?? profileRecord?.[stat.id] ?? healthProfile?.[stat.id]} ` : '-- '}
+                                                    {(user?.[stat.id] ?? profileRecord?.[stat.id] ?? healthProfile?.[stat.id]) && stat.suffix && <span className="text-sm tracking-normal not-italic opacity-60 ml-1">{stat.suffix}</span>}
+                                                </p>
+                                            )}
+                                        </>
                                     )}
                                 </div>
                             ))}
@@ -307,7 +323,7 @@ const SettingsProfile = () => {
                                             <input className="w-full pl-14 pr-6 py-5 bg-slate-50 dark:bg-white/5 border border-transparent rounded-[1.5rem] focus:ring-4 focus:ring-[#6143f4]/10 focus:border-[#6143f4]/20 text-sm text-[#13082a] dark:text-white font-black uppercase tracking-tight transition-all disabled:opacity-70 disabled:cursor-not-allowed" value={editForm.date_of_birth} onChange={(e) => setEditForm({ ...editForm, date_of_birth: e.target.value })} type="date" />
                                         ) : (
                                             <div className="w-full pl-14 pr-6 py-5 bg-slate-50 dark:bg-white/5 border border-transparent rounded-[1.5rem] text-sm text-[#13082a] dark:text-white font-black uppercase tracking-tight transition-all">
-                                                {dob ? new Date(dob).toLocaleDateString() : "Not set"}
+                                                {dob || "Not Set"}
                                             </div>
                                         )}
                                     </div>

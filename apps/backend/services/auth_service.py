@@ -74,6 +74,7 @@ class AuthService:
             "is_email_verified": user.is_email_verified,
             "gmail_connected": bool(getattr(user, "gmail_connected", False)),
             "apple_connected": bool(getattr(user, "apple_connected", False)),
+            "has_password": user.password_hash != "OAUTH_NO_PASSWORD",
         }
 
     @staticmethod
@@ -208,7 +209,7 @@ class AuthService:
         else:
             user = User(
                 email=email,
-                password_hash=get_password_hash(secrets.token_urlsafe(48)),
+                password_hash="OAUTH_NO_PASSWORD",
                 full_name=safe_input(full_name) if full_name else None,
                 is_email_verified=True,
             )
@@ -370,6 +371,7 @@ class AuthService:
                 detail="Refresh token revoked or session invalid"
             )
             
+        user = db.query(User).filter(User.id == uuid.UUID(user_id) if isinstance(user_id, str) else user_id).first()
         new_access_token = create_access_token(subject=user_id)
         
         return {
@@ -379,7 +381,8 @@ class AuthService:
             "data": {
                 "access_token": new_access_token,
                 "refresh_token": old_refresh_token,
-                "token_type": "bearer"
+                "token_type": "bearer",
+                "user": AuthService._serialize_user(user)
             }
         }
 
@@ -414,4 +417,37 @@ class AuthService:
         user.is_email_verified = True
         db.commit()
 
+
         return {"success": True, "status": "ready", "error": None, "data": {"message": "Email verified successfully", "is_email_verified": True}}
+
+    @staticmethod
+    def update_password(db: Session, user_id: str, current_password: str | None, new_password: str) -> dict:
+        from core.security import validate_password, get_password_hash, verify_password
+        
+        if not validate_password(new_password):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Password must be at least 8 characters long and contain at least one uppercase letter, one number, and one special character."
+            )
+            
+        user = db.query(User).filter(
+            User.id == uuid.UUID(user_id) if isinstance(user_id, str) else user_id,
+            User.is_deleted == False
+        ).first()
+
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+        # Require current password if it's a standard user who didn't sign up strictly via OAuth
+        # Check OAuth status: if they have gmail/apple connected AND no current_password provided, we allow it.
+        # But if they provide current_password we always check it.
+        if current_password:
+            if not verify_password(current_password, user.password_hash):
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid current password")
+        else:
+            if not getattr(user, 'gmail_connected', False) and not getattr(user, 'apple_connected', False):
+                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is required")
+
+        user.password_hash = get_password_hash(new_password)
+        db.commit()
+        return {"success": True, "status": "ready", "data": {"message": "Password updated successfully"}}
