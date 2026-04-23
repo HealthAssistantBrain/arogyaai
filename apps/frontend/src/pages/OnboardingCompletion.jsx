@@ -22,6 +22,7 @@ import { triggerAuthRevalidation } from '../lib/authRevalidator';
 import { useAuthStore } from '../store/authStore';
 
 const OnboardingCompletion = () => {
+  const navigate = useNavigate();
   const completeOnboarding = useAuthStore((s) => s.completeOnboarding);
   const hydrateAuth = useAuthStore((s) => s.hydrateAuth);
 
@@ -31,6 +32,7 @@ const OnboardingCompletion = () => {
       await completeOnboarding();  // PUT over /users/me
       await hydrateAuth();         // Fetch fresh state from backend
       triggerAuthRevalidation();   // Signal INIT_RESOLVER to run
+      navigate("/dashboard", { replace: true });
     } finally {
       unlockSystem();              // Release the global lock, triggering the flushed event
     }
@@ -57,7 +59,7 @@ const OnboardingCompletion = () => {
     <div className="bg-[#EAEAEA] dark:bg-[#131022] min-h-screen flex flex-col font-display antialiased text-[#13082A] dark:text-slate-100 items-center justify-center p-6 lg:p-12 overflow-hidden">
       <div className="layout-container flex h-full grow flex-col w-full max-w-[1200px]">
         {/* Navigation Header - Matched Stitch */}
-        
+
 
         <main className="flex-1 flex flex-col items-center justify-center">
           <motion.div
