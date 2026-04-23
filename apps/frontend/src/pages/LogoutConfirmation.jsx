@@ -9,7 +9,7 @@ import {
     Waves,
     ShieldAlert
 } from 'lucide-react';
-import { api } from '../api/axios';
+import api from '../lib/axios';
 
 const LogoutConfirmation = () => {
     const navigate = useNavigate();
