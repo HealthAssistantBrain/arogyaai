@@ -91,6 +91,48 @@ export async function INIT_RESOLVER(): Promise<InitResult> {
 
   const store = useAuthStore.getState();
   const isProtectedPath = isProtectedRoute(pathname);
+  const hasPersistedToken = !!store.token;
+
+  // If we already have a backend access token in Zustand, trust it and hydrate
+  // against /users/me instead of forcing a cookie refresh. This is the normal
+  // post-login and post-OAuth path, and it avoids 401 loops when the backend
+  // refresh cookie is not present yet.
+  if (hasPersistedToken) {
+    try {
+      if (!store.user || !store.isAuthenticated) {
+        await store.hydrateAuth();
+      } else {
+        store.setHydrated();
+      }
+
+      const currentState = useAuthStore.getState();
+
+      if (isOAuthCallbackPath) {
+        const onboardingRoute = getOnboardingRoute(currentState.onboardingStep);
+        return currentState.onboardingDone
+          ? { route: ROUTES.DASHBOARD, cause: 'OAuth handoff complete' }
+          : { route: onboardingRoute, cause: 'OAuth handoff complete' };
+      }
+
+      if (!isProtectedPath) {
+        return null;
+      }
+
+      if (!currentState.onboardingDone) {
+        return {
+          route: getOnboardingRoute(currentState.onboardingStep),
+          cause: 'Onboarding incomplete',
+        };
+      }
+
+      return { route: ROUTES.DASHBOARD, cause: 'Authenticated with persisted token' };
+    } catch (err: any) {
+      console.warn('[INIT_RESOLVER] Persisted-token hydration failed:', err?.message);
+      store.reset();
+      store.setHydrated();
+      return isProtectedPath ? { route: '/', cause: `Failed persisted-token hydration: ${err?.message}` } : null;
+    }
+  }
 
   // ── Attempt auto-login via cookie ───────────────────────────────────────
   try {
@@ -127,8 +169,16 @@ export async function INIT_RESOLVER(): Promise<InitResult> {
 
   } catch (err: any) {
     console.warn('INIT_RESOLVER network/auth error:', err?.message);
-    store.reset();
-    store.setHydrated();
+    const status = err?.response?.status;
+    const isHardReject = status === 401 || err?.message === 'Token rejected by server';
+
+    if (isHardReject) {
+      store.reset();
+      store.setHydrated();
+    } else {
+      store.setHydrated();
+      return null;
+    }
 
     if (isOAuthCallbackPath) {
       console.log('[INIT_RESOLVER] OAuth callback has no token yet; leaving page in place for callback handling.');

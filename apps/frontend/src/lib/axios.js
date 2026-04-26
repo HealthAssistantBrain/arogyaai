@@ -2,6 +2,7 @@ import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 import { isSystemLocked } from './systemLock';
 import { getApiRootUrl, getApiUrl } from './apiBaseUrl';
+import { applyCsrfHeader } from './csrf';
 
 const BASE_URL = getApiRootUrl(import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000');
 const API_URL = getApiUrl(import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000');
@@ -18,8 +19,14 @@ const api = axios.create({
 // ── Request interceptor: attach Bearer token ─────────────────────────────────
 api.interceptors.request.use(
   (config) => {
+    const method = (config.method || 'get').toUpperCase();
+    const headers = config.headers || {};
     const token = useAuthStore.getState().token;
-    if (token) config.headers.Authorization = `Bearer ${token}`;
+    if (token) headers.Authorization = `Bearer ${token}`;
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+      applyCsrfHeader(headers);
+    }
+    config.headers = headers;
     return config;
   },
   (error) => Promise.reject(error)
@@ -113,8 +120,7 @@ api.interceptors.response.use(
       // Only hard-logout on 401 — not on any other error code
       if (error.response?.status === 401) {
         useAuthStore.getState().hardReset();
-        window.location.href = '/';
-        return;
+        return Promise.reject(error);
       }
       return Promise.reject(error);
     }

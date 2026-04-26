@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import sys
+import secrets
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -85,6 +86,43 @@ async def validation_exception_handler(request, exc):
             "error": "Validation error: " + str(exc.errors())
         }
     )
+
+
+@app.middleware("http")
+async def csrf_protection_middleware(request: Request, call_next):
+    unsafe_methods = {"POST", "PUT", "PATCH", "DELETE"}
+    exempt_paths = {
+        "/api/v1/auth/login",
+        "/api/v1/auth/signup",
+        "/api/v1/auth/oauth",
+        "/api/v1/auth/refresh",
+        "/api/v1/auth/refresh-token",
+        "/api/v1/health",
+        "/health",
+    }
+
+    if request.method in unsafe_methods:
+        path = request.url.path
+        has_cookie_session = bool(request.cookies.get("access_token") or request.cookies.get("refresh_token"))
+        is_exempt = path in exempt_paths or any(path.startswith(prefix) for prefix in ("/docs", "/openapi.json", "/redoc"))
+
+        if has_cookie_session and not is_exempt:
+            csrf_cookie = request.cookies.get("csrf_token")
+            csrf_header = request.headers.get("x-csrf-token")
+
+            if not csrf_cookie or not csrf_header or not secrets.compare_digest(csrf_cookie, csrf_header):
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "success": False,
+                        "status": "ready",
+                        "data": None,
+                        "error": "CSRF validation failed",
+                    },
+                )
+
+    response = await call_next(request)
+    return response
 
 
 @app.middleware("http")

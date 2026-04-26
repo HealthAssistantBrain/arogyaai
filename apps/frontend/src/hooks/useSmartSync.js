@@ -33,6 +33,7 @@ export const useSmartSync = () => {
                 if (newDataString !== prevDataStringRef.current) {
                     prevDataStringRef.current = newDataString;
                     setWearableData(newData);
+                    void useHealthStore.getState().fetchHealthMetrics({ force: true, silent: true });
                 }
             }
         } catch (err) {

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
-import { devtools } from 'zustand/middleware'
+import { devtools, persist } from 'zustand/middleware'
 import { getApiUrl } from '../lib/apiBaseUrl'
+import { getCsrfToken } from '../lib/csrf'
 
 const API_BASE_URL = getApiUrl(import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000')
 const ACCESS_TOKEN_STORAGE_KEY = 'access_token'
@@ -9,6 +10,78 @@ const LEGACY_AUTH_STORAGE_KEY = 'arogyaai-auth'
 const LEGACY_USER_STORAGE_KEY = 'user'
 
 const isBrowser = () => typeof window !== 'undefined'
+
+const isWriteMethod = (method = 'GET') => ['POST', 'PUT', 'PATCH', 'DELETE'].includes(String(method).toUpperCase())
+
+const buildHeaders = ({ token = null, method = 'GET', json = false } = {}) => {
+  const headers = {}
+
+  if (json) {
+    headers['Content-Type'] = 'application/json'
+  }
+
+  if (token && typeof token === 'string' && token.trim()) {
+    headers.Authorization = `Bearer ${token}`
+  }
+
+  if (isWriteMethod(method)) {
+    const csrfToken = getCsrfToken()
+    if (csrfToken) {
+      headers['X-CSRF-Token'] = csrfToken
+    }
+  }
+
+  return headers
+}
+
+const fetchJson = async (url, { method = 'GET', body, token = null, retryOn401 = false } = {}) => {
+  const doRequest = async () => {
+    const response = await fetch(url, {
+      method,
+      headers: buildHeaders({ token, method, json: !!body }),
+      credentials: 'include',
+      body: body ? JSON.stringify(body) : undefined,
+    })
+
+    const contentType = response.headers.get('content-type') || ''
+    let payload = null
+
+    if (contentType.includes('application/json')) {
+      try {
+        payload = await response.json()
+      } catch {
+        payload = null
+      }
+    } else {
+      const text = await response.text()
+      payload = text ? { message: text } : null
+    }
+
+    if (!response.ok) {
+      const error = new Error(
+        payload?.detail || payload?.error || payload?.message || `Request failed with status ${response.status}`
+      )
+      error.status = response.status
+      error.payload = payload
+      throw error
+    }
+
+    return payload
+  }
+
+  try {
+    return await doRequest()
+  } catch (error) {
+    if (retryOn401 && error?.status === 401) {
+      const refreshed = await useAuthStore.getState().refreshSession?.()
+      if (refreshed) {
+        return await doRequest()
+      }
+    }
+
+    throw error
+  }
+}
 
 const clearLegacyAuthStorage = () => {
   if (!isBrowser()) return
@@ -62,7 +135,8 @@ const normalizeProfilePayload = (profile = {}) => {
 //    are user-level persistent data, not session data. They survive across login cycles.
 
 export const useAuthStore = create(
-  devtools((set, get) => ({
+  persist(
+    devtools((set, get) => ({
     // Trace state for debugging
     logOnboardingState: () => console.log("ONBOARDING STATE:", get()),
     user: null,
@@ -99,8 +173,8 @@ export const useAuthStore = create(
 
     setAccessToken: (token) => get().setToken(token),
 
-    setRefreshToken: () => {
-      set({ refreshToken: null }, false, 'setRefreshToken')
+    setRefreshToken: (refreshToken = null) => {
+      set({ refreshToken: refreshToken ?? null }, false, 'setRefreshToken')
     },
 
     setAuth: (data) => set({
@@ -163,16 +237,13 @@ export const useAuthStore = create(
 
     // ── PROFILE MANAGEMENT ──────────────────────────────────────────────
     fetchProfile: async () => {
-      const token = get().token;
-      if (!token) return false;
-
       set({ profileLoading: true, profileError: null });
       try {
-        const res = await fetch(`${API_BASE_URL}/user/profile`, {
-          headers: { Authorization: `Bearer ${token}` }
+        const envelope = await fetchJson(`${API_BASE_URL}/user/profile`, {
+          method: 'GET',
+          token: get().token,
+          retryOn401: true,
         });
-        if (!res.ok) throw new Error('Failed to fetch profile');
-        const envelope = await res.json();
         const data = envelope.data || envelope || {};
         const normalizedProfile = normalizeProfileState(data);
 
@@ -202,8 +273,6 @@ export const useAuthStore = create(
     },
 
     updateProfile: async (newHealthProfile) => {
-      const token = get().token;
-      if (!token) return false;
       const payload = normalizeProfilePayload(newHealthProfile);
 
       // Optimistic UI Update
@@ -230,16 +299,12 @@ export const useAuthStore = create(
       });
 
       try {
-        const res = await fetch(`${API_BASE_URL}/user/profile`, {
+        const envelope = await fetchJson(`${API_BASE_URL}/user/profile`, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify(payload)
+          body: payload,
+          token: get().token,
+          retryOn401: true,
         });
-        if (!res.ok) throw new Error('Failed to update profile');
-        const envelope = await res.json();
         const data = envelope.data || envelope || {};
         const normalizedProfile = normalizeProfileState(data);
 
@@ -276,9 +341,6 @@ export const useAuthStore = create(
     },
 
     saveOnboarding: async (onboardingData) => {
-      const token = get().token;
-      if (!token) return false;
-
       const payload = normalizeProfilePayload(onboardingData);
       const previousUser = get().user;
       const previousProfile = get().healthProfile;
@@ -287,18 +349,12 @@ export const useAuthStore = create(
       set({ profileLoading: true, profileError: null });
 
       try {
-        const res = await fetch(`${API_BASE_URL}/user/onboarding`, {
+        const envelope = await fetchJson(`${API_BASE_URL}/user/onboarding`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify(payload)
+          body: payload,
+          token: get().token,
+          retryOn401: true,
         });
-
-        if (!res.ok) throw new Error('Failed to save onboarding data');
-
-        const envelope = await res.json();
         const data = envelope.data || envelope || {};
         const normalizedProfile = normalizeProfileState(data);
 
@@ -580,5 +636,28 @@ export const useAuthStore = create(
       get().reset();
       set({ isHydrated: true }, false, 'hardReset');
     }
-  }), { name: 'arogyaai-auth' })
+    }), { name: 'arogyaai-auth' }),
+    {
+      name: 'arogyaai-auth',
+      partialize: (state) => ({
+        user: state.user,
+        profile: state.profile,
+        healthProfile: state.healthProfile,
+        token: state.token,
+        isAuthenticated: state.isAuthenticated,
+        isEmailVerified: state.isEmailVerified,
+        onboardingStep: state.onboardingStep,
+        onboardingDone: state.onboardingDone,
+        role: state.role,
+        refreshToken: state.refreshToken,
+      }),
+      onRehydrateStorage: () => (state, error) => {
+        if (error) {
+          console.warn('[authStore] Persist rehydration failed:', error)
+        }
+
+        state?.setHydrated?.()
+      },
+    }
+  )
 )

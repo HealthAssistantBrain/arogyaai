@@ -75,7 +75,10 @@ const ServerError500 = lazy(() => import('../pages/ServerError'))
 const MaintenancePage = lazy(() => import('../pages/SystemMaintenance'))
 
 function RootRedirect() {
-  const { isAuthenticated } = useAuthStore()
+  const { isAuthenticated, isHydrated } = useAuthStore()
+
+  if (!isHydrated) return null
+
   return isAuthenticated ? <Navigate to="/dashboard" replace /> : <LandingPage />
 }
 

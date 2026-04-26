@@ -59,6 +59,7 @@ import { safeArray, safeNumber, safeObject, safeText } from '../utils/safeData';
 import { useFetchLock } from '../hooks/useFetchLock';
 import useDeviceStore from '../store/deviceStore';
 import { useSmartSync } from '../hooks/useSmartSync';
+import VitalsCards from '../components/VitalsCards';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -73,6 +74,9 @@ const Dashboard = () => {
     loading, error, fetchDashboardData, googleFit } = useDashboardStore();
   const vitals = useDashboardStore((s) => s.vitals);
   const dashboardData = useDashboardStore((s) => s.dashboardData);
+  const healthMetrics = useHealthStore((s) => s.metrics);
+  const metricsLoading = useHealthStore((s) => s.metricsLoading);
+  const fetchHealthMetrics = useHealthStore((s) => s.fetchHealthMetrics);
   const authUser = useAuthStore((s) => s.user);
 
   const setGoogleFitConnected = useDeviceStore((s) => s.setGoogleFitConnected);
@@ -114,6 +118,10 @@ const Dashboard = () => {
     void refreshDashboard({ silent: false });
   }, []);
 
+  useEffect(() => {
+    void fetchHealthMetrics({ silent: true });
+  }, [fetchHealthMetrics]);
+
   // ── Sync handler ──────────────────────────────────────────────────────────
   const handleSync = async () => {
     try {
@@ -140,6 +148,11 @@ const Dashboard = () => {
   const profData = profile?.data;
   const alertsData = safeArray(alerts?.data?.alerts);
   const hasDashboardData = Boolean(safeObject(dashboardData) && Object.keys(safeObject(dashboardData)).length > 0);
+
+  useEffect(() => {
+    if (!hasDashboardData) return;
+    void fetchHealthMetrics({ silent: true });
+  }, [fetchHealthMetrics, hasDashboardData]);
 
   const stepsSlice = vitals?.['steps:24h'] ?? {};
   const sleepSlice = vitals?.['sleep:24h'] ?? {};
@@ -441,6 +454,11 @@ const Dashboard = () => {
               </div>
             </div>
           </motion.div>
+
+          <VitalsCards
+            items={healthMetrics?.cards ?? []}
+            loading={metricsLoading && !healthMetrics}
+          />
 
           {/* Section 3: Secondary Stats Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

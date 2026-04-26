@@ -9,18 +9,20 @@ Exposes:
 
 import uuid
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, status, Header as FastAPIHeader
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status, Header as FastAPIHeader
 from sqlalchemy.orm import Session
 import jwt
 
 from database.session import get_db
 from models import User
 from core.config import settings
+from core.session_cookies import clear_session_cookies
 from services.user_service import UserService
 
 router = APIRouter(prefix="/api/v1/users", tags=["Users"])
 
 def get_current_user_from_header(
+    request: Request,
     authorization: str = FastAPIHeader(None),
     db: Session = Depends(get_db),
 ) -> User:
@@ -30,10 +32,14 @@ def get_current_user_from_header(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    if not authorization or not authorization.startswith("Bearer "):
-        raise credentials_exception
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ", 1)[1]
+    else:
+        token = request.cookies.get("access_token")
 
-    token = authorization.split(" ", 1)[1]
+    if not token:
+        raise credentials_exception
 
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
@@ -112,11 +118,14 @@ def update_me(
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
 def delete_me(
+    response: Response,
     current_user: User = Depends(get_current_user_from_header),
     db: Session = Depends(get_db),
 ):
     """Deactivate user via UserService."""
-    return UserService.delete_user_me(db, current_user)
+    UserService.delete_user_me(db, current_user)
+    clear_session_cookies(response)
+    return None
 
 
 @router.post("/profile")

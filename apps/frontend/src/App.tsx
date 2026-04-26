@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { INIT_RESOLVER } from './router/INIT_RESOLVER';
 import AppRouter from './router';
+import { useAuthStore } from './store/authStore';
 
 export default function App() {
   const [initComplete, setInitComplete] = useState(false);
+  const isHydrated = useAuthStore((state) => state.isHydrated);
 
   useEffect(() => {
     let isMounted = true;
@@ -42,7 +44,7 @@ export default function App() {
     };
   }, []);
 
-  if (!initComplete) {
+  if (!initComplete || !isHydrated) {
     return (
       <div
         style={{

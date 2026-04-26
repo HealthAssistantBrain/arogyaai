@@ -15,7 +15,7 @@ router = APIRouter(tags=["Dashboard Realtime"])
 
 
 def _authenticate_dashboard_socket(websocket: WebSocket, user_id: str) -> User | None:
-    token = websocket.query_params.get("token")
+    token = websocket.query_params.get("token") or websocket.cookies.get("access_token")
     if not token:
         return None
 
@@ -74,4 +74,3 @@ async def dashboard_socket(websocket: WebSocket, user_id: str):
     finally:
         await dashboard_connection_manager.disconnect(str(current_user.id), websocket)
         db.close()
-

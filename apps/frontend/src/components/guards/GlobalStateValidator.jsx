@@ -6,6 +6,7 @@ export default function GlobalStateValidator() {
   const isEmailVerified = useAuthStore((s) => s.isEmailVerified);
   const onboardingDone = useAuthStore((s) => s.onboardingDone);
   const onboardingStep = useAuthStore((s) => s.onboardingStep);
+  const user = useAuthStore((s) => s.user);
   const token = useAuthStore((s) => s.token);
   const isHydrated = useAuthStore((s) => s.isHydrated);
   const isHydratingAuth = useAuthStore((s) => s.isHydratingAuth);
@@ -20,11 +21,11 @@ export default function GlobalStateValidator() {
   // isHydratingAuth guard prevents double-calls with the cold-start path.
   // ─────────────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (isHydrated && token && !isHydratingAuth) {
+    if (isHydrated && token && !user && !isHydratingAuth) {
       hydrateAuth();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]); // Only re-run when token changes (not isHydrated, which fires the cold-start path)
+  }, [token, user, isHydrated, isHydratingAuth, hydrateAuth]);
 
   useEffect(() => {
     // ── SECTION 9: Wait for both persist hydration AND network auth hydration

@@ -1,6 +1,7 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { useAuthStore } from '../store/authStore';
 import { getApiUrl } from './apiBaseUrl';
+import { applyCsrfHeader } from './csrf';
 
 const env = (import.meta as any).env ?? {};
 
@@ -33,10 +34,16 @@ const processQueue = (error: any, token: string | null = null) => {
 
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    const method = (config.method || 'get').toUpperCase();
+    const headers = (config.headers as Record<string, string | undefined>) || {};
     const token = useAuthStore.getState().token;
-    if (token && config.headers) {
-      config.headers.Authorization = `Bearer ${token}`;
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
     }
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+      applyCsrfHeader(headers);
+    }
+    config.headers = headers as any;
     return config;
   },
   (error) => Promise.reject(error)
@@ -77,7 +84,10 @@ apiClient.interceptors.response.use(
         const { data: envelope } = await axios.post(
           `${API_URL}/auth/refresh-token`,
           {},
-          { withCredentials: true }
+          {
+            withCredentials: true,
+            headers: applyCsrfHeader({}),
+          }
         );
 
         const newAccessToken = envelope.data.access_token;

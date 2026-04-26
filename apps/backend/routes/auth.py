@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Header, Request
+import secrets
+
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from sqlalchemy.orm import Session
 import jwt
 
@@ -7,7 +9,9 @@ from models import User
 from schemas.api_models import OAuthLoginRequest, UserLogin, UserCreate, TokenResponse, RefreshTokenRequest, PasswordUpdate
 from core.security import create_access_token
 from core.config import settings
+from core.session_cookies import clear_session_cookies, set_session_cookies
 from services.auth_service import AuthService
+from routes.users import get_current_user_from_header
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
 
@@ -15,24 +19,12 @@ router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
 async def signup(user_data: UserCreate, response: Response, db: Session = Depends(get_db)):
     """Register a new user account via AuthService."""
     result = AuthService.signup(db, user_data)
-    
-    # Set CSRF Cookie for frontend security
-    import secrets
     csrf_token = secrets.token_urlsafe(32)
-    response.set_cookie(
-        key="csrf_token", 
-        value=csrf_token, 
-        httponly=False,
-        samesite="lax",
-        secure=False
-    )
-    response.set_cookie(
-        key="refresh_token",
-        value=result["data"]["refresh_token"],
-        httponly=True,
-        secure=False,  # Set True in prod
-        samesite="Strict",
-        path="/"
+    set_session_cookies(
+        response,
+        access_token=result["data"]["access_token"],
+        refresh_token=result["data"].get("refresh_token"),
+        csrf_token=csrf_token,
     )
     
     return result
@@ -41,24 +33,12 @@ async def signup(user_data: UserCreate, response: Response, db: Session = Depend
 async def login(user_data: UserLogin, response: Response, db: Session = Depends(get_db)):
     """Authenticate via AuthService."""
     result = AuthService.login(db, user_data)
-    
-    # CSRF Cookie
-    import secrets
     csrf_token = secrets.token_urlsafe(32)
-    response.set_cookie(
-        key="csrf_token", 
-        value=csrf_token, 
-        httponly=False,
-        samesite="lax",
-        secure=False
-    )
-    response.set_cookie(
-        key="refresh_token",
-        value=result["data"]["refresh_token"],
-        httponly=True,
-        secure=False,  # Set True in prod
-        samesite="Strict",
-        path="/"
+    set_session_cookies(
+        response,
+        access_token=result["data"]["access_token"],
+        refresh_token=result["data"].get("refresh_token"),
+        csrf_token=csrf_token,
     )
     
     return result
@@ -73,13 +53,12 @@ async def oauth_login(oauth_data: OAuthLoginRequest, response: Response, db: Ses
     )
     print(f"[OAuth Route] provider={oauth_data.provider!r} token={token_preview}")
     result = AuthService.oauth_login(db, oauth_data)
-    response.set_cookie(
-        key="refresh_token",
-        value=result["data"]["refresh_token"],
-        httponly=True,
-        secure=False,  # Set True in prod
-        samesite="Strict",
-        path="/"
+    csrf_token = secrets.token_urlsafe(32)
+    set_session_cookies(
+        response,
+        access_token=result["data"]["access_token"],
+        refresh_token=result["data"].get("refresh_token"),
+        csrf_token=csrf_token,
     )
     return result
 
@@ -114,13 +93,10 @@ async def refresh_access_token(request: Request, response: Response, db: Session
         )
         
     result = AuthService.refresh_token(db, user_id, refresh_token)
-    response.set_cookie(
-        key="refresh_token",
-        value=result["data"]["refresh_token"],
-        httponly=True,
-        secure=False,  # Set True in prod
-        samesite="Strict",
-        path="/"
+    set_session_cookies(
+        response,
+        access_token=result["data"]["access_token"],
+        refresh_token=result["data"].get("refresh_token"),
     )
     return result
 
@@ -136,58 +112,37 @@ async def logout(request: Request, response: Response, db: Session = Depends(get
             pass
             
     if not refresh_token:
-        response.delete_cookie("refresh_token", path="/")
+        clear_session_cookies(response)
         return {"success": True, "status": "ready", "data": {"message": "Session revoked"}}
 
     try:
         payload = jwt.decode(refresh_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         user_id = payload.get("sub")
     except jwt.PyJWTError:
-        response.delete_cookie("refresh_token", path="/")
+        clear_session_cookies(response)
         return {"success": True, "status": "ready", "data": {"message": "Session revoked"}}
         
     result = AuthService.logout(db, user_id, refresh_token)
-    response.delete_cookie("refresh_token", path="/")
+    clear_session_cookies(response)
     return result
-
-
-from fastapi.security import OAuth2PasswordBearer
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
 
 @router.post("/verify-email", status_code=status.HTTP_200_OK)
 async def verify_email(
-    token: str = Depends(oauth2_scheme),
+    current_user: User = Depends(get_current_user_from_header),
     db: Session = Depends(get_db),
 ):
     """
     Mark the authenticated user's email as verified via AuthService.
     """
-    try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        user_id = payload.get("sub")
-        token_type = payload.get("type")
-        if not user_id or token_type != "access":
-             raise HTTPException(status_code=401, detail="Invalid token type")
-    except jwt.PyJWTError:
-        raise HTTPException(status_code=401, detail="Token expired or invalid")
-
-    return AuthService.verify_email(db, user_id)
+    return AuthService.verify_email(db, current_user.id)
 
 @router.put("/update-password", status_code=status.HTTP_200_OK)
 async def update_password(
     payload: PasswordUpdate,
-    token: str = Depends(oauth2_scheme),
+    current_user: User = Depends(get_current_user_from_header),
     db: Session = Depends(get_db),
 ):
-    try:
-        jwt_payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        user_id = jwt_payload.get("sub")
-        if not user_id:
-             raise HTTPException(status_code=401, detail="Invalid token")
-    except jwt.PyJWTError:
-        raise HTTPException(status_code=401, detail="Token expired or invalid")
-
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(User.id == current_user.id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
         
