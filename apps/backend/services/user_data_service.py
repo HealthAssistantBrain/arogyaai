@@ -18,6 +18,7 @@ from models import (
     UserVitalSourceEnum,
     UserVitalTypeEnum,
 )
+from services.onboarding_service import OnboardingService
 from services.user_service import UserService
 
 ALLOWED_FETCH_INTERVALS = {5, 10, 15, 20, 25, 30}
@@ -123,12 +124,18 @@ class UserDataService:
             payload["phone_number"] = normalized.get("phone_number")
         if "date_of_birth" in normalized:
             payload["date_of_birth"] = normalized.get("date_of_birth")
+        if "age" in normalized:
+            payload["age"] = normalized.get("age")
         if "gender" in normalized:
             payload["gender"] = normalized.get("gender")
         if "height_cm" in normalized:
             payload["height_cm"] = normalized.get("height_cm")
         if "weight_kg" in normalized:
             payload["weight_kg"] = normalized.get("weight_kg")
+        if "activity_level" in normalized:
+            payload["activity_level"] = normalized.get("activity_level")
+        if "goals" in normalized:
+            payload["goals"] = normalized.get("goals")
         if "blood_group" in normalized:
             payload["blood_group"] = normalized.get("blood_group")
         if "allergies" in normalized:
@@ -146,10 +153,12 @@ class UserDataService:
             normalized["height_cm"] = normalized["height"]
         if "weight_kg" not in normalized and "weight" in normalized:
             normalized["weight_kg"] = normalized["weight"]
+        if "activity_level" in normalized:
+            normalized["activity_level"] = normalized.get("activity_level")
 
         profile_payload = {
             key: normalized.get(key)
-            for key in ("full_name", "date_of_birth", "gender", "phone_number", "height_cm", "weight_kg", "blood_group", "allergies")
+            for key in ("full_name", "date_of_birth", "age", "gender", "phone_number", "height_cm", "weight_kg", "activity_level", "goals", "blood_group", "allergies")
             if key in normalized and normalized.get(key) is not None
         }
         result = UserDataService.update_profile(db, user, profile_payload)
@@ -162,6 +171,9 @@ class UserDataService:
 
         if user_updates:
             UserService.update_user_me(db, user, user_updates)
+
+        if user_updates.get("is_onboarding_done"):
+            return OnboardingService.finalize_onboarding(db, user, normalized)
 
         return result
 

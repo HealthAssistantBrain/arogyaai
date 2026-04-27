@@ -1,12 +1,17 @@
 import { create } from "zustand";
 import axios from "../lib/axios";
 
-export const useUserStore = create((set) => ({
+export const useUserStore = create((set, get) => ({
     user: null,
     loading: false,
+    loaded: false,
+    error: null,
 
     fetchUser: async () => {
-        set({ loading: true });
+        if (get().loading) return get().user;
+        if (get().loaded && get().user) return get().user;
+
+        set({ loading: true, error: null });
         try {
             const res = await axios.get("/user/profile");
             const userData = res.data?.data || res.data || {};
@@ -17,13 +22,18 @@ export const useUserStore = create((set) => ({
                 weight: userData.weight || userData.weight_kg,
             };
             console.log("GLOBAL USER:", normalizedUser);
-            set({ user: normalizedUser, loading: false });
+            set({ user: normalizedUser, loading: false, loaded: true, error: null });
+            return normalizedUser;
         } catch (err) {
             console.error("User fetch failed", err);
-            set({ loading: false });
-            throw err;
+            set({ loading: false, loaded: false, error: err?.message || "User fetch failed" });
+            return null;
         }
     },
 
-    setUser: (data) => set((state) => ({ user: typeof data === "function" ? data(state.user) : data })),
+    setUser: (data) => set((state) => ({
+        user: typeof data === "function" ? data(state.user) : data,
+        loaded: true,
+        error: null,
+    })),
 }));

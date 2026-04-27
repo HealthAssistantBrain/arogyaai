@@ -48,7 +48,7 @@ export default function ActiveOnboardingGuard() {
 
   // ── SECTION 4: MAX-STEP ROUTING WATERFALL ──
   if (!isAuthenticated) {
-    return <SafeNavigate to={ROUTES.LOGIN} replace />
+    return <SafeNavigate to={ROUTES.HOME} replace />
   }
   else if (onboardingDone === false) {
     const maxAllowedStep = onboardingStep || 1;

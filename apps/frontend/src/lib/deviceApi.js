@@ -2,8 +2,16 @@ import { Watch } from 'lucide-react';
 
 import { apiClient } from './apiClient';
 import { fetchGoogleFitStatus } from './googleFitApi';
+import { safeApiGet } from './safeApi';
 
 export const GOOGLE_FIT_PROVIDER = 'google-fit';
+
+function normalizeDeviceKey(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-');
+}
 
 function normalizeListResponse(payload) {
   if (Array.isArray(payload)) {
@@ -33,16 +41,37 @@ function normalizeListResponse(payload) {
   return [];
 }
 
-function isIgnoredRouteError(error) {
-  const status = error?.response?.status;
-  return status === 404 || status === 405;
+function normalizeConnectionFlag(record = {}) {
+  if (typeof record?.is_connected === 'boolean') {
+    return record.is_connected;
+  }
+
+  if (typeof record?.connected === 'boolean') {
+    return record.connected;
+  }
+
+  const normalizedStatus = String(
+    record?.status ?? record?.connection_status ?? record?.state ?? ''
+  ).trim().toLowerCase();
+
+  if (['connected', 'active', 'enabled', 'ok'].includes(normalizedStatus)) {
+    return true;
+  }
+
+  if (['not_connected', 'disconnected', 'inactive', 'disabled', 'pending', 'error'].includes(normalizedStatus)) {
+    return false;
+  }
+
+  return true;
 }
 
 function normalizeDeviceSummary(record = {}) {
-  const provider = String(record?.provider || record?.integration || record?.slug || record?.id || '').toLowerCase();
-  const isConnected = record?.is_connected ?? record?.connected ?? true;
+  const name = record?.name || record?.display_name || 'Connected Device';
+  const provider = normalizeDeviceKey(
+    record?.provider || record?.integration || record?.slug || record?.id || name
+  );
+  const isConnected = normalizeConnectionFlag(record);
   const lastSyncedAt = record?.last_synced_at ?? record?.lastSyncedAt ?? null;
-  const name = record?.name || record?.display_name || (provider === GOOGLE_FIT_PROVIDER ? 'Google Fit' : 'Connected Device');
 
   return {
     id: record?.id || provider || name,
@@ -54,21 +83,23 @@ function normalizeDeviceSummary(record = {}) {
 }
 
 export async function fetchConnectedDeviceSummaries() {
-  let deviceApiError = null;
-
-  try {
-    const { data } = await apiClient.get('/devices');
-    const backendDevices = normalizeListResponse(data)
-      .map((device) => normalizeDeviceSummary(device))
-      .filter(Boolean);
-
-    if (backendDevices.length > 0) {
-      return backendDevices;
+  const response = await safeApiGet(
+    apiClient,
+    '/users/devices',
+    {},
+    {
+      fallback: null,
+      ignoreStatuses: [404, 405],
+      logLabel: 'GET /users/devices',
     }
-  } catch (error) {
-    if (!isIgnoredRouteError(error)) {
-      deviceApiError = error;
-    }
+  );
+
+  const backendDevices = normalizeListResponse(response?.data)
+    .map((device) => normalizeDeviceSummary(device))
+    .filter(Boolean);
+
+  if (backendDevices.length > 0) {
+    return backendDevices;
   }
 
   try {
@@ -83,10 +114,7 @@ export async function fetchConnectedDeviceSummaries() {
       })];
     }
   } catch (error) {
-    if (deviceApiError) {
-      throw deviceApiError;
-    }
-    if (!isIgnoredRouteError(error)) {
+    if (error?.response?.status !== 404 && error?.response?.status !== 405) {
       throw error;
     }
   }
@@ -104,28 +132,5 @@ export async function fetchSupportedDeviceIntegrations(onGoogleFitConnect) {
     onSelect: onGoogleFitConnect,
   };
 
-  try {
-    const { data } = await apiClient.get('/devices/available');
-    const integrations = normalizeListResponse(data)
-      .map((integration) => {
-        const provider = String(integration?.provider || integration?.slug || integration?.id || '').toLowerCase();
-        if (provider !== GOOGLE_FIT_PROVIDER) {
-          return null;
-        }
-
-        return {
-          id: GOOGLE_FIT_PROVIDER,
-          name: integration?.name || googleFitIntegration.name,
-          description: integration?.description || googleFitIntegration.description,
-          actionLabel: integration?.action_label || integration?.actionLabel || googleFitIntegration.actionLabel,
-          icon: Watch,
-          onSelect: onGoogleFitConnect,
-        };
-      })
-      .filter(Boolean);
-
-    return integrations.length > 0 ? integrations : [googleFitIntegration];
-  } catch {
-    return [googleFitIntegration];
-  }
+  return [googleFitIntegration];
 }

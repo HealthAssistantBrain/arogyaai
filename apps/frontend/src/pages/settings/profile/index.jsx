@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import api from '../../../lib/axios';
 import { calculateAge, calculateBMI } from '../../../utils/userDerived';
+import SettingsSkeleton from '../../../components/skeleton/SettingsSkeleton';
 
 const getInitials = (name) => {
     if (!name) return "NA";
@@ -50,14 +51,10 @@ const SettingsProfile = () => {
         }
     }, [fetchProfile, token]);
 
-    if (!user) return <div className="flex h-64 items-center justify-center text-sm font-bold text-slate-500">Loading...</div>;
+    if (!user) return <SettingsSkeleton />;
 
     if (profileLoading && !hasLoadedProfile) {
-        return (
-            <div className="flex h-64 items-center justify-center text-sm font-bold text-slate-500">
-                Loading profile...
-            </div>
-        );
+        return <SettingsSkeleton />;
     }
 
     const handleSaveProfile = async () => {

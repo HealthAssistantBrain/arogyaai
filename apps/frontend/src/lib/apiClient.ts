@@ -2,6 +2,7 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { useAuthStore } from '../store/authStore';
 import { getApiUrl } from './apiBaseUrl';
 import { applyCsrfHeader } from './csrf';
+import { getSupabaseClient, supabase } from './supabaseClient';
 
 const env = (import.meta as any).env ?? {};
 
@@ -32,11 +33,25 @@ const processQueue = (error: any, token: string | null = null) => {
   failedQueue = [];
 };
 
+const getCurrentSupabaseToken = async (fallbackToken: string | null = null) => {
+  const client = getSupabaseClient() ?? supabase;
+  if (!client) return fallbackToken;
+
+  const { data } = await client.auth.getSession();
+  const session = data?.session ?? null;
+  if (session?.access_token) {
+    useAuthStore.getState().setSupabaseSession?.(session);
+    return session.access_token;
+  }
+
+  return fallbackToken;
+};
+
 apiClient.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
+  async (config: InternalAxiosRequestConfig) => {
     const method = (config.method || 'get').toUpperCase();
     const headers = (config.headers as Record<string, string | undefined>) || {};
-    const token = useAuthStore.getState().token;
+    const token = await getCurrentSupabaseToken(useAuthStore.getState().token);
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }

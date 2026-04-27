@@ -12,20 +12,15 @@ import {
     AlertCircle,
 } from 'lucide-react';
 import ReportSummary, { hasReportSummaryContent, normalizeReportSummaryData } from '../components/reports/ReportSummary';
-import { apiClient } from '../lib/apiClient';
 import { buildSummaryPdfFileName, generateStyledSummaryPdf } from '../utils/generateStyledSummaryPdf';
 import { ROUTES } from '../router/routes';
 import HeartLoader from '../components/ui/HeartLoader';
 import Skeleton from '../components/ui/Skeleton';
-
-const stripQuery = (value = '') => String(value).split('?')[0].split('#')[0];
-
-const getFileNameFromUrl = (url = '') => {
-    const cleaned = stripQuery(url);
-    if (!cleaned) return '';
-    const parts = cleaned.split('/');
-    return decodeURIComponent(parts[parts.length - 1] || '');
-};
+import { useAuthStore } from '../store/authStore';
+import useReportsStore, { reportHasRenderableSummary, toText } from '../store/reportsStore';
+import ReportsSkeleton from '../components/skeleton/ReportsSkeleton';
+import SmartLoadingOverlay from '../components/ui/SmartLoadingOverlay';
+import useSmartFetchOverlay from '../hooks/useSmartFetchOverlay';
 
 const formatBytes = (bytes) => {
     const size = Number(bytes);
@@ -64,134 +59,6 @@ const formatDate = (value) => {
     });
 };
 
-const inferReportType = (reportName = '', reportUrl = '', reportType = '') => {
-    const normalizedType = String(reportType || '').toUpperCase();
-    const extension = stripQuery(reportName || reportUrl).split('.').pop()?.toLowerCase() || '';
-
-    if (extension === 'pdf') return 'pdf';
-    if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic', 'heif'].includes(extension)) return 'image';
-
-    if (normalizedType.includes('XRAY') || normalizedType.includes('IMAGE') || normalizedType.includes('CLINICAL_NOTE')) {
-        return 'image';
-    }
-
-    return 'pdf';
-};
-
-const toText = (value) => {
-    if (value === null || value === undefined) return '';
-    return String(value).trim();
-};
-
-const normalizeTextList = (value) => {
-    if (Array.isArray(value)) {
-        return value.map(toText).filter(Boolean);
-    }
-
-    const text = toText(value);
-    return text ? [text] : [];
-};
-
-
-const normalizeMarkers = (value) => {
-    if (!Array.isArray(value)) return [];
-
-    return value
-        .map((item) => ({
-            name: toText(item?.name ?? item?.label ?? item?.test ?? item?.title ?? 'Biomarker'),
-            value: toText(item?.value ?? item?.reading ?? item?.result),
-            unit: toText(item?.unit),
-            flag: toText(item?.flag ?? item?.status ?? item?.trend),
-        }))
-        .filter((item) => item.name || item.value || item.unit || item.flag);
-};
-
-// Backend now serves summaryView ready-to-use via summary_data.
-// We just perform basic safety checks.
-const hasSummaryContent = (summaryView = {}) => (
-    (summaryView.patientInfo?.length ?? 0) > 0 ||
-    (summaryView.keyFindings?.length ?? 0) > 0 ||
-    (summaryView.biomarkers?.length ?? 0) > 0 ||
-    (summaryView.abnormalValues?.length ?? 0) > 0 ||
-    (summaryView.notes?.length ?? 0) > 0
-);
-
-const normalizeReport = (report) => {
-    const fileUrl = report?.fileUrl ?? report?.file_url ?? report?.url ?? '';
-    const fileName =
-        report?.name ??
-        report?.fileName ??
-        report?.file_name ??
-        report?.title ??
-        getFileNameFromUrl(fileUrl) ??
-        'Medical Report';
-    const createdAt = report?.createdAt ?? report?.created_at ?? report?.uploaded_at ?? report?.date ?? null;
-    const updatedAt = report?.updatedAt ?? report?.updated_at ?? null;
-    const sizeValue = Number(report?.fileSize ?? report?.file_size ?? report?.sizeBytes ?? report?.size_bytes ?? null);
-    const reportType = String(report?.reportType ?? report?.report_type ?? report?.type ?? 'OTHER').toUpperCase();
-    const summarySource = toText(report?.summarySource ?? report?.summary_source ?? '');
-    const parsedText = report?.parsedText ?? report?.parsed_text ?? '';
-    const summaryView = report?.summaryView ?? report?.summary_view ?? {
-        title: fileName,
-        patientInfo: [],
-        keyFindings: [],
-        biomarkers: [],
-        abnormalValues: [],
-        notes: [],
-        source: summarySource
-    };
-    const markers = normalizeMarkers(report?.markers ?? summaryView.biomarkers);
-    const summaryData = normalizeReportSummaryData({
-        ...report,
-        fileName,
-        title: report?.title ?? fileName,
-        summaryView,
-        summarySource: summarySource || summaryView.source || report?.source || 'upload',
-    });
-
-    return {
-        id: String(report?.id ?? report?.report_id ?? fileUrl ?? `${fileName}-${createdAt ?? 'report'}`),
-        fileName,
-        title: report?.title ?? fileName,
-        fileUrl,
-        reportType,
-        reportKind: inferReportType(fileName, fileUrl, reportType),
-        status: String(report?.status ?? 'COMPLETED').toUpperCase(),
-        createdAt,
-        updatedAt,
-        fileSize: Number.isFinite(sizeValue) ? sizeValue : null,
-        summary: Array.isArray(report?.summary) ? report.summary : normalizeTextList(report?.summary),
-        summaryView,
-        summaryData,
-        markers,
-        ocrText: report?.ocrText ?? report?.ocr_text ?? '',
-        parsedText,
-        abnormalValues: normalizeTextList(report?.abnormalValues ?? report?.abnormal_values),
-        patientSummary: toText(report?.patientSummary ?? report?.patient_summary),
-        risks: Array.isArray(report?.risks) ? report.risks : [],
-        recommendations: Array.isArray(report?.recommendations) ? report.recommendations : [],
-        source: report?.source ?? summarySource ?? 'upload',
-        summarySource: summarySource || summaryView.source || report?.source || 'upload',
-    };
-};
-
-const normalizeReportList = (items = []) => {
-    return items.filter(Boolean).map(normalizeReport).sort((left, right) => {
-        return new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime();
-    });
-};
-
-const extractReportsArray = (payload) => {
-    if (Array.isArray(payload)) return payload;
-    if (Array.isArray(payload?.data)) return payload.data;
-    if (Array.isArray(payload?.data?.data)) return payload.data.data;
-    if (Array.isArray(payload?.data?.reports)) return payload.data.reports;
-    if (Array.isArray(payload?.reports)) return payload.reports;
-    if (Array.isArray(payload?.items)) return payload.items;
-    return [];
-};
-
-
 const getStatusStyles = (status = '') => {
     const normalized = String(status).toUpperCase();
 
@@ -213,37 +80,36 @@ const getStatusStyles = (status = '') => {
 const Reports = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const [reports, setReports] = useState([]);
-    const [selectedReport, setSelectedReport] = useState(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [selectedReportLoading, setSelectedReportLoading] = useState(false);
+    const authUserId = useAuthStore((state) => state.user?.id ?? null);
+    const {
+        reports,
+        selectedReportId,
+        loading,
+        isFetching,
+        detailFetchingId,
+        lastFetchedAt,
+        cacheOwnerId,
+        hasHydratedCache,
+        fetchReports,
+        fetchReportDetail,
+        setSelectedReportId,
+    } = useReportsStore();
     const focusedReportId = location.state?.reportId;
-
-    const loadReports = useCallback(async () => {
-        setIsLoading(true);
-
-        try {
-            const response = await apiClient.get('/reports', { timeout: 12000 });
-            console.log('REPORTS FETCH:', response.data);
-            const remoteReports = normalizeReportList(extractReportsArray(response.data));
-            setReports(remoteReports);
-        } catch (error) {
-            const status = error?.response?.status;
-            if (status !== 404 && status !== 405) {
-                console.warn('[Reports] Failed to load reports:', error);
-            }
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
+    const selectedReport = reports.find((report) => report.id === selectedReportId) ?? null;
+    const hasReportsSnapshot = cacheOwnerId === authUserId && lastFetchedAt !== null;
+    const showPageSkeleton = !hasReportsSnapshot && (isFetching || !hasHydratedCache);
+    const showReportsOverlay = useSmartFetchOverlay(isFetching, hasReportsSnapshot, { exitDelayMs: 200 });
+    const selectedReportLoading = detailFetchingId === selectedReport?.id;
+    const hasSelectedSummary = selectedReport ? reportHasRenderableSummary(selectedReport) : false;
+    const showDetailOverlay = useSmartFetchOverlay(selectedReportLoading, hasSelectedSummary, { exitDelayMs: 200 });
 
     useEffect(() => {
-        void loadReports();
-    }, [loadReports]);
+        void fetchReports();
+    }, [fetchReports]);
 
     useEffect(() => {
         const handleRefresh = () => {
-            void loadReports();
+            void fetchReports({ force: true });
         };
 
         window.addEventListener('focus', handleRefresh);
@@ -253,7 +119,7 @@ const Reports = () => {
             window.removeEventListener('focus', handleRefresh);
             window.removeEventListener('storage', handleRefresh);
         };
-    }, [loadReports]);
+    }, [fetchReports]);
 
     useEffect(() => {
         if (!focusedReportId || !reports.length) {
@@ -262,74 +128,36 @@ const Reports = () => {
 
         const targetReport = reports.find((report) => report.id === focusedReportId);
         if (targetReport) {
-            setSelectedReport(targetReport);
+            setSelectedReportId(targetReport.id);
         }
-    }, [focusedReportId, reports]);
+    }, [focusedReportId, reports, setSelectedReportId]);
 
     useEffect(() => {
-        if (!selectedReport) {
+        if (!selectedReportId) {
             return;
         }
 
-        const refreshedReport = reports.find((report) => report.id === selectedReport.id);
-        if (!refreshedReport) {
-            setSelectedReport(null);
-            return;
+        const stillExists = reports.some((report) => report.id === selectedReportId);
+        if (!stillExists) {
+            setSelectedReportId(null);
         }
-
-        if (refreshedReport !== selectedReport) {
-            setSelectedReport(refreshedReport);
-        }
-    }, [reports, selectedReport]);
+    }, [reports, selectedReportId, setSelectedReportId]);
 
     useEffect(() => {
         if (!selectedReport?.id) {
-            setSelectedReportLoading(false);
             return;
         }
 
-        const currentSummary = selectedReport.summaryData ?? selectedReport.summaryView ?? {};
-        const source = toText(selectedReport.summarySource ?? currentSummary.source).toLowerCase();
-        const hasText = Boolean(toText(selectedReport.parsedText ?? selectedReport.parsed_text ?? selectedReport.ocrText ?? selectedReport.ocr_text));
-
-        if (hasReportSummaryContent(currentSummary) || hasSummaryContent(currentSummary) || source.includes('fallback') || hasText) {
-            setSelectedReportLoading(false);
+        if (reportHasRenderableSummary(selectedReport)) {
             return;
         }
 
-        let active = true;
-        setSelectedReportLoading(true);
-
-        const loadDetail = async () => {
-            try {
-                const response = await apiClient.get(`/reports/${selectedReport.id}`, { timeout: 12000 });
-                if (!active) return;
-
-                const detailedReport = normalizeReport(response.data?.data ?? response.data ?? {});
-                setReports((currentReports) => currentReports.map((report) => (report.id === detailedReport.id ? detailedReport : report)));
-                setSelectedReport(detailedReport);
-            } catch (error) {
-                if (active) {
-                    console.warn('[Reports] Failed to load report details:', error);
-                }
-            } finally {
-                if (active) {
-                    setSelectedReportLoading(false);
-                }
-            }
-        };
-
-        void loadDetail();
-
-        return () => {
-            active = false;
-        };
-    }, [selectedReport]);
+        void fetchReportDetail(selectedReport.id);
+    }, [fetchReportDetail, selectedReport]);
 
     const selectedSummaryData = selectedReport ? (selectedReport.summaryData ?? normalizeReportSummaryData(selectedReport)) : null;
     const handleSelectReport = (report) => {
-        setSelectedReport(report);
-        setSelectedReportLoading(false);
+        setSelectedReportId(report.id);
     };
 
     const handleDownloadSummary = async () => {
@@ -354,6 +182,10 @@ const Reports = () => {
             alert(`PDF generation failed: ${error?.message || 'Unknown error'}`);
         }
     };
+
+    if (showPageSkeleton) {
+        return <ReportsSkeleton />;
+    }
 
     return (
         <div className="bg-[#f6f5f8] dark:bg-[#131022] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased">
@@ -382,10 +214,11 @@ const Reports = () => {
                             </button>
                         </div>
 
-                        <div className="flex flex-1 gap-10 px-10 pb-10 overflow-hidden">
+                        <div className="relative flex flex-1 gap-10 px-10 pb-10 overflow-hidden">
+                            {showReportsOverlay ? <SmartLoadingOverlay label="Refreshing reports" className="rounded-[2.5rem]" /> : null}
                             {/* Report Sidebar List - 35% Width */}
                             <div className="w-full md:w-[35%] flex flex-col gap-4 overflow-y-auto pr-4 custom-scrollbar">
-                                {isLoading && reports.length === 0 ? (
+                                {loading && !hasReportsSnapshot ? (
                                     <div className="w-full flex flex-col gap-4">
                                         <Skeleton height={88} className="w-full" />
                                         <Skeleton height={88} className="w-full" />
@@ -394,7 +227,7 @@ const Reports = () => {
                                     </div>
                                 ) : null}
 
-                                {!isLoading && reports.length === 0 ? (
+                                {!loading && reports.length === 0 ? (
                                     <div className="flex min-h-[18rem] items-center justify-center rounded-[2.25rem] border border-dashed border-slate-200 dark:border-white/10 bg-white/60 dark:bg-white/5 p-8">
                                         <div className="flex flex-col items-center gap-4 text-center">
                                             <AlertCircle size={28} className="text-slate-300" />
@@ -481,7 +314,8 @@ const Reports = () => {
                                     <div className="flex-1 overflow-hidden p-6 sm:p-10 flex items-center justify-center bg-slate-100/40 dark:bg-black/20 min-h-0">
                                         {selectedReport ? (
                                             <div className="w-full h-full bg-white dark:bg-[#1a1433] rounded-[2.5rem] shadow-2xl relative overflow-hidden flex flex-col border border-slate-200 dark:border-white/5 transition-transform group-hover:scale-[0.99] duration-700 min-h-0">
-                                                {selectedReportLoading ? (
+                                                {showDetailOverlay ? <SmartLoadingOverlay label="Refreshing summary" /> : null}
+                                                {selectedReportLoading && !hasSelectedSummary ? (
                                                     <div className="flex-1 flex items-center justify-center px-6 text-center">
                                                         <div className="max-w-sm">
                                                             <div className="h-12 flex justify-center mb-4"><HeartLoader size={48} /></div>

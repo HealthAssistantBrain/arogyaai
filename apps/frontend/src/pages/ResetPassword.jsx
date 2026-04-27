@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -17,6 +17,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { ROUTES } from '../router/routes';
 import toast from 'react-hot-toast';
+import { getSupabaseClient, supabase } from '../lib/supabaseClient';
 
 const resetPasswordSchema = z.object({
   password: z.string()
@@ -35,6 +36,25 @@ const ResetPassword = () => {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isRecoveryReady, setIsRecoveryReady] = useState(true);
+  const [recoveryCheckComplete, setRecoveryCheckComplete] = useState(false);
+
+  const hasRecoveryTokenInUrl = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
+    const searchParams = new URLSearchParams(window.location.search);
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const recoveryType = searchParams.get('type') || hashParams.get('type');
+
+    return Boolean(
+      recoveryType === 'recovery' ||
+      searchParams.get('token_hash') ||
+      searchParams.get('code') ||
+      hashParams.get('access_token')
+    );
+  }, []);
 
   const {
     register,
@@ -45,16 +65,61 @@ const ResetPassword = () => {
     defaultValues: { password: '', confirmPassword: '' },
   });
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const verifyRecoverySession = async () => {
+      const client = getSupabaseClient() ?? supabase;
+
+      if (!client) {
+        if (isMounted) {
+          setIsRecoveryReady(false);
+          setRecoveryCheckComplete(true);
+        }
+        return;
+      }
+
+      try {
+        const { data, error } = await client.auth.getSession();
+        if (error) throw error;
+
+        const hasSession = Boolean(data?.session?.access_token);
+        if (isMounted) {
+          setIsRecoveryReady(hasSession || hasRecoveryTokenInUrl);
+        }
+      } catch {
+        if (isMounted) {
+          setIsRecoveryReady(hasRecoveryTokenInUrl);
+        }
+      } finally {
+        if (isMounted) {
+          setRecoveryCheckComplete(true);
+        }
+      }
+    };
+
+    void verifyRecoverySession();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [hasRecoveryTokenInUrl]);
+
   const onSubmit = async (data) => {
     try {
-      // Connection Map: Reset Password -> /login (success state)
-      // Simulate API call
-      await new Promise(r => setTimeout(r, 1000));
-      console.log("Password reset success for new password.");
+      const client = getSupabaseClient() ?? supabase;
+      if (!client) throw new Error('Supabase Auth is not configured');
+
+      const { error } = await client.auth.updateUser({
+        password: data.password,
+      });
+
+      if (error) throw error;
       toast.success('Password reset successfully. Please login.');
+      await client.auth.signOut();
       navigate(ROUTES.LOGIN, { state: { message: 'Password reset successfully. Please login with your new password.' } });
     } catch (err) {
-      toast.error('Failed to reset password. Please try again.');
+      toast.error(err?.message || 'Failed to reset password. Please try again.');
     }
   };
 
@@ -106,6 +171,12 @@ const ResetPassword = () => {
               <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2 leading-tight">Reset your password</h2>
               <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">Please enter and confirm your new secure password.</p>
             </div>
+
+            {recoveryCheckComplete && !isRecoveryReady ? (
+              <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+                This reset link is missing or has expired. Request a fresh password reset email and try again.
+              </div>
+            ) : null}
 
             {/* Form Section */}
             <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
@@ -178,7 +249,7 @@ const ResetPassword = () => {
               <button 
                 className="w-full flex items-center justify-center gap-2 bg-[#6143f4] hover:bg-[#6143f4]/90 text-white font-bold py-4 px-6 rounded-lg transition-all duration-200 transform active:scale-[0.98] shadow-lg shadow-[#6143f4]/25 disabled:opacity-70 disabled:cursor-not-allowed" 
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || (recoveryCheckComplete && !isRecoveryReady)}
               >
                 <span>{isSubmitting ? 'Resetting...' : 'Reset Password'}</span>
                 <ArrowRight size={20} />

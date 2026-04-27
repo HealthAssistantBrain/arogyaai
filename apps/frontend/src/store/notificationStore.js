@@ -1,7 +1,11 @@
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import api from '../lib/axios';
 import { useAuthStore } from './authStore';
 import { showBrowserNotification } from '../services/browserNotifications';
+
+const NOTIFICATION_STORAGE_KEY = 'arogyaai-notifications';
+const STALE_THRESHOLD_MS = 60_000;
 
 const deriveNotificationCounts = (notifications = []) => {
   const unreadNotifications = Array.isArray(notifications)
@@ -51,17 +55,40 @@ const getNewUnreadNotifications = (userId, notifications) => {
   return newUnreadNotifications;
 };
 
-export const useNotificationStore = create((set, get) => ({
+export const useNotificationStore = create(persist((set, get) => ({
   notifications: [],
   counts: deriveNotificationCounts(),
   unreadCount: 0,
   loading: false,
+  isFetching: false,
   error: null,
   activeRequestId: 0,
+  lastFetchedAt: null,
+  cacheOwnerId: null,
+  hasHydratedCache: false,
 
-  fetchNotifications: async ({ type, search } = {}) => {
+  setHasHydratedCache: (value = true) => set({ hasHydratedCache: !!value }),
+
+  fetchNotifications: async ({ type, search, force = false } = {}) => {
+    const currentUserId = getCurrentNotificationUserId();
+    const isSummaryFetch = !type && !search?.trim();
+    const ownsCache = Boolean(currentUserId) && get().cacheOwnerId === currentUserId;
+
+    if (
+      !force &&
+      isSummaryFetch &&
+      ownsCache &&
+      get().lastFetchedAt &&
+      (Date.now() - get().lastFetchedAt) < STALE_THRESHOLD_MS
+    ) {
+      return {
+        notifications: get().notifications,
+        counts: get().counts,
+      };
+    }
+
     const requestId = Date.now() + Math.random();
-    set({ loading: true, error: null, activeRequestId: requestId });
+    set({ loading: true, isFetching: true, error: null, activeRequestId: requestId });
     try {
       const params = {};
       if (type) params.type = type;
@@ -86,15 +113,17 @@ export const useNotificationStore = create((set, get) => ({
         };
       });
       const nextCounts = deriveNotificationCounts(nextNotifications);
-      const isSummaryFetch = !type && !search;
 
       set({
         notifications: nextNotifications,
         counts: isSummaryFetch ? nextCounts : get().counts,
         unreadCount: isSummaryFetch ? nextCounts.unread : get().unreadCount,
         loading: false,
+        isFetching: false,
         error: null,
         activeRequestId: requestId,
+        lastFetchedAt: Date.now(),
+        cacheOwnerId: currentUserId,
       });
 
       return payload;
@@ -104,10 +133,8 @@ export const useNotificationStore = create((set, get) => ({
       }
 
       set({
-        notifications: [],
-        counts: deriveNotificationCounts(),
-        unreadCount: 0,
         loading: false,
+        isFetching: false,
         error: error?.response?.data?.error || error?.message || 'Unable to load notifications',
         activeRequestId: requestId,
       });
@@ -132,8 +159,11 @@ export const useNotificationStore = create((set, get) => ({
       const newUnreadNotifications = getNewUnreadNotifications(userId, notifications);
 
       set((state) => ({
+        notifications,
         unreadCount: nextUnreadCount,
         counts: { ...state.counts, ...counts },
+        lastFetchedAt: Date.now(),
+        cacheOwnerId: userId,
       }));
 
       if (newUnreadNotifications.length > 0) {
@@ -164,6 +194,7 @@ export const useNotificationStore = create((set, get) => ({
     set({
       activeRequestId: mutationRequestId,
       loading: false,
+      isFetching: false,
       notifications: nextNotifications,
       counts: nextCounts,
       unreadCount: nextCounts.unread,
@@ -196,6 +227,7 @@ export const useNotificationStore = create((set, get) => ({
     set({
       activeRequestId: mutationRequestId,
       loading: false,
+      isFetching: false,
       notifications: nextNotifications,
       counts: nextCounts,
       unreadCount: nextCounts.unread,
@@ -214,6 +246,22 @@ export const useNotificationStore = create((set, get) => ({
       }));
       throw error;
     }
+  },
+}), {
+  name: NOTIFICATION_STORAGE_KEY,
+  storage: createJSONStorage(() => window.localStorage),
+  partialize: (state) => ({
+    notifications: state.notifications,
+    counts: state.counts,
+    unreadCount: state.unreadCount,
+    lastFetchedAt: state.lastFetchedAt,
+    cacheOwnerId: state.cacheOwnerId,
+  }),
+  onRehydrateStorage: () => (state, error) => {
+    if (error) {
+      console.warn('[notificationStore] Persist rehydration failed:', error);
+    }
+    state?.setHasHydratedCache?.(true);
   },
 }));
 

@@ -13,14 +13,15 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import toast from 'react-hot-toast';
-import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 import { ROUTES } from '../router/routes';
+import { getAuthenticatedHomeRoute } from '../router/authRedirects';
 import { setAuthFlow } from '../lib/axios';
 import { lockSystem, unlockSystem } from '../lib/systemLock';
 import { triggerAuthRevalidation } from '../lib/authRevalidator';
-import { getApiUrl } from '../lib/apiBaseUrl';
+import { syncUser } from '../lib/authSync';
 import { startSupabaseOAuth } from '../lib/supabaseOAuth';
+import { getSupabaseClient, supabase } from '../lib/supabaseClient';
 
 const signupSchema = z.object({
   fullName: z.string().min(2, 'Name must be at least 2 characters'),
@@ -28,28 +29,10 @@ const signupSchema = z.object({
   password: z.string().min(8, 'Password must be at least 8 characters'),
 });
 
-const API_URL = getApiUrl(
-  import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
-);
-
-const getCookie = (name) => {
-  if (typeof document === 'undefined') return null;
-
-  const match = document.cookie
-    .split('; ')
-    .find((entry) => entry.startsWith(`${name}=`));
-
-  return match ? decodeURIComponent(match.split('=').slice(1).join('=')) : null;
-};
-
-
-
 const Signup = () => {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [apiError, setApiError] = useState(null);
-  const hydrateAuth = useAuthStore((state) => state.hydrateAuth);
-
   const {
     register,
     handleSubmit,
@@ -69,65 +52,47 @@ const Signup = () => {
     setAuthFlow(true);
 
     try {
-      const payload = {
+      const client = getSupabaseClient() ?? supabase;
+      if (!client) throw new Error('Supabase Auth is not configured');
+
+      useAuthStore.getState().reset();
+
+      const redirectTo = `${window.location.origin}${ROUTES.AUTH_CALLBACK}?welcome=1`;
+      const { data: authData, error } = await client.auth.signUp({
         email: data.email,
         password: data.password,
-        full_name: data.fullName
-      };
-
-      console.log('SIGNUP REQUEST:', payload);
-
-      const csrfToken = getCookie('csrf_token');
-      const response = await axios.post(`${API_URL}/auth/signup`, payload, {
-        withCredentials: true,
-        headers: {
-          'Content-Type': 'application/json',
-          ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+        options: {
+          emailRedirectTo: redirectTo,
+          data: {
+            full_name: data.fullName,
+          },
         },
       });
 
-      console.log("SIGNUP RESPONSE:", response.data);
+      if (error) throw error;
 
-      const accessToken = response.data.data.token || response.data.data.access_token;
-
-      // ── 2. HYDRATE AUTH (INIT_RESOLVER) ────────────────────────────────────
-      // Fetch /users/me so Zustand has accurate backend state before navigate.
-      // Since hydrateAuth no longer has a lock check, this runs normally.
-      await hydrateAuth(accessToken);
-
-      // ── 2.5 FIRE REVALIDATION SIGNAL ──────────────────────────────────────
-      triggerAuthRevalidation();
-
-      // ── 3. LET GUARDS HANDLE NAVIGATION ──────────────────────────────────
-      // By NOT calling navigate() here, we let the GuestGuard naturally
-      // redirect the user to either Dashboard or Onboarding the moment
-      // we call `unlockSystem()`.
-
-      toast.success('Account created successfully!');
-
-      const { isEmailVerified } = useAuthStore.getState();
-      const hasSeenEmailVerification = sessionStorage.getItem('hasSeenEmailVerification');
-
-      if (!isEmailVerified && !hasSeenEmailVerification) {
-        sessionStorage.setItem('hasSeenEmailVerification', 'true');
-        navigate(ROUTES.EMAIL_VERIFICATION, { replace: true });
-        // finally block handles unlockSystem()
-      } else {
-        navigate('/onboarding', { replace: true });
+      if (authData?.session?.access_token) {
+        await syncUser({ session: authData.session, force: true });
+        useAuthStore.getState().setPendingWelcome(true);
+        triggerAuthRevalidation();
+        toast.success('Account created successfully!');
+        navigate(getAuthenticatedHomeRoute(useAuthStore.getState()), { replace: true });
+        return;
       }
+
+      toast.success('Verification email sent. Please check your inbox.');
+      navigate(ROUTES.EMAIL_VERIFICATION, {
+        replace: true,
+        state: { email: data.email },
+      });
 
     } catch (err) {
       console.error('[Signup] error:', err);
-      const status = err.response?.status;
-
-      if (status === 409) {
+      const message = err?.message || 'Failed to create account. Please try again.';
+      if (message.toLowerCase().includes('already')) {
         setApiError('This email is already registered. Please sign in instead.');
-      } else if (status === 400) {
-        setApiError(err.response?.data?.detail || 'This email is already registered. Please sign in instead.');
-      } else if (status === 422) {
-        setApiError('Please check your details and try again.');
       } else {
-        toast.error(err.response?.data?.detail || 'Failed to create account. Please try again.');
+        toast.error(message);
       }
     } finally {
       // Always release the lock and auth-flow flag
@@ -148,7 +113,7 @@ const Signup = () => {
     setAuthFlow(true);
 
     try {
-      await startSupabaseOAuth(provider);
+      await startSupabaseOAuth(provider, { flow: 'signup', welcome: true });
     } catch (err) {
       console.error('[Signup] Supabase OAuth failed:', err);
       toast.error(err?.message || 'Unable to start social sign-in');

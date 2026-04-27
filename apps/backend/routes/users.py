@@ -7,64 +7,76 @@ Exposes:
   DELETE /users/me    ← account deletion (stub)
 """
 
-import uuid
-from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status, Header as FastAPIHeader
 from sqlalchemy.orm import Session
-import jwt
 
 from database.session import get_db
-from models import User
-from core.config import settings
+from models import User, UserProfile
 from core.session_cookies import clear_session_cookies
 from services.user_service import UserService
+from services.auth_service import AuthService
 
 router = APIRouter(prefix="/api/v1/users", tags=["Users"])
 
-def get_current_user_from_header(
+def get_supabase_claims_from_header(
     request: Request,
     authorization: str = FastAPIHeader(None),
-    db: Session = Depends(get_db),
-) -> User:
+) -> dict:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    token = None
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ", 1)[1]
     else:
-        token = request.cookies.get("access_token")
+        token = None
 
     if not token:
         raise credentials_exception
 
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        user_id = payload.get("sub")
-        token_type = payload.get("type")
-
-        if not user_id or token_type != "access":
-            raise credentials_exception
-    except jwt.PyJWTError:
+        return AuthService._decode_supabase_token(token)
+    except HTTPException:
         raise credentials_exception
 
-    user = db.query(User).filter(
-        User.id == uuid.UUID(user_id),
-        User.is_deleted == False
-    ).first()
+def get_current_user_from_header(
+    claims: dict = Depends(get_supabase_claims_from_header),
+    db: Session = Depends(get_db),
+) -> User:
+    return AuthService.get_or_create_user_from_supabase_claims(db, claims)
 
+
+def get_existing_user_from_header(
+    claims: dict = Depends(get_supabase_claims_from_header),
+    db: Session = Depends(get_db),
+) -> User:
+    user = AuthService.get_user_from_supabase_claims(db, claims)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Authenticated user has not been synchronized yet",
+        )
     return user
+
+
+def get_current_user_profile(
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+) -> UserProfile:
+    return UserService.get_or_create_user_profile(db, current_user)
+
+
+def get_current_user(
+    current_profile: UserProfile = Depends(get_current_user_profile),
+) -> UserProfile:
+    return current_profile
 
 
 @router.get("/me")
 def get_me(
-    current_user: User = Depends(get_current_user_from_header),
+    current_user: User = Depends(get_existing_user_from_header),
     db: Session = Depends(get_db),
 ):
     """Returns the authenticated user's core profile data via UserService."""
@@ -77,6 +89,16 @@ def get_me(
         data["data"]["conditions"] = [h.condition_name for h in history]
         
     return data
+
+
+@router.post("/create-from-auth")
+def create_from_auth(
+    claims: dict = Depends(get_supabase_claims_from_header),
+    db: Session = Depends(get_db),
+):
+    """Create or link the authenticated Supabase user in an idempotent way."""
+    current_user = AuthService.get_or_create_user_from_supabase_claims(db, claims)
+    return UserService.get_user_me(db, current_user)
 
 
 @router.get("/devices")
@@ -177,5 +199,43 @@ def update_lifestyle(
     db: Session = Depends(get_db),
 ):
     """Saves lifestyle assessment data (activity, diet, sleep, stress)."""
-    # Stub route to accept the payload gracefully without 404ing while schema is finalized
-    return {"success": True, "message": "Lifestyle data saved successfully."}
+    activity_raw = payload.get("activity")
+    if isinstance(activity_raw, str):
+        normalized_activity = activity_raw.strip().lower()
+        activity_level = {
+            "sedentary": 3500,
+            "active": 8000,
+            "very active": 12000,
+        }.get(normalized_activity)
+    else:
+        try:
+            activity_level = int(activity_raw) if activity_raw is not None else None
+        except (TypeError, ValueError):
+            activity_level = None
+
+    diet = payload.get("diet")
+    goals = None
+    if isinstance(diet, list):
+        goals = ", ".join(str(item).strip() for item in diet if str(item).strip())
+    elif isinstance(diet, str):
+        goals = diet.strip() or None
+
+    UserService.update_user_profile(
+        db,
+        current_user,
+        {
+            "activity_level": activity_level,
+            "goals": goals,
+        },
+    )
+
+    return {
+        "success": True,
+        "message": "Lifestyle data saved successfully.",
+        "data": {
+            "activity_level": activity_level,
+            "goals": goals,
+            "sleep": payload.get("sleep"),
+            "stress": payload.get("stress"),
+        },
+    }

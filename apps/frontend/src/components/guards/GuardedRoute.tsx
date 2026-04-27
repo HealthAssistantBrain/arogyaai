@@ -1,6 +1,7 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { useRef, ReactNode } from 'react';
+import { ROUTES } from '../../router/routes';
 
 interface GuardedRouteProps {
   children: ReactNode;
@@ -18,11 +19,11 @@ export function GuardedRoute({ children, guards }: GuardedRouteProps) {
   }
 
   // ── AUTH_GUARD ─────────────────────────────────────────────────────────────
-  // Blocks unauthenticated users and sends them to /login.
+  // Blocks unauthenticated users and sends them to the landing page.
   if (guards.includes('AUTH_GUARD') && !authStore.isAuthenticated) {
     if (!redirectFired.current) {
       redirectFired.current = true;
-      return <Navigate to="/login" state={{ from: location.pathname, isGuardRedirect: true }} replace />;
+      return <Navigate to={ROUTES.HOME} state={{ from: location.pathname, isGuardRedirect: true }} replace />;
     }
   }
 
@@ -43,8 +44,8 @@ export function GuardedRoute({ children, guards }: GuardedRouteProps) {
       redirectFired.current = true;
       // PHASE 1: Skip email verification gate, go directly to dashboard/onboarding.
       const target = authStore.onboardingDone
-        ? '/dashboard'
-        : `/onboarding/step-${authStore.onboardingStep || 1}`;
+        ? ROUTES.DASHBOARD
+        : `${ROUTES.ONBOARDING}/step-${authStore.onboardingStep || 1}`;
       return <Navigate to={target} state={{ isGuardRedirect: true }} replace />;
     }
   }
@@ -65,7 +66,7 @@ export function GuardedRoute({ children, guards }: GuardedRouteProps) {
       else if (stepSuffix === 6) stepSuffix = 'completion';
       else stepSuffix = `step-${stepSuffix}`;
 
-      return <Navigate to={`/onboarding/${stepSuffix}`} state={{ isGuardRedirect: true }} replace />;
+      return <Navigate to={`${ROUTES.ONBOARDING}/${stepSuffix}`} state={{ isGuardRedirect: true }} replace />;
     }
   }
 

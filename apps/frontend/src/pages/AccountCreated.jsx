@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -11,12 +12,24 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { ROUTES } from '../router/routes';
+import { getProtectedRouteRedirect } from '../router/authRedirects';
 
 const AccountCreated = () => {
   const navigate = useNavigate();
   const setOnboardingStep = useAuthStore((state) => state.setOnboardingStep);
+  const setPendingWelcome = useAuthStore((state) => state.setPendingWelcome);
+  const pendingWelcome = useAuthStore((state) => state.pendingWelcome);
+  const onboardingDone = useAuthStore((state) => state.onboardingDone);
+
+  useEffect(() => {
+    const nextRoute = getProtectedRouteRedirect(ROUTES.ACCOUNT_CREATED, useAuthStore.getState());
+    if (nextRoute && nextRoute !== ROUTES.ACCOUNT_CREATED) {
+      navigate(nextRoute, { replace: true });
+    }
+  }, [navigate, onboardingDone, pendingWelcome]);
 
   const handleStartOnboarding = () => {
+    setPendingWelcome(false);
     setOnboardingStep(1);
     navigate(ROUTES.ONBOARDING_STEP_1);
   };

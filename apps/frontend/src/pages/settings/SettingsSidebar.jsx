@@ -1,6 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../router/routes';
-import { useAuthStore } from '../../store/authStore';
 import {
     User, ShieldCheck, Smartphone, Database, HeartPulse, BellRing, Brain, Activity, LogOut, ArrowLeft, Trash2
 } from 'lucide-react';
@@ -8,11 +7,9 @@ import {
 const SettingsSidebar = () => {
     const location = useLocation();
     const navigate = useNavigate();
-    const logout = useAuthStore((s) => s.logout);
 
     const handleLogout = () => {
-        logout();
-        navigate(ROUTES.HOME, { replace: true });
+        navigate(ROUTES.LOGOUT);
     };
 
     const menuItems = [

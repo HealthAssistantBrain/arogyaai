@@ -26,35 +26,41 @@ import {
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { ROUTES } from '../router/routes';
-import api from '../lib/axios';
+import { fetchConnectedDeviceSummaries } from '../lib/deviceApi';
 import OnboardingHeader from '../components/OnboardingHeader';
 
 const OnboardingSummary = () => {
   const navigate = useNavigate();
   const setOnboardingStep = useAuthStore((state) => state.setOnboardingStep);
+  const completeOnboarding = useAuthStore((state) => state.completeOnboarding);
+  const fetchProfile = useAuthStore((state) => state.fetchProfile);
+  const userData = useAuthStore((state) => state.profile);
 
-  const [userData, setUserData] = useState(null);
   const [devices, setDevices] = useState([]);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     async function fetchUserProfile() {
       try {
-        const res = await api.get("/users/me");
-        setUserData(res.data.data);
+        const currentProfile = useAuthStore.getState().profile;
+        if (!(currentProfile?.id || currentProfile?.user_id)) {
+          await fetchProfile();
+        }
       } catch (err) {
         console.error("Non-blocking error fetching profile:", err);
       }
       try {
-        const devRes = await api.get("/users/devices");
-        if (Array.isArray(devRes.data)) {
-          setDevices(devRes.data.filter((device) => device.name !== 'Gmail' && device.name !== 'Apple ID'));
-        }
+        const summaries = await fetchConnectedDeviceSummaries();
+        setDevices(
+          summaries.filter((device) => device.name !== 'Gmail' && device.name !== 'Apple ID')
+        );
       } catch (err) {
         console.error("Non-blocking error fetching devices:", err);
+        setDevices([]);
       }
     }
     fetchUserProfile();
-  }, []);
+  }, [fetchProfile]);
 
   const safeValue = (val) => {
     if (Array.isArray(val)) {
@@ -114,24 +120,16 @@ const OnboardingSummary = () => {
   };
 
   const handleConfirm = async () => {
+    setSubmitting(true);
     try {
-      const token = useAuthStore.getState().token;
-      const user = useAuthStore.getState().user;
-
-      // Call prediction compute using shared api instance
-      await api.post('/prediction/compute', {
-        user_id: user?.id || 'unknown',
-        data_points: { source: 'onboarding_summary' }
-      });
-
-      setOnboardingStep(6);
-      toast.success('Onboarding complete! Initialising your dashboard...');
-      navigate(ROUTES.ONBOARDING_COMPLETION);
+      await completeOnboarding();
+      toast.success('Onboarding complete! Redirecting to your dashboard...');
+      navigate(ROUTES.DASHBOARD, { replace: true });
     } catch (err) {
-      console.error("Prediction compute failed:", err);
-      // Proceed anyway to avoid blocking the user, but log the error
-      setOnboardingStep(6);
-      navigate(ROUTES.ONBOARDING_COMPLETION);
+      console.error("Onboarding finalization failed:", err);
+      toast.error(err?.response?.data?.error || err?.message || 'Failed to complete onboarding');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -332,9 +330,10 @@ const OnboardingSummary = () => {
               </button>
               <button
                 onClick={handleConfirm}
+                disabled={submitting}
                 className="w-full sm:w-auto px-10 py-3 rounded-lg bg-[#6143f4] text-white font-bold hover:bg-[#6143f4]/90 shadow-lg shadow-[#6143f4]/25 transition-all flex items-center justify-center gap-2"
               >
-                Complete Initialization
+                {submitting ? 'Finalizing...' : 'Complete Initialization'}
                 <ArrowRight size={16} />
               </button>
             </div>

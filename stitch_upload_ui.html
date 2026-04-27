@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ArogyaAI - Upload Medical Report</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#6043F4",
+                        "secondary": "#009CDE",
+                        "background-light": "#EAEAEA",
+                        "background-dark": "#131022",
+                        "dark-text": "#13082A",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.5rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: "Space Grotesk", sans-serif;
+            background-color: #EAEAEA;
+        }
+        .custom-dashed {
+            background-image: url("data:image/svg+xml,%3csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' rx='24' ry='24' stroke='%236043F466' stroke-width='3' stroke-dasharray='12%2c 12' stroke-dashoffset='0' stroke-linecap='square'/%3e%3c/svg%3e");
+            border-radius: 1.5rem;
+        }
+    </style>
+</head>
+<body class="bg-background-light text-dark-text min-h-screen">
+<div class="flex h-screen overflow-hidden">
+<!-- Sidebar -->
+<aside class="w-72 bg-white border-r border-gray-200 flex flex-col hidden lg:flex">
+<div class="p-8 flex items-center gap-3">
+<div class="size-10 bg-primary rounded-lg flex items-center justify-center text-white">
+<span class="material-symbols-outlined text-2xl">grid_view</span>
+</div>
+<h2 class="text-2xl font-bold tracking-tight text-dark-text">ArogyaAI</h2>
+</div>
+<nav class="flex-1 px-4 space-y-2 overflow-y-auto mt-4">
+<a class="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-primary/5 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-medium">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-primary/5 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">psychology</span>
+<span class="font-medium">AI Insights</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-primary/5 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">query_stats</span>
+<span class="font-medium">Disease Simulator</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-primary/5 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">timeline</span>
+<span class="font-medium">Health Timeline</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-primary/5 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">science</span>
+<span class="font-medium">Lab Results</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-xl bg-primary text-white shadow-lg shadow-primary/30" href="#">
+<span class="material-symbols-outlined">description</span>
+<span class="font-medium">Medical Reports</span>
+</a>
+</nav>
+<div class="p-6 border-t border-gray-100">
+<div class="bg-primary/5 rounded-2xl p-4 flex flex-col gap-3">
+<p class="text-xs font-bold text-primary uppercase tracking-wider">Pro Plan</p>
+<p class="text-sm text-gray-600">Get unlimited AI scans and early detection reports.</p>
+<button class="w-full py-2 bg-primary text-white text-sm font-bold rounded-xl hover:bg-opacity-90 transition-all">Upgrade Now</button>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<div class="flex-1 flex flex-col overflow-hidden">
+<!-- Navbar -->
+<header class="h-20 bg-white/80 backdrop-blur-md border-b border-gray-200 px-8 flex items-center justify-between z-10">
+<div class="flex-1 max-w-xl">
+<div class="relative group">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-primary transition-colors">search</span>
+<input class="w-full bg-gray-100 border-none rounded-xl pl-12 pr-4 py-2.5 focus:ring-2 focus:ring-primary/20 transition-all text-sm" placeholder="Search reports, insights or doctor notes..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="size-10 flex items-center justify-center rounded-xl hover:bg-gray-100 text-gray-600 transition-colors relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2.5 right-2.5 size-2 bg-red-500 rounded-full border-2 border-white"></span>
+</button>
+<button class="size-10 flex items-center justify-center rounded-xl hover:bg-gray-100 text-gray-600 transition-colors">
+<span class="material-symbols-outlined">help</span>
+</button>
+<div class="h-8 w-[1px] bg-gray-200 mx-2"></div>
+<div class="flex items-center gap-3 cursor-pointer group">
+<div class="text-right hidden sm:block">
+<p class="text-sm font-bold text-dark-text leading-none">Alex Johnson</p>
+<p class="text-xs text-gray-500 mt-1 leading-none">Patient ID: 8842</p>
+</div>
+<div class="size-10 rounded-full bg-primary/10 border-2 border-white overflow-hidden shadow-sm" data-alt="User profile avatar portrait" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCDebeYyMPRTTh-tMeOf76qyMU8Xrd_odgGpimWtqGLWdWREEh8GggG6mJXtcwN_ICOFS9aUA978vT53bDp9iVZz0FZ03piydqI6a-PT2XzuSfk25_2DwVhfo_t-uIZ1ecP6QWPIbP3neRrVPE4cxtgjezH5u2OSWtmpy23wjADorsDqwA4xaoAdqjPE8GOftJAh7i0lnbpkOnwlGS-AI_4aAc9XAXGUayfN2shqorukh07y7IZco8jEMSxrkEawkqIheGSSTfOe0o3');"></div>
+</div>
+</div>
+</header>
+<!-- Page Content -->
+<main class="flex-1 overflow-y-auto p-8 lg:p-12">
+<div class="max-w-5xl mx-auto space-y-10">
+<!-- Title Section -->
+<div class="flex flex-col gap-2">
+<h1 class="text-4xl font-bold tracking-tight text-dark-text">Upload Medical Report</h1>
+<p class="text-gray-500 text-lg">Our AI-powered system will analyze your document for health patterns and anomalies.</p>
+</div>
+<!-- Upload Zone -->
+<div class="custom-dashed bg-white p-12 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-primary/5 transition-all group relative overflow-hidden">
+<div class="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
+<div class="size-24 bg-primary/10 rounded-full flex items-center justify-center text-primary mb-6 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-5xl">cloud_upload</span>
+</div>
+<h3 class="text-2xl font-bold text-dark-text mb-2">Drag and drop your medical report here</h3>
+<p class="text-gray-500 mb-8 max-w-md">Or <span class="text-primary font-bold underline">click to browse</span> your local files. Your data is encrypted and HIPAA compliant.</p>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-widest bg-gray-100 px-4 py-2 rounded-lg">
+<span class="material-symbols-outlined text-sm">picture_as_pdf</span> PDF
+                            </div>
+<div class="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-widest bg-gray-100 px-4 py-2 rounded-lg">
+<span class="material-symbols-outlined text-sm">image</span> JPG
+                            </div>
+<div class="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-widest bg-gray-100 px-4 py-2 rounded-lg">
+<span class="material-symbols-outlined text-sm">image</span> PNG
+                            </div>
+</div>
+<input class="hidden" type="file"/>
+</div>
+<!-- Active Processing & Preview Area -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+<!-- Processing Card -->
+<div class="lg:col-span-2 bg-white rounded-3xl p-8 shadow-sm border border-gray-100">
+<div class="flex items-start justify-between mb-8">
+<div class="flex items-center gap-4">
+<div class="size-14 bg-secondary/10 text-secondary rounded-2xl flex items-center justify-center">
+<span class="material-symbols-outlined text-3xl">analytics</span>
+</div>
+<div>
+<h4 class="font-bold text-lg text-dark-text leading-tight">Blood_Analysis_May_2024.pdf</h4>
+<p class="text-sm text-gray-500">4.2 MB • Processing with Arogya Engine</p>
+</div>
+</div>
+<button class="text-gray-400 hover:text-red-500 transition-colors">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<div class="space-y-4">
+<div class="flex items-center justify-between text-sm font-bold">
+<span class="text-primary flex items-center gap-2">
+<span class="material-symbols-outlined text-base animate-spin">refresh</span>
+                                        Analyzing health markers...
+                                    </span>
+<span class="text-dark-text">68%</span>
+</div>
+<div class="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 68%;"></div>
+</div>
+<div class="flex justify-between text-xs text-gray-400 font-medium">
+<span>Scanning text</span>
+<span>OCR Processing</span>
+<span class="text-primary">Cross-referencing</span>
+<span>Generating Insights</span>
+</div>
+</div>
+</div>
+<!-- Quick Preview Card -->
+<div class="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 flex flex-col">
+<h5 class="font-bold text-dark-text mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-lg">visibility</span>
+                                Preview
+                            </h5>
+<div class="flex-1 bg-gray-50 rounded-2xl border border-gray-200 p-4 overflow-hidden flex flex-col gap-2 opacity-60">
+<div class="h-4 w-3/4 bg-gray-200 rounded"></div>
+<div class="h-4 w-full bg-gray-200 rounded"></div>
+<div class="h-4 w-1/2 bg-gray-200 rounded"></div>
+<div class="mt-4 grid grid-cols-2 gap-2">
+<div class="h-12 bg-gray-200 rounded"></div>
+<div class="h-12 bg-gray-200 rounded"></div>
+<div class="h-12 bg-gray-200 rounded"></div>
+<div class="h-12 bg-gray-200 rounded"></div>
+</div>
+<div class="mt-auto h-20 bg-primary/5 rounded-xl flex items-center justify-center">
+<span class="material-symbols-outlined text-primary/40 text-4xl">description</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Informational Footer -->
+<div class="bg-dark-text rounded-3xl p-8 text-white flex flex-col md:flex-row items-center justify-between gap-6 overflow-hidden relative">
+<div class="absolute right-0 top-0 bottom-0 w-1/3 bg-gradient-to-l from-primary/20 to-transparent pointer-events-none"></div>
+<div class="flex items-center gap-6 relative z-10">
+<div class="size-16 bg-white/10 rounded-2xl flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary text-4xl">verified_user</span>
+</div>
+<div>
+<h4 class="text-xl font-bold mb-1">Privacy First Analysis</h4>
+<p class="text-gray-400 max-w-md">Your medical data is stripped of PII before engine processing. Only you and your authorized healthcare provider can see the results.</p>
+</div>
+</div>
+<button class="px-8 py-3 bg-white text-dark-text font-bold rounded-xl hover:bg-gray-100 transition-colors whitespace-nowrap relative z-10">
+                            View Privacy Policy
+                        </button>
+</div>
+</div>
+</main>
+</div>
+</div>
+</body></html>

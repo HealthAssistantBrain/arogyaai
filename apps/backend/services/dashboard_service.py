@@ -245,3 +245,36 @@ async def get_alerts(user: User, db: Session) -> dict:
     Returns dynamic alerts list via alert_service.
     """
     return await get_active_alerts(user, db)
+
+
+async def get_health_metrics(user: User, db: Session) -> dict:
+    latest_feature = StoragePipelineService.latest_feature_snapshot(db, user)
+    latest_health = StoragePipelineService.latest_health_score(db, user)
+
+    metrics = {}
+    last_updated = None
+
+    if latest_feature is not None:
+        metrics["resting_hr"] = {
+            "value": float(latest_feature.feature_payload.get("avg_rhr")) if latest_feature.feature_payload and latest_feature.feature_payload.get("avg_rhr") is not None else None,
+            "unit": "bpm",
+            "status": "ready",
+            "source": "feature_snapshot",
+            "last_updated": latest_feature.calculated_at.isoformat() if latest_feature.calculated_at else None,
+        }
+        last_updated = latest_feature.calculated_at.isoformat() if latest_feature.calculated_at else last_updated
+
+    if latest_health is not None:
+        payload = latest_health.health_payload or {}
+        metrics["health_score"] = {
+            "value": float(latest_health.score),
+            "unit": "score",
+            "status": "ready",
+            "source": latest_health.source,
+            "last_updated": latest_health.calculated_at.isoformat() if latest_health.calculated_at else None,
+            "components": payload,
+        }
+        if latest_health.calculated_at:
+            last_updated = latest_health.calculated_at.isoformat()
+
+    return _envelope({"metrics": metrics}, status="ready" if metrics else "fallback", source="health_metrics", error=None if metrics else "No health metrics available yet")

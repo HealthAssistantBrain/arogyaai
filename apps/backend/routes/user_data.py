@@ -1,13 +1,14 @@
 """
 user_data.py — canonical user profile, onboarding, settings, and vitals routes.
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Body, Depends
 from sqlalchemy.orm import Session
 
 from database.session import get_db
 from models import User
 from routes.users import get_current_user_from_header
 from schemas.api_models import UserOnboardingSave, UserProfileUpdate, UserSettingsUpdate, ProfileUpdateSchema
+from services.onboarding_service import OnboardingService
 from services.user_data_service import UserDataService
 from services.user_service import UserService
 
@@ -93,6 +94,23 @@ def save_onboarding(
     db: Session = Depends(get_db),
 ):
     return UserDataService.save_onboarding(db, current_user, payload.model_dump(exclude_unset=True))
+
+@router.post("/complete-onboarding")
+def complete_onboarding(
+    payload: dict = Body(default_factory=dict),
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
+    return OnboardingService.finalize_onboarding(db, current_user, payload)
+
+
+@router.post("/onboarding-complete")
+def complete_onboarding_legacy(
+    payload: dict = Body(default_factory=dict),
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
+    return OnboardingService.finalize_onboarding(db, current_user, payload)
 
 
 @router.get("/settings")

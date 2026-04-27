@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Change Password | ArogyaAI</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#6143f4",
+                        "secondary": "#009CDE",
+                        "dark-text": "#13082A",
+                        "background-light": "#EAEAEA",
+                        "background-dark": "#131022",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.5rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background-color: #EAEAEA;
+        }
+        .sidebar-active {
+            background-color: rgba(97, 67, 244, 0.1);
+            color: #6143f4;
+            border-right: 3px solid #6143f4;
+        }
+        .card-shadow {
+            box-shadow: 0 4px 20px -2px rgba(19, 8, 42, 0.05);
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-dark-text dark:text-slate-100 min-h-screen">
+<div class="flex h-screen overflow-hidden">
+<!-- Sidebar Navigation -->
+<aside class="w-72 bg-white dark:bg-background-dark border-r border-slate-200 dark:border-slate-800 flex flex-col h-full overflow-y-auto">
+<div class="p-8 flex items-center gap-3">
+<div class="size-10 bg-primary rounded-lg flex items-center justify-center text-white">
+<span class="material-symbols-outlined text-2xl">neurology</span>
+</div>
+<h2 class="text-xl font-bold tracking-tight text-dark-text dark:text-white leading-none">ArogyaAI</h2>
+</div>
+<nav class="flex-1 px-4 space-y-1">
+<p class="px-4 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">Main</p>
+<a class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all" href="#">
+<span class="material-symbols-outlined text-[22px]">dashboard</span>
+<span class="text-sm font-medium">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all" href="#">
+<span class="material-symbols-outlined text-[22px]">psychology</span>
+<span class="text-sm font-medium">AI Insights</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all" href="#">
+<span class="material-symbols-outlined text-[22px]">monitoring</span>
+<span class="text-sm font-medium">Disease Simulator</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all" href="#">
+<span class="material-symbols-outlined text-[22px]">timeline</span>
+<span class="text-sm font-medium">Health Timeline</span>
+</a>
+<p class="px-4 py-2 mt-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Medical Records</p>
+<a class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all" href="#">
+<span class="material-symbols-outlined text-[22px]">biotech</span>
+<span class="text-sm font-medium">Lab Results</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all" href="#">
+<span class="material-symbols-outlined text-[22px]">description</span>
+<span class="text-sm font-medium">Medical Reports</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all" href="#">
+<span class="material-symbols-outlined text-[22px]">bedtime</span>
+<span class="text-sm font-medium">Sleep Analysis</span>
+</a>
+<p class="px-4 py-2 mt-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Account</p>
+<a class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all" href="#">
+<span class="material-symbols-outlined text-[22px]">devices</span>
+<span class="text-sm font-medium">Device Manager</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all" href="#">
+<span class="material-symbols-outlined text-[22px]">medical_services</span>
+<span class="text-sm font-medium">Consultation</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all" href="#">
+<span class="material-symbols-outlined text-[22px]">notifications</span>
+<span class="text-sm font-medium">Notifications</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2.5 rounded-lg sidebar-active text-primary font-semibold transition-all" href="#">
+<span class="material-symbols-outlined text-[22px] fill-1">settings</span>
+<span class="text-sm">Settings</span>
+</a>
+</nav>
+<div class="p-6 border-t border-slate-200 dark:border-slate-800">
+<div class="bg-primary/5 rounded-xl p-4 flex flex-col gap-2">
+<p class="text-xs font-bold text-primary uppercase">Pro Plan</p>
+<p class="text-[11px] text-slate-500">Your next bill is on Oct 24, 2024</p>
+<button class="w-full py-2 bg-primary text-white text-xs font-bold rounded-lg mt-2">Manage Plan</button>
+</div>
+</div>
+</aside>
+<!-- Main Content Wrapper -->
+<div class="flex-1 flex flex-col overflow-hidden">
+<!-- Top Navbar -->
+<header class="h-20 bg-white/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-8 flex items-center justify-between z-10">
+<div class="w-96">
+<div class="relative group">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">search</span>
+<input class="w-full bg-slate-100 dark:bg-slate-800 border-none rounded-xl pl-10 pr-4 py-2.5 text-sm focus:ring-2 focus:ring-primary/20 transition-all" placeholder="Search analytics, records, or health tips..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<button class="relative p-2 text-slate-500 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-2xl">notifications</span>
+<span class="absolute top-2 right-2 size-2 bg-red-500 border-2 border-white rounded-full"></span>
+</button>
+<div class="h-8 w-[1px] bg-slate-200"></div>
+<div class="flex items-center gap-3">
+<div class="text-right hidden sm:block">
+<p class="text-sm font-bold text-dark-text dark:text-white leading-none">Dr. Alena Vance</p>
+<p class="text-[11px] text-slate-500 font-medium">Chief Neuro-Analyst</p>
+</div>
+<div class="size-10 rounded-full bg-primary/20 border-2 border-primary/10 overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="User profile avatar of Dr. Alena Vance" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA6-CAQLI42gP3prq06Qu4xfX2TX8QUBX7JN0nX2qgB3W2AEM-kC53lnq-ZfeMu2pPMqVQOgHthKSNqKu0opFn2A3MxVMnB9rG0F044HaST28O_UFXAbYDWnS4PteNJqvTCRlTTg82FRmg3QEhbV3Z5FeFEb7zQahaL3wrLZLskhMqLB7QQgs9tXs5zcZzRUmgU5YMeYyCJI_mfoKKaWzKZBlhKndfQszF1_3u7mkEGVgJ8qFLMsu5AYaXN9rGz07bubq4vjXSOVj7d"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Content Area -->
+<main class="flex-1 overflow-y-auto p-8 lg:p-12">
+<div class="max-w-4xl mx-auto">
+<!-- Breadcrumbs -->
+<div class="flex items-center gap-2 text-sm text-slate-500 mb-8">
+<a class="hover:text-primary transition-colors" href="#">Settings</a>
+<span class="material-symbols-outlined text-xs">chevron_right</span>
+<span class="text-dark-text dark:text-white font-medium">Security</span>
+<span class="material-symbols-outlined text-xs">chevron_right</span>
+<span class="text-primary font-bold">Change Password</span>
+</div>
+<div class="mb-10">
+<h1 class="text-3xl font-bold text-dark-text dark:text-white">Account Security</h1>
+<p class="text-slate-500 mt-2">Update your login credentials and secure your health data with a strong password.</p>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+<!-- Main Card -->
+<div class="lg:col-span-2">
+<div class="bg-white dark:bg-slate-900 rounded-xl card-shadow overflow-hidden">
+<div class="px-8 py-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+<h3 class="font-bold text-dark-text dark:text-white flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">key</span>
+                                        Change Password
+                                    </h3>
+<span class="text-[11px] px-2 py-1 bg-green-100 text-green-700 rounded-full font-bold uppercase tracking-tight">Level: High Security</span>
+</div>
+<div class="p-8">
+<form class="space-y-6">
+<div class="space-y-2">
+<label class="text-sm font-bold text-slate-700 dark:text-slate-300">Current Password</label>
+<div class="relative">
+<input class="w-full rounded-xl border-slate-200 dark:border-slate-700 dark:bg-slate-800 py-3 px-4 focus:ring-primary focus:border-primary transition-all" placeholder="••••••••" type="password"/>
+<button class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" type="button">
+<span class="material-symbols-outlined text-xl">visibility</span>
+</button>
+</div>
+</div>
+<div class="h-[1px] w-full bg-slate-100 dark:bg-slate-800 my-2"></div>
+<div class="space-y-2">
+<label class="text-sm font-bold text-slate-700 dark:text-slate-300">New Password</label>
+<div class="relative">
+<input class="w-full rounded-xl border-slate-200 dark:border-slate-700 dark:bg-slate-800 py-3 px-4 focus:ring-primary focus:border-primary transition-all" placeholder="Create a strong password" type="password"/>
+<button class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" type="button">
+<span class="material-symbols-outlined text-xl">visibility</span>
+</button>
+</div>
+</div>
+<div class="space-y-2">
+<label class="text-sm font-bold text-slate-700 dark:text-slate-300">Confirm New Password</label>
+<div class="relative">
+<input class="w-full rounded-xl border-slate-200 dark:border-slate-700 dark:bg-slate-800 py-3 px-4 focus:ring-primary focus:border-primary transition-all" placeholder="Re-enter your new password" type="password"/>
+</div>
+</div>
+<div class="flex items-center justify-end gap-4 pt-6 border-t border-slate-100 dark:border-slate-800 mt-8">
+<button class="px-6 py-3 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-all" type="button">Cancel</button>
+<button class="px-8 py-3 rounded-xl text-sm font-bold text-white bg-primary hover:opacity-90 shadow-lg shadow-primary/25 transition-all" type="button">Update Password</button>
+</div>
+</form>
+</div>
+</div>
+</div>
+<!-- Sidebar Tips/Requirements -->
+<div class="space-y-6">
+<div class="bg-white dark:bg-slate-900 rounded-xl card-shadow p-6">
+<h4 class="text-sm font-bold text-dark-text dark:text-white mb-4">Password Requirements</h4>
+<ul class="space-y-3">
+<li class="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-400">
+<span class="material-symbols-outlined text-green-500 text-lg">check_circle</span>
+                                        Minimum 8 characters
+                                    </li>
+<li class="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-400">
+<span class="material-symbols-outlined text-green-500 text-lg">check_circle</span>
+                                        At least one uppercase letter
+                                    </li>
+<li class="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-400">
+<span class="material-symbols-outlined text-slate-300 text-lg">circle</span>
+                                        At least one number (0-9)
+                                    </li>
+<li class="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-400">
+<span class="material-symbols-outlined text-slate-300 text-lg">circle</span>
+                                        At least one special character (!@#$)
+                                    </li>
+</ul>
+<div class="mt-6 pt-6 border-t border-slate-100 dark:border-slate-800">
+<div class="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-tight mb-2">
+<span>Strength Score</span>
+<span class="text-secondary">Medium</span>
+</div>
+<div class="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+<div class="h-full bg-secondary w-[60%] rounded-full"></div>
+</div>
+</div>
+</div>
+<div class="bg-gradient-to-br from-primary to-secondary rounded-xl p-6 text-white card-shadow">
+<span class="material-symbols-outlined text-3xl mb-3">verified_user</span>
+<h4 class="font-bold text-lg mb-2 leading-tight">Two-Factor Authentication</h4>
+<p class="text-sm text-white/80 mb-4">Add an extra layer of security to your health records by enabling 2FA.</p>
+<button class="w-full py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white text-xs font-bold rounded-lg transition-all">Configure Now</button>
+</div>
+<div class="bg-white dark:bg-slate-900 rounded-xl card-shadow p-6">
+<div class="flex items-center gap-3 mb-4">
+<div class="size-10 rounded-full bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center text-amber-500">
+<span class="material-symbols-outlined">info</span>
+</div>
+<h4 class="text-sm font-bold text-dark-text dark:text-white">Security Tip</h4>
+</div>
+<p class="text-xs leading-relaxed text-slate-500 dark:text-slate-400">Avoid using common words, birthdays, or names. A mix of unrelated words (passphrase) is often more secure and easier to remember.</p>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</div>
+</body></html>

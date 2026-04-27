@@ -1,47 +1,33 @@
 from __future__ import annotations
 
-import uuid
-
-import jwt
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
-from core.config import settings
 from database.session import SessionLocal
-from models import User
+from services.auth_service import AuthService
 from services.dashboard_realtime import build_realtime_payload, dashboard_connection_manager
 
 router = APIRouter(tags=["Dashboard Realtime"])
 
 
 def _authenticate_dashboard_socket(websocket: WebSocket, user_id: str) -> User | None:
-    token = websocket.query_params.get("token") or websocket.cookies.get("access_token")
+    token = websocket.query_params.get("token")
     if not token:
         return None
 
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-    except jwt.PyJWTError:
+        payload = AuthService._decode_supabase_token(token)
+    except Exception:
         return None
 
     token_user_id = payload.get("sub")
-    token_type = payload.get("type")
-    if token_type != "access" or not token_user_id:
-        return None
-
-    try:
-        requested_user_id = uuid.UUID(str(user_id))
-        decoded_user_id = uuid.UUID(str(token_user_id))
-    except (TypeError, ValueError):
-        return None
-
-    if requested_user_id != decoded_user_id:
+    if not token_user_id:
         return None
 
     db: Session = SessionLocal()
     try:
-        user = db.query(User).filter(User.id == requested_user_id, User.is_deleted == False).first()
-        return user
+        user = AuthService.get_or_create_user_from_supabase_claims(db, payload)
+        return user if str(user.id) == str(user_id) else None
     finally:
         db.close()
 

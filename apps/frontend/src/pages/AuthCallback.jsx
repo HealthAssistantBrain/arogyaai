@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Activity, ShieldCheck, ArrowRight } from 'lucide-react'
-import { completeSupabaseOAuthSession } from '../lib/supabaseOAuth'
 import { useAuthStore } from '../store/authStore'
 import { ROUTES } from '../router/routes'
+import { getAuthenticatedHomeRoute } from '../router/authRedirects'
+import { syncUser } from '../lib/authSync'
 import { getSupabaseClient, supabase } from '../lib/supabaseClient'
 import HeartLoader from '../components/ui/HeartLoader'
 import FullPageSkeleton from '../components/ui/FullPageSkeleton'
@@ -18,6 +19,9 @@ const AuthCallback = () => {
 
     const run = async () => {
       let didError = false
+      const callbackUrl = new URL(window.location.href)
+      const flow = callbackUrl.searchParams.get('flow')
+      const wantsWelcome = callbackUrl.searchParams.get('welcome') === '1' || flow === 'signup'
 
       try {
         const client = getSupabaseClient() ?? supabase
@@ -42,11 +46,9 @@ const AuthCallback = () => {
           return
         }
 
-        console.log('[AuthCallback] Sending access_token:', session.access_token.slice(0, 20) + '...')
-        const result = await completeSupabaseOAuthSession(session)
-        console.log('[AuthCallback] Backend response:', result)
+        const result = await syncUser({ session, force: true })
 
-        if (!result && !useAuthStore.getState().isAuthenticated) {
+        if (!result?.id) {
           didError = true
           setStatus('error')
           setError('OAuth sign-in could not be completed. Please try again.')
@@ -68,17 +70,8 @@ const AuthCallback = () => {
 
       if (latestState.isAuthenticated) {
         setStatus('ready')
-        if (latestState.onboardingDone) {
-          navigate(ROUTES.DASHBOARD, { replace: true })
-        } else {
-          const stepRoute =
-            latestState.onboardingStep === 2 ? ROUTES.ONBOARDING_STEP_2
-              : latestState.onboardingStep === 3 ? ROUTES.ONBOARDING_STEP_3
-                : latestState.onboardingStep === 4 ? ROUTES.ONBOARDING_STEP_4
-                  : latestState.onboardingStep === 5 ? ROUTES.ONBOARDING_SUMMARY
-                    : ROUTES.ONBOARDING_STEP_1
-          navigate(stepRoute, { replace: true })
-        }
+        useAuthStore.getState().setPendingWelcome(!latestState.onboardingDone && wantsWelcome)
+        navigate(getAuthenticatedHomeRoute(useAuthStore.getState()), { replace: true, state: { fromOAuth: true } })
       } else {
         setStatus('error')
         setError('OAuth sign-in could not be completed. Please try again.')
@@ -120,11 +113,11 @@ const AuthCallback = () => {
         </div>
         <h1 className="text-2xl font-bold text-[#13082A] dark:text-white">Finalizing secure sign-in</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-3 leading-relaxed">
-          We are handing your Supabase session off to the backend and restoring your JWT session.
+          We are restoring your verified Supabase session and preparing your ArogyaAI profile.
         </p>
         <div className="mt-8 flex items-center justify-center gap-2 text-xs uppercase tracking-[0.3em] font-black text-[#6143f4]">
           <ShieldCheck size={14} />
-          <span>Backend authority active</span>
+          <span>Supabase session active</span>
         </div>
         <div className="mt-6 flex items-center justify-center gap-2 text-sm text-slate-400">
           <ArrowRight size={16} className="animate-pulse" />
@@ -147,4 +140,3 @@ const AuthCallback = () => {
 }
 
 export default AuthCallback
-

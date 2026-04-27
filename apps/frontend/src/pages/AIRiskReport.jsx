@@ -41,7 +41,7 @@ const AIRiskReport = () => {
 
     const sidebarLinks = [
         { icon: LayoutDashboard, label: 'Overview', path: ROUTES.DASHBOARD },
-        { icon: ShieldAlert, label: 'Risk Analysis', path: ROUTES.RISK_EXPLANATION, active: true },
+        { icon: ShieldAlert, label: 'Risk Analysis', path: ROUTES.RISK_PREDICTION, active: true },
         { icon: FileText, label: 'Records', path: ROUTES.MEDICAL_REPORTS },
         { icon: FlaskConical, label: 'Labs', path: ROUTES.LAB_RESULTS },
         { icon: Settings, label: 'AI Settings', path: ROUTES.SETTINGS },

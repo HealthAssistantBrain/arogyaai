@@ -11,6 +11,7 @@ import jwt
 from jwt import algorithms
 import requests
 import json
+from sqlalchemy.exc import IntegrityError
 
 from models import User, UserProfile, UserSetting, Session as DBSession
 from schemas.api_models import OAuthLoginRequest, UserCreate, UserLogin, TokenResponse
@@ -23,9 +24,83 @@ from services.user_service import UserService
 logger = logging.getLogger("auth_service")
 
 
+@lru_cache(maxsize=4)
+def _fetch_supabase_jwks(supabase_url: str, anon_key: str) -> dict:
+    jwks_url = f"{supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
+    headers = {"apikey": anon_key} if anon_key else {}
+    response = requests.get(jwks_url, headers=headers, timeout=10)
+    response.raise_for_status()
+    return response.json()
+
 
 
 class AuthService:
+    @staticmethod
+    def _extract_supabase_identity(claims: dict) -> dict:
+        supabase_user_id = claims.get("sub")
+        email = str(claims.get("email") or "").strip().lower()
+
+        if not supabase_user_id or not email:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Supabase token missing required user claims",
+            )
+
+        metadata = claims.get("user_metadata") or {}
+        app_metadata = claims.get("app_metadata") or {}
+        full_name = metadata.get("full_name") or metadata.get("name")
+        avatar_url = metadata.get("avatar_url") or metadata.get("picture")
+        provider = str(app_metadata.get("provider") or "").strip().lower()
+
+        try:
+            supabase_uuid = uuid.UUID(str(supabase_user_id))
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid Supabase user id",
+            ) from exc
+
+        return {
+            "supabase_uuid": supabase_uuid,
+            "email": email,
+            "full_name": full_name,
+            "avatar_url": avatar_url,
+            "provider": provider,
+        }
+
+    @staticmethod
+    def _get_user_for_supabase_subject(db: Session, supabase_uuid: uuid.UUID) -> User | None:
+        profile = (
+            db.query(UserProfile)
+            .filter(UserProfile.supabase_id == supabase_uuid)
+            .first()
+        )
+        if profile and profile.user:
+            return profile.user
+
+        return db.query(User).filter(User.id == supabase_uuid).first()
+
+    @staticmethod
+    def _get_legacy_user_by_email(
+        db: Session,
+        email: str,
+        supabase_uuid: uuid.UUID,
+    ) -> User | None:
+        legacy_user = db.query(User).filter(User.email == email).first()
+        if not legacy_user:
+            return None
+
+        profile = db.query(UserProfile).filter(UserProfile.user_id == legacy_user.id).first()
+        if profile and profile.supabase_id and profile.supabase_id != supabase_uuid:
+            logger.warning(
+                "[Auth] Preserving existing Supabase link for legacy user email=%s user_id=%s existing_supabase_id=%s incoming_supabase_id=%s",
+                email,
+                legacy_user.id,
+                profile.supabase_id,
+                supabase_uuid,
+            )
+        return legacy_user
+
     @staticmethod
     def _issue_session(db: Session, user: User) -> tuple[str, str, datetime]:
         access_token = create_access_token(subject=user.id)
@@ -42,16 +117,35 @@ class AuthService:
         return access_token, refresh_token, refresh_expire
 
     @staticmethod
-    def _ensure_user_profile_and_settings(db: Session, user: User, full_name: str | None = None) -> None:
+    def _ensure_user_profile_and_settings(
+        db: Session,
+        user: User,
+        full_name: str | None = None,
+        *,
+        supabase_id: uuid.UUID | None = None,
+        email: str | None = None,
+        avatar_url: str | None = None,
+    ) -> UserProfile:
         profile = db.query(UserProfile).filter(UserProfile.user_id == user.id).first()
         if not profile:
             profile = UserProfile(
                 user_id=user.id,
+                supabase_id=supabase_id,
+                email=email,
                 full_name=safe_input(full_name) if full_name else user.full_name,
             )
             db.add(profile)
         elif full_name and not profile.full_name:
             profile.full_name = safe_input(full_name)
+
+        if supabase_id:
+            profile.supabase_id = supabase_id
+
+        if email:
+            profile.email = email
+
+        if avatar_url and not profile.avatar_url:
+            profile.avatar_url = safe_input(avatar_url, max_chars=4000)
 
         setting = db.query(UserSetting).filter(UserSetting.user_id == user.id).first()
         if not setting:
@@ -62,11 +156,13 @@ class AuthService:
                     fetch_interval_minutes=15,
                 )
             )
+        return profile
 
     @staticmethod
     def _serialize_user(user: User) -> dict:
         return {
             "id": str(user.id),
+            "supabase_id": str(user.user_profile.supabase_id) if user.user_profile and user.user_profile.supabase_id else None,
             "email": user.email,
             "full_name": user.full_name,
             "is_onboarding_done": user.is_onboarding_done,
@@ -74,46 +170,123 @@ class AuthService:
             "is_email_verified": user.is_email_verified,
             "gmail_connected": bool(getattr(user, "gmail_connected", False)),
             "apple_connected": bool(getattr(user, "apple_connected", False)),
-            "has_password": user.password_hash != "OAUTH_NO_PASSWORD",
+            "has_password": user.password_hash not in {"OAUTH_NO_PASSWORD", "SUPABASE_AUTH"},
         }
 
     @staticmethod
+    def get_user_from_supabase_claims(db: Session, claims: dict) -> User | None:
+        identity = AuthService._extract_supabase_identity(claims)
+        user = AuthService._get_user_for_supabase_subject(db, identity["supabase_uuid"])
+        if user and not user.is_deleted:
+            return user
+        return None
+
+    @staticmethod
+    def get_or_create_user_from_supabase_claims(db: Session, claims: dict) -> User:
+        identity = AuthService._extract_supabase_identity(claims)
+        supabase_uuid = identity["supabase_uuid"]
+        email = identity["email"]
+        full_name = identity["full_name"]
+        avatar_url = identity["avatar_url"]
+        provider = identity["provider"]
+
+        user = AuthService._get_user_for_supabase_subject(db, supabase_uuid)
+        if not user:
+            # Legacy password users may already exist with the same email. We only
+            # use email here as a one-time adoption fallback so repeated Supabase
+            # sign-ins stay idempotent without creating duplicates.
+            user = AuthService._get_legacy_user_by_email(db, email, supabase_uuid)
+
+        if user:
+            user.email = email
+            user.is_email_verified = True
+            user.is_deleted = False
+            if full_name and not user.full_name:
+                user.full_name = safe_input(full_name)
+        else:
+            user = User(
+                id=supabase_uuid,
+                email=email,
+                password_hash="SUPABASE_AUTH",
+                full_name=safe_input(full_name) if full_name else None,
+                is_email_verified=True,
+            )
+            db.add(user)
+
+        if provider == "google":
+            user.gmail_connected = True
+        elif provider == "apple":
+            user.apple_connected = True
+
+        AuthService._ensure_user_profile_and_settings(
+            db,
+            user,
+            full_name=full_name,
+            supabase_id=supabase_uuid,
+            email=email,
+            avatar_url=avatar_url,
+        )
+
+        user.updated_at = datetime.now(timezone.utc)
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            user = AuthService._get_user_for_supabase_subject(db, supabase_uuid)
+            if not user:
+                user = AuthService._get_legacy_user_by_email(db, email, supabase_uuid)
+
+            if not user:
+                logger.exception(
+                    "[Auth] Failed to recover user sync after integrity conflict for email=%s supabase_id=%s",
+                    email,
+                    supabase_uuid,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to synchronize Supabase user",
+                )
+
+            user.email = email
+            user.is_email_verified = True
+            user.is_deleted = False
+            if full_name and not user.full_name:
+                user.full_name = safe_input(full_name)
+
+            if provider == "google":
+                user.gmail_connected = True
+            elif provider == "apple":
+                user.apple_connected = True
+
+            AuthService._ensure_user_profile_and_settings(
+                db,
+                user,
+                full_name=full_name,
+                supabase_id=supabase_uuid,
+                email=email,
+                avatar_url=avatar_url,
+            )
+            user.updated_at = datetime.now(timezone.utc)
+            db.commit()
+        db.refresh(user)
+        return user
+
+    @staticmethod
     def _decode_supabase_token(token: str) -> dict:
-        # ── Diagnostic logging — always visible in docker logs ───────────────
         supabase_url = settings.SUPABASE_URL or ''
         audience = settings.SUPABASE_AUDIENCE or ''
-        token_preview = f"{token[:12]}...{token[-8:]}" if len(token) > 20 else token
-        print(f"[Auth] SUPABASE_URL='{supabase_url}'")
-        print(f"[Auth] SUPABASE_AUDIENCE='{audience}'")
-        print(f"[Auth] Decoding token: {token_preview}")
 
         if not supabase_url:
-            print("[Auth] ERROR: SUPABASE_URL is empty — set it in your .env file")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Supabase OAuth is not configured (SUPABASE_URL missing)",
             )
 
         try:
-            jwks_url = f"{supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
-            print(f"NEW JWKS URL: {jwks_url}")
-            
-            headers = {}
-            if settings.SUPABASE_ANON_KEY:
-                headers["apikey"] = settings.SUPABASE_ANON_KEY
-                
-            response = requests.get(jwks_url, headers=headers, timeout=10)
-            if response.status_code != 200:
-                print("JWKS fetch failed:", response.text)
-                raise HTTPException(401, "Failed to fetch JWKS")
-                
-            jwks = response.json()
-            
+            jwks = _fetch_supabase_jwks(supabase_url, settings.SUPABASE_ANON_KEY or "")
             unverified_header = jwt.get_unverified_header(token)
             alg = unverified_header.get("alg", "RS256")
             kid = unverified_header.get("kid")
-            print("JWT ALG:", alg)
-            print("JWT KID:", kid)
             
             matching_key = next(
                 (k for k in jwks.get("keys", []) if k.get("kid") == kid),
@@ -121,10 +294,7 @@ class AuthService:
             )
             if not matching_key:
                 raise HTTPException(401, "JWK not found")
-
-            print("Using key type:", matching_key.get("kty"))
             
-            # Dynamically choose RSA or EC key based on token header alg
             if alg.startswith("RS"):
                 public_key = algorithms.RSAAlgorithm.from_jwk(json.dumps(matching_key))
             elif alg.startswith("ES"):
@@ -133,7 +303,6 @@ class AuthService:
                 raise HTTPException(401, f"Unsupported algorithm: {alg}")
 
             issuer = f"{supabase_url.rstrip('/')}/auth/v1"
-            print(f"[Auth] Verifying with issuer='{issuer}' audience='{audience}' alg={alg}")
             decoded = jwt.decode(
                 token,
                 public_key,
@@ -141,20 +310,14 @@ class AuthService:
                 audience=audience,
                 issuer=issuer,
             )
-            print(f"[Auth] Token decoded OK — sub={decoded.get('sub')} email={decoded.get('email')}")
-            print("JWT decoded successfully")
         except HTTPException:
             raise
         except jwt.PyJWTError as exc:
-            print("JWT ERROR:", str(exc))
-            print(f"[Auth] PyJWTError ({type(exc).__name__}): {exc}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=f"Invalid Supabase OAuth token: {exc}",
             ) from exc
         except Exception as exc:
-            print("JWT ERROR:", str(exc))
-            print(f"[Auth] Exception ({type(exc).__name__}): {exc}")
             logger.exception("[Auth] Failed to decode Supabase OAuth token")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,

@@ -1,28 +1,44 @@
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { ROUTES } from '../router/routes';
-import React from 'react';
 import { useAuthStore } from '../store/authStore';
 import {
     LogOut,
     ArrowRight,
     LayoutDashboard,
-    Waves,
-    ShieldAlert
+    Waves
 } from 'lucide-react';
-import api from '../lib/axios';
+
+const initialsFromName = (value) =>
+    String(value || 'ArogyaAI')
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase() || '')
+        .join('') || 'AI';
 
 const LogoutConfirmation = () => {
     const navigate = useNavigate();
-    const reset = useAuthStore((state) => state.reset);
+    const logout = useAuthStore((state) => state.logout);
+    const user = useAuthStore((state) => state.user);
+    const profile = useAuthStore((state) => state.profile);
+    const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+    const displayName = profile?.full_name || user?.full_name || 'Your profile';
+    const avatarUrl = profile?.avatar_url || user?.avatar_url || user?.user_metadata?.avatar_url || null;
+    const avatarInitials = useMemo(() => initialsFromName(displayName), [displayName]);
 
     const handleLogout = async () => {
+        setIsLoggingOut(true);
+
         try {
-            await api.post("/auth/logout");
-        } catch (e) {
-            console.error("Logout API failed:", e);
+            await logout();
+            navigate(ROUTES.HOME, { replace: true });
+        } catch (err) {
+            console.error('Logout failed:', err);
+            setIsLoggingOut(false);
         }
-        reset();
-        navigate("/", { replace: true });
     };
 
     return (
@@ -59,12 +75,18 @@ const LogoutConfirmation = () => {
                         {/* Avatar & Badge Section */}
                         <div className="mb-10 relative group/avatar">
                             <div className="size-32 rounded-[2.5rem] bg-gradient-to-br from-[#6143f4]/20 to-[#009cde]/20 p-1 transition-transform duration-700 group-hover/avatar:scale-110 group-hover/avatar:rotate-3 shadow-2xl">
-                                <div className="size-full rounded-[2.2rem] overflow-hidden border-4 border-white dark:border-[#131022] bg-white">
-                                    <img
-                                        className="w-full h-full object-cover grayscale opacity-80 group-hover/avatar:grayscale-0 group-hover/avatar:opacity-100 transition-all duration-700"
-                                        alt="User profile avatar"
-                                        src="https://lh3.googleusercontent.com/aida-public/AB6AXuCmca7uoDE5AXEl5Lm8J0kNozFbXew2KmxjvbMH9Uxz6_puV-3M4e6vnlXT3lEb_5cr82WJlJpIhLxX0n3slwWbP57cryd-X1PYojJGyEJFIbxEi5GoRB7BAanTNFGumWZcuLVazL6mqrjhuvUC3gGRtjHZVA9j0pjweqT5KOzZfnYTmtLSNDWzJTJ0I2GNWutesIDE2flIJl8eYqrE_zQxMiy9H-ayg4LdE001a6UkDGckUUtZ533LriYErfK1okd7WRmFj5K6lXvB"
-                                    />
+                                <div className="size-full rounded-[2.2rem] overflow-hidden border-4 border-white dark:border-[#131022] bg-white flex items-center justify-center">
+                                    {avatarUrl ? (
+                                        <img
+                                            className="w-full h-full object-cover grayscale opacity-80 group-hover/avatar:grayscale-0 group-hover/avatar:opacity-100 transition-all duration-700"
+                                            alt={displayName}
+                                            src={avatarUrl}
+                                        />
+                                    ) : (
+                                        <span className="text-4xl font-black text-slate-300 dark:text-slate-600 grayscale opacity-80 group-hover/avatar:grayscale-0 group-hover/avatar:opacity-100 transition-all duration-700">
+                                            {avatarInitials}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
                             <motion.div
@@ -88,13 +110,15 @@ const LogoutConfirmation = () => {
                         <div className="w-full flex flex-col gap-4">
                             <button
                                 onClick={handleLogout}
+                                disabled={isLoggingOut}
                                 className="w-full py-6 bg-[#6143f4] hover:bg-[#4a34c1] text-white font-black text-xs uppercase tracking-[0.25em] rounded-[2rem] transition-all shadow-[0_25px_50px_-15px_rgba(97,67,244,0.4)] flex items-center justify-center gap-4 group/btn active:scale-95 leading-none"
                             >
-                                <span>Log Out</span>
+                                <span>{isLoggingOut ? 'Logging Out...' : 'Log Out'}</span>
                                 <ArrowRight size={18} strokeWidth={3} className="group-hover/btn:translate-x-2 transition-transform duration-300" />
                             </button>
                             <button
                                 onClick={() => navigate(-1)}
+                                disabled={isLoggingOut}
                                 className="w-full py-6 bg-transparent hover:bg-slate-50 dark:hover:bg-white/5 text-slate-400 dark:text-slate-500 hover:text-[#13082a] dark:hover:text-white font-black text-xs uppercase tracking-[0.25em] rounded-[2rem] transition-all active:scale-95 leading-none"
                             >
                                 Discard & Stay

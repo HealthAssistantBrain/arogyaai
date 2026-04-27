@@ -58,12 +58,12 @@ export default function OnboardingGuard() {
   // ── SECTION 5: TOKEN PARITY HARDENING ──
   if (hasTokenParityError(isAuthenticated, token)) {
     logout()
-    return <SafeNavigate to={ROUTES.LOGIN} replace />
+    return <SafeNavigate to={ROUTES.HOME} replace />
   }
 
   // ── SECTION 4: STRICT ROUTING WATERFALL ──
   if (!isAuthenticated) {
-    return <SafeNavigate to={ROUTES.LOGIN} replace />
+    return <SafeNavigate to={ROUTES.HOME} replace />
   }
   // ── PHASE 1: Email verification NOT enforced ────────────────────────────
   // Re-enable in Phase 2:

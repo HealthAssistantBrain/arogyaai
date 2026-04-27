@@ -5,8 +5,10 @@ import {
 } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
 import { ROUTES } from './routes'
+import { getAuthenticatedHomeRoute } from './authRedirects'
 import ProtectedRoute from '../components/guards/AuthGuard'
 import GuestGuard from '../components/guards/GuestGuard'
+import ActiveOnboardingGuard from '../components/guards/ActiveOnboardingGuard'
 import LoadingScreen from '../pages/LoadingScreen'
 import MainLayout from '../components/layout/MainLayout'
 import { useAuthStore } from '../store/authStore'
@@ -75,11 +77,15 @@ const ServerError500 = lazy(() => import('../pages/ServerError'))
 const MaintenancePage = lazy(() => import('../pages/SystemMaintenance'))
 
 function RootRedirect() {
-  const { isAuthenticated, isHydrated } = useAuthStore()
+  const authState = useAuthStore()
+  const { isAuthenticated, isHydrated } = authState
+  const isSignedIn = isAuthenticated && !!authState.user?.id
 
   if (!isHydrated) return null
 
-  return isAuthenticated ? <Navigate to="/dashboard" replace /> : <LandingPage />
+  return isSignedIn
+    ? <Navigate to={getAuthenticatedHomeRoute(authState)} replace />
+    : <LandingPage />
 }
 
 export default function AppRouter() {
@@ -96,6 +102,7 @@ export default function AppRouter() {
           <Route path={ROUTES.PRIVACY} element={<PrivacyPolicy />} />
           <Route path={ROUTES.DATA_CONSENT} element={<DataConsent />} />
           <Route path={ROUTES.AUTH_CALLBACK} element={<AuthCallback />} />
+          <Route path={ROUTES.EMAIL_VERIFICATION} element={<EmailVerification />} />
           <Route path={ROUTES.NOT_FOUND} element={<NotFound404 />} />
           <Route path={ROUTES.SERVER_ERROR} element={<ServerError500 />} />
           <Route path={ROUTES.MAINTENANCE} element={<MaintenancePage />} />
@@ -106,32 +113,32 @@ export default function AppRouter() {
             <Route path={ROUTES.SIGNUP} element={<SignUp />} />
             <Route path={ROUTES.FORGOT_PASSWORD} element={<ForgotPassword />} />
             <Route path={ROUTES.RESET_PASSWORD} element={<ResetPassword />} />
-            <Route path={ROUTES.ONBOARDING} element={<Step1BasicProfile />} />
-            <Route path={ROUTES.ONBOARDING_STEP_1} element={<Step1BasicProfile />} />
-            <Route path={ROUTES.ONBOARDING_STEP_2} element={<Step2MedHistory />} />
-            <Route path={ROUTES.ONBOARDING_STEP_3} element={<Step3Lifestyle />} />
-            <Route path={ROUTES.ONBOARDING_STEP_4} element={<Step4DeviceConnect />} />
-            <Route path={ROUTES.ONBOARDING_SUMMARY} element={<OnboardingSummary />} />
-            <Route path={ROUTES.ONBOARDING_COMPLETION} element={<OnboardingCompletion />} />
           </Route>
 
           {/* ── AUTH REQUIRED ─────────────────────────────────── */}
           <Route element={<ProtectedRoute />}>
-
-            {/* CRITICAL: onboarding steps are INSIDE AuthGuard   */}
-            {/* but OUTSIDE OnboardingGuard — if they were inside  */}
-            {/* OnboardingGuard they would trigger infinite loop   */}
-            <Route path={ROUTES.EMAIL_VERIFICATION} element={<EmailVerification />} />
+            <Route path={ROUTES.WELCOME} element={<AccountCreated />} />
             <Route path={ROUTES.ACCOUNT_CREATED} element={<AccountCreated />} />
+            <Route element={<ActiveOnboardingGuard />}>
+              <Route path={ROUTES.ONBOARDING} element={<Step1BasicProfile />} />
+              <Route path={ROUTES.ONBOARDING_STEP_1} element={<Step1BasicProfile />} />
+              <Route path={ROUTES.ONBOARDING_STEP_2} element={<Step2MedHistory />} />
+              <Route path={ROUTES.ONBOARDING_STEP_3} element={<Step3Lifestyle />} />
+              <Route path={ROUTES.ONBOARDING_STEP_4} element={<Step4DeviceConnect />} />
+              <Route path={ROUTES.ONBOARDING_SUMMARY} element={<OnboardingSummary />} />
+              <Route path={ROUTES.ONBOARDING_COMPLETION} element={<OnboardingCompletion />} />
+            </Route>
 
             <Route element={<MainLayout />}>
               <Route path={ROUTES.DASHBOARD} element={<MainDashboard />} />
               <Route path={ROUTES.DASHBOARD_ALT} element={<DashboardAltView />} />
               <Route path={`${ROUTES.INSIGHTS}/*`} element={<AIHealthInsights />} />
               <Route path={`${ROUTES.INSIGHTS_DESKTOP}/*`} element={<AIInsightsDesktop />} />
+              <Route path={ROUTES.RISK_PREDICTION} element={<RiskExplanation />} />
               <Route path={`${ROUTES.SIMULATOR}/*`} element={<DiseaseSimulator />} />
               <Route path={ROUTES.TIMELINE} element={<HealthTimeline />} />
               <Route path={ROUTES.RISK_EXPLANATION} element={<RiskExplanation />} />
+              <Route path="/risk-prediction" element={<Navigate to={ROUTES.RISK_PREDICTION} replace />} />
               <Route path={ROUTES.RECOMMENDATIONS} element={<PreventiveRecs />} />
               <Route path={ROUTES.RISK_REPORT} element={<AIRiskReport />} />
               <Route path={ROUTES.AQI_MONITOR} element={<AQIMonitor />} />

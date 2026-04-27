@@ -148,6 +148,8 @@ class DiseaseSimulationService:
         conditions = DiseaseSimulationService._conditions(db, user)
 
         age = _age_from_dob(profile.date_of_birth) if profile else None
+        if age is None and profile is not None:
+            age = _safe_int(getattr(profile, "age", None))
         weight_kg = _safe_float(getattr(profile, "weight_kg", None), 72.0) or 72.0
         height_cm = _safe_float(getattr(profile, "height_cm", None), 170.0) or 170.0
         bmi = round(weight_kg / ((height_cm / 100) ** 2), 1) if height_cm > 0 else None

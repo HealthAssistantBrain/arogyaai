@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import { devtools } from 'zustand/middleware';
+import { createJSONStorage, devtools, persist } from 'zustand/middleware';
 import api from '../lib/axios';
 import { safeArray, safeNumber, safeObject, deepEqual, safeText } from '../utils/safeData';
+import { useAuthStore } from './authStore';
 
 /**
  * Pipeline-aware dashboard store.
@@ -15,6 +16,7 @@ const POLL_INTERVAL_MS = 30_000;
 const STALE_THRESHOLD_MS = 60_000;
 const VITALS_LIMIT = 100;
 const DEFAULT_VITAL_RANGE = '24h';
+const DASHBOARD_STORAGE_KEY = 'arogyaai-dashboard-cache';
 const NO_CACHE_HEADERS = {
     'Cache-Control': 'no-cache, no-store, max-age=0, must-revalidate',
     Pragma: 'no-cache',
@@ -25,6 +27,7 @@ let dashboardFetchSeq = 0;
 const emptySlice = () => ({ data: null, status: 'fallback', source: 'db', last_updated: null });
 const vitalKey = (type, range) => `${type}:${range}`;
 const isPlainObject = (value) => Boolean(value && typeof value === 'object' && !Array.isArray(value));
+const getCurrentDashboardUserId = () => useAuthStore.getState()?.user?.id ?? null;
 
 const buildNoCacheConfig = (cacheBust, params = {}) => ({
     params: { ...params, ts: cacheBust },
@@ -199,8 +202,8 @@ const normalizeVitals = (payload, type, range) => {
 };
 
 const useDashboardStore = create(
-    devtools(
-        (set, get) => ({
+    persist(
+        devtools((set, get) => ({
             healthScore: emptySlice(),
             history: emptySlice(),
             prediction: emptySlice(),
@@ -213,9 +216,15 @@ const useDashboardStore = create(
             dashboardUpdatedAt: null,
 
             loading: false,
+            isFetching: false,
             error: null,
             lastFetched: null,
+            lastFetchedAt: null,
+            cacheOwnerId: null,
+            hasHydratedCache: false,
             _pollTimer: null,
+
+            setHasHydratedCache: (value = true) => set({ hasHydratedCache: !!value }, false, 'dashboard/cacheHydrated'),
 
             fetchVitals: async (type, range = DEFAULT_VITAL_RANGE, { force = false, silent = false, requestId = null, cacheBust = null } = {}) => {
                 const key = vitalKey(type, range);
@@ -291,11 +300,15 @@ const useDashboardStore = create(
                 }
 
                 if (deepEqual(next.dashboardData, current.dashboardData)) {
+                    const currentUserId = getCurrentDashboardUserId();
                     set(
                         {
                             loading: false,
+                            isFetching: false,
                             error: null,
                             lastFetched: Date.now(),
+                            lastFetchedAt: Date.now(),
+                            cacheOwnerId: currentUserId,
                             dashboardUpdatedAt: next.dashboardUpdatedAt ?? current.dashboardUpdatedAt ?? null,
                         },
                         false,
@@ -304,12 +317,16 @@ const useDashboardStore = create(
                     return current.dashboardData;
                 }
 
+                const currentUserId = getCurrentDashboardUserId();
                 set(
                     {
                         ...next,
                         loading: false,
+                        isFetching: false,
                         error: null,
                         lastFetched: Date.now(),
+                        lastFetchedAt: Date.now(),
+                        cacheOwnerId: currentUserId,
                     },
                     false,
                     `dashboard/${source}`
@@ -318,16 +335,21 @@ const useDashboardStore = create(
             },
 
             fetchDashboardData: async ({ force = false, silent = false } = {}) => {
-                const { lastFetched, loading } = get();
+                const { lastFetched, loading, cacheOwnerId } = get();
+                const currentUserId = getCurrentDashboardUserId();
                 if (loading && !force) return;
-                if (!force && lastFetched && Date.now() - lastFetched < STALE_THRESHOLD_MS) return;
+                if (
+                    !force &&
+                    currentUserId &&
+                    cacheOwnerId === currentUserId &&
+                    lastFetched &&
+                    Date.now() - lastFetched < STALE_THRESHOLD_MS
+                ) return;
 
                 const requestId = ++dashboardFetchSeq;
                 const cacheBust = `${Date.now()}-${requestId}`;
                 console.log('[Dashboard] Fetching dashboard data');
-                if (!silent) {
-                    set({ loading: true }, false, 'fetch/start');
-                }
+                set({ loading: true, isFetching: true }, false, silent ? 'fetch/start:silent' : 'fetch/start');
                 set({ error: null }, false, 'fetch/clear-error');
 
                 try {
@@ -346,7 +368,11 @@ const useDashboardStore = create(
                     }
                     console.error('[dashboardStore] fetch failed:', err);
                     set(
-                        { loading: false, error: err?.response?.data?.detail || err?.message || 'Failed to load dashboard data.' },
+                        {
+                            loading: false,
+                            isFetching: false,
+                            error: err?.response?.data?.detail || err?.message || 'Failed to load dashboard data.',
+                        },
                         false,
                         'fetch/error'
                     );
@@ -386,16 +412,44 @@ const useDashboardStore = create(
                         dashboardSignature: null,
                         dashboardUpdatedAt: null,
                         loading: false,
+                        isFetching: false,
                         error: null,
                         lastFetched: null,
+                        lastFetchedAt: null,
+                        cacheOwnerId: null,
+                        hasHydratedCache: false,
                         _pollTimer: null,
                     },
                     false,
                     'clearDashboard'
                 );
             },
-        }),
-        { name: 'arogyaai-dashboard' }
+        }), { name: 'arogyaai-dashboard' }),
+        {
+            name: DASHBOARD_STORAGE_KEY,
+            storage: createJSONStorage(() => window.localStorage),
+            partialize: (state) => ({
+                healthScore: state.healthScore,
+                history: state.history,
+                prediction: state.prediction,
+                profile: state.profile,
+                alerts: state.alerts,
+                googleFit: state.googleFit,
+                vitals: state.vitals,
+                dashboardData: state.dashboardData,
+                dashboardSignature: state.dashboardSignature,
+                dashboardUpdatedAt: state.dashboardUpdatedAt,
+                lastFetched: state.lastFetched,
+                lastFetchedAt: state.lastFetchedAt,
+                cacheOwnerId: state.cacheOwnerId,
+            }),
+            onRehydrateStorage: () => (state, error) => {
+                if (error) {
+                    console.warn('[dashboardStore] Persist rehydration failed:', error);
+                }
+                state?.setHasHydratedCache?.(true);
+            },
+        }
     )
 );
 

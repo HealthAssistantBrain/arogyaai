@@ -19,6 +19,24 @@ import { ROUTES } from '../router/routes';
 import api from '../lib/axios';
 import OnboardingHeader from '../components/OnboardingHeader';
 
+const getOnboardingRoute = (step) => {
+  switch (step) {
+    case 2:
+      return ROUTES.ONBOARDING_STEP_2;
+    case 3:
+      return ROUTES.ONBOARDING_STEP_3;
+    case 4:
+      return ROUTES.ONBOARDING_STEP_4;
+    case 5:
+      return ROUTES.ONBOARDING_SUMMARY;
+    case 6:
+      return ROUTES.ONBOARDING_COMPLETION;
+    case 1:
+    default:
+      return ROUTES.ONBOARDING_STEP_1;
+  }
+};
+
 const Onboarding = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -76,7 +94,7 @@ const Onboarding = () => {
     }
 
     if (restoredStep !== 1) {
-      navigate(ROUTES[`ONBOARDING_STEP_${restoredStep}`] || ROUTES.ONBOARDING_STEP_1, { replace: true });
+      navigate(getOnboardingRoute(restoredStep), { replace: true });
     }
   }, [navigate, restoredStep, setOnboardingStep, stepFromStorage, stepFromUrl]);
 
@@ -145,11 +163,11 @@ const Onboarding = () => {
     setLoading(true);
     try {
       await saveProfile(data);
-      await useAuthStore.getState().completeOnboarding();
+      setOnboardingStep(2);
       await useAuthStore.getState().fetchProfile();
 
-      toast.success('Profile updated!');
-      navigate('/dashboard');
+      toast.success('Progress saved');
+      navigate(ROUTES.DASHBOARD);
     } catch (err) {
       toast.error('Failed to save data');
     } finally {
@@ -345,7 +363,7 @@ const Onboarding = () => {
                 <div className="mt-12 pt-8 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-4 justify-between items-center">
                   <button
                     type="button"
-                    onClick={() => navigate('/')}
+                    onClick={() => navigate(ROUTES.DASHBOARD)}
                     className="w-full sm:w-auto px-8 py-3 rounded-lg border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
                   >
                     <ArrowLeft size={18} />

@@ -3,9 +3,10 @@ import { useAuthStore } from '../store/authStore';
 import { isSystemLocked } from './systemLock';
 import { getApiRootUrl, getApiUrl } from './apiBaseUrl';
 import { applyCsrfHeader } from './csrf';
+import { getSupabaseClient, supabase } from './supabaseClient';
 
-const BASE_URL = getApiRootUrl(import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000');
-const API_URL = getApiUrl(import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000');
+const BASE_URL = getApiRootUrl(import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000');
+const API_URL = getApiUrl(import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000');
 
 console.log('[ArogyaAI] API Base URL configured:', API_URL);
 
@@ -30,12 +31,26 @@ const processRefreshQueue = (error, token = null) => {
   refreshQueue = [];
 };
 
+const getCurrentSupabaseToken = async (fallbackToken = null) => {
+  const client = getSupabaseClient() ?? supabase;
+  if (!client) return fallbackToken;
+
+  const { data } = await client.auth.getSession();
+  const session = data?.session ?? null;
+  if (session?.access_token) {
+    useAuthStore.getState().setSupabaseSession?.(session);
+    return session.access_token;
+  }
+
+  return fallbackToken;
+};
+
 // ── Request interceptor: attach Bearer token ─────────────────────────────────
 api.interceptors.request.use(
-  (config) => {
+  async (config) => {
     const method = (config.method || 'get').toUpperCase();
     const headers = config.headers || {};
-    const token = useAuthStore.getState().token;
+    const token = await getCurrentSupabaseToken(useAuthStore.getState().token);
     if (token) headers.Authorization = `Bearer ${token}`;
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
       applyCsrfHeader(headers);
@@ -140,7 +155,7 @@ api.interceptors.response.use(
     }
 
     if (error.response?.status === 401 && config && !config._retry) {
-      if (config.url?.includes('/auth/refresh-token') || config.url?.includes('/auth/login')) {
+      if (config.url?.includes('/auth/login') || config.url?.includes('/auth/signup')) {
         return Promise.reject(error);
       }
 

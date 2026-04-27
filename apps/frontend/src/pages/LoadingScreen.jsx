@@ -1,14 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuthStore } from '../store/authStore';
-import { ROUTES } from '../router/routes';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Activity, ShieldCheck, Lock, HeartPulse } from 'lucide-react';
 
 const LoadingScreen = () => {
-  const navigate = useNavigate();
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const onboardingDone = useAuthStore((state) => state.onboardingDone);
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
@@ -23,21 +17,10 @@ const LoadingScreen = () => {
       });
     }, 30);
 
-    const timer = setTimeout(() => {
-      if (isAuthenticated && onboardingDone) {
-        navigate(ROUTES.DASHBOARD, { replace: true });
-      } else if (isAuthenticated && !onboardingDone) {
-        navigate(ROUTES.ONBOARDING_STEP_1, { replace: true });
-      } else {
-        navigate(ROUTES.HOME, { replace: true });
-      }
-    }, 2800);
-
     return () => {
       clearInterval(interval);
-      clearTimeout(timer);
     };
-  }, [navigate, isAuthenticated, onboardingDone]);
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#f6f5f8] dark:bg-[#13082A] flex items-center justify-center p-6 font-display relative overflow-hidden transition-colors duration-500">

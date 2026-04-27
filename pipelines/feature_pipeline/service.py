@@ -438,6 +438,8 @@ class FeaturePipelineService:
         bp_category = _bp_category(systolic_bp, diastolic_bp)
 
         age = _age_from_dob(getattr(profile, "date_of_birth", None))
+        if age is None:
+            age = _safe_int(getattr(profile, "age", None))
         cholesterol_proxy = _cholesterol_proxy(bmi, systolic_bp, diastolic_bp, activity_level, sleep_score, age)
 
         source_breakdown = {

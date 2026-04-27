@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -35,13 +35,14 @@ const Lifestyle = () => {
   const [searchParams] = useSearchParams();
   const setOnboardingStep = useAuthStore((state) => state.setOnboardingStep);
   const saveOnboarding = useAuthStore((state) => state.saveOnboarding);
+  const profile = useAuthStore((state) => state.profile);
   const [selectedDiets, setSelectedDiets] = useState([]);
 
   const [loading, setLoading] = useState(false);
 
-  const { register, handleSubmit, watch, getValues } = useForm({
+  const { register, handleSubmit, watch, getValues, setValue } = useForm({
     defaultValues: {
-      activity: 'Sedentary',
+      activity: profile?.activity || 'Sedentary',
       sleep: 7.5,
       stress: 3
     }
@@ -50,6 +51,20 @@ const Lifestyle = () => {
   const sleepValue = watch('sleep');
   const stressValue = watch('stress');
   const activityValue = watch('activity');
+
+  useEffect(() => {
+    if (profile?.activity) {
+      setValue('activity', profile.activity);
+    }
+    if (profile?.goals) {
+      setSelectedDiets(
+        String(profile.goals)
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean)
+      );
+    }
+  }, [profile?.activity, profile?.goals, setValue]);
 
   const toggleDiet = (diet) => {
     if (diet === 'No Preference') {
@@ -73,6 +88,7 @@ const Lifestyle = () => {
         sleep: parseFloat(data.sleep),
         stress: parseInt(data.stress, 10)
       });
+      await useAuthStore.getState().fetchProfile();
     } catch (err) {
       console.log("Non-blocking error", err);
     }
@@ -105,13 +121,15 @@ const Lifestyle = () => {
         sleep: parseFloat(data.sleep),
         stress: parseInt(data.stress, 10)
       });
+      await useAuthStore.getState().fetchProfile();
       await saveOnboarding({ onboarding_step: 4 });
+      toast.success('Progress saved');
     } catch (err) {
       console.log("Non-blocking error", err);
     } finally {
       setLoading(false);
     }
-    navigate("/dashboard");
+    navigate(ROUTES.DASHBOARD);
   };
 
   const getStressText = (val) => {

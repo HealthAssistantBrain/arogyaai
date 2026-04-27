@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ArogyaAI - Air Quality Risk Monitor</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#6043F4",
+                        "secondary": "#009CDE",
+                        "background-light": "#EAEAEA",
+                        "background-dark": "#13082A",
+                        "accent-yellow": "#FBBF24",
+                        "accent-red": "#EF4444",
+                        "accent-green": "#10B981"
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.5rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Space Grotesk', sans-serif; }
+        .glass-panel { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(10px); }
+        .map-gradient { background: radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.2) 0%, rgba(251, 191, 36, 0.2) 30%, rgba(239, 68, 68, 0.1) 60%); }
+    </style>
+</head>
+<body class="bg-background-light text-slate-900 font-display">
+<div class="flex h-screen overflow-hidden">
+<!-- Left Sidebar -->
+<aside class="w-72 bg-white border-r border-slate-200 flex flex-col shrink-0 overflow-y-auto hidden lg:flex">
+<div class="p-6 flex items-center gap-3">
+<div class="bg-primary size-10 rounded-xl flex items-center justify-center text-white">
+<span class="material-symbols-outlined text-2xl">health_metrics</span>
+</div>
+<h2 class="text-xl font-bold tracking-tight text-background-dark">ArogyaAI</h2>
+</div>
+<nav class="flex-1 px-4 py-2 space-y-1">
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-primary/5 hover:text-primary rounded-xl transition-colors" href="#">
+<span class="material-symbols-outlined">grid_view</span>
+<span class="font-medium text-sm">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-primary/5 hover:text-primary rounded-xl transition-colors" href="#">
+<span class="material-symbols-outlined">psychology</span>
+<span class="font-medium text-sm">AI Insights</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-primary/5 hover:text-primary rounded-xl transition-colors" href="#">
+<span class="material-symbols-outlined">query_stats</span>
+<span class="font-medium text-sm">Disease Simulator</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-primary/5 hover:text-primary rounded-xl transition-colors" href="#">
+<span class="material-symbols-outlined">history</span>
+<span class="font-medium text-sm">Health Timeline</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 bg-primary/10 text-primary rounded-xl transition-colors" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">air</span>
+<span class="font-medium text-sm">Air Quality Monitor</span>
+</a>
+<div class="pt-4 pb-2 px-4 uppercase text-[10px] font-bold text-slate-400 tracking-widest">Medical Records</div>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-primary/5 hover:text-primary rounded-xl transition-colors" href="#">
+<span class="material-symbols-outlined">biotech</span>
+<span class="font-medium text-sm">Lab Results</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-primary/5 hover:text-primary rounded-xl transition-colors" href="#">
+<span class="material-symbols-outlined">description</span>
+<span class="font-medium text-sm">Medical Reports</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-primary/5 hover:text-primary rounded-xl transition-colors" href="#">
+<span class="material-symbols-outlined">bedtime</span>
+<span class="font-medium text-sm">Sleep Analysis</span>
+</a>
+<div class="pt-4 pb-2 px-4 uppercase text-[10px] font-bold text-slate-400 tracking-widest">System</div>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-primary/5 hover:text-primary rounded-xl transition-colors" href="#">
+<span class="material-symbols-outlined">devices</span>
+<span class="font-medium text-sm">Device Manager</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-primary/5 hover:text-primary rounded-xl transition-colors" href="#">
+<span class="material-symbols-outlined">stethoscope</span>
+<span class="font-medium text-sm">Consultation</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-primary/5 hover:text-primary rounded-xl transition-colors" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-medium text-sm">Settings</span>
+</a>
+</nav>
+<div class="p-6">
+<div class="bg-primary/5 p-4 rounded-xl border border-primary/10">
+<p class="text-xs font-semibold text-primary uppercase">Support</p>
+<p class="text-xs text-slate-500 mt-1">Need medical assistance?</p>
+<button class="mt-3 w-full bg-primary text-white py-2 rounded-lg text-xs font-bold">Help Center</button>
+</div>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex-1 flex flex-col overflow-hidden">
+<!-- Top Navbar -->
+<header class="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
+<div class="flex-1 max-w-md">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+<input class="w-full bg-slate-50 border-none rounded-xl py-2 pl-10 text-sm focus:ring-2 focus:ring-primary/20" placeholder="Search medical data, cities, or insights..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<button class="relative p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2 right-2 size-2 bg-red-500 rounded-full border-2 border-white"></span>
+</button>
+<div class="h-8 w-px bg-slate-200"></div>
+<div class="flex items-center gap-3">
+<div class="text-right hidden sm:block">
+<p class="text-sm font-bold text-background-dark leading-tight">Dr. Sarah Chen</p>
+<p class="text-[10px] text-slate-500 uppercase font-bold tracking-tight">Chief Medical Officer</p>
+</div>
+<img alt="User avatar" class="size-10 rounded-full object-cover border-2 border-primary/20" data-alt="Portrait of a female doctor smiling" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBMazOr2mKHZkMVl0IaSlzFlmfOpSLVitXjMdECoFPgPN_sZDxqc3KIhTEupQU70qbUU0erSJl9VYWPDdcL3PH0GWCckWnAQL56F_JZbrkrH0_PrUj7vwO4R28AGF24fkgyfvp9_cHGMcaLfNdu-HBjoigGcoHpMqVCPcB3KWdBdwfg4c8yTyD_y06xnvS5gru1FHxZve3uLCfw0-1UTdpmSh0E9g19XRapY_mZwYkOA9yAj4-aJaAA9yG8W5sUhX0Y5DrXzG3wCkBZ"/>
+</div>
+</div>
+</header>
+<div class="flex-1 overflow-y-auto p-8 space-y-8">
+<!-- Header Section -->
+<div class="max-w-4xl">
+<h1 class="text-4xl font-black text-background-dark tracking-tight">Air Quality Risk Monitor</h1>
+<p class="mt-2 text-slate-500 text-lg leading-relaxed">
+                        Precision monitoring of environmental pollutants. Our AI analyzes real-time atmospheric data to predict and mitigate respiratory risks for vulnerable patients.
+                    </p>
+</div>
+<!-- Hero Section: Map & Widgets -->
+<div class="grid grid-cols-1 xl:grid-cols-12 gap-8 h-auto">
+<!-- Interactive Map -->
+<div class="xl:col-span-8 relative h-[500px] bg-white rounded-3xl overflow-hidden shadow-sm border border-slate-200">
+<div class="absolute inset-0 map-gradient"></div>
+<div class="absolute inset-0 opacity-40 bg-[url('https://placeholder.pics/svg/1200x800/EAEAEA/000000?text=Topographic+Map+Pattern')] bg-cover" data-location="Mumbai, India" style=""></div>
+<!-- Map Controls -->
+<div class="absolute top-4 right-4 flex flex-col gap-2">
+<button class="bg-white p-2 rounded-lg shadow-md text-slate-600 hover:text-primary"><span class="material-symbols-outlined">add</span></button>
+<button class="bg-white p-2 rounded-lg shadow-md text-slate-600 hover:text-primary"><span class="material-symbols-outlined">remove</span></button>
+<button class="bg-white p-2 rounded-lg shadow-md text-slate-600 hover:text-primary mt-2"><span class="material-symbols-outlined">my_location</span></button>
+</div>
+<!-- Map Markers -->
+<div class="absolute top-1/4 left-1/3 group cursor-pointer">
+<div class="size-4 bg-accent-green rounded-full shadow-[0_0_20px_rgba(16,185,129,0.8)] animate-pulse"></div>
+<div class="absolute bottom-6 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-white px-3 py-1 rounded-lg text-xs font-bold shadow-xl border border-slate-100">AQI: 24 - Healthy</div>
+</div>
+<div class="absolute top-1/2 left-1/2 group cursor-pointer">
+<div class="size-6 bg-accent-yellow rounded-full shadow-[0_0_20px_rgba(251,191,36,0.8)] border-4 border-white"></div>
+<div class="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white px-3 py-1 rounded-lg text-xs font-bold shadow-xl border border-slate-100">Current: 54</div>
+</div>
+<div class="absolute bottom-1/4 right-1/4 group cursor-pointer">
+<div class="size-4 bg-accent-red rounded-full shadow-[0_0_20px_rgba(239,68,68,0.8)] animate-pulse"></div>
+</div>
+<!-- Map Legend -->
+<div class="absolute bottom-4 left-4 glass-panel p-4 rounded-2xl border border-white/50">
+<p class="text-[10px] font-bold text-slate-600 uppercase mb-2">AQI Legend</p>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-1.5"><div class="size-2 rounded-full bg-accent-green"></div><span class="text-[10px] font-medium text-slate-500">Good</span></div>
+<div class="flex items-center gap-1.5"><div class="size-2 rounded-full bg-accent-yellow"></div><span class="text-[10px] font-medium text-slate-500">Mod</span></div>
+<div class="flex items-center gap-1.5"><div class="size-2 rounded-full bg-orange-500"></div><span class="text-[10px] font-medium text-slate-500">Unhealthy</span></div>
+<div class="flex items-center gap-1.5"><div class="size-2 rounded-full bg-accent-red"></div><span class="text-[10px] font-medium text-slate-500">Hazard</span></div>
+</div>
+</div>
+</div>
+<!-- Sidebar Widgets -->
+<div class="xl:col-span-4 space-y-6">
+<!-- Location Selector -->
+<div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+<h3 class="text-sm font-bold text-background-dark mb-4">Location</h3>
+<div class="space-y-3">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">location_on</span>
+<input class="w-full bg-slate-50 border-slate-100 rounded-xl py-2.5 pl-9 text-sm font-medium" type="text" value="Mumbai, Maharashtra"/>
+</div>
+<button class="w-full flex items-center justify-center gap-2 py-2.5 text-primary bg-primary/5 hover:bg-primary/10 rounded-xl text-sm font-bold transition-all">
+<span class="material-symbols-outlined text-sm">near_me</span>
+                                    Use Current Location
+                                </button>
+</div>
+</div>
+<!-- AQI Status Card -->
+<div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden">
+<div class="absolute top-0 right-0 w-32 h-32 bg-accent-yellow/5 rounded-full -mr-16 -mt-16"></div>
+<div class="flex items-start justify-between">
+<div>
+<p class="text-sm font-bold text-slate-500">AQI Index</p>
+<div class="flex items-baseline gap-1 mt-1">
+<span class="text-6xl font-black text-background-dark tracking-tighter">54</span>
+<span class="text-sm font-bold text-accent-yellow">Moderate</span>
+</div>
+<p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-4 flex items-center gap-1">
+<span class="material-symbols-outlined text-xs">schedule</span>
+                                        Updated 5 mins ago
+                                    </p>
+</div>
+<div class="size-16 rounded-full border-8 border-accent-yellow/20 flex items-center justify-center">
+<div class="size-8 rounded-full bg-accent-yellow"></div>
+</div>
+</div>
+</div>
+<!-- Health Impact Panel & Advice -->
+<div class="bg-background-dark p-6 rounded-3xl shadow-xl text-white">
+<h3 class="text-sm font-bold uppercase tracking-widest text-primary mb-6">AI Health Assessment</h3>
+<div class="space-y-6">
+<div class="flex gap-4">
+<div class="size-10 rounded-xl bg-accent-yellow/20 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-accent-yellow">warning</span>
+</div>
+<div>
+<p class="text-sm font-bold text-white leading-tight">Respiratory Alert</p>
+<p class="text-xs text-slate-400 mt-1">Elevated particulate matter (PM2.5) may cause irritation for asthmatic patients.</p>
+</div>
+</div>
+<div class="h-px bg-slate-800"></div>
+<div>
+<p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Preventive Advice</p>
+<div class="grid grid-cols-1 gap-2">
+<div class="flex items-center gap-3 bg-white/5 p-3 rounded-xl">
+<span class="material-symbols-outlined text-primary text-sm">masks</span>
+<span class="text-xs font-medium">Wear N95 Mask outdoors</span>
+</div>
+<div class="flex items-center gap-3 bg-white/5 p-3 rounded-xl">
+<span class="material-symbols-outlined text-primary text-sm">sprint</span>
+<span class="text-xs font-medium">Avoid outdoor exercise</span>
+</div>
+<div class="flex items-center gap-3 bg-white/5 p-3 rounded-xl">
+<span class="material-symbols-outlined text-primary text-sm">air_purifier_gen</span>
+<span class="text-xs font-medium">Keep air purifiers at 50%</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Section: Historical Trends -->
+<div class="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200">
+<div class="flex items-center justify-between mb-8">
+<div>
+<h3 class="text-xl font-bold text-background-dark">7-Day AQI History</h3>
+<p class="text-sm text-slate-500">Historical trend of atmospheric pollutants for Mumbai</p>
+</div>
+<div class="flex gap-2">
+<button class="px-4 py-2 text-xs font-bold bg-primary text-white rounded-lg">PM2.5</button>
+<button class="px-4 py-2 text-xs font-bold bg-slate-50 text-slate-500 rounded-lg hover:bg-slate-100">O3</button>
+<button class="px-4 py-2 text-xs font-bold bg-slate-50 text-slate-500 rounded-lg hover:bg-slate-100">NO2</button>
+</div>
+</div>
+<!-- Placeholder for Chart -->
+<div class="h-64 w-full relative">
+<!-- Horizontal Grid Lines -->
+<div class="absolute inset-0 flex flex-col justify-between py-2">
+<div class="h-px w-full bg-slate-100 relative"><span class="absolute -left-8 -top-2 text-[10px] text-slate-400">100</span></div>
+<div class="h-px w-full bg-slate-100 relative"><span class="absolute -left-8 -top-2 text-[10px] text-slate-400">75</span></div>
+<div class="h-px w-full bg-slate-100 relative"><span class="absolute -left-8 -top-2 text-[10px] text-slate-400">50</span></div>
+<div class="h-px w-full bg-slate-100 relative"><span class="absolute -left-8 -top-2 text-[10px] text-slate-400">25</span></div>
+<div class="h-px w-full bg-slate-100 relative"><span class="absolute -left-8 -top-2 text-[10px] text-slate-400">0</span></div>
+</div>
+<!-- Chart SVG Path (Styled with Tailwind Colors) -->
+<svg class="absolute inset-0 w-full h-full overflow-visible" preserveaspectratio="none" viewbox="0 0 700 200">
+<defs>
+<lineargradient id="chartGradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#6043F4" stop-opacity="0.2"></stop>
+<stop offset="100%" stop-color="#6043F4" stop-opacity="0"></stop>
+</lineargradient>
+</defs>
+<path d="M0,150 L100,120 L200,160 L300,90 L400,110 L500,70 L600,100 L700,54" fill="none" stroke="#6043F4" stroke-linecap="round" stroke-linejoin="round" stroke-width="3"></path>
+<path d="M0,150 L100,120 L200,160 L300,90 L400,110 L500,70 L600,100 L700,54 L700,200 L0,200 Z" fill="url(#chartGradient)"></path>
+<!-- Current Day Pulse Marker -->
+<circle cx="700" cy="54" fill="#6043F4" r="6"></circle>
+<circle cx="700" cy="54" fill="#6043F4" fill-opacity="0.2" r="12">
+<animate attributename="r" dur="2s" repeatcount="indefinite" values="8;16;8"></animate>
+</circle>
+</svg>
+<!-- X-Axis Labels -->
+<div class="absolute bottom-[-32px] w-full flex justify-between px-0">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Mon</span>
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tue</span>
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Wed</span>
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Thu</span>
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Fri</span>
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Sat</span>
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Sun</span>
+<span class="text-[10px] font-bold text-primary uppercase tracking-widest">Today</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

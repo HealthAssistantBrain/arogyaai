@@ -85,10 +85,13 @@ class ProfileUpdateSchema(BaseModel):
 class UserOnboardingSave(BaseModel):
     full_name: Optional[str] = None
     date_of_birth: Optional[str] = None
+    age: Optional[int] = None
     gender: Optional[str] = None
     phone_number: Optional[str] = None
     height_cm: Optional[float] = None
     weight_kg: Optional[float] = None
+    activity_level: Optional[int] = None
+    goals: Optional[str] = None
     blood_group: Optional[str] = None
     allergies: Optional[str] = None
     is_onboarding_done: Optional[bool] = None

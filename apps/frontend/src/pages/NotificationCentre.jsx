@@ -1,22 +1,24 @@
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../router/routes';
-import { motion as Motion, AnimatePresence } from 'framer-motion';
-import { 
-  History, 
-  Bell, 
-  Search,
-  HelpCircle,
-  AlertTriangle,
-  ChevronRight,
-  AlertCircle,
-  Calendar,
-  Sparkles,
-  Clock,
-  CheckCheck
+import { AnimatePresence } from 'framer-motion';
+import {
+    Bell,
+    ChevronRight,
+    Clock,
+    CheckCheck,
+    Sparkles,
+    AlertCircle,
+    Calendar,
+    AlertTriangle,
+    History
 } from 'lucide-react';
+import { useAuthStore } from '../store/authStore';
 import useNotificationStore from '../store/notificationStore';
-import { openCommandPalette } from '../components/CommandPalette';
+import NotificationCardV2 from '../components/notifications/NotificationCardV2';
+import NotificationSkeleton from '../components/notifications/NotificationSkeleton';
+import SmartLoadingOverlay from '../components/ui/SmartLoadingOverlay';
+import useSmartFetchOverlay from '../hooks/useSmartFetchOverlay';
 
 const FILTERS = [
     { name: 'All', apiType: null, color: 'text-slate-500', bg: 'bg-slate-500/10' },
@@ -28,80 +30,22 @@ const FILTERS = [
 
 const TYPE_META = {
     ai_insight: {
-        label: 'AI Insights',
-        icon: Sparkles,
-        color: 'text-[#6143f4]',
-        bg: 'bg-[#6143f4]/10',
-        accent: '#6143f4',
-        actionLabel: 'Read insight',
         actionPath: ROUTES.INSIGHTS,
     },
     health_alert: {
-        label: 'Health Alerts',
-        icon: AlertCircle,
-        color: 'text-red-500',
-        bg: 'bg-red-500/10',
-        accent: '#ef4444',
-        actionLabel: 'View alert',
         actionPath: ROUTES.TIMELINE,
     },
     appointment: {
-        label: 'Appointments',
-        icon: Calendar,
-        color: 'text-[#009cde]',
-        bg: 'bg-[#009cde]/10',
-        accent: '#009cde',
-        actionLabel: 'View history',
         actionPath: ROUTES.NOTIFICATIONS_HISTORY,
     },
     system: {
-        label: 'System',
-        icon: AlertTriangle,
-        color: 'text-amber-500',
-        bg: 'bg-amber-500/10',
-        accent: '#f59e0b',
-        actionLabel: 'Open settings',
         actionPath: ROUTES.SETTINGS,
     },
 };
 
-const SEVERITY_META = {
-    info: { color: 'text-[#6143f4]', bg: 'bg-[#6143f4]/10' },
-    warning: { color: 'text-amber-500', bg: 'bg-amber-500/10' },
-    critical: { color: 'text-red-500', bg: 'bg-red-500/10' },
-};
-
-const formatRelativeTime = (value) => {
-    if (!value) return 'Just now';
-
-    const timestamp = new Date(value);
-    if (Number.isNaN(timestamp.getTime())) return 'Just now';
-
-    const diffMs = timestamp.getTime() - Date.now();
-    const absDiff = Math.abs(diffMs);
-    const units = [
-        { label: 'year', ms: 1000 * 60 * 60 * 24 * 365 },
-        { label: 'month', ms: 1000 * 60 * 60 * 24 * 30 },
-        { label: 'day', ms: 1000 * 60 * 60 * 24 },
-        { label: 'hour', ms: 1000 * 60 * 60 },
-        { label: 'minute', ms: 1000 * 60 },
-        { label: 'second', ms: 1000 },
-    ];
-
-    for (const unit of units) {
-        const amount = Math.floor(absDiff / unit.ms);
-        if (amount >= 1) {
-            return diffMs < 0
-                ? `${amount} ${unit.label}${amount > 1 ? 's' : ''} ago`
-                : `In ${amount} ${unit.label}${amount > 1 ? 's' : ''}`;
-        }
-    }
-
-    return 'Just now';
-};
-
 const NotificationCentre = () => {
     const navigate = useNavigate();
+    const authUserId = useAuthStore((state) => state.user?.id ?? null);
     const [activeFilter, setActiveFilter] = useState('All');
     const [searchText, setSearchText] = useState('');
     const [debouncedSearchText, setDebouncedSearchText] = useState('');
@@ -112,22 +56,25 @@ const NotificationCentre = () => {
         counts,
         unreadCount,
         loading,
+        lastFetchedAt,
+        cacheOwnerId,
+        hasHydratedCache,
         fetchNotifications,
         markAsRead,
         markAllAsRead,
     } = useNotificationStore();
+    const hasNotificationSnapshot = cacheOwnerId === authUserId && lastFetchedAt !== null;
+    const showListOverlay = useSmartFetchOverlay(loading, hasNotificationSnapshot, { exitDelayMs: 200 });
 
     useEffect(() => {
         const timer = setTimeout(() => {
             setDebouncedSearchText(searchText);
         }, 300);
-
         return () => clearTimeout(timer);
     }, [searchText]);
 
     useEffect(() => {
         const selectedFilter = FILTERS.find((filter) => filter.name === activeFilter);
-
         let isCancelled = false;
         const run = async () => {
             try {
@@ -141,12 +88,8 @@ const NotificationCentre = () => {
                 }
             }
         };
-
         run();
-
-        return () => {
-            isCancelled = true;
-        };
+        return () => { isCancelled = true; };
     }, [activeFilter, debouncedSearchText, fetchNotifications]);
 
     useEffect(() => {
@@ -155,9 +98,8 @@ const NotificationCentre = () => {
             void fetchNotifications({
                 type: selectedFilter?.apiType || undefined,
                 search: debouncedSearchText,
-            }).catch(() => {});
+            }).catch(() => { });
         }, 20000);
-
         return () => window.clearInterval(interval);
     }, [activeFilter, debouncedSearchText, fetchNotifications]);
 
@@ -169,23 +111,24 @@ const NotificationCentre = () => {
     const visibleNotifications = useMemo(() => (
         (Array.isArray(notifications) ? notifications : []).filter((notification) => !notification.is_read)
     ), [notifications]);
-    const showEmptyState = hasLoadedOnce && !loading && visibleNotifications.length === 0;
+
+    const showEmptyState = !loading && visibleNotifications.length === 0 && (hasLoadedOnce || hasNotificationSnapshot);
+
+    const handleView = (id) => {
+        const notif = notifications.find(n => n.id === id);
+        if (!notif) return;
+        markAsRead(id);
+        const meta = TYPE_META[notif.type];
+        if (meta && meta.actionPath) navigate(meta.actionPath);
+    };
 
     return (
         <div className="bg-[#f6f5f8] dark:bg-[#0B0819] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased text-[14px]">
             <div className="flex flex-1 overflow-hidden">
-                {/* Sidebar - Standardized Branding */}
-
-
-                {/* Main Content Area */}
                 <main className="flex-1 flex flex-col h-full relative overflow-y-auto no-scrollbar bg-[#f6f5f8] dark:bg-[#0B0819]">
-                    {/* Top Navigation Bar */}
-                    
-
-                    {/* Content Area */}
                     <div className="flex-1 p-10 lg:p-12 custom-scrollbar overflow-y-auto">
                         <div className="max-w-6xl mx-auto space-y-10 pb-16">
-                            
+
                             {/* Header Section */}
                             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                                 <div className="space-y-4">
@@ -211,23 +154,21 @@ const NotificationCentre = () => {
                                 </div>
                             </div>
 
-                            {/* Filters Tab System */}
-                            <div className="flex items-center gap-3 overflow-x-auto pb-4 scrollbar-hide select-none transition-all duration-500 no-scrollbar">
+                            {/* Filter System */}
+                            <div className="flex items-center gap-3 overflow-x-auto pb-4 scrollbar-hide no-scrollbar">
                                 {filters.map((filter) => (
                                     <button
                                         key={filter.name}
                                         onClick={() => setActiveFilter(filter.name)}
-                                        className={`px-6 py-3.5 rounded-[1.5rem] text-[10px] font-black uppercase tracking-[0.2em] whitespace-nowrap transition-all flex items-center gap-3 border ${
-                                            activeFilter === filter.name
+                                        className={`px-6 py-3.5 rounded-[1.5rem] text-[10px] font-black uppercase tracking-[0.2em] whitespace-nowrap transition-all flex items-center gap-3 border ${activeFilter === filter.name
                                                 ? 'bg-[#6143f4] text-white shadow-2xl shadow-[#6143f4]/30 border-transparent scale-105 z-10'
                                                 : 'bg-white dark:bg-white/5 text-slate-500 dark:text-slate-400 border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/10 hover:border-[#6143f4]/20'
-                                        }`}
+                                            }`}
                                     >
-                                        {filter.name} 
+                                        {filter.name}
                                         {filter.count !== null && filter.count !== undefined && (
-                                            <span className={`px-2.5 py-1 rounded-full text-[9px] font-black transition-colors ${
-                                                activeFilter === filter.name ? 'bg-white/20 text-white' : (filter.bg + ' ' + filter.color)
-                                            }`}>
+                                            <span className={`px-2.5 py-1 rounded-full text-[9px] font-black transition-colors ${activeFilter === filter.name ? 'bg-white/20 text-white' : (filter.bg + ' ' + filter.color)
+                                                }`}>
                                                 {filter.count}
                                             </span>
                                         )}
@@ -235,93 +176,46 @@ const NotificationCentre = () => {
                                 ))}
                             </div>
 
-                            {/* Notification List Environment */}
-                            <div className="space-y-6">
-                                <AnimatePresence mode="popLayout">
-                                    {visibleNotifications.map((notif, idx) => {
-                                        const meta = TYPE_META[notif.type] || TYPE_META.system;
-                                        const severityMeta = SEVERITY_META[notif.severity] || SEVERITY_META.info;
-                                        const Icon = meta.icon;
-                                        const timeLabel = formatRelativeTime(notif.created_at);
+                            {/* Notification List */}
+                            <div className="relative space-y-6">
+                                {showListOverlay ? <SmartLoadingOverlay label="Refreshing notifications" className="rounded-[2rem]" /> : null}
+                                {loading && !hasLoadedOnce && !hasNotificationSnapshot ? (
+                                    <div className="space-y-6">
+                                        {[1, 2, 3].map(i => <NotificationSkeleton key={i} />)}
+                                    </div>
+                                ) : (
+                                    <AnimatePresence mode="popLayout">
+                                        {visibleNotifications.map((notif) => (
+                                            <NotificationCardV2
+                                                key={notif.id}
+                                                {...notif}
+                                                timestamp={notif.created_at}
+                                                onMarkRead={markAsRead}
+                                                onView={handleView}
+                                            />
+                                        ))}
+                                    </AnimatePresence>
+                                )}
 
-                                        return (
-                                        <Motion.div 
-                                            layout
-                                            initial={{ opacity: 0, y: 20 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            exit={{ opacity: 0, scale: 0.95 }}
-                                            transition={{ delay: idx * 0.05 }}
-                                            key={notif.id} 
-                                            className="bg-white dark:bg-[#131022] rounded-[2.5rem] p-10 shadow-[0_40px_80px_-20px_rgba(19,8,42,0.05)] border border-slate-100 dark:border-white/5 relative overflow-hidden group hover:scale-[1.01] transition-all duration-500"
-                                        >
-                                            {/* Status Indicator Bar */}
-                                            <div className="absolute top-0 bottom-0 left-0 w-2" style={{ backgroundColor: meta.accent }}></div>
-
-                                            <div className="flex flex-col md:flex-row gap-8 items-start">
-                                                <div className={`size-16 rounded-[1.5rem] ${meta.bg} ${meta.color} flex items-center justify-center shrink-0 shadow-inner group-hover:rotate-12 group-hover:scale-110 transition-all duration-500`}>
-                                                    <Icon size={32} strokeWidth={2.5} />
-                                                </div>
-                                                <div className="flex-1 space-y-4">
-                                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                                        <div className="flex items-center gap-3">
-                                                            <span className={`text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-lg ${severityMeta.bg} ${severityMeta.color}`}>
-                                                                {(notif.severity || 'info').toUpperCase()}
-                                                            </span>
-                                                            <span className="size-1.5 bg-slate-200 dark:bg-white/10 rounded-full"></span>
-                                                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-                                                                {meta.label}
-                                                            </span>
-                                                        </div>
-                                                        <div className="flex items-center gap-2 text-slate-400">
-                                                            <Clock size={12} strokeWidth={3} />
-                                                            <span className="text-[10px] font-black uppercase tracking-widest">{timeLabel}</span>
-                                                        </div>
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        <h3 className="text-2xl font-black text-[#13082a] dark:text-white uppercase tracking-tighter italic leading-none">{notif.title}</h3>
-                                                        <p className="text-slate-500 dark:text-slate-400 text-[15px] font-bold leading-relaxed uppercase tracking-tight max-w-4xl opacity-80">{notif.description}</p>
-                                                    </div>
-                                                    
-                                                    <div className="flex flex-wrap items-center gap-4 pt-4">
-                                                        <button 
-                                                            onClick={() => navigate(meta.actionPath)}
-                                                            className="bg-white dark:bg-white/5 border-2 border-slate-100 dark:border-white/10 px-8 py-3.5 rounded-[1.5rem] text-[10px] font-black uppercase tracking-[0.2em] text-[#13082a] dark:text-white hover:bg-[#6143f4] hover:text-white hover:border-[#6143f4] transition-all shadow-sm active:scale-95 group/action"
-                                                        >
-                                                            {meta.actionLabel}
-                                                        </button>
-                                                        <button
-                                                            onClick={() => markAsRead(notif.id)}
-                                                            className="px-8 py-3.5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 hover:text-[#6143f4] transition-colors leading-none"
-                                                        >
-                                                            Mark as read
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </Motion.div>
-                                    )})}
-                                </AnimatePresence>
-
-                                {/* Empty State Environment */}
                                 {showEmptyState && (
                                     <div className="py-24 text-center space-y-8 bg-white/50 dark:bg-white/5 rounded-[4rem] border-2 border-dashed border-slate-200 dark:border-white/10">
                                         <div className="size-24 bg-slate-100 dark:bg-white/5 rounded-[2.5rem] flex items-center justify-center mx-auto text-slate-300 dark:text-slate-700">
                                             <Bell size={48} strokeWidth={1} />
                                         </div>
                                         <div className="space-y-2">
-                                            <p className="text-xl font-black text-[#13082a] dark:text-white uppercase tracking-tighter italic">You&apos;re all caught up</p>
+                                            <p className="text-xl font-black text-[#13082a] dark:text-white uppercase tracking-tighter italic">You're all caught up</p>
                                             <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-[0.2em]">New alerts will appear here as soon as they arrive.</p>
                                         </div>
                                     </div>
                                 )}
 
-                                {/* Archive Access Point */}
                                 <div className="flex items-center justify-center pt-8">
-                                    <button 
+                                    <button
+                                        onClick={() => navigate(ROUTES.NOTIFICATIONS_HISTORY)}
                                         className="px-10 py-5 rounded-[2rem] bg-white dark:bg-[#131022] border border-slate-100 dark:border-white/5 text-[#6143f4] text-[11px] font-black uppercase tracking-[0.3em] transition-all flex items-center gap-4 group shadow-2xl shadow-[#6143f4]/5 hover:shadow-[#6143f4]/20 hover:scale-105 active:scale-95"
                                     >
                                         <History size={20} className="group-hover:rotate-12 transition-transform" />
-                                        Temporal Notification Archive
+                                        Full Notification History
                                     </button>
                                 </div>
                             </div>
@@ -330,7 +224,8 @@ const NotificationCentre = () => {
                 </main>
             </div>
 
-            <style dangerouslySetInnerHTML={{ __html: `
+            <style dangerouslySetInnerHTML={{
+                __html: `
                 .no-scrollbar::-webkit-scrollbar { display: none; }
                 .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
                 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
@@ -345,4 +240,3 @@ const NotificationCentre = () => {
 };
 
 export default NotificationCentre;
-

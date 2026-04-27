@@ -19,20 +19,22 @@ import {
 import { ROUTES } from '../router/routes';
 import { lockSystem, unlockSystem } from '../lib/systemLock';
 import { triggerAuthRevalidation } from '../lib/authRevalidator';
+import { syncUser } from '../lib/authSync';
 import { useAuthStore } from '../store/authStore';
 
 const OnboardingCompletion = () => {
   const navigate = useNavigate();
-  const completeOnboarding = useAuthStore((s) => s.completeOnboarding);
-  const hydrateAuth = useAuthStore((s) => s.hydrateAuth);
 
   const handleGoToDashboard = async () => {
     lockSystem();
     try {
-      await completeOnboarding();  // PUT over /users/me
-      await hydrateAuth();         // Fetch fresh state from backend
+      const user = await syncUser({ force: true });
+      if (!user?.is_onboarding_done) {
+        navigate(ROUTES.ONBOARDING_STEP_1, { replace: true });
+        return;
+      }
       triggerAuthRevalidation();   // Signal INIT_RESOLVER to run
-      navigate("/dashboard", { replace: true });
+      navigate(ROUTES.DASHBOARD, { replace: true });
     } finally {
       unlockSystem();              // Release the global lock, triggering the flushed event
     }

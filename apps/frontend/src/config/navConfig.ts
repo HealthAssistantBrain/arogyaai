@@ -9,7 +9,8 @@ import {
     Smartphone,
     Bell,
     Settings,
-    HelpCircle
+    HelpCircle,
+    Wind
 } from 'lucide-react';
 import { ROUTES } from '../router/routes';
 
@@ -31,12 +32,14 @@ export const navConfig: NavSection[] = [
         items: [
             { label: 'Dashboard', icon: LayoutDashboard, path: ROUTES.DASHBOARD },
             { label: 'AI Insights', icon: Brain, path: ROUTES.INSIGHTS },
+            { label: 'AI Risk Prediction', icon: Brain, path: ROUTES.RISK_PREDICTION },
             { label: 'Disease Simulator', icon: FlaskConical, path: ROUTES.SIMULATOR },
             { label: 'Health Timeline', icon: History, path: ROUTES.TIMELINE },
             { label: 'Lab Results', icon: Activity, path: ROUTES.LAB_RESULTS },
             { label: 'Medical Reports', icon: FileText, path: ROUTES.MEDICAL_REPORTS },
             { label: 'Sleep Analysis', icon: Moon, path: ROUTES.SLEEP },
             { label: 'Device Manager', icon: Smartphone, path: ROUTES.DEVICES },
+            { label: 'AQI Monitor', icon: Wind, path: ROUTES.AQI_MONITOR },
         ],
     },
     {

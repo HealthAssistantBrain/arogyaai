@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ROUTES } from '../router/routes';
+import { getSupabaseClient, supabase } from '../lib/supabaseClient';
 
 const forgotPasswordSchema = z.object({
   email: z.string().min(1, 'Email is required').email('Invalid email address'),
@@ -19,8 +20,6 @@ const forgotPasswordSchema = z.object({
 
 
 const ForgotPassword = () => {
-  const navigate = useNavigate();
-
   const {
     register,
     handleSubmit,
@@ -32,12 +31,17 @@ const ForgotPassword = () => {
 
   const onSubmit = async (data) => {
     try {
-      console.log("Password reset requested for:", data.email);
-      await new Promise(r => setTimeout(r, 800)); // Simulate delay
+      const client = getSupabaseClient() ?? supabase;
+      if (!client) throw new Error('Supabase Auth is not configured');
+
+      const { error } = await client.auth.resetPasswordForEmail(data.email, {
+        redirectTo: `${window.location.origin}${ROUTES.RESET_PASSWORD}`,
+      });
+
+      if (error) throw error;
       toast.success('Reset link sent to your email!');
-      navigate(ROUTES.RESET_PASSWORD);
     } catch (err) {
-      toast.error('Failed to send reset link. Please try again.');
+      toast.error(err?.message || 'Failed to send reset link. Please try again.');
     }
   };
 

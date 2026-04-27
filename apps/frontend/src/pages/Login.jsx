@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -13,10 +13,13 @@ import {
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { ROUTES } from '../router/routes';
-import api, { setAuthFlow } from '../lib/axios';
+import { getAuthenticatedHomeRoute } from '../router/authRedirects';
+import { setAuthFlow } from '../lib/axios';
 import { lockSystem, unlockSystem } from '../lib/systemLock';
 import { triggerAuthRevalidation } from '../lib/authRevalidator';
+import { syncUser } from '../lib/authSync';
 import { startSupabaseOAuth } from '../lib/supabaseOAuth';
+import { getSupabaseClient, supabase } from '../lib/supabaseClient';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -27,9 +30,7 @@ const loginSchema = z.object({
 
 const Login = () => {
   const Motion = motion;
-
-  // Selector pattern for Zustand
-  const setAccessToken = useAuthStore((state) => state.setAccessToken);
+  const navigate = useNavigate();
 
   const {
     register,
@@ -45,7 +46,8 @@ const Login = () => {
     setAuthFlow(true);
 
     try {
-      await startSupabaseOAuth(provider);
+      useAuthStore.getState().setPendingWelcome(false);
+      await startSupabaseOAuth(provider, { flow: 'login' });
     } catch (err) {
       console.error('[Login] Supabase OAuth failed:', err);
       toast.error(err?.message || 'Unable to start social sign-in');
@@ -61,77 +63,22 @@ const Login = () => {
     setAuthFlow(true); // suppress maintenance redirects during login
 
     try {
-      const authStore = useAuthStore.getState();
+      useAuthStore.getState().reset();
 
-      // STEP 1 — FORCE CLEAN STATE BEFORE LOGIN
-      // Clear all previous session data so a different user can never inherit it.
-      useAuthStore.setState({
-        user: null,
-        profile: {},
-        healthProfile: {},
-        vitals: [],
-        notifications: [],
-        profileLoading: false,
-        profileError: null,
-        isAuthenticated: false,
-        isEmailVerified: false,
-        onboardingStep: 1,
-        onboardingDone: false,
-        role: 'user',
-        isHydrated: true,
-        isHydratingAuth: true,
+      const client = getSupabaseClient() ?? supabase;
+      if (!client) throw new Error('Supabase Auth is not configured');
+
+      const { data: authData, error } = await client.auth.signInWithPassword({
+        email: data.email,
+        password: data.password,
       });
-      authStore.setAccessToken(null);
-      authStore.setRefreshToken(null);
-      authStore.setUser(null);
 
-      // Call standard backend Authentication workflow
-      const response = await api.post('auth/login', data);
-
-      if (response.status !== 200) {
-        throw new Error(response.data?.detail || 'Invalid email or password');
+      if (error) throw error;
+      if (!authData?.session?.access_token) {
+        throw new Error('Email verification is required before login.');
       }
 
-      // STEP 2 — SET TOKEN FIRST
-      const { access_token, refresh_token } = response.data.data;
-      setAccessToken(access_token);
-      authStore.setRefreshToken(refresh_token ?? null);
-
-      // STEP 3 — IMMEDIATE USER FETCH (MANDATORY)
-      let userObj = null;
-      try {
-        const userRes = await api.get("/users/me");
-        userObj = userRes.data?.data ?? userRes.data;
-      } catch (err) {
-        // STEP 8 — ADD SAFETY GUARD (IMPORTANT)
-        authStore.setAccessToken(null);
-        authStore.setRefreshToken(null);
-        authStore.setUser(null);
-        useAuthStore.setState({
-          profile: {},
-          healthProfile: {},
-          vitals: [],
-          notifications: [],
-          profileError: null,
-          profileLoading: false,
-          isAuthenticated: false,
-          isEmailVerified: false,
-          onboardingStep: 1,
-          onboardingDone: false,
-          isHydratingAuth: false,
-          isHydrated: true,
-        });
-        throw new Error('Failed to fetch user profile');
-      }
-
-      // STEP 4 — HARD OVERWRITE STORE
-      authStore.setUser(userObj);
-      authStore.setEmailVerified(!!(userObj?.is_email_verified ?? userObj?.isEmailVerified));
-      authStore.setOnboardingStatus({
-        onboardingDone: !!(userObj?.is_onboarding_done ?? userObj?.onboardingDone),
-        onboardingStep: userObj?.onboarding_step ?? userObj?.onboardingStep ?? 1,
-      });
-      await authStore.fetchProfile();
+      await syncUser({ session: authData.session, force: true });
 
       // Fire global revalidation signal to flush router correctly
       triggerAuthRevalidation();
@@ -145,36 +92,11 @@ const Login = () => {
       }
 
       toast.success('Welcome back!');
-
-      // ── 6. LET GUARDS HANDLE NAVIGATION ──────────────────────────────────
-      // By NOT calling navigate() here, we let the GuestGuard naturally
-      // redirect the user to either Dashboard or Onboarding the moment
-      // we call `unlockSystem()`.
+      useAuthStore.getState().setPendingWelcome(false);
+      navigate(getAuthenticatedHomeRoute(useAuthStore.getState()), { replace: true });
     } catch (err) {
       console.error('Login failed:', err);
-      useAuthStore.setState({
-        user: null,
-        profile: {},
-        healthProfile: {},
-        vitals: [],
-        notifications: [],
-        profileLoading: false,
-        profileError: null,
-        token: null,
-        refreshToken: null,
-        isAuthenticated: false,
-        isEmailVerified: false,
-        onboardingStep: 1,
-        onboardingDone: false,
-        role: 'user',
-        isHydrated: true,
-        isHydratingAuth: false,
-      });
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('token');
-      localStorage.removeItem('auth-storage');
-      localStorage.removeItem('arogyaai-auth');
-      localStorage.removeItem('user');
+      useAuthStore.getState().reset();
       toast.error(err.message || 'Invalid email or password');
     } finally {
       useAuthStore.setState({ isHydratingAuth: false, isHydrated: true });

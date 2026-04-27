@@ -1,18 +1,19 @@
 import { useAuthStore } from '../store/authStore';
 import { isSystemLocked } from '../lib/systemLock';
 import { shouldRevalidate, consumeAuthRevalidation } from '../lib/authRevalidator';
-import { completeSupabaseOAuthSession } from '../lib/supabaseOAuth';
+import { getSupabaseClient, supabase } from '../lib/supabaseClient';
 import { ROUTES } from './routes';
-import api from '../lib/axios';
+import { getAuthenticatedHomeRoute, getProtectedRouteRedirect } from './authRedirects';
 
 export type InitResult = { route: string | null; cause: string } | null;
 
 const PROTECTED_ROUTE_BASES = [
-  ROUTES.EMAIL_VERIFICATION,
   ROUTES.ACCOUNT_CREATED,
+  ROUTES.WELCOME,
   ROUTES.ONBOARDING,
   ROUTES.DASHBOARD,
   ROUTES.INSIGHTS,
+  ROUTES.RISK_PREDICTION,
   ROUTES.SIMULATOR,
   ROUTES.TIMELINE,
   ROUTES.RISK_EXPLANATION,
@@ -45,150 +46,65 @@ const isProtectedRoute = (pathname: string) =>
   PROTECTED_ROUTE_BASES.some((route) => pathname === route || pathname.startsWith(`${route}/`)) ||
   PROTECTED_ROUTE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 
-const getOnboardingRoute = (step: number | null | undefined) => {
-  switch (step) {
-    case 2:
-      return ROUTES.ONBOARDING_STEP_2;
-    case 3:
-      return ROUTES.ONBOARDING_STEP_3;
-    case 4:
-      return ROUTES.ONBOARDING_STEP_4;
-    case 5:
-      return ROUTES.ONBOARDING_SUMMARY;
-    case 6:
-      return ROUTES.ONBOARDING_COMPLETION;
-    case 1:
-    default:
-      return ROUTES.ONBOARDING_STEP_1;
-  }
-};
-
 export async function INIT_RESOLVER(): Promise<InitResult> {
-  // FAILSAFE: If authRevalidator is triggered, INIT_RESOLVER must run even if normally skipped
-  if (isSystemLocked() && !shouldRevalidate()) {
-    console.log('[INIT_RESOLVER] Skipped — system is locked.');
-    return null;
-  }
+  if (isSystemLocked() && !shouldRevalidate()) return null;
 
-  if (shouldRevalidate()) {
-    console.log('[INIT_RESOLVER] Forced auth revalidation triggered.');
-    consumeAuthRevalidation();
-  }
-
-  console.log('INIT START');
+  if (shouldRevalidate()) consumeAuthRevalidation();
 
   const pathname = typeof window !== 'undefined' ? window.location.pathname : ROUTES.HOME;
-  const isOAuthCallbackPath = pathname === ROUTES.AUTH_CALLBACK;
-
-  // ── OAuth session handoff: Supabase only acts as the identity provider.
-  // If a Supabase session exists, exchange it for a backend JWT before
-  // continuing with the standard bootstrap path.
-  try {
-    await completeSupabaseOAuthSession();
-  } catch (err) {
-    console.warn('[INIT_RESOLVER] Supabase OAuth handoff failed:', err);
-  }
-
-  const store = useAuthStore.getState();
   const isProtectedPath = isProtectedRoute(pathname);
-  const hasPersistedToken = !!store.token;
+  const store = useAuthStore.getState();
+  const client = getSupabaseClient() ?? supabase;
 
-  // If we already have a backend access token in Zustand, trust it and hydrate
-  // against /users/me instead of forcing a cookie refresh. This is the normal
-  // post-login and post-OAuth path, and it avoids 401 loops when the backend
-  // refresh cookie is not present yet.
-  if (hasPersistedToken) {
-    try {
-      if (!store.user || !store.isAuthenticated) {
-        await store.hydrateAuth();
-      } else {
-        store.setHydrated();
-      }
-
-      const currentState = useAuthStore.getState();
-
-      if (isOAuthCallbackPath) {
-        const onboardingRoute = getOnboardingRoute(currentState.onboardingStep);
-        return currentState.onboardingDone
-          ? { route: ROUTES.DASHBOARD, cause: 'OAuth handoff complete' }
-          : { route: onboardingRoute, cause: 'OAuth handoff complete' };
-      }
-
-      if (!isProtectedPath) {
-        return null;
-      }
-
-      if (!currentState.onboardingDone) {
-        return {
-          route: getOnboardingRoute(currentState.onboardingStep),
-          cause: 'Onboarding incomplete',
-        };
-      }
-
-      return { route: ROUTES.DASHBOARD, cause: 'Authenticated with persisted token' };
-    } catch (err: any) {
-      console.warn('[INIT_RESOLVER] Persisted-token hydration failed:', err?.message);
-      store.reset();
-      store.setHydrated();
-      return isProtectedPath ? { route: '/', cause: `Failed persisted-token hydration: ${err?.message}` } : null;
-    }
+  if (!client) {
+    store.reset();
+    store.setHydrated();
+    return isProtectedPath ? { route: ROUTES.HOME, cause: 'Supabase Auth is not configured' } : null;
   }
 
-  // ── Attempt auto-login via cookie ───────────────────────────────────────
   try {
-    const res = await api.post('/auth/refresh-token');
+    const url = typeof window !== 'undefined' ? new URL(window.location.href) : null;
+    const code = url?.searchParams.get('code');
 
-    store.setAuth(res.data.data);
-    store.setHydrated();
+    if (code) {
+      const { error } = await client.auth.exchangeCodeForSession(code);
+      if (error) throw error;
+      window.history.replaceState({}, '', window.location.pathname);
+    }
 
-    const currentState = useAuthStore.getState();
+    const state = await store.hydrateAuth();
+    const currentState = state || useAuthStore.getState();
 
     if (!currentState.isAuthenticated) {
-      return { route: '/', cause: 'Token rejected by server' };
+      return isProtectedPath ? { route: ROUTES.HOME, cause: 'No Supabase session' } : null;
     }
 
-    const onboardingRoute = getOnboardingRoute(currentState.onboardingStep);
-    const fullyOnboardedRoute = ROUTES.DASHBOARD;
-
-    if (isOAuthCallbackPath) {
-      return currentState.onboardingDone ? { route: fullyOnboardedRoute, cause: 'OAuth handoff complete' } : { route: onboardingRoute, cause: 'OAuth handoff complete' };
+    if (!currentState.isEmailVerified) {
+      return pathname === ROUTES.EMAIL_VERIFICATION
+        ? null
+        : { route: ROUTES.EMAIL_VERIFICATION, cause: 'Email is not verified' };
     }
 
-    if (!isProtectedPath) {
-      return null;
-    }
-
-    if (!currentState.onboardingDone) {
+    if (pathname === ROUTES.LOGIN || pathname === ROUTES.SIGNUP || pathname === ROUTES.EMAIL_VERIFICATION) {
+      currentState.setPendingWelcome?.(false);
       return {
-        route: getOnboardingRoute(currentState.onboardingStep),
-        cause: 'Onboarding incomplete',
+        route: getAuthenticatedHomeRoute(currentState),
+        cause: 'Authenticated user on guest route',
       };
     }
 
-    return { route: fullyOnboardedRoute, cause: 'Authenticated and fully onboarded' };
+    if (isProtectedPath) {
+      const redirect = getProtectedRouteRedirect(pathname, currentState);
+      if (redirect && redirect !== pathname) {
+        return { route: redirect, cause: 'Protected route onboarding gate' };
+      }
+    }
 
+    return null;
   } catch (err: any) {
-    console.warn('INIT_RESOLVER network/auth error:', err?.message);
-    const status = err?.response?.status;
-    const isHardReject = status === 401 || err?.message === 'Token rejected by server';
-
-    if (isHardReject) {
-      store.reset();
-      store.setHydrated();
-    } else {
-      store.setHydrated();
-      return null;
-    }
-
-    if (isOAuthCallbackPath) {
-      console.log('[INIT_RESOLVER] OAuth callback has no token yet; leaving page in place for callback handling.');
-      return null;
-    }
-
-    if (!isProtectedPath) {
-      return null;
-    }
-
-    return { route: '/', cause: `Failed auth check: ${err?.message}` };
+    console.warn('[INIT_RESOLVER] Supabase auth bootstrap failed:', err?.message);
+    store.reset();
+    store.setHydrated();
+    return isProtectedPath ? { route: ROUTES.HOME, cause: `Failed auth check: ${err?.message}` } : null;
   }
 }

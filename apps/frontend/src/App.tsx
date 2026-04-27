@@ -1,25 +1,26 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
+import AppErrorBoundary from './components/guards/AppErrorBoundary';
 import { INIT_RESOLVER } from './router/INIT_RESOLVER';
 import AppRouter from './router';
-import { useAuthStore } from './store/authStore';
+import { initializeAuthStateListener, useAuthStore } from './store/authStore';
 
 export default function App() {
+  const navigate = useNavigate();
   const [initComplete, setInitComplete] = useState(false);
   const isHydrated = useAuthStore((state) => state.isHydrated);
 
   useEffect(() => {
     let isMounted = true;
+    const teardownAuthListener = initializeAuthStateListener?.();
 
     INIT_RESOLVER()
       .then((result) => {
         if (!isMounted) return;
 
-        // INIT_RESOLVER returns a specific route → hard redirect before any
-        // React rendering so guards never see a stale / mid-flight state.
         if (result?.route && result.route !== window.location.pathname) {
-          window.location.replace(result.route);
-          return; // deliberately block setInitComplete so the blank screen persists during redirect
+          navigate(result.route, { replace: true });
         }
 
         setInitComplete(true);
@@ -40,9 +41,10 @@ export default function App() {
 
     return () => {
       isMounted = false;
+      teardownAuthListener?.();
       window.removeEventListener('auth_reval_signal', handleRevalidation);
     };
-  }, []);
+  }, [navigate]);
 
   if (!initComplete || !isHydrated) {
     return (
@@ -63,7 +65,9 @@ export default function App() {
 
   return (
     <>
-      <AppRouter />
+      <AppErrorBoundary>
+        <AppRouter />
+      </AppErrorBoundary>
       <Toaster
         position="top-right"
         toastOptions={{

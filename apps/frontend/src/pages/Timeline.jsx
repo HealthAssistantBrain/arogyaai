@@ -30,6 +30,8 @@ import { ROUTES } from '../router/routes';
 import { openCommandPalette } from '../components/CommandPalette';
 
 import { useFetchLock } from '../hooks/useFetchLock';
+import { safeFetch } from '../lib/safeApi';
+import { safeArray } from '../utils/safeData';
 
 const API_BASE_URL = getApiUrl(import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000');
 
@@ -48,18 +50,21 @@ const Timeline = () => {
         let isMounted = true;
         const fetchTimeline = async () => {
             const currentToken = useAuthStore.getState().token;
-            if (!currentToken) return;
+            if (!currentToken) {
+                if (isMounted) setLoading(false);
+                return;
+            }
             if (!acquireLock('timeline_fetch')) return;
 
             try {
                 if (isMounted) setLoading(true);
-                const res = await fetch(`${API_BASE_URL}/health/timeline`, {
+                const json = await safeFetch(`${API_BASE_URL}/health/timeline`, {
                     headers: { Authorization: `Bearer ${currentToken}` }
                 });
-                if (!res.ok) throw new Error('Failed to fetch timeline data');
-                const json = await res.json();
 
-                const mappedEvents = (json.data || []).map(event => {
+                const timelinePayload = safeArray(json?.data ?? json);
+
+                const mappedEvents = timelinePayload.map(event => {
                     let icon = Activity;
                     let iconColor = 'bg-gray-100 text-gray-500';
                     let dotColor = 'bg-gray-400';
@@ -104,8 +109,11 @@ const Timeline = () => {
 
                 if (isMounted) {
                     setTimelineEvents(mappedEvents);
+                    setError(null);
                     if (mappedEvents.length > 0) {
                         setExpandedEvents({ [mappedEvents[0].id]: true });
+                    } else {
+                        setExpandedEvents({});
                     }
                 }
             } catch (err) {
