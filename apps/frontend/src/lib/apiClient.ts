@@ -80,20 +80,15 @@ apiClient.interceptors.response.use(
       originalRequest._retry = true;
       isRefreshing = true;
 
-      try {
-        const { data: envelope } = await axios.post(
-          `${API_URL}/auth/refresh-token`,
-          {},
-          {
-            withCredentials: true,
-            headers: applyCsrfHeader({}),
-          }
-        );
+    try {
+        const refreshed = await useAuthStore.getState().refreshSession?.();
+        const newAccessToken = useAuthStore.getState().token;
 
-        const newAccessToken = envelope.data.access_token;
-        useAuthStore.getState().setToken(newAccessToken);
+        if (!refreshed || !newAccessToken) {
+          throw error;
+        }
+
         processQueue(null, newAccessToken);
-
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
         return apiClient(originalRequest);
       } catch (refreshError) {

@@ -60,6 +60,9 @@ import { useFetchLock } from '../hooks/useFetchLock';
 import useDeviceStore from '../store/deviceStore';
 import { useSmartSync } from '../hooks/useSmartSync';
 import VitalsCards from '../components/VitalsCards';
+import FloatingChatbot from '../components/ui/FloatingChatbot';
+import AssistantOverlay from '../components/assistant/AssistantOverlay';
+import { useAppStore } from '../store/useAppStore';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -80,9 +83,15 @@ const Dashboard = () => {
   const authUser = useAuthStore((s) => s.user);
 
   const setGoogleFitConnected = useDeviceStore((s) => s.setGoogleFitConnected);
+  const isAssistantOpen = useAppStore((s) => s.isAssistantOpen);
+  const closeAssistant = useAppStore((s) => s.closeAssistant);
+  const isHydrated = useAuthStore((s) => s.isHydrated);
+  const isHydratingAuth = useAuthStore((s) => s.isHydratingAuth);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const authReady = isHydrated && !isHydratingAuth && isAuthenticated;
 
   // Initialize Smart Sync Engine
-  useSmartSync();
+  useSmartSync(authReady);
 
   const refreshDashboard = async ({ silent = true } = {}) => {
     if (!acquireLock('dashboard_refresh')) return;
@@ -97,6 +106,8 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
+    if (!authReady) return;
+
     async function fetchDeviceStatus() {
       try {
         const res = await api.get('/user/devices').catch(() => api.get('/devices'));
@@ -111,16 +122,20 @@ const Dashboard = () => {
       }
     }
     fetchDeviceStatus();
-  }, [setGoogleFitConnected, setConnection]);
+  }, [authReady, setGoogleFitConnected, setConnection]);
 
   useEffect(() => {
+    if (!authReady) return;
+
     setHasAttemptedDashboardLoad(true);
     void refreshDashboard({ silent: false });
-  }, []);
+  }, [authReady]);
 
   useEffect(() => {
+    if (!authReady) return;
+
     void fetchHealthMetrics({ silent: true });
-  }, [fetchHealthMetrics]);
+  }, [authReady, fetchHealthMetrics]);
 
   // ── Sync handler ──────────────────────────────────────────────────────────
   const handleSync = async () => {
@@ -176,6 +191,14 @@ const Dashboard = () => {
   // Normalize recommendations — backend may return strings or {title, detail, ...} objects.
   const predRecs = safeArray(predData?.recommendations).map((r) => safeText(r)).filter(Boolean);
   const hasProfileData = Boolean(safeObject(profData) && Object.keys(safeObject(profData)).length > 0);
+
+  if (!authReady) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#f6f5f8] dark:bg-[#131022] text-sm font-bold text-slate-500">
+        Restoring your session...
+      </div>
+    );
+  }
 
   const googleFitLatestDaySteps = googleFit?.data?.stats?.latest_day?.steps;
   const canonicalGoogleFitSteps = Number.isFinite(Number(googleFitLatestDaySteps))
@@ -282,13 +305,18 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="bg-[#f6f5f8] dark:bg-[#131022] font-display text-[#13082A] dark:text-slate-100 min-h-screen flex antialiased">
+    <div className="relative isolate overflow-hidden bg-[#f6f5f8] dark:bg-[#131022] font-display text-[#13082A] dark:text-slate-100 min-h-screen flex antialiased">
 
-      {/* Left Sidebar - Matched Stitch */}
+      <div
+        className={`flex-1 min-w-0 transition-[filter,opacity,transform] duration-200 ease-out ${
+          isAssistantOpen ? 'pointer-events-none select-none opacity-30 blur-[1.5px] saturate-75' : ''
+        }`}
+      >
+        {/* Left Sidebar - Matched Stitch */}
 
 
-      {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
+        {/* Main Content Area */}
+        <main className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
 
         {/* Dashboard Content Container */}
         <motion.div
@@ -629,10 +657,19 @@ const Dashboard = () => {
           </div>
         </motion.div>
 
-        <footer className="py-8 px-10 text-center text-slate-400 dark:text-slate-600 text-[10px] font-bold uppercase tracking-[0.3em] mt-auto border-t border-slate-100 dark:border-slate-800 bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm relative z-20">
-          © 2024 ArogyaAI Neural Systems • Clinical Grade Intelligence • HIPAA Certified
-        </footer>
-      </main>
+          <footer className="py-8 px-10 text-center text-slate-400 dark:text-slate-600 text-[10px] font-bold uppercase tracking-[0.3em] mt-auto border-t border-slate-100 dark:border-slate-800 bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm relative z-20">
+            © 2024 ArogyaAI Neural Systems • Clinical Grade Intelligence • HIPAA Certified
+          </footer>
+        </main>
+      </div>
+
+      <AnimatePresence mode="wait" initial={false}>
+        {isAssistantOpen ? (
+          <AssistantOverlay key="assistant-overlay" onClose={closeAssistant} />
+        ) : null}
+      </AnimatePresence>
+
+      <FloatingChatbot />
 
       <style dangerouslySetInnerHTML={{
         __html: `

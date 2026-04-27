@@ -21,4 +21,9 @@ export const useAppStore = create((set) => ({
     addNotification: (notification) => set((state) => ({
         notifications: [notification, ...state.notifications]
     })),
+
+    // Assistant overlay state
+    isAssistantOpen: false,
+    openAssistant: () => set({ isAssistantOpen: true }),
+    closeAssistant: () => set({ isAssistantOpen: false }),
 }));

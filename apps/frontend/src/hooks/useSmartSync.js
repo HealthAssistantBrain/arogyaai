@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import useHealthStore from '../store/healthStore';
 import api from '../lib/axios';
 
-export const useSmartSync = () => {
+export const useSmartSync = (enabled = true) => {
     const googleFitConnected = useHealthStore((s) => s.googleFitConnected);
     const setWearableData = useHealthStore((s) => s.setWearableData);
     const setSyncing = useHealthStore((s) => s.setSyncing);
@@ -12,6 +12,8 @@ export const useSmartSync = () => {
     const prevDataStringRef = useRef(null);
 
     const fetchGoogleFitData = useCallback(async () => {
+        if (!enabled) return;
+
         // 1. Check fetch lock (debounce & duplicate prevention)
         if (isFetchingRef.current) return;
 
@@ -42,9 +44,19 @@ export const useSmartSync = () => {
             isFetchingRef.current = false;
             setSyncing(false);
         }
-    }, [setWearableData, setSyncing]);
+    }, [enabled, setWearableData, setSyncing]);
 
     useEffect(() => {
+        if (!enabled) {
+            if (intervalRef.current) {
+                window.clearInterval(intervalRef.current);
+                intervalRef.current = null;
+            }
+            isFetchingRef.current = false;
+            setSyncing(false);
+            return;
+        }
+
         // CASE 1 & 3: Not Connected or Disconnect
         if (!googleFitConnected) {
             if (intervalRef.current) {
@@ -72,7 +84,7 @@ export const useSmartSync = () => {
                 intervalRef.current = null;
             }
         };
-    }, [googleFitConnected, fetchGoogleFitData]);
+    }, [enabled, googleFitConnected, fetchGoogleFitData, setSyncing]);
 };
 
 export default useSmartSync;

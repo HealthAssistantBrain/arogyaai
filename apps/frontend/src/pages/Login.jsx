@@ -172,6 +172,7 @@ const Login = () => {
       });
       localStorage.removeItem('access_token');
       localStorage.removeItem('token');
+      localStorage.removeItem('auth-storage');
       localStorage.removeItem('arogyaai-auth');
       localStorage.removeItem('user');
       toast.error(err.message || 'Invalid email or password');

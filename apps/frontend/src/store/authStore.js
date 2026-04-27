@@ -1,9 +1,10 @@
 import { create } from 'zustand'
-import { devtools, persist } from 'zustand/middleware'
+import { devtools, persist, createJSONStorage } from 'zustand/middleware'
 import { getApiUrl } from '../lib/apiBaseUrl'
 import { getCsrfToken } from '../lib/csrf'
 
 const API_BASE_URL = getApiUrl(import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000')
+const AUTH_STORAGE_KEY = 'auth-storage'
 const ACCESS_TOKEN_STORAGE_KEY = 'access_token'
 const TOKEN_STORAGE_KEY = 'token'
 const LEGACY_AUTH_STORAGE_KEY = 'arogyaai-auth'
@@ -35,10 +36,13 @@ const buildHeaders = ({ token = null, method = 'GET', json = false } = {}) => {
 }
 
 const fetchJson = async (url, { method = 'GET', body, token = null, retryOn401 = false } = {}) => {
-  const doRequest = async () => {
+  const doRequest = async ({ useFreshToken = false } = {}) => {
+    const effectiveToken = useFreshToken
+      ? useAuthStore.getState().token
+      : (token ?? useAuthStore.getState().token)
     const response = await fetch(url, {
       method,
-      headers: buildHeaders({ token, method, json: !!body }),
+      headers: buildHeaders({ token: effectiveToken, method, json: !!body }),
       credentials: 'include',
       body: body ? JSON.stringify(body) : undefined,
     })
@@ -75,7 +79,7 @@ const fetchJson = async (url, { method = 'GET', body, token = null, retryOn401 =
     if (retryOn401 && error?.status === 401) {
       const refreshed = await useAuthStore.getState().refreshSession?.()
       if (refreshed) {
-        return await doRequest()
+        return await doRequest({ useFreshToken: true })
       }
     }
 
@@ -86,10 +90,44 @@ const fetchJson = async (url, { method = 'GET', body, token = null, retryOn401 =
 const clearLegacyAuthStorage = () => {
   if (!isBrowser()) return
 
+  window.localStorage.removeItem(AUTH_STORAGE_KEY)
+  window.localStorage.removeItem(LEGACY_AUTH_STORAGE_KEY)
   window.localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY)
   window.localStorage.removeItem(TOKEN_STORAGE_KEY)
-  window.localStorage.removeItem(LEGACY_AUTH_STORAGE_KEY)
   window.localStorage.removeItem(LEGACY_USER_STORAGE_KEY)
+}
+
+const authPersistStorage = {
+  getItem: (name) => {
+    if (!isBrowser()) return null
+
+    const activeValue = window.localStorage.getItem(name)
+    if (activeValue !== null) {
+      return activeValue
+    }
+
+    if (name === AUTH_STORAGE_KEY) {
+      return window.localStorage.getItem(LEGACY_AUTH_STORAGE_KEY)
+    }
+
+    return null
+  },
+  setItem: (name, value) => {
+    if (!isBrowser()) return
+
+    window.localStorage.setItem(name, value)
+    if (name === AUTH_STORAGE_KEY) {
+      window.localStorage.setItem(LEGACY_AUTH_STORAGE_KEY, value)
+    }
+  },
+  removeItem: (name) => {
+    if (!isBrowser()) return
+
+    window.localStorage.removeItem(name)
+    if (name === AUTH_STORAGE_KEY) {
+      window.localStorage.removeItem(LEGACY_AUTH_STORAGE_KEY)
+    }
+  },
 }
 
 const normalizeProfileState = (profile) => ({
@@ -129,6 +167,29 @@ const normalizeProfilePayload = (profile = {}) => {
   )
 }
 
+const normalizeAuthSession = (data = {}) => {
+  const user = data.user ?? null
+  const token = data.token ?? data.accessToken ?? data.access_token ?? null
+  const refreshToken = data.refreshToken ?? data.refresh_token ?? null
+  const onboardingDone = data.onboardingDone ?? data.is_onboarding_done ?? user?.is_onboarding_done ?? false
+  const onboardingStepRaw = data.onboardingStep ?? data.onboarding_step ?? user?.onboarding_step ?? 1
+  const onboardingStep = Number.isFinite(Number(onboardingStepRaw)) ? Number(onboardingStepRaw) : 1
+  const isEmailVerified = data.isEmailVerified ?? data.is_email_verified ?? user?.is_email_verified ?? false
+  const role = data.role ?? 'user'
+
+  return {
+    user,
+    token,
+    accessToken: token,
+    refreshToken,
+    isAuthenticated: !!token,
+    isEmailVerified: !!isEmailVerified,
+    onboardingDone: !!onboardingDone,
+    onboardingStep: onboardingDone ? 6 : onboardingStep,
+    role,
+  }
+}
+
 // ── Patch 7: isHydrated prevents guard decisions before Zustand hydrates from localStorage
 // ── Patch 4: role field added for future role-based access control (no UI impact)
 // ── Bug Fix: logout() must NOT wipe onboarding state. onboardingDone / onboardingStep
@@ -140,6 +201,7 @@ export const useAuthStore = create(
     // Trace state for debugging
     logOnboardingState: () => console.log("ONBOARDING STATE:", get()),
     user: null,
+    accessToken: null,
     profile: {},
     healthProfile: {},
     vitals: [],
@@ -164,11 +226,11 @@ export const useAuthStore = create(
 
     setToken: (token) => {
       if (!token || typeof token !== 'string' || token.trim() === '') {
-        set({ token: null, isAuthenticated: false }, false, 'setToken');
+        set({ token: null, accessToken: null, isAuthenticated: false }, false, 'setToken');
         clearLegacyAuthStorage();
         return;
       }
-      set({ token, isAuthenticated: true }, false, 'setToken');
+      set({ token, accessToken: token, isAuthenticated: true }, false, 'setToken');
     },
 
     setAccessToken: (token) => get().setToken(token),
@@ -178,22 +240,24 @@ export const useAuthStore = create(
     },
 
     setAuth: (data) => set({
-      user: data.user,
-      token: data.access_token,
-      isAuthenticated: true,
-      onboardingDone: data.user?.is_onboarding_done ?? false,
-      onboardingStep: data.user?.onboarding_step ?? 1,
+      ...normalizeAuthSession(data),
     }, false, 'setAuth'),
 
     reset: () => {
       set({
         user: null,
         token: null,
+        accessToken: null,
+        refreshToken: null,
         isAuthenticated: false,
+        isEmailVerified: false,
         profile: {},
         healthProfile: {},
+        vitals: [],
+        notifications: [],
         onboardingDone: false,
-        onboardingStep: 1
+        onboardingStep: 1,
+        role: 'user',
       }, false, 'reset');
       clearLegacyAuthStorage();
     },
@@ -234,6 +298,66 @@ export const useAuthStore = create(
 
     setHydrated: () =>
       set({ isHydrated: true }, false, 'setHydrated'),
+
+    refreshSession: async () => {
+      const refreshToken = get().refreshToken ?? null
+
+      set({ isHydratingAuth: true }, false, 'refreshSession_start')
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/auth/refresh-token`, {
+          method: 'POST',
+          headers: buildHeaders({ method: 'POST', json: true }),
+          credentials: 'include',
+          body: JSON.stringify(refreshToken ? { refresh_token: refreshToken } : {}),
+        })
+
+        const contentType = response.headers.get('content-type') || ''
+        let payload = null
+
+        if (contentType.includes('application/json')) {
+          try {
+            payload = await response.json()
+          } catch {
+            payload = null
+          }
+        } else {
+          const text = await response.text()
+          payload = text ? { message: text } : null
+        }
+
+        if (!response.ok) {
+          const detail = payload?.detail || payload?.error || payload?.message || `Request failed with status ${response.status}`
+          const error = new Error(detail)
+          error.status = response.status
+          throw error
+        }
+
+        const normalized = normalizeAuthSession(payload?.data || payload || {})
+        set(
+          {
+            user: normalized.user,
+            token: normalized.token,
+            accessToken: normalized.accessToken,
+            refreshToken: normalized.refreshToken ?? refreshToken,
+            isAuthenticated: normalized.isAuthenticated,
+            isEmailVerified: normalized.isEmailVerified,
+            onboardingDone: normalized.onboardingDone,
+            onboardingStep: normalized.onboardingStep,
+            role: normalized.role,
+            isHydrated: true,
+            isHydratingAuth: false,
+          },
+          false,
+          'refreshSession_SUCCESS'
+        )
+
+        return normalized
+      } catch (err) {
+        set({ isHydratingAuth: false }, false, 'refreshSession_FAIL')
+        return false
+      }
+    },
 
     // ── PROFILE MANAGEMENT ──────────────────────────────────────────────
     fetchProfile: async () => {
@@ -469,14 +593,12 @@ export const useAuthStore = create(
 
       try {
         // Hit the newly scaffolded backend /api/v1/users/me endpoint
-        const res = await fetch(`${API_BASE_URL}/users/me`, {
-          headers: { Authorization: `Bearer ${token}` },
-          credentials: 'include'
+        const envelope = await fetchJson(`${API_BASE_URL}/users/me`, {
+          method: 'GET',
+          token,
+          retryOn401: true,
         })
 
-        if (!res.ok) throw new Error('Token rejected by server')
-
-        const envelope = await res.json()
         const dbUser = envelope.data
 
         const normalizedOnboardingDone = dbUser?.is_onboarding_done ?? false
@@ -517,6 +639,8 @@ export const useAuthStore = create(
         set({
           user: dbUser,
           healthProfile: normalizeProfileState(dbUser),
+          token,
+          accessToken: token,
           isAuthenticated: true,
           isEmailVerified: dbUser.is_email_verified ?? true, // Fallback if backend doesn't implement yet
           onboardingDone: normalizedOnboardingDone,
@@ -540,13 +664,13 @@ export const useAuthStore = create(
       } catch (err) {
         console.error('[Zustand] Auth Hydration Failed:', err)
         // ── Determine whether this was a hard auth rejection or a transient error
-        const isHardReject = err?.message === 'Token rejected by server'
+        const isHardReject = err?.message === 'Token rejected by server' || err?.status === 401
 
         if (isHardReject) {
           // 401/403: token is dead → wipe everything, user must re-login
           set(
             {
-              user: null, token: null, refreshToken: null,
+              user: null, token: null, accessToken: null, refreshToken: null,
               profile: {},
               healthProfile: {},
               vitals: [],
@@ -607,6 +731,7 @@ export const useAuthStore = create(
           profileLoading: false,
           profileError: null,
           token: null,
+          accessToken: null,
           refreshToken: null,
           isAuthenticated: false,
           isEmailVerified: false,
@@ -636,11 +761,13 @@ export const useAuthStore = create(
       get().reset();
       set({ isHydrated: true }, false, 'hardReset');
     }
-    }), { name: 'arogyaai-auth' }),
+    }), { name: AUTH_STORAGE_KEY }),
     {
-      name: 'arogyaai-auth',
+      name: AUTH_STORAGE_KEY,
+      storage: createJSONStorage(() => authPersistStorage),
       partialize: (state) => ({
         user: state.user,
+        accessToken: state.accessToken,
         profile: state.profile,
         healthProfile: state.healthProfile,
         token: state.token,
@@ -654,6 +781,10 @@ export const useAuthStore = create(
       onRehydrateStorage: () => (state, error) => {
         if (error) {
           console.warn('[authStore] Persist rehydration failed:', error)
+        }
+
+        if (state?.token && !state?.accessToken) {
+          state?.setAccessToken?.(state.token)
         }
 
         state?.setHydrated?.()

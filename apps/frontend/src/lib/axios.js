@@ -16,6 +16,20 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+let isRefreshingSession = false;
+let refreshQueue = [];
+
+const processRefreshQueue = (error, token = null) => {
+  refreshQueue.forEach((promise) => {
+    if (error) {
+      promise.reject(error);
+    } else if (token) {
+      promise.resolve(token);
+    }
+  });
+  refreshQueue = [];
+};
+
 // ── Request interceptor: attach Bearer token ─────────────────────────────────
 api.interceptors.request.use(
   (config) => {
@@ -123,6 +137,49 @@ api.interceptors.response.use(
         return Promise.reject(error);
       }
       return Promise.reject(error);
+    }
+
+    if (error.response?.status === 401 && config && !config._retry) {
+      if (config.url?.includes('/auth/refresh-token') || config.url?.includes('/auth/login')) {
+        return Promise.reject(error);
+      }
+
+      if (isRefreshingSession) {
+        return new Promise((resolve, reject) => {
+          refreshQueue.push({ resolve, reject });
+        })
+          .then((token) => {
+            config.headers = config.headers || {};
+            config.headers.Authorization = `Bearer ${token}`;
+            return api(config);
+          })
+          .catch((err) => Promise.reject(err));
+      }
+
+      config._retry = true;
+      isRefreshingSession = true;
+
+      try {
+        const refreshed = await useAuthStore.getState().refreshSession?.();
+        const newToken = useAuthStore.getState().token;
+
+        if (!refreshed || !newToken) {
+          throw error;
+        }
+
+        processRefreshQueue(null, newToken);
+        config.headers = config.headers || {};
+        config.headers.Authorization = `Bearer ${newToken}`;
+        return api(config);
+      } catch (refreshError) {
+        processRefreshQueue(refreshError, null);
+        const store = useAuthStore.getState();
+        store.hardReset ? store.hardReset() : store.logout();
+        window.location.href = '/login?sessionExpired=true';
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshingSession = false;
+      }
     }
 
     // ── Classify error ────────────────────────────────────────────────────────
