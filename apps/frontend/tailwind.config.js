@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+    darkMode: 'class',
     content: [
         "./index.html",
         "./src/**/*.{js,ts,jsx,tsx}",
@@ -7,8 +8,11 @@ export default {
     theme: {
         extend: {
             colors: {
-                background: "#EBEBEB",
-                card: "#FFFFFF",
+                background: "rgb(var(--color-background) / <alpha-value>)",
+                card: "rgb(var(--color-card) / <alpha-value>)",
+                surface: "rgb(var(--color-surface) / <alpha-value>)",
+                'surface-muted': "rgb(var(--color-surface-muted) / <alpha-value>)",
+                stroke: "rgb(var(--color-stroke) / <alpha-value>)",
                 primary: "#0A4DA1",
                 landingPrimary: "#6043F4",
                 accent: "#009CDE",
@@ -24,9 +28,9 @@ export default {
                     awake: "#FF4B26"
                 },
                 text: {
-                    primary: "#111111",
-                    secondary: "#888888",
-                    muted: "#BBBBBB"
+                    primary: "rgb(var(--color-text-primary) / <alpha-value>)",
+                    secondary: "rgb(var(--color-text-secondary) / <alpha-value>)",
+                    muted: "rgb(var(--color-text-muted) / <alpha-value>)"
                 },
                 warning: "#F6AD55",
                 brandDanger: "#E53E3E"

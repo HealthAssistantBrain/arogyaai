@@ -4,10 +4,12 @@ import { BrowserRouter } from 'react-router-dom'
 import App               from './App'
 import './index.css'
 import { registerBrowserNotificationServiceWorker } from './services/browserNotifications'
+import { bootstrapTheme } from './store/themeStore'
 
 console.log("SUPABASE URL:", import.meta.env.VITE_SUPABASE_URL)
 console.log("SUPABASE KEY:", import.meta.env.VITE_SUPABASE_ANON_KEY)
 
+bootstrapTheme()
 void registerBrowserNotificationServiceWorker()
 
 createRoot(document.getElementById('root')).render(

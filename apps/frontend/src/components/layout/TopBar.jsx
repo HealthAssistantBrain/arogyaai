@@ -39,13 +39,13 @@ const TopBar = () => {
             </div>
 
             <div className="flex items-center gap-2">
-                <button className="p-2 text-text-secondary hover:bg-white hover:shadow-sm rounded-xl transition-all">
+                <button className="p-2 text-text-secondary hover:bg-card hover:shadow-sm rounded-xl transition-all">
                     <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="w-5 h-5" />
                 </button>
                 <button
                     type="button"
                     onClick={() => navigate(ROUTES.NOTIFICATIONS)}
-                    className="p-2 text-text-secondary hover:bg-white hover:shadow-sm rounded-xl transition-all relative"
+                    className="p-2 text-text-secondary hover:bg-card hover:shadow-sm rounded-xl transition-all relative"
                     aria-label="Open notifications"
                 >
                     <Bell className="w-5 h-5" />

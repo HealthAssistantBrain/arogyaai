@@ -1,15 +1,25 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../router/routes';
 import {
-    User, ShieldCheck, Smartphone, Database, HeartPulse, BellRing, Brain, Activity, LogOut, ArrowLeft, Trash2
+    User, ShieldCheck, Smartphone, Database, HeartPulse, BellRing, Brain, Activity, LogOut, ArrowLeft, Trash2, MoonStar, SunMedium, Laptop
 } from 'lucide-react';
+import { useThemeStore } from '../../store/themeStore';
 
 const SettingsSidebar = () => {
     const location = useLocation();
     const navigate = useNavigate();
+    const theme = useThemeStore((state) => state.theme);
+    const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
+    const setTheme = useThemeStore((state) => state.setTheme);
 
     const handleLogout = () => {
         navigate(ROUTES.LOGOUT);
+    };
+    const isDarkMode = resolvedTheme === 'dark';
+    const isFollowingSystem = theme === 'system';
+
+    const handleThemeToggle = () => {
+        setTheme(isDarkMode ? 'light' : 'dark');
     };
 
     const menuItems = [
@@ -56,6 +66,55 @@ const SettingsSidebar = () => {
             </div>
 
             <div className="p-6 border-t border-[#6143f4]/5 space-y-2">
+                <div className="rounded-[1.75rem] border border-[#6143f4]/10 bg-[#6143f4]/[0.04] dark:bg-white/[0.03] px-4 py-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="space-y-1">
+                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Theme</p>
+                            <p className="text-sm font-black uppercase tracking-tight text-[#13082a] dark:text-white">
+                                {isDarkMode ? 'Dark Mode' : 'Light Mode'}
+                            </p>
+                            <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 leading-snug">
+                                {isFollowingSystem
+                                    ? `Following system preference: ${isDarkMode ? 'dark' : 'light'}.`
+                                    : 'Applies instantly across the whole app.'}
+                            </p>
+                        </div>
+                        <div className="mt-0.5 flex size-10 items-center justify-center rounded-2xl bg-white/90 text-[#6143f4] shadow-sm dark:bg-white/5 dark:text-[#b9abff]">
+                            {isFollowingSystem ? <Laptop size={18} /> : isDarkMode ? <MoonStar size={18} /> : <SunMedium size={18} />}
+                        </div>
+                    </div>
+
+                    <div className="mt-4 flex items-center justify-between gap-3">
+                        <span className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                            Dark Mode
+                        </span>
+                        <button
+                            type="button"
+                            onClick={handleThemeToggle}
+                            aria-label="Toggle dark mode"
+                            aria-pressed={isDarkMode}
+                            className={`flex h-7 w-14 items-center rounded-full border p-1 transition-all ${isDarkMode
+                                ? 'justify-end border-[#6143f4] bg-[#6143f4] shadow-lg shadow-[#6143f4]/25'
+                                : 'justify-start border-slate-300 bg-slate-200 dark:border-slate-600 dark:bg-slate-700'
+                                }`}
+                        >
+                            <span className="size-5 rounded-full bg-white shadow-sm" />
+                        </button>
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={() => setTheme('system')}
+                        className={`mt-3 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] transition-all ${isFollowingSystem
+                            ? 'border-[#6143f4]/25 bg-[#6143f4]/10 text-[#6143f4]'
+                            : 'border-slate-200 text-slate-500 hover:bg-white dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5'
+                            }`}
+                    >
+                        <Laptop size={12} />
+                        Use System
+                    </button>
+                </div>
+
                 <button
                     onClick={handleLogout}
                     className="w-full flex items-center justify-between px-4 py-3 rounded-2xl text-rose-500 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition-all group"

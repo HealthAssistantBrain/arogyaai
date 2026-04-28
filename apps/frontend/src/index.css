@@ -1,17 +1,50 @@
 @import "tailwindcss";
 @config "../tailwind.config.js";
 
+:root {
+  --color-background: 246 245 248;
+  --color-card: 255 255 255;
+  --color-surface: 255 255 255;
+  --color-surface-muted: 241 245 249;
+  --color-stroke: 226 232 240;
+  --color-text-primary: 19 8 42;
+  --color-text-secondary: 100 116 139;
+  --color-text-muted: 148 163 184;
+}
+
+.dark {
+  --color-background: 11 8 25;
+  --color-card: 19 16 34;
+  --color-surface: 24 24 39;
+  --color-surface-muted: 30 41 59;
+  --color-stroke: 51 65 85;
+  --color-text-primary: 241 245 249;
+  --color-text-secondary: 148 163 184;
+  --color-text-muted: 100 116 139;
+}
+
 @layer base {
+  html {
+    background-color: rgb(var(--color-background));
+    color: rgb(var(--color-text-primary));
+  }
+
   body {
     @apply bg-background text-text-primary font-sans;
+    min-height: 100vh;
+    transition: background-color 180ms ease, color 180ms ease;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  #root {
+    min-height: 100vh;
   }
 }
 
 @layer components {
   .card-container {
-    @apply bg-card rounded-card shadow-card p-5 transition-all duration-300;
+    @apply bg-card border border-stroke rounded-card shadow-card p-5 transition-all duration-300;
   }
 
   .card-container:hover {
@@ -53,6 +86,11 @@
 .font-number {
   font-family: 'DM Sans', sans-serif;
   font-weight: 700;
+}
+
+input::placeholder,
+textarea::placeholder {
+  @apply text-text-muted;
 }
 
 @keyframes shimmer {

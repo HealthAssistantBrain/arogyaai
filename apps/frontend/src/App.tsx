@@ -5,11 +5,16 @@ import AppErrorBoundary from './components/guards/AppErrorBoundary';
 import { INIT_RESOLVER } from './router/INIT_RESOLVER';
 import AppRouter from './router';
 import { initializeAuthStateListener, useAuthStore } from './store/authStore';
+import { useThemeEffect } from './hooks/useThemeEffect';
+import { useThemeStore } from './store/themeStore';
 
 export default function App() {
   const navigate = useNavigate();
   const [initComplete, setInitComplete] = useState(false);
   const isHydrated = useAuthStore((state) => state.isHydrated);
+  const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
+
+  useThemeEffect();
 
   useEffect(() => {
     let isMounted = true;
@@ -48,20 +53,15 @@ export default function App() {
 
   if (!initComplete || !isHydrated) {
     return (
-      <div
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontFamily: 'sans-serif',
-          color: '#6143f4',
-        }}
-      >
+      <div className="flex min-h-screen items-center justify-center bg-background font-sans text-sm font-bold text-[#6143f4]">
         Initializing ArogyaAI…
       </div>
     );
   }
+
+  const toastStyle = resolvedTheme === 'dark'
+    ? { background: '#13082A', color: '#F0F6FF', border: '1px solid rgba(255,255,255,0.08)' }
+    : { background: '#FFFFFF', color: '#13082A', border: '1px solid #E2E8F0' };
 
   return (
     <>
@@ -72,9 +72,9 @@ export default function App() {
         position="top-right"
         toastOptions={{
           duration: 4000,
-          style: { background: '#0A0F2E', color: '#F0F6FF', border: '1px solid #00D4AA' },
-          success: { iconTheme: { primary: '#00D4AA', secondary: '#0A0F2E' } },
-          error: { iconTheme: { primary: '#ef4444', secondary: '#0A0F2E' } },
+          style: toastStyle,
+          success: { iconTheme: { primary: '#00C48C', secondary: resolvedTheme === 'dark' ? '#13082A' : '#FFFFFF' } },
+          error: { iconTheme: { primary: '#ef4444', secondary: resolvedTheme === 'dark' ? '#13082A' : '#FFFFFF' } },
         }}
       />
     </>
