@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import DashboardSkeleton from '../components/skeletons/DashboardSkeleton';
 import {
@@ -95,13 +95,13 @@ const Dashboard = () => {
   const isHydrated = useAuthStore((s) => s.isHydrated);
   const isHydratingAuth = useAuthStore((s) => s.isHydratingAuth);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const authReady = isHydrated && !isHydratingAuth && isAuthenticated;
+  const hasAuthUser = !!authUser?.id;
+  const authReady = isHydrated && !isHydratingAuth && isAuthenticated && hasAuthUser;
   const authUserId = authUser?.id ?? null;
 
-  const location = useLocation();
-  const fromOAuth = location.state?.fromOAuth;
   const hasDashboardSnapshot = cacheOwnerId === authUserId && lastFetchedAt !== null;
-  const showSkeleton = fromOAuth || !authReady || (!hasDashboardSnapshot && (isFetching || !hasHydratedCache));
+  const shouldBlockOnCacheHydration = !hasHydratedCache && !hasAttemptedDashboardLoad;
+  const showSkeleton = !authReady || (!hasDashboardSnapshot && (isFetching || shouldBlockOnCacheHydration));
   const showRefreshOverlay = useSmartFetchOverlay(isFetching, hasDashboardSnapshot, { exitDelayMs: 200 });
 
   // Initialize Smart Sync Engine

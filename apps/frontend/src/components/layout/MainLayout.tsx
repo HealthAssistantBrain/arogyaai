@@ -10,8 +10,9 @@ export default function MainLayout() {
     const isHydrated = useAuthStore((state: any) => state.isHydrated);
     const isHydratingAuth = useAuthStore((state: any) => state.isHydratingAuth);
     const isAuthenticated = useAuthStore((state: any) => state.isAuthenticated);
+    const authUser = useAuthStore((state: any) => state.user);
     const authProfile = useAuthStore((state: any) => state.profile);
-    const authReady = isHydrated && !isHydratingAuth && isAuthenticated;
+    const authReady = isHydrated && !isHydratingAuth && isAuthenticated && !!authUser?.id;
     const fetchUser = useUserStore((state: any) => state.fetchUser);
     const user = useUserStore((state: any) => state.user);
     const profileLoaded = !!(authProfile?.id || authProfile?.user_id);
