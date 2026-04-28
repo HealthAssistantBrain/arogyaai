@@ -93,6 +93,24 @@ textarea::placeholder {
   @apply text-text-muted;
 }
 
+.map-wrapper {
+  isolation: isolate;
+  z-index: 0;
+}
+
+.leaflet-container {
+  z-index: 0 !important;
+}
+
+.leaflet-pane {
+  z-index: 0 !important;
+}
+
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 10 !important;
+}
+
 @keyframes shimmer {
   0% {
     background-position: -200px 0;

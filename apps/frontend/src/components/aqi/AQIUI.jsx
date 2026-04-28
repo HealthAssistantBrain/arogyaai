@@ -179,14 +179,14 @@ const AQIUI = ({
           </p>
         </header>
 
-        <section className="grid gap-6 xl:grid-cols-12">
-          <div className="min-w-0 xl:col-span-8">
-            <div className="relative overflow-hidden rounded-[32px] border border-slate-200/80 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.08)]">
+        <section className="relative grid gap-6 xl:grid-cols-12">
+          <div className="relative z-0 min-w-0 xl:col-span-8">
+            <div className="map-wrapper relative z-0 isolate overflow-hidden rounded-[32px] border border-slate-200/80 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.08)]">
               <div
                 className="pointer-events-none absolute inset-x-0 top-0 h-32"
                 style={{ background: `linear-gradient(180deg, ${aqiConfig.glow} 0%, rgba(255,255,255,0) 100%)` }}
               />
-              <div className="absolute left-5 top-5 z-[500] flex flex-wrap items-center gap-3">
+              <div className="absolute left-5 top-5 z-10 flex flex-wrap items-center gap-3">
                 <div className="rounded-2xl border border-white/90 bg-white/95 px-4 py-3 shadow-lg backdrop-blur">
                   <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">Tracked Location</p>
                   <p className="mt-1 text-sm font-bold text-slate-900">{location || 'Current region'}</p>
@@ -195,7 +195,7 @@ const AQIUI = ({
                   </p>
                 </div>
               </div>
-              <div className="absolute right-5 top-5 z-[500]">
+              <div className="absolute right-5 top-5 z-10">
                 <button
                   type="button"
                   onClick={onLocationClick}
@@ -207,12 +207,12 @@ const AQIUI = ({
                 </button>
               </div>
 
-              <div className="h-[520px] w-full">
+              <div className="relative z-0 h-[520px] w-full overflow-hidden">
                 <MapContainer
                   center={[activeCoords.lat, activeCoords.lng]}
                   zoom={10}
                   scrollWheelZoom
-                  className="h-full w-full"
+                  className="relative z-0 h-full w-full"
                   zoomControl
                 >
                   <TileLayer
@@ -233,7 +233,7 @@ const AQIUI = ({
                 </MapContainer>
               </div>
 
-              <div className="absolute bottom-5 left-5 z-[500] rounded-2xl border border-white/80 bg-white/95 px-4 py-3 shadow-lg backdrop-blur">
+              <div className="absolute bottom-5 left-5 z-10 rounded-2xl border border-white/80 bg-white/95 px-4 py-3 shadow-lg backdrop-blur">
                 <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">AQI Status</p>
                 <div className="mt-2 flex items-center gap-3">
                   <span
@@ -246,10 +246,10 @@ const AQIUI = ({
             </div>
           </div>
 
-          <div className="flex min-w-0 flex-col gap-6 xl:col-span-4">
-            <div className="rounded-[28px] border border-slate-200/80 bg-white p-6 shadow-[0_18px_60px_rgba(15,23,42,0.08)]">
+          <div className="relative z-20 flex min-w-0 flex-col gap-6 xl:col-span-4">
+            <div className="relative z-20 rounded-[28px] border border-slate-200/80 bg-white p-6 shadow-[0_18px_60px_rgba(15,23,42,0.08)]">
               <p className="text-sm font-black uppercase tracking-[0.18em] text-slate-500">Location Search</p>
-              <div ref={searchContainerRef} className="relative mt-4">
+              <div ref={searchContainerRef} className="relative z-20 mt-4">
                 <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                 <input
                   type="text"
@@ -271,7 +271,7 @@ const AQIUI = ({
                       initial={{ opacity: 0, y: -8 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -8 }}
-                      className="absolute left-0 right-0 top-[4.25rem] z-[600] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
+                      className="absolute left-0 right-0 top-[4.25rem] z-30 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
                     >
                       <div className="max-h-72 overflow-y-auto p-2">
                         {isSearching ? (
