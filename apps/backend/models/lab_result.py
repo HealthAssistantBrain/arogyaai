@@ -41,3 +41,12 @@ class LabResult(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     # ── Relationships ──────────────────────────────────────────
     user = relationship("User", back_populates="lab_results")
+    report = relationship("Report", back_populates="lab_results")
+
+    @property
+    def biomarker_name(self):
+        return self.name
+
+    @property
+    def extracted_at(self):
+        return self.timestamp

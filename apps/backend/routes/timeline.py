@@ -1,125 +1,145 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+
 from database.session import get_db
-from models.user import User
-from models.wearable_data import WearableData
-from models.vitals_data import VitalsData
 from models.lab_result import LabResult
 from models.notification import Notification, NotificationTypeEnum
+from models.user import User
+from models.user_vital import UserVital, UserVitalTypeEnum
 from routes.users import get_current_user_from_header
 
 router = APIRouter(prefix="/api/v1/health", tags=["Health Timeline"])
 
+
+def _vital_title(vital_type: UserVitalTypeEnum) -> str:
+    mapping = {
+        UserVitalTypeEnum.STEPS: "Steps Logged",
+        UserVitalTypeEnum.SLEEP: "Sleep Logged",
+        UserVitalTypeEnum.HEART_RATE: "Heart Rate Logged",
+        UserVitalTypeEnum.SPO2: "SpO2 Logged",
+        UserVitalTypeEnum.BLOOD_PRESSURE_SYSTOLIC: "Blood Pressure Logged",
+        UserVitalTypeEnum.BLOOD_PRESSURE_DIASTOLIC: "Blood Pressure Logged",
+    }
+    return mapping.get(vital_type, "Wearable Metric Logged")
+
+
 @router.get("/timeline")
 def get_timeline(
     current_user: User = Depends(get_current_user_from_header),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     user_id = current_user.id
-    
-    # Query Data safely with isolation
-    wearables, vitals, labs, alerts = [], [], [], []
-    
+
+    vitals, labs, alerts = [], [], []
+
     try:
-        wearables = db.query(WearableData).filter(WearableData.user_id == user_id).order_by(WearableData.recorded_at.desc()).limit(30).all()
+        vitals = (
+            db.query(UserVital)
+            .filter(UserVital.user_id == user_id)
+            .order_by(UserVital.timestamp.desc())
+            .limit(60)
+            .all()
+        )
     except Exception as e:
-        print(f"Error fetching wearables for timeline: {e}")
-        
+        print(f"Error fetching user_vitals for timeline: {e}")
+
     try:
-        vitals = db.query(VitalsData).filter(VitalsData.user_id == user_id).order_by(VitalsData.recorded_at.desc()).limit(30).all()
-    except Exception as e:
-        print(f"Error fetching vitals for timeline: {e}")
-        
-    try:
-        labs = db.query(LabResult).filter(LabResult.user_id == user_id).order_by(LabResult.timestamp.desc()).limit(30).all()
+        labs = (
+            db.query(LabResult)
+            .filter(LabResult.user_id == user_id)
+            .order_by(LabResult.timestamp.desc())
+            .limit(30)
+            .all()
+        )
     except Exception as e:
         print(f"Error fetching labs for timeline: {e}")
-        
+
     try:
-        alerts = db.query(Notification).filter(
-            Notification.user_id == user_id, 
-            Notification.notification_type == NotificationTypeEnum.HEALTH_ALERT
-        ).order_by(Notification.created_at.desc()).limit(30).all()
+        alerts = (
+            db.query(Notification)
+            .filter(
+                Notification.user_id == user_id,
+                Notification.notification_type == NotificationTypeEnum.HEALTH_ALERT,
+            )
+            .order_by(Notification.created_at.desc())
+            .limit(30)
+            .all()
+        )
     except Exception as e:
         print(f"Error fetching alerts for timeline: {e}")
-    
+
     timeline_events = []
-    
-    for w in wearables:
-        timeline_events.append({
-            "id": f"wearable_{w.id}",
-            "type": "Device",
-            "source": "wearable",
-            "title": "Wearable Data Logged",
-            "description": f"Step count: {w.step_count or 0}, Calories: {w.calories_burned or 0}, Sleep: {w.sleep_duration_minutes or 0} min",
-            "timestamp": w.recorded_at.isoformat() if w.recorded_at else None,
-            "metrics": [
-                {"label": "Steps", "value": str(w.step_count or 0)},
-                {"label": "Sleep", "value": f"{w.sleep_duration_minutes or 0}m"}
-            ]
-        })
-        
-    for v in vitals:
-        timeline_events.append({
-            "id": f"vital_{v.id}",
-            "type": "Vitals",
-            "source": "vitals",
-            "title": "Vitals Recorded",
-            "description": f"HR: {v.heart_rate_bpm} bpm, BP: {v.blood_pressure_sys}/{v.blood_pressure_dia}, SpO2: {v.oxygen_saturation_spo2}%",
-            "timestamp": v.recorded_at.isoformat() if v.recorded_at else None,
-            "metrics": [
-                {"label": "Heart Rate", "value": f"{v.heart_rate_bpm} bpm"},
-                {"label": "BP", "value": f"{v.blood_pressure_sys}/{v.blood_pressure_dia}"}
-            ]
-        })
-        
-    for l in labs:
+
+    for vital in vitals:
+        vital_type = vital.vital_type.value if hasattr(vital.vital_type, "value") else str(vital.vital_type)
+        label = vital_type.replace("_", " ").title()
+        timeline_events.append(
+            {
+                "id": f"vital_{vital.id}",
+                "type": "Vitals",
+                "source": "user_vitals",
+                "title": _vital_title(vital.vital_type),
+                "description": f"{label}: {vital.value} {vital.unit or ''}".strip(),
+                "timestamp": vital.timestamp.isoformat() if vital.timestamp else None,
+                "metrics": [
+                    {
+                        "label": label,
+                        "value": f"{vital.value} {vital.unit or ''}".strip(),
+                    }
+                ],
+            }
+        )
+
+    for lab in labs:
         color = "bg-green-500"
-        if l.status and l.status.lower() in ["high", "low", "abnormal", "critical"]:
+        if lab.status and lab.status.lower() in ["high", "low", "abnormal", "critical"]:
             color = "bg-amber-500"
-        if l.status and l.status.lower() == "critical":
+        if lab.status and lab.status.lower() == "critical":
             color = "bg-red-500"
 
-        timeline_events.append({
-            "id": f"lab_{l.id}",
-            "type": "Tests",
-            "source": "lab",
-            "category": l.category,
-            "title": f"Lab Result: {l.name}",
-            "description": f"Result: {l.value} {l.unit or ''} (Status: {l.status or 'info'})",
-            "timestamp": l.timestamp.isoformat() if l.timestamp else None,
-            "labData": [
-                {
-                    "label": l.name, 
-                    "value": f"{l.value} {l.unit or ''}",
-                    "progress": 50, # default progress placeholder
-                    "color": color
-                }
-            ]
-        })
-        
-    for a in alerts:
-        severity_val = a.severity.value if hasattr(a.severity, "value") else str(a.severity)
-        timeline_events.append({
-            "id": f"alert_{a.id}",
-            "type": "Alerts",
-            "source": "system",
-            "title": a.title,
-            "description": a.description,
-            "timestamp": a.created_at.isoformat() if a.created_at else None,
-            "metrics": [
-                {"label": "Severity", "value": severity_val.upper()}
-            ]
-        })
+        timeline_events.append(
+            {
+                "id": f"lab_{lab.id}",
+                "type": "Tests",
+                "source": "lab",
+                "category": lab.category,
+                "title": f"Lab Result: {lab.name}",
+                "description": f"Result: {lab.value} {lab.unit or ''} (Status: {lab.status or 'info'})",
+                "timestamp": lab.timestamp.isoformat() if lab.timestamp else None,
+                "labData": [
+                    {
+                        "label": lab.name,
+                        "value": f"{lab.value} {lab.unit or ''}",
+                        "progress": 50,
+                        "color": color,
+                    }
+                ],
+            }
+        )
 
-    # Sort descending by timestamp
+    for alert in alerts:
+        severity_val = alert.severity.value if hasattr(alert.severity, "value") else str(alert.severity)
+        timeline_events.append(
+            {
+                "id": f"alert_{alert.id}",
+                "type": "Alerts",
+                "source": "system",
+                "title": alert.title,
+                "description": alert.description,
+                "timestamp": alert.created_at.isoformat() if alert.created_at else None,
+                "metrics": [
+                    {"label": "Severity", "value": severity_val.upper()}
+                ],
+            }
+        )
+
     timeline_events.sort(key=lambda x: x["timestamp"] or "", reverse=True)
-    
+
     return {
         "success": True,
         "status": "ready" if timeline_events else "empty",
         "source": "db",
         "error": None,
         "data": timeline_events,
-        "last_updated": timeline_events[0]["timestamp"] if timeline_events else None
+        "last_updated": timeline_events[0]["timestamp"] if timeline_events else None,
     }

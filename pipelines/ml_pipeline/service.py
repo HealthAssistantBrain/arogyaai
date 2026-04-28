@@ -153,9 +153,21 @@ class MLPipelineService:
     @staticmethod
     def predict(db: Session, user: User, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         overrides = MLPipelineService._prepare_feature_overrides(payload)
-        feature_snapshot = FeaturePipelineService.build_feature_snapshot(db, user, overrides=overrides, persist=True)
+        feature_snapshot = FeaturePipelineService.build_feature_snapshot(
+            db,
+            user,
+            overrides=overrides,
+            persist=True,
+            report_id=(payload or {}).get("report_id"),
+        )
 
-        return MLPipelineService.predict_from_snapshot(db, user, feature_snapshot, payload=payload)
+        return MLPipelineService.predict_from_snapshot(
+            db,
+            user,
+            feature_snapshot,
+            payload=payload,
+            report_id=(payload or {}).get("report_id"),
+        )
 
     @staticmethod
     def predict_from_snapshot(
@@ -164,6 +176,7 @@ class MLPipelineService:
         feature_snapshot: Any,
         *,
         payload: dict[str, Any] | None = None,
+        report_id: str | None = None,
     ) -> dict[str, Any]:
         if isinstance(feature_snapshot, dict):
             feature_snapshot = FeatureSnapshot.from_dict(feature_snapshot)
@@ -214,10 +227,12 @@ class MLPipelineService:
             db,
             user,
             risk_payload=risk_payload,
-            feature_snapshot=feature_snapshot.to_dict(),
+            feature_snapshot_id=getattr(feature_snapshot, "snapshot_id", None),
+            report_id=report_id,
             model_version=model_version,
             source=source,
             status="ready",
+            run_id=(payload or {}).get("run_id"),
         )
 
         health_payload = MLPipelineService._compute_health_score(feature_snapshot, risk_payload)

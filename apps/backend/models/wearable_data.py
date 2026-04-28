@@ -1,6 +1,6 @@
 """
-WearableData model — maps to the `wearable_data` table.
-Time-series table. 1:N from User and Device.
+WearableData model — legacy/deprecated wearable storage.
+Kept mapped during the transition so older rows can be migrated and read safely.
 """
 from sqlalchemy import Column, Integer, Numeric, DateTime, ForeignKey, func
 from sqlalchemy.dialects.postgresql import UUID

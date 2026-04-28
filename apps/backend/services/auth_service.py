@@ -419,6 +419,12 @@ class AuthService:
             )
         
         hashed_pwd = get_password_hash(user_data.password)
+        initial_dob = None
+        if user_data.dob:
+            try:
+                initial_dob = datetime.strptime(user_data.dob, "%Y-%m-%d").date()
+            except ValueError:
+                initial_dob = None
         new_user = User(
             email=user_data.email,
             password_hash=hashed_pwd,
@@ -432,6 +438,7 @@ class AuthService:
             UserProfile(
                 user_id=new_user.id,
                 full_name=safe_input(user_data.full_name) if user_data.full_name else None,
+                date_of_birth=initial_dob,
             )
         )
         db.commit()
@@ -444,24 +451,6 @@ class AuthService:
             )
         )
         db.commit()
-
-        # ── Link Initial Profile if DOB provided ──
-        if user_data.dob:
-            from models import HealthProfile
-            try:
-                # Expecting YYYY-MM-DD
-                dob_date = datetime.strptime(user_data.dob, "%Y-%m-%d").date()
-                initial_profile = HealthProfile(
-                    user_id=new_user.id,
-                    date_of_birth=dob_date
-                )
-                db.add(initial_profile)
-                db.commit()
-            except Exception as profile_err:
-                # Log error but don't crash signup
-                print(f"Warning: Could not create profile during signup: {profile_err}")
-                db.rollback() 
-
 
         access_token, refresh_token, _ = AuthService._issue_session(db, new_user)
 

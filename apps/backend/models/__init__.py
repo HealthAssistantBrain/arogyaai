@@ -4,7 +4,7 @@ Centralised registry — import everything from here so that SQLAlchemy
 can discover all mapped classes at startup (required for relationship() to resolve).
 
 Usage:
-    from models import User, HealthProfile, Device, ...
+    from models import User, UserProfile, Device, ...
     from models.base import Base   # For Alembic or table creation
 """
 
@@ -12,7 +12,6 @@ from .base import Base
 
 from .user            import User
 from .user_profile    import UserProfile
-from .health_profile  import HealthProfile, GenderEnum
 from .device          import Device, DeviceTypeEnum
 from .vitals_data     import VitalsData
 from .wearable_data   import WearableData
@@ -22,7 +21,6 @@ from .risk_score      import RiskScore, RiskLevelEnum
 from .recommendation  import Recommendation, RecCategoryEnum, PriorityEnum
 from .feature_snapshot import FeatureSnapshotRecord
 from .baseline_metric import BaselineMetricRecord
-from .lab_value      import LabValue
 from .shap_value     import ShapValueRecord
 from .health_score   import HealthScoreRecord
 from .alert           import Alert, AlertTypeEnum, SeverityEnum
@@ -47,7 +45,6 @@ __all__ = [
     # Domain Models
     "User",
     "UserProfile",
-    "HealthProfile",
     "Device",
     "VitalsData",
     "WearableData",
@@ -57,7 +54,6 @@ __all__ = [
     "Recommendation",
     "FeatureSnapshotRecord",
     "BaselineMetricRecord",
-    "LabValue",
     "ShapValueRecord",
     "HealthScoreRecord",
     "Alert",
@@ -70,7 +66,6 @@ __all__ = [
     "GoogleFitConnection",
     "LabResult",
     # Enums
-    "GenderEnum",
     "DeviceTypeEnum",
     "ReportTypeEnum",
     "ReportStatusEnum",

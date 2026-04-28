@@ -4,7 +4,7 @@ Stores rolling window aggregates for core metrics.
 """
 from __future__ import annotations
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String, func
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
@@ -13,6 +13,9 @@ from .base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
 class BaselineMetricRecord(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "baseline_metrics"
+    __table_args__ = (
+        UniqueConstraint("user_id", "metric_name", name="uq_baseline_metrics_user_metric"),
+    )
 
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     metric_name = Column(String(80), nullable=False, index=True)

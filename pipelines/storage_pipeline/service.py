@@ -11,7 +11,7 @@ from models import (
     BaselineMetricRecord,
     FeatureSnapshotRecord,
     HealthScoreRecord,
-    LabValue,
+    LabResult,
     PriorityEnum,
     Recommendation,
     RecCategoryEnum,
@@ -171,30 +171,30 @@ class StoragePipelineService:
         return persisted
 
     @staticmethod
-    def store_lab_values(
+    def store_lab_results(
         db: Session,
         user: User,
         values: Iterable[dict[str, Any]],
         *,
         report_id: UUID | str | None = None,
-    ) -> list[LabValue]:
-        persisted: list[LabValue] = []
+    ) -> list[LabResult]:
+        persisted: list[LabResult] = []
         for item in values:
             name = str(item.get("name") or item.get("biomarker_name") or "").strip()
             if not name:
                 continue
 
             record = (
-                db.query(LabValue)
+                db.query(LabResult)
                 .filter(
-                    LabValue.user_id == user.id,
-                    LabValue.report_id == report_id,
-                    LabValue.biomarker_name == name,
+                    LabResult.user_id == user.id,
+                    LabResult.report_id == report_id,
+                    LabResult.name == name,
                 )
                 .one_or_none()
             )
             if record is None:
-                record = LabValue(user_id=user.id, report_id=report_id, biomarker_name=name)
+                record = LabResult(user_id=user.id, report_id=report_id, name=name)
                 db.add(record)
 
             record.value = float(item.get("value") or item.get("raw_value") or 0.0)
@@ -202,7 +202,6 @@ class StoragePipelineService:
             record.reference_range = item.get("reference_range")
             record.category = item.get("category")
             record.status = item.get("status")
-            record.raw_text = item.get("raw_text")
             persisted.append(record)
 
         db.commit()
@@ -211,17 +210,27 @@ class StoragePipelineService:
         return persisted
 
     @staticmethod
+    def store_lab_values(
+        db: Session,
+        user: User,
+        values: Iterable[dict[str, Any]],
+        *,
+        report_id: UUID | str | None = None,
+    ) -> list[LabResult]:
+        return StoragePipelineService.store_lab_results(db, user, values, report_id=report_id)
+
+    @staticmethod
     def store_risk_score(
         db: Session,
         user: User,
         *,
         risk_payload: dict[str, Any],
-        feature_snapshot: dict[str, Any] | None = None,
+        feature_snapshot_id: UUID | str | None = None,
         report_id: UUID | str | None = None,
         model_version: str | None = None,
         source: str = "rule_engine",
         status: str = "ready",
-        pipeline_run_id: str | None = None,
+        run_id: str | None = None,
     ) -> RiskScore:
         score = _as_float(
             risk_payload.get("overall_score")
@@ -236,28 +245,46 @@ class StoragePipelineService:
         except Exception:
             level = _risk_level_from_score(score)
 
-        record = None
+        sanitized_payload = dict(risk_payload or {})
+        sanitized_payload.pop("feature_snapshot", None)
+
+        effective_run_id = run_id or str(uuid4())
+        record = (
+            db.query(RiskScore)
+            .filter(RiskScore.user_id == user.id, RiskScore.run_id == effective_run_id)
+            .one_or_none()
+        )
+        if record is None:
+            record = RiskScore(user_id=user.id)
+            db.add(record)
+        else:
+            db.query(Recommendation).filter(Recommendation.risk_score_id == record.id).delete(synchronize_session=False)
+
         if report_id is not None:
-            record = (
-                db.query(RiskScore)
-                .filter(RiskScore.report_id == report_id, RiskScore.user_id == user.id)
+            record.report_id = report_id
+        if feature_snapshot_id is not None:
+            record.feature_snapshot_id = feature_snapshot_id
+        elif isinstance(risk_payload.get("feature_snapshot_id"), str):
+            feature_snapshot_record = (
+                db.query(FeatureSnapshotRecord)
+                .filter(
+                    FeatureSnapshotRecord.id == risk_payload.get("feature_snapshot_id"),
+                    FeatureSnapshotRecord.user_id == user.id,
+                )
                 .one_or_none()
             )
-
-        if record is None:
-            record = RiskScore(user_id=user.id, report_id=report_id)
-            db.add(record)
+            if feature_snapshot_record is not None:
+                record.feature_snapshot_id = feature_snapshot_record.id
 
         record.risk_level = level
         record.overall_score = round(score, 2)
         record.confidence_score = _as_float(risk_payload.get("confidence"), default=None)
-        record.ml_model_version = model_version
+        record.model_version = model_version
         record.prediction_source = source
         record.prediction_status = status
-        record.feature_snapshot = ensure_json_safe(feature_snapshot) if feature_snapshot is not None else None
-        record.risk_payload = ensure_json_safe(risk_payload)
-        record.health_score = _as_float(risk_payload.get("health_score"), default=None)
-        record.pipeline_run_id = pipeline_run_id or str(uuid4())
+        record.risk_payload = ensure_json_safe(sanitized_payload)
+        record.health_score = _as_float(sanitized_payload.get("health_score"), default=None)
+        record.run_id = effective_run_id
         record.is_fallback = source != "ml"
 
         db.commit()
@@ -463,7 +490,7 @@ class StoragePipelineService:
         return (
             db.query(RiskScore)
             .filter(RiskScore.user_id == user.id)
-            .order_by(desc(RiskScore.calculated_at))
+            .order_by(desc(RiskScore.calculated_at), desc(RiskScore.created_at))
             .first()
         )
 
@@ -543,14 +570,21 @@ class StoragePipelineService:
             recommendations = payload_recommendations if isinstance(payload_recommendations, list) else []
 
         has_lab = (
-            db.query(LabValue.id)
-            .filter(LabValue.user_id == user.id)
-            .order_by(desc(LabValue.extracted_at))
+            db.query(LabResult.id)
+            .filter(LabResult.user_id == user.id)
+            .order_by(desc(LabResult.timestamp))
             .first()
             is not None
         )
         latest_feature = StoragePipelineService.latest_feature_snapshot(db, user)
-        feature_payload = latest_feature.feature_payload if latest_feature and isinstance(latest_feature.feature_payload, dict) else {}
+        linked_feature = getattr(latest_risk, "feature_snapshot_record", None)
+        feature_payload = {}
+        if linked_feature and isinstance(linked_feature.feature_payload, dict):
+            feature_payload = linked_feature.feature_payload
+        elif isinstance(getattr(latest_risk, "feature_snapshot", None), dict):
+            feature_payload = latest_risk.feature_snapshot
+        elif latest_feature and isinstance(latest_feature.feature_payload, dict):
+            feature_payload = latest_feature.feature_payload
         source_breakdown = feature_payload.get("source_breakdown") if isinstance(feature_payload, dict) else {}
         if not isinstance(source_breakdown, dict):
             source_breakdown = {}

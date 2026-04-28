@@ -15,9 +15,6 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from models import User
-from pipelines.storage_pipeline.service import StoragePipelineService
-
 logger = logging.getLogger("uvicorn.error")
 
 # ---------------------------------------------------------------------------
@@ -339,12 +336,6 @@ def run_lab_pipeline(
 
         normalized = normalize_lab_values(raw)
         count = store_lab_results(db, user_id, report_id, normalized)
-        user = db.query(User).filter(User.id == user_id).first()
-        if user is not None:
-            try:
-                StoragePipelineService.store_lab_values(db, user, normalized, report_id=report_id)
-            except Exception:
-                logger.exception("Lab pipeline: lab_values persistence failed for user=%s report=%s", user_id, report_id)
         logger.info(
             "Lab pipeline: stored %d lab results for user=%s report=%s",
             count,

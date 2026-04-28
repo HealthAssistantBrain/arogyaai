@@ -100,6 +100,7 @@ def run_inference(context: dict[str, Any]) -> dict[str, Any]:
             user,
             feature_snapshot,
             payload=context.get("payload"),
+            report_id=context.get("report_id"),
         )
         context.update(
             {

@@ -31,3 +31,4 @@ class FeatureSnapshotRecord(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     user = relationship("User", back_populates="feature_snapshots")
     report = relationship("Report", back_populates="feature_snapshots")
+    risk_scores = relationship("RiskScore", back_populates="feature_snapshot_record")

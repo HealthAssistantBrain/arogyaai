@@ -1,6 +1,6 @@
 """
-VitalsData model — maps to the `vitals_data` table.
-Time-series table. 1:N from User. TimescaleDB-ready.
+VitalsData model — legacy/deprecated structured vitals storage.
+Kept mapped during the transition so canonical `user_vitals` can backfill safely.
 """
 from sqlalchemy import Column, Integer, Numeric, DateTime, ForeignKey, func
 from sqlalchemy.dialects.postgresql import UUID

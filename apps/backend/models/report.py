@@ -1,6 +1,6 @@
 """
 Report model — maps to the `reports` table.
-1:N from User. 1:1 to RiskScore.
+1:N from User. Supports multiple prediction runs per report.
 """
 import enum
 
@@ -43,7 +43,19 @@ class Report(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     # ── Relationships ──────────────────────────────────────────
     user       = relationship("User", back_populates="reports")
-    risk_score = relationship("RiskScore", back_populates="report", uselist=False)
-    lab_values = relationship("LabValue", back_populates="report")
+    risk_scores = relationship("RiskScore", back_populates="report")
+    lab_results = relationship("LabResult", back_populates="report")
     feature_snapshots = relationship("FeatureSnapshotRecord", back_populates="report")
 
+    @property
+    def risk_score(self):
+        if not self.risk_scores:
+            return None
+        return max(
+            self.risk_scores,
+            key=lambda item: item.calculated_at or item.created_at,
+        )
+
+    @property
+    def lab_values(self):
+        return self.lab_results

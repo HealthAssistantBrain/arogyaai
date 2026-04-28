@@ -4,7 +4,7 @@ import logging
 from typing import Any
 
 from database.session import SessionLocal
-from models import LabValue, RiskScore, User
+from models import LabResult, RiskScore, User
 from pipelines.baseline_pipeline.service import BaselinePipelineService
 from pipelines.feature_pipeline.service import FeaturePipelineService, FeatureSnapshot
 from pipelines.ml_pipeline.model_loader import ModelLoader
@@ -70,12 +70,14 @@ def run_ml_pipeline(
     features: FeatureSnapshot,
     *,
     payload: dict[str, Any] | None = None,
+    report_id: str | None = None,
 ) -> dict[str, Any]:
     return MLPipelineService.predict_from_snapshot(
         db,
         user,
         features,
         payload=payload,
+        report_id=report_id,
     )
 
 
@@ -190,9 +192,9 @@ def _build_health_insights(
     baseline_metrics = ((insights.get("baseline") or {}).get("metrics") if isinstance(insights, dict) else None)
 
     has_lab = (
-        db.query(LabValue.id)
-        .filter(LabValue.user_id == user.id)
-        .order_by(LabValue.extracted_at.desc())
+        db.query(LabResult.id)
+        .filter(LabResult.user_id == user.id)
+        .order_by(LabResult.timestamp.desc())
         .first()
         is not None
     )
@@ -280,7 +282,7 @@ def run_pipeline(
 
         if features is not None:
             try:
-                predictions = run_ml_pipeline(db, user, features, payload=payload) or predictions
+                predictions = run_ml_pipeline(db, user, features, payload=payload, report_id=report_id) or predictions
             except Exception as exc:
                 logger.exception("[Orchestrator] ML pipeline failed for user=%s: %s", user.id, exc)
 

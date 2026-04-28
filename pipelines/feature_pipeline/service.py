@@ -4,10 +4,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from statistics import mean, pstdev
 from typing import Any, Iterable
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from models import HealthProfile, User, UserProfile, UserVital, UserVitalTypeEnum, VitalsData, WearableData
+from models import User, UserProfile, UserVital, UserVitalTypeEnum, VitalsData, WearableData
 from services.sleep_service import SleepService
 from pipelines.storage_pipeline.service import StoragePipelineService
 
@@ -175,29 +176,17 @@ def _cholesterol_proxy(
     return round(_clamp(score, 60.0, 190.0), 1)
 
 
-def _latest_profile(db: Session, user: User) -> HealthProfile | UserProfile | None:
-    health_profile = db.query(HealthProfile).filter(HealthProfile.user_id == user.id).first()
-    user_profile = db.query(UserProfile).filter(UserProfile.user_id == user.id).first()
-
-    if health_profile and user_profile:
-        health_updated = _to_utc(getattr(health_profile, "updated_at", None)) or _to_utc(getattr(health_profile, "created_at", None))
-        user_updated = _to_utc(getattr(user_profile, "updated_at", None)) or _to_utc(getattr(user_profile, "created_at", None))
-        if user_updated and health_updated and user_updated > health_updated:
-            return user_profile
-        return health_profile
-
-    return health_profile or user_profile
+def _latest_profile(db: Session, user: User) -> UserProfile | None:
+    return db.query(UserProfile).filter(UserProfile.user_id == user.id).first()
 
 
-def _recent_heart_rates(db: Session, user: User, days: int = VITAL_LOOKBACK_DAYS) -> list[float]:
-    cutoff = _now_utc() - timedelta(days=days)
+def _recent_user_vital_values(db: Session, user: User, vital_type: UserVitalTypeEnum, cutoff: datetime) -> list[float]:
     values: list[float] = []
-
     for row in (
         db.query(UserVital)
         .filter(
             UserVital.user_id == user.id,
-            UserVital.vital_type == UserVitalTypeEnum.HEART_RATE,
+            UserVital.vital_type == vital_type,
             UserVital.timestamp >= cutoff,
         )
         .order_by(UserVital.timestamp.asc())
@@ -205,6 +194,29 @@ def _recent_heart_rates(db: Session, user: User, days: int = VITAL_LOOKBACK_DAYS
     ):
         if row.value is not None:
             values.append(float(row.value))
+    return values
+
+
+def _latest_user_vital_value(db: Session, user: User, vital_type: UserVitalTypeEnum) -> float | None:
+    row = (
+        db.query(UserVital)
+        .filter(
+            UserVital.user_id == user.id,
+            UserVital.vital_type == vital_type,
+        )
+        .order_by(UserVital.timestamp.desc())
+        .first()
+    )
+    if row is None or row.value is None:
+        return None
+    return float(row.value)
+
+
+def _recent_heart_rates(db: Session, user: User, days: int = VITAL_LOOKBACK_DAYS) -> list[float]:
+    cutoff = _now_utc() - timedelta(days=days)
+    values = _recent_user_vital_values(db, user, UserVitalTypeEnum.HEART_RATE, cutoff)
+    if values:
+        return values
 
     for row in (
         db.query(VitalsData)
@@ -223,20 +235,9 @@ def _recent_heart_rates(db: Session, user: User, days: int = VITAL_LOOKBACK_DAYS
 
 def _recent_steps(db: Session, user: User, days: int = LOOKBACK_DAYS) -> list[float]:
     cutoff = _now_utc() - timedelta(days=days)
-    values: list[float] = []
-
-    for row in (
-        db.query(UserVital)
-        .filter(
-            UserVital.user_id == user.id,
-            UserVital.vital_type == UserVitalTypeEnum.STEPS,
-            UserVital.timestamp >= cutoff,
-        )
-        .order_by(UserVital.timestamp.asc())
-        .all()
-    ):
-        if row.value is not None:
-            values.append(float(row.value))
+    values = _recent_user_vital_values(db, user, UserVitalTypeEnum.STEPS, cutoff)
+    if values:
+        return values
 
     for row in (
         db.query(WearableData)
@@ -255,23 +256,12 @@ def _recent_steps(db: Session, user: User, days: int = LOOKBACK_DAYS) -> list[fl
 
 def _recent_sleep_rows(db: Session, user: User, days: int = SLEEP_LOOKBACK_DAYS) -> tuple[list[float], list[float], int]:
     cutoff = _now_utc() - timedelta(days=days)
-    durations: list[float] = []
+    durations = _recent_user_vital_values(db, user, UserVitalTypeEnum.SLEEP, cutoff)
     scores: list[int] = []
-    source_rows = 0
+    source_rows = len(durations)
 
-    for row in (
-        db.query(UserVital)
-        .filter(
-            UserVital.user_id == user.id,
-            UserVital.vital_type == UserVitalTypeEnum.SLEEP,
-            UserVital.timestamp >= cutoff,
-        )
-        .order_by(UserVital.timestamp.asc())
-        .all()
-    ):
-        if row.value is not None:
-            durations.append(float(row.value))
-            source_rows += 1
+    if durations:
+        return durations, [], source_rows
 
     for row in (
         db.query(WearableData)
@@ -291,8 +281,9 @@ def _recent_sleep_rows(db: Session, user: User, days: int = SLEEP_LOOKBACK_DAYS)
     return durations, [float(score) for score in scores], source_rows
 
 
-@dataclass
+@dataclass(kw_only=True)
 class FeatureSnapshot:
+    snapshot_id: UUID | str | None = None
     avg_hrv: float | None
     avg_rhr: float | None
     sleep_score: float | None
@@ -318,6 +309,7 @@ class FeatureSnapshot:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "snapshot_id": str(self.snapshot_id) if self.snapshot_id else None,
             "avg_hrv": self.avg_hrv,
             "avg_rhr": self.avg_rhr,
             "sleep_score": self.sleep_score,
@@ -355,6 +347,7 @@ class FeatureSnapshot:
             parsed_latest = latest_observation_at
 
         return cls(
+            snapshot_id=data.get("snapshot_id"),
             avg_hrv=data.get("avg_hrv"),
             avg_rhr=data.get("avg_rhr"),
             sleep_score=data.get("sleep_score"),
@@ -433,8 +426,12 @@ class FeaturePipelineService:
         if height_cm and weight_kg and height_cm > 0:
             bmi = round(weight_kg / ((height_cm / 100.0) ** 2), 1)
 
-        systolic_bp = _safe_int(getattr(latest_vitals, "blood_pressure_sys", None))
-        diastolic_bp = _safe_int(getattr(latest_vitals, "blood_pressure_dia", None))
+        systolic_bp = _safe_int(_latest_user_vital_value(db, user, UserVitalTypeEnum.BLOOD_PRESSURE_SYSTOLIC))
+        diastolic_bp = _safe_int(_latest_user_vital_value(db, user, UserVitalTypeEnum.BLOOD_PRESSURE_DIASTOLIC))
+        if systolic_bp is None:
+            systolic_bp = _safe_int(getattr(latest_vitals, "blood_pressure_sys", None))
+        if diastolic_bp is None:
+            diastolic_bp = _safe_int(getattr(latest_vitals, "blood_pressure_dia", None))
         bp_category = _bp_category(systolic_bp, diastolic_bp)
 
         age = _age_from_dob(getattr(profile, "date_of_birth", None))
@@ -466,6 +463,22 @@ class FeaturePipelineService:
         latest_candidates = [
             _to_utc(getattr(latest_vitals, "recorded_at", None)),
         ]
+        latest_bp_row = (
+            db.query(UserVital)
+            .filter(
+                UserVital.user_id == user.id,
+                UserVital.vital_type.in_(
+                    [
+                        UserVitalTypeEnum.BLOOD_PRESSURE_SYSTOLIC,
+                        UserVitalTypeEnum.BLOOD_PRESSURE_DIASTOLIC,
+                    ]
+                ),
+            )
+            .order_by(UserVital.timestamp.desc())
+            .first()
+        )
+        if latest_bp_row is not None:
+            latest_candidates.append(_to_utc(latest_bp_row.timestamp))
         sleep_last = sleep_summary.get("last_updated")
         if sleep_last:
             try:
@@ -560,6 +573,7 @@ class FeaturePipelineService:
                     snapshot.lifestyle_score = round(_clamp(activity_component * 0.4 + sleep_component * 0.4 + bmi_component * 0.2, 0.0, 100.0), 1)
 
         if persist:
-            StoragePipelineService.store_feature_snapshot(db, user, snapshot, report_id=report_id)
+            stored_snapshot = StoragePipelineService.store_feature_snapshot(db, user, snapshot, report_id=report_id)
+            snapshot.snapshot_id = stored_snapshot.id
 
         return snapshot

@@ -28,7 +28,6 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     score_change_percent  = Column(Numeric(5, 2), default=0.0)
 
     # ── Relationships ──────────────────────────────────────────
-    health_profile  = relationship("HealthProfile", back_populates="user", uselist=False)
     user_profile    = relationship("UserProfile", back_populates="user", uselist=False)
     devices         = relationship("Device", back_populates="user")
     vitals_data     = relationship("VitalsData", back_populates="user")
@@ -45,11 +44,18 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     logs            = relationship("Log", back_populates="user")
     google_fit_connection = relationship("GoogleFitConnection", back_populates="user", uselist=False)
     lab_results          = relationship("LabResult", back_populates="user")
-    lab_values           = relationship("LabValue", back_populates="user")
     feature_snapshots    = relationship("FeatureSnapshotRecord", back_populates="user")
     baseline_metrics     = relationship("BaselineMetricRecord", back_populates="user")
     shap_values          = relationship("ShapValueRecord", back_populates="user")
     health_scores        = relationship("HealthScoreRecord", back_populates="user")
+
+    @property
+    def health_profile(self):
+        return self.user_profile
+
+    @property
+    def lab_values(self):
+        return self.lab_results
 
     def __repr__(self):
         return f"<User id={self.id} email={self.email}>"

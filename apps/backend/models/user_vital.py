@@ -15,6 +15,10 @@ class UserVitalTypeEnum(str, enum.Enum):
     STEPS = "steps"
     SLEEP = "sleep"
     SPO2 = "spo2"
+    BLOOD_PRESSURE_SYSTOLIC = "blood_pressure_systolic"
+    BLOOD_PRESSURE_DIASTOLIC = "blood_pressure_diastolic"
+    BODY_TEMPERATURE = "body_temperature"
+    CALORIES_BURNED = "calories_burned"
 
 
 class UserVitalSourceEnum(str, enum.Enum):
