@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 
 import useDeviceStore from '../store/deviceStore';
+import { connectGoogleFit } from '../services/deviceService';
 
 export const DEVICE_OPTIONS = [
   {
@@ -120,6 +121,7 @@ function AddDeviceModal({ open, onClose }) {
   const previousFocusRef = useRef(null);
   const [query, setQuery] = useState('');
   const devices = useDeviceStore((state) => state.devices);
+  const isConnected = useDeviceStore((state) => state.isConnected);
 
   const mergedDevices = useMemo(
     () => findMatchingDevice(DEVICE_OPTIONS, devices),
@@ -217,6 +219,11 @@ function AddDeviceModal({ open, onClose }) {
     }
 
     onClose();
+
+    if (getNormalizedId(option.id) === 'google_fit') {
+      connectGoogleFit({ redirectPath: window.location.pathname });
+      return;
+    }
 
     if (typeof option.onSelect === 'function') {
       option.onSelect();

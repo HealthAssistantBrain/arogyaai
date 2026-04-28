@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Search,
   Bell,
@@ -23,6 +23,7 @@ import {
   GOOGLE_FIT_PROVIDER,
 } from '../lib/deviceApi';
 import { refreshAfterGoogleFitSync } from '../lib/googleFitRefresh';
+import { setGoogleFitConnectionState } from '../lib/googleFitConnectionState';
 
 function formatLastSynced(value) {
   if (!value) return null;
@@ -250,6 +251,7 @@ function SyncPanel({ integrations, lastUpdated }) {
 
 const DeviceManagement = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [query, setQuery] = useState('');
   const devices = useDeviceStore((state) => state.devices);
   const setDevices = useDeviceStore((state) => state.setDevices);
@@ -257,8 +259,9 @@ const DeviceManagement = () => {
   const [error, setError] = useState('');
   const [syncingDeviceId, setSyncingDeviceId] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const oauthHandledRef = useRef(false);
 
-  const loadDevices = async ({ silent = false } = {}) => {
+  const loadDevices = useCallback(async ({ silent = false } = {}) => {
     if (!silent) {
       setIsLoading(true);
     }
@@ -267,19 +270,68 @@ const DeviceManagement = () => {
     try {
       const summaries = await fetchConnectedDeviceSummaries();
       setDevices(dedupeDevices(summaries));
+      setGoogleFitConnectionState(
+        Array.isArray(summaries) && summaries.some(
+          (device) => device?.provider === GOOGLE_FIT_PROVIDER && device?.is_connected
+        )
+      );
     } catch (apiError) {
       setDevices([]);
+      setGoogleFitConnectionState(false);
       setError(extractErrorMessage(apiError, 'Unable to load connected devices right now.'));
     } finally {
       if (!silent) {
         setIsLoading(false);
       }
     }
-  };
+  }, [setDevices]);
 
   useEffect(() => {
     void loadDevices();
   }, []);
+
+  useEffect(() => {
+    const googleFitStatus = searchParams.get('googleFit');
+    const connectedProvider = searchParams.get('connected');
+    const isConnectedCallback = googleFitStatus === 'connected' || connectedProvider === 'google_fit';
+    const isErrorCallback = googleFitStatus === 'error';
+    const message = searchParams.get('message');
+
+    if ((!isConnectedCallback && !isErrorCallback && !message) || oauthHandledRef.current) {
+      return;
+    }
+
+    oauthHandledRef.current = true;
+
+    const finalize = async () => {
+      if (isConnectedCallback) {
+        setGoogleFitConnectionState(true);
+        toast.success('Google Fit connected. Starting your first sync.');
+
+        try {
+          await syncGoogleFit({
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            days: 30,
+          });
+          await refreshAfterGoogleFitSync();
+        } catch (apiError) {
+          toast.error(extractErrorMessage(apiError, 'Google Fit connected, but the first sync failed.'));
+        }
+      } else if (isErrorCallback || message) {
+        toast.error(message || 'Google Fit connection failed.');
+      }
+
+      await loadDevices({ silent: true });
+
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('googleFit');
+      nextParams.delete('connected');
+      nextParams.delete('message');
+      setSearchParams(nextParams, { replace: true });
+    };
+
+    void finalize();
+  }, [loadDevices, searchParams, setSearchParams]);
 
   const connectedDevices = useMemo(
     () => devices
@@ -346,6 +398,7 @@ const DeviceManagement = () => {
         days: 30,
       });
       await refreshAfterGoogleFitSync();
+      await loadDevices({ silent: true });
       toast.success('Google Fit sync triggered.');
     } catch (apiError) {
       toast.error(extractErrorMessage(apiError, 'Google Fit sync failed.'));

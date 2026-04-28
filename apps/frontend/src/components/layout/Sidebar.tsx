@@ -1,13 +1,11 @@
-import { useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { Waves } from 'lucide-react';
 import { navConfig } from '../../config/navConfig';
 import { ROUTES } from '../../router/routes';
 import useNotificationStore from '../../store/notificationStore';
 
 export default function Sidebar() {
-    const location = useLocation();
     const navigate = useNavigate();
-    const currentPath = location.pathname;
     const unreadCount = useNotificationStore((state) => state.unreadCount);
 
     return (
@@ -39,34 +37,36 @@ export default function Sidebar() {
                         )}
                         <div className="space-y-1">
                             {group.items.map((link) => {
-                                const isActive = currentPath === link.path || 
-                                    (link.path !== '/' && currentPath.startsWith(link.path));
                                 const Icon = link.icon;
                                 return (
-                                    <button
+                                    <NavLink
                                         key={link.label}
-                                        onClick={() => navigate(link.path)}
-                                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left ${
+                                        to={link.path}
+                                        className={({ isActive }) => `w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left ${
                                             isActive
                                                 ? 'bg-[#6143f4] text-white font-bold shadow-md shadow-[#6143f4]/20'
                                                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-[#6143f4] font-medium'
                                         }`}
                                     >
-                                        {Icon && (
-                                            <span className="relative inline-flex">
-                                                <Icon
-                                                    size={18}
-                                                    className={isActive ? 'text-white' : 'text-slate-400 group-hover:text-[#6143f4]'}
-                                                />
-                                                {link.path === ROUTES.NOTIFICATIONS && unreadCount > 0 && (
-                                                    <span className="absolute -top-1 -right-1 size-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-[#131022]" />
+                                        {({ isActive }) => (
+                                            <>
+                                                {Icon && (
+                                                    <span className="relative inline-flex">
+                                                        <Icon
+                                                            size={18}
+                                                            className={isActive ? 'text-white' : 'text-slate-400 group-hover:text-[#6143f4]'}
+                                                        />
+                                                        {link.path === ROUTES.NOTIFICATIONS && unreadCount > 0 && (
+                                                            <span className="absolute -top-1 -right-1 size-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-[#131022]" />
+                                                        )}
+                                                    </span>
                                                 )}
-                                            </span>
+                                                <span className="text-[13px] tracking-tight leading-none">
+                                                    {link.label}
+                                                </span>
+                                            </>
                                         )}
-                                        <span className="text-[13px] tracking-tight leading-none">
-                                            {link.label}
-                                        </span>
-                                    </button>
+                                    </NavLink>
                                 );
                             })}
                         </div>

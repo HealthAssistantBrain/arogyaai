@@ -16,13 +16,13 @@ export async function startGoogleFitConnect({ timezone, redirectPath }) {
 }
 
 export async function fetchGoogleFitConnect({ timezone, redirectPath }) {
-  const { data } = await apiClient.get('/google-fit/connect', {
+  const { data } = await apiClient.get('/integrations/google-fit/url', {
     params: {
       timezone,
       redirect_path: redirectPath,
     },
   });
-  return data.data;
+  return data;
 }
 
 export async function syncGoogleFit({ timezone, days = 30 }) {

@@ -145,3 +145,15 @@ async def get_aqi_locations(
 ):
     """Return inline city suggestions for the AQI monitor search UI."""
     return await aqi_service.search_locations(query, limit)
+
+
+@router.get("/health/aqi-history")
+async def get_aqi_history(
+    lat: float = Query(..., ge=-90, le=90, description="Latitude"),
+    lng: float = Query(..., ge=-180, le=180, description="Longitude"),
+    days: int = Query(7, ge=1, le=14, description="Number of days to summarize"),
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
+    """Backward-compatible AQI history route for existing dashboard consumers."""
+    return await aqi_service.get_aqi_history(lat, lng, days)

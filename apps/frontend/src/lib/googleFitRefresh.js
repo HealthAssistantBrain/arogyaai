@@ -1,7 +1,9 @@
 import useDashboardStore from '../store/dashboardStore';
 import useHealthStore from '../store/healthStore';
-import useDeviceStore from '../store/deviceStore';
 import { fetchConnectedDeviceSummaries } from './deviceApi';
+import { GOOGLE_FIT_PROVIDER } from './deviceApi';
+import useDeviceStore from '../store/deviceStore';
+import { setGoogleFitConnectionState } from './googleFitConnectionState';
 
 export async function refreshAfterGoogleFitSync() {
   const dashboardStore = useDashboardStore.getState();
@@ -9,6 +11,11 @@ export async function refreshAfterGoogleFitSync() {
   await Promise.all([
     fetchConnectedDeviceSummaries().then((summaries) => {
       useDeviceStore.getState().setDevices(summaries);
+      setGoogleFitConnectionState(
+        Array.isArray(summaries) && summaries.some(
+          (device) => device?.provider === GOOGLE_FIT_PROVIDER && device?.is_connected
+        )
+      );
       return summaries;
     }),
     dashboardStore.fetchDashboardData({ force: true, silent: true }),

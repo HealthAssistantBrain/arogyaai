@@ -90,6 +90,10 @@ function isAuthUrl(url = '') {
   return AUTH_PATTERNS.some((p) => url.includes(p));
 }
 
+function isIntegrationAuthSoftFailUrl(url = '') {
+  return url.includes('/google-fit/data-sync') || url.includes('/wearable/google-fit/data');
+}
+
 // Cold-start grace period: suppress maintenance for the first 5 s after the
 // page loads, giving the backend containers time to become fully ready.
 const APP_START_TIME = Date.now();
@@ -155,6 +159,10 @@ api.interceptors.response.use(
     }
 
     if (error.response?.status === 401 && config && !config._retry) {
+      if (isIntegrationAuthSoftFailUrl(config.url || '')) {
+        return Promise.reject(error);
+      }
+
       if (config.url?.includes('/auth/login') || config.url?.includes('/auth/signup')) {
         return Promise.reject(error);
       }

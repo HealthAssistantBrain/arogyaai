@@ -61,6 +61,7 @@ import { safeArray, safeNumber, safeObject, safeText } from '../utils/safeData';
 import { useFetchLock } from '../hooks/useFetchLock';
 import useDeviceStore from '../store/deviceStore';
 import { useSmartSync } from '../hooks/useSmartSync';
+import { setGoogleFitConnectionState } from '../lib/googleFitConnectionState';
 import VitalsCards from '../components/VitalsCards';
 import FloatingChatbot from '../components/ui/FloatingChatbot';
 import AssistantOverlay from '../components/assistant/AssistantOverlay';
@@ -72,7 +73,6 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const isSyncing = useHealthStore((s) => s.isSyncing);
   const setSyncing = useHealthStore((s) => s.setSyncing);
-  const setConnection = useHealthStore((s) => s.setConnection);
   const [hasAttemptedDashboardLoad, setHasAttemptedDashboardLoad] = useState(false);
   const { acquireLock, releaseLock } = useFetchLock();
 
@@ -89,7 +89,6 @@ const Dashboard = () => {
   const fetchHealthMetrics = useHealthStore((s) => s.fetchHealthMetrics);
   const authUser = useAuthStore((s) => s.user);
 
-  const setGoogleFitConnected = useDeviceStore((s) => s.setGoogleFitConnected);
   const setDevices = useDeviceStore((s) => s.setDevices);
   const isAssistantOpen = useAppStore((s) => s.isAssistantOpen);
   const closeAssistant = useAppStore((s) => s.closeAssistant);
@@ -130,14 +129,13 @@ const Dashboard = () => {
         const isConnected = Array.isArray(devices) && devices.some(
           (device) => device?.provider === GOOGLE_FIT_PROVIDER && device?.is_connected
         );
-        setGoogleFitConnected(isConnected);
-        setConnection(isConnected);
+        setGoogleFitConnectionState(isConnected);
       } catch (err) {
         console.log('Fetch device status skipped or failed', err);
       }
     }
     fetchDeviceStatus();
-  }, [authReady, setConnection, setDevices, setGoogleFitConnected]);
+  }, [authReady, setDevices]);
 
   useEffect(() => {
     if (!authReady) return;

@@ -775,6 +775,8 @@ class GoogleFitService:
     def _build_frontend_redirect(redirect_path: str, status_value: str, message: str | None = None) -> str:
         target = f"{settings.FRONTEND_APP_URL.rstrip('/')}{redirect_path}"
         params = {"googleFit": status_value}
+        if status_value == "connected":
+            params["connected"] = "google_fit"
         if message:
             params["message"] = message
         return f"{target}?{urlencode(params)}"
@@ -800,6 +802,19 @@ class GoogleFitService:
                 "stats": GoogleFitService._build_stats([]),
                 "raw_json": None,
                 "google_email": None,
+            }
+
+        has_valid_tokens = bool(connection.access_token_encrypted or connection.refresh_token_encrypted)
+        is_explicitly_disconnected = (connection.last_sync_status or "").lower() == "disconnected"
+        if not has_valid_tokens or is_explicitly_disconnected:
+            return {
+                "connected": False,
+                "timezone": GoogleFitService._resolve_timezone(connection.default_timezone or timezone_name),
+                "last_synced_at": connection.last_synced_at.isoformat() if connection.last_synced_at else None,
+                "stats": GoogleFitService._build_stats([]),
+                "raw_json": connection.raw_last_response,
+                "google_email": connection.google_email,
+                "last_sync_status": connection.last_sync_status,
             }
 
         effective_timezone = GoogleFitService._resolve_timezone(connection.default_timezone or timezone_name)
@@ -1175,10 +1190,12 @@ class GoogleFitService:
 
         refresh_token = token_data.get("refresh_token") or decrypt_secret(connection.refresh_token_encrypted)
         expires_in = token_data.get("expires_in") or 3600
+        google_email = await GoogleFitService._fetch_google_email(access_token)
 
         connection.device_id = device.id
         connection.default_timezone = GoogleFitService._resolve_timezone(state_payload.get("timezone"))
         connection.scopes = token_data.get("scope") or " ".join(GOOGLE_FIT_SCOPE_SET)
+        connection.google_email = google_email
         connection.access_token_encrypted = encrypt_secret(access_token)
         connection.refresh_token_encrypted = encrypt_secret(refresh_token)
         connection.token_expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))

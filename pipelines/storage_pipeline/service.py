@@ -1,7 +1,6 @@
 """Persistence helpers shared by the pipeline stack."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any, Iterable
 from uuid import UUID, uuid4
 
@@ -21,6 +20,9 @@ from models import (
     ShapValueRecord,
     User,
 )
+from pipelines.contracts import PipelineContract
+from pipelines.schemas import BaselineMetricDTO
+from pipelines.storage_pipeline.utils import ensure_json_safe
 
 
 def _as_float(value: Any, default: float | None = None) -> float | None:
@@ -66,6 +68,25 @@ class StoragePipelineService:
     """Central DB write/read utility for all pipeline stages."""
 
     @staticmethod
+    def _normalize_health_insights_payload(payload: dict[str, Any] | None) -> dict[str, Any]:
+        payload = payload if isinstance(payload, dict) else {}
+        risk = payload.get("risk")
+        drivers = payload.get("drivers")
+        recommendations = payload.get("recommendations")
+        availability = payload.get("availability")
+
+        return {
+            "risk": risk if isinstance(risk, dict) else {},
+            "drivers": drivers if isinstance(drivers, list) else [],
+            "recommendations": recommendations if isinstance(recommendations, list) else [],
+            "availability": availability if isinstance(availability, dict) else {
+                "has_wearable": False,
+                "has_lab": False,
+                "has_baseline": False,
+            },
+        }
+
+    @staticmethod
     def store_feature_snapshot(
         db: Session,
         user: User,
@@ -85,8 +106,8 @@ class StoragePipelineService:
             sleep_score=getattr(snapshot, "sleep_score", None),
             confidence=getattr(snapshot, "confidence", None),
             latest_observation_at=getattr(snapshot, "latest_observation_at", None),
-            feature_payload=getattr(snapshot, "to_dict", lambda: {})(),
-            source_breakdown=getattr(snapshot, "source_breakdown", None),
+            feature_payload=ensure_json_safe(getattr(snapshot, "to_dict", lambda: {})()),
+            source_breakdown=ensure_json_safe(getattr(snapshot, "source_breakdown", None) or {}),
         )
         db.add(record)
         db.commit()
@@ -97,13 +118,27 @@ class StoragePipelineService:
     def store_baseline_metrics(
         db: Session,
         user: User,
-        metrics: Iterable[dict[str, Any]],
+        metrics: Iterable[BaselineMetricDTO | dict[str, Any]],
     ) -> list[BaselineMetricRecord]:
-        persisted: list[BaselineMetricRecord] = []
-        for metric in metrics:
-            metric_name = str(metric.get("metric_name") or metric.get("name") or "").strip()
-            if not metric_name:
+        metric_list = list(metrics)
+        validated_metrics: list[BaselineMetricDTO] = []
+        for metric in metric_list:
+            if isinstance(metric, BaselineMetricDTO):
+                validated_metrics.append(metric)
                 continue
+
+            payload = dict(metric)
+            payload.setdefault("user_id", user.id)
+            validated_metrics.append(BaselineMetricDTO.model_validate(payload))
+
+        PipelineContract.validate_baseline(validated_metrics)
+
+        persisted: list[BaselineMetricRecord] = []
+        for dto in validated_metrics:
+            metric = dto.to_storage_dict()
+            serialized_metric = dto.to_json_dict()
+            serialized_metric["metric_payload"] = ensure_json_safe(serialized_metric.get("metric_payload", {}))
+            metric_name = dto.metric_name
 
             record = (
                 db.query(BaselineMetricRecord)
@@ -123,10 +158,14 @@ class StoragePipelineService:
             record.sample_count = int(metric.get("sample_count") or 0)
             record.window_start = metric.get("window_start")
             record.window_end = metric.get("window_end")
-            record.metric_payload = metric
+            record.metric_payload = ensure_json_safe(serialized_metric)
             persisted.append(record)
 
-        db.commit()
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
         for record in persisted:
             db.refresh(record)
         return persisted
@@ -215,8 +254,8 @@ class StoragePipelineService:
         record.ml_model_version = model_version
         record.prediction_source = source
         record.prediction_status = status
-        record.feature_snapshot = feature_snapshot
-        record.risk_payload = risk_payload
+        record.feature_snapshot = ensure_json_safe(feature_snapshot) if feature_snapshot is not None else None
+        record.risk_payload = ensure_json_safe(risk_payload)
         record.health_score = _as_float(risk_payload.get("health_score"), default=None)
         record.pipeline_run_id = pipeline_run_id or str(uuid4())
         record.is_fallback = source != "ml"
@@ -224,7 +263,7 @@ class StoragePipelineService:
         db.commit()
         db.refresh(record)
 
-        recommendations = risk_payload.get("recommendations") or []
+        recommendations = (record.risk_payload or {}).get("recommendations") or []
         StoragePipelineService.store_recommendations(db, record, recommendations)
         return record
 
@@ -306,7 +345,7 @@ class StoragePipelineService:
                     direction=str(item.get("direction") or ("increasing" if value >= 0 else "decreasing")),
                     explanation=str(item.get("explanation") or item.get("detail") or ""),
                     source_type=source_type,
-                    shap_payload=item,
+                    shap_payload=ensure_json_safe(item),
                 )
                 db.add(record)
             else:
@@ -315,7 +354,7 @@ class StoragePipelineService:
                 record.direction = str(item.get("direction") or ("increasing" if value >= 0 else "decreasing"))
                 record.explanation = str(item.get("explanation") or item.get("detail") or "")
                 record.source_type = source_type
-                record.shap_payload = item
+                record.shap_payload = ensure_json_safe(item)
             persisted.append(record)
 
         if persisted:
@@ -358,7 +397,7 @@ class StoragePipelineService:
             lifestyle_component=lifestyle_component,
             vitals_component=vitals_component,
             sleep_component=sleep_component,
-            health_payload=health_payload,
+            health_payload=ensure_json_safe(health_payload),
             source=source,
         )
         db.add(record)
@@ -372,6 +411,42 @@ class StoragePipelineService:
         db.refresh(user)
         if risk_score is not None:
             db.refresh(risk_score)
+        return record
+
+    @staticmethod
+    def store_health_insights(
+        db: Session,
+        user: User,
+        insights_payload: dict[str, Any] | None,
+        *,
+        prediction_id: UUID | str | None = None,
+    ) -> RiskScore | None:
+        normalized = StoragePipelineService._normalize_health_insights_payload(insights_payload)
+        record = None
+        if prediction_id is not None:
+            record = (
+                db.query(RiskScore)
+                .filter(RiskScore.id == prediction_id, RiskScore.user_id == user.id)
+                .one_or_none()
+            )
+
+        if record is None:
+            record = StoragePipelineService.latest_risk_score(db, user)
+
+        if record is None:
+            return None
+
+        risk_payload = dict(record.risk_payload or {})
+        risk_payload["health_insights"] = ensure_json_safe(normalized)
+        risk_payload["drivers"] = normalized["drivers"] or list(risk_payload.get("drivers") or [])
+        risk_payload["recommendations"] = normalized["recommendations"] or list(risk_payload.get("recommendations") or [])
+        if normalized["risk"]:
+            existing_risks = risk_payload.get("risks")
+            risk_payload["risks"] = normalized["risk"] if not isinstance(existing_risks, dict) or not existing_risks else existing_risks
+
+        record.risk_payload = ensure_json_safe(risk_payload)
+        db.commit()
+        db.refresh(record)
         return record
 
     @staticmethod
@@ -418,3 +493,89 @@ class StoragePipelineService:
             .order_by(desc(BaselineMetricRecord.calculated_at))
             .all()
         )
+
+    @staticmethod
+    def fetch_health_insights(db: Session, user: User) -> dict[str, Any] | None:
+        latest_risk = StoragePipelineService.latest_risk_score(db, user)
+        if latest_risk is None:
+            return None
+
+        risk_payload = latest_risk.risk_payload if isinstance(latest_risk.risk_payload, dict) else {}
+        stored = StoragePipelineService._normalize_health_insights_payload(risk_payload.get("health_insights"))
+
+        base_risk = stored["risk"]
+        if not base_risk:
+            fallback_risks = risk_payload.get("risks")
+            if isinstance(fallback_risks, dict):
+                base_risks = dict(fallback_risks)
+            else:
+                base_risks = {}
+            base_risks.setdefault("overall_risk_score", float(latest_risk.overall_score) if latest_risk.overall_score is not None else 0.0)
+            if getattr(latest_risk, "risk_level", None) is not None:
+                base_risks.setdefault(
+                    "risk_level",
+                    latest_risk.risk_level.value if hasattr(latest_risk.risk_level, "value") else str(latest_risk.risk_level),
+                )
+            base_risk = base_risks
+
+        drivers = stored["drivers"]
+        if not drivers:
+            payload_drivers = risk_payload.get("drivers")
+            drivers = payload_drivers if isinstance(payload_drivers, list) else []
+        if not drivers:
+            shap_rows = StoragePipelineService.latest_shap_values(db, latest_risk.id)
+            drivers = [
+                {
+                    "feature_name": row.feature_name,
+                    "shap_value": float(row.shap_value),
+                    "abs_shap_value": float(row.abs_shap_value),
+                    "direction": row.direction,
+                    "explanation": row.explanation,
+                    "source_type": row.source_type,
+                    "calculated_at": row.calculated_at.isoformat() if row.calculated_at else None,
+                }
+                for row in shap_rows
+            ]
+
+        recommendations = stored["recommendations"]
+        if not recommendations:
+            payload_recommendations = risk_payload.get("recommendations")
+            recommendations = payload_recommendations if isinstance(payload_recommendations, list) else []
+
+        has_lab = (
+            db.query(LabValue.id)
+            .filter(LabValue.user_id == user.id)
+            .order_by(desc(LabValue.extracted_at))
+            .first()
+            is not None
+        )
+        latest_feature = StoragePipelineService.latest_feature_snapshot(db, user)
+        feature_payload = latest_feature.feature_payload if latest_feature and isinstance(latest_feature.feature_payload, dict) else {}
+        source_breakdown = feature_payload.get("source_breakdown") if isinstance(feature_payload, dict) else {}
+        if not isinstance(source_breakdown, dict):
+            source_breakdown = {}
+
+        availability = stored["availability"]
+        availability = {
+            **availability,
+            "has_wearable": bool(
+                sum(
+                    int(source_breakdown.get(key) or 0)
+                    for key in ("heart_rate_points", "step_points", "sleep_points", "wearable_sleep_rows", "bp_points")
+                )
+            ),
+            "has_lab": bool(has_lab),
+            "has_baseline": bool(StoragePipelineService.latest_baseline_metrics(db, user)),
+        }
+
+        return {
+            "risk": base_risk if isinstance(base_risk, dict) else {},
+            "drivers": drivers if isinstance(drivers, list) else [],
+            "recommendations": recommendations if isinstance(recommendations, list) else [],
+            "availability": availability,
+            "analysis": risk_payload.get("analysis"),
+            "confidence": float(latest_risk.confidence_score) if latest_risk.confidence_score is not None else None,
+            "feature_snapshot": latest_risk.feature_snapshot if isinstance(latest_risk.feature_snapshot, dict) else feature_payload,
+            "data_points": risk_payload.get("data_points"),
+            "last_updated": latest_risk.calculated_at.isoformat() if latest_risk.calculated_at else None,
+        }

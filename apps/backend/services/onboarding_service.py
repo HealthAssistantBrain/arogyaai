@@ -4,12 +4,13 @@ from datetime import datetime, timezone
 import logging
 from typing import Any
 
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from models import User
-from pipelines.baseline_pipeline.service import BaselinePipelineService
-from pipelines.feature_pipeline.service import FeaturePipelineService
-from pipelines.ml_pipeline.service import MLPipelineService
+from pipelines.contracts import PipelineContract
+from pipelines.orchestration_pipeline.service import OrchestrationPipelineService
+from pipelines.schemas import BaselineMetricDTO
 from pipelines.storage_pipeline.service import StoragePipelineService
 from services.user_service import UserService
 
@@ -50,6 +51,7 @@ class OnboardingService:
         now = datetime.now(timezone.utc)
         baseline_metrics = [
             {
+                "user_id": user.id,
                 "metric_name": "bmi_baseline",
                 "mean_7d": getattr(feature_snapshot, "bmi", None),
                 "mean_30d": getattr(feature_snapshot, "bmi", None),
@@ -60,6 +62,7 @@ class OnboardingService:
                 "metric_payload": {"source": "onboarding_completion"},
             },
             {
+                "user_id": user.id,
                 "metric_name": "activity_level_baseline",
                 "mean_7d": getattr(feature_snapshot, "activity_level", None),
                 "mean_30d": getattr(feature_snapshot, "activity_level", None),
@@ -70,6 +73,7 @@ class OnboardingService:
                 "metric_payload": {"source": "onboarding_completion"},
             },
             {
+                "user_id": user.id,
                 "metric_name": "risk_score_baseline",
                 "mean_7d": prediction_payload.get("risk_score"),
                 "mean_30d": prediction_payload.get("risk_score"),
@@ -80,6 +84,7 @@ class OnboardingService:
                 "metric_payload": {"source": "onboarding_completion"},
             },
             {
+                "user_id": user.id,
                 "metric_name": "health_score_baseline",
                 "mean_7d": prediction_payload.get("health_score"),
                 "mean_30d": prediction_payload.get("health_score"),
@@ -91,7 +96,13 @@ class OnboardingService:
             },
         ]
 
-        persisted = StoragePipelineService.store_baseline_metrics(db, user, baseline_metrics)
+        try:
+            validated_metrics = [BaselineMetricDTO.model_validate(metric) for metric in baseline_metrics]
+        except ValidationError as exc:
+            raise ValueError(f"Invalid ML output: {exc}") from exc
+
+        PipelineContract.validate_baseline(validated_metrics)
+        persisted = StoragePipelineService.store_baseline_metrics(db, user, validated_metrics)
         return [_serialize_baseline_record(record) for record in persisted]
 
     @staticmethod
@@ -130,74 +141,57 @@ class OnboardingService:
         if payload.get("age") is not None:
             feature_overrides["age"] = payload.get("age")
 
-        try:
-            feature_snapshot = FeaturePipelineService.build_feature_snapshot(
-                db,
-                user,
-                overrides=feature_overrides,
-                persist=True,
-            )
-            BaselinePipelineService.compute_baselines(db, user, feature_snapshot)
-
-            prediction_result = MLPipelineService.predict_from_snapshot(
-                db,
-                user,
-                feature_snapshot,
-                payload={
+        task_response = OrchestrationPipelineService.trigger_prediction(
+            {
+                "user_id": str(user.id),
+                "payload": {
                     "data_points": {
                         **feature_overrides,
                         "source": "onboarding_completion",
                     }
                 },
-            )
+            }
+        )
 
-            prediction_payload = prediction_result.get("data", {})
-            default_baselines = OnboardingService._upsert_default_baselines(db, user, feature_snapshot, prediction_payload)
-            latest_health = StoragePipelineService.latest_health_score(db, user)
-            latest_risk = StoragePipelineService.latest_risk_score(db, user)
-            latest_baselines = StoragePipelineService.latest_baseline_metrics(db, user)
-
-            serialized_baselines = [_serialize_baseline_record(item) for item in latest_baselines]
-            if default_baselines:
-                default_metric_names = {item["metric_name"] for item in serialized_baselines}
-                for item in default_baselines:
-                    if item["metric_name"] not in default_metric_names:
-                        serialized_baselines.append(item)
-
+        if task_response.get("success"):
+            task_data = task_response.get("data") or {}
             return {
                 "success": True,
-                "status": "ready",
-                "source": "pipeline",
+                "status": "processing",
+                "source": task_response.get("source", "celery"),
                 "error": None,
                 "data": {
-                    "user": UserService.get_user_me(db, user).get("data"),
+                    "user": profile_data,
                     "onboarding_completed": True,
                     "pipelines_triggered": True,
-                    "feature_snapshot": feature_snapshot.to_dict(),
-                    "health_score": float(latest_health.score) if latest_health is not None else prediction_payload.get("health_score"),
-                    "risk_score": float(latest_risk.overall_score) if latest_risk is not None else prediction_payload.get("risk_score"),
-                    "baseline_metrics": serialized_baselines,
-                    "prediction": prediction_payload,
+                    "task_id": task_data.get("task_id"),
+                    "task_state": task_data.get("state"),
+                    "status_endpoint": f"/api/v1/prediction/status/{task_data['task_id']}" if task_data.get("task_id") else None,
                 },
-                "last_updated": latest_health.calculated_at.isoformat() if latest_health and latest_health.calculated_at else None,
+                "last_updated": None,
             }
-        except Exception as exc:
-            logger.exception("Onboarding pipeline finalization failed for user=%s: %s", user.id, exc)
-            latest_health = StoragePipelineService.latest_health_score(db, user)
-            latest_risk = StoragePipelineService.latest_risk_score(db, user)
-            latest_baselines = StoragePipelineService.latest_baseline_metrics(db, user)
-            return {
-                "success": True,
-                "status": "fallback",
-                "source": "db",
-                "error": f"Pipeline execution deferred: {exc}",
-                "data": {
-                    "user": UserService.get_user_me(db, user).get("data"),
-                    "onboarding_completed": True,
-                    "pipelines_triggered": False,
-                    "health_score": float(latest_health.score) if latest_health is not None else None,
-                    "risk_score": float(latest_risk.overall_score) if latest_risk is not None else None,
-                    "baseline_metrics": [_serialize_baseline_record(item) for item in latest_baselines],
-                },
-                "last_updated": latest_health.calculated_at.isoformat() if latest_health and latest_health.calculated_at else None,
-            }
+
+        logger.error(
+            "Onboarding pipeline enqueue failed for user=%s: %s",
+            user.id,
+            task_response.get("error"),
+        )
+        latest_health = StoragePipelineService.latest_health_score(db, user)
+        latest_risk = StoragePipelineService.latest_risk_score(db, user)
+        latest_baselines = StoragePipelineService.latest_baseline_metrics(db, user)
+        return {
+            "success": False,
+            "status": "fallback",
+            "source": task_response.get("source", "celery"),
+            "error": task_response.get("error"),
+            "data": {
+                "user": profile_data,
+                "onboarding_completed": True,
+                "pipelines_triggered": False,
+                "task_id": None,
+                "health_score": float(latest_health.score) if latest_health is not None else None,
+                "risk_score": float(latest_risk.overall_score) if latest_risk is not None else None,
+                "baseline_metrics": [_serialize_baseline_record(item) for item in latest_baselines],
+            },
+            "last_updated": latest_health.calculated_at.isoformat() if latest_health and latest_health.calculated_at else None,
+        }

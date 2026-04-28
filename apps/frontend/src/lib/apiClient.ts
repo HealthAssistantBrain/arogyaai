@@ -16,6 +16,10 @@ export const apiClient = axios.create({
   withCredentials: true // Required for HTTP-only cookies if strictly used
 });
 
+function isIntegrationAuthSoftFailUrl(url = '') {
+  return url.includes('/google-fit/data-sync') || url.includes('/wearable/google-fit/data');
+}
+
 let isRefreshing = false;
 let failedQueue: Array<{
   resolve: (token: string) => void;
@@ -76,6 +80,10 @@ apiClient.interceptors.response.use(
     }
 
     if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
+      if (isIntegrationAuthSoftFailUrl(originalRequest.url || '')) {
+        return Promise.reject(error);
+      }
+
       // Prevent infinite loops on auth check endpoints
       if (originalRequest.url?.includes('/auth/refresh') || originalRequest.url?.includes('/auth/login')) {
         return Promise.reject(error);

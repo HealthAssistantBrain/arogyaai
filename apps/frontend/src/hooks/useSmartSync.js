@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import useHealthStore from '../store/healthStore';
 import api from '../lib/axios';
+import { setGoogleFitConnectionState } from '../lib/googleFitConnectionState';
 
 export const useSmartSync = (enabled = true) => {
     const googleFitConnected = useHealthStore((s) => s.googleFitConnected);
@@ -12,7 +13,7 @@ export const useSmartSync = (enabled = true) => {
     const prevDataStringRef = useRef(null);
 
     const fetchGoogleFitData = useCallback(async () => {
-        if (!enabled) return;
+        if (!enabled || !googleFitConnected) return;
 
         // 1. Check fetch lock (debounce & duplicate prevention)
         if (isFetchingRef.current) return;
@@ -25,9 +26,15 @@ export const useSmartSync = (enabled = true) => {
             setSyncing(true);
 
             const res = await api.get('/google-fit/data-sync');
+            const payload = res.data?.data;
 
-            if (res.data?.data) {
-                const newData = res.data.data;
+            if (payload?.connected === false || res.data?.status === 'not_connected') {
+                setGoogleFitConnectionState(false);
+                return;
+            }
+
+            if (payload) {
+                const newData = payload;
                 const newDataString = JSON.stringify(newData);
 
                 // 3. Cache Guard (Timestamp/Change validation)
@@ -39,12 +46,16 @@ export const useSmartSync = (enabled = true) => {
                 }
             }
         } catch (err) {
+            if (err?.response?.status === 401 || err?.response?.status === 403) {
+                setGoogleFitConnectionState(false);
+                return;
+            }
             console.error('Smart Sync fetch error:', err);
         } finally {
             isFetchingRef.current = false;
             setSyncing(false);
         }
-    }, [enabled, setWearableData, setSyncing]);
+    }, [enabled, googleFitConnected, setWearableData, setSyncing]);
 
     useEffect(() => {
         if (!enabled) {

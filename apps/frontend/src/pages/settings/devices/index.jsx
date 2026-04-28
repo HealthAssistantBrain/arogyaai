@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useSearchParams } from 'react-router-dom';
 import {
     Activity, Battery, CheckCircle2, Clock, Link2, RefreshCw, Unplug, User, Watch, ArrowUpRight
 } from 'lucide-react';
@@ -12,7 +13,7 @@ import {
     syncGoogleFit,
 } from '../../../lib/googleFitApi';
 import { refreshAfterGoogleFitSync } from '../../../lib/googleFitRefresh';
-import useDeviceStore from '../../../store/deviceStore';
+import { setGoogleFitConnectionState } from '../../../lib/googleFitConnectionState';
 
 const DEFAULT_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 
@@ -56,20 +57,23 @@ function StatCard({ label, value, helper, icon: Icon }) {
 }
 
 const SettingsDevices = () => {
+    const [searchParams, setSearchParams] = useSearchParams();
     const [status, setStatus] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isConnecting, setIsConnecting] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
     const [isDisconnecting, setIsDisconnecting] = useState(false);
+    const oauthHandledRef = useRef(false);
 
     async function loadStatus({ silent = false } = {}) {
         if (!silent) setIsLoading(true);
         try {
             const nextStatus = await fetchGoogleFitStatus();
             setStatus(nextStatus);
-            useDeviceStore.getState().setGoogleFitConnected(Boolean(nextStatus?.connected));
+            setGoogleFitConnectionState(Boolean(nextStatus?.connected));
         } catch (apiError) {
             setStatus(null);
+            setGoogleFitConnectionState(false);
             toast.error(extractErrorMessage(apiError, 'Unable to load Google Fit status right now.'));
         } finally {
             if (!silent) setIsLoading(false);
@@ -80,6 +84,44 @@ const SettingsDevices = () => {
         loadStatus();
         // eslint-disable-next-line
     }, []);
+
+    useEffect(() => {
+        const googleFitStatus = searchParams.get('googleFit');
+        const connectedProvider = searchParams.get('connected');
+        const message = searchParams.get('message');
+        const isConnectedCallback = googleFitStatus === 'connected' || connectedProvider === 'google_fit';
+
+        if ((!isConnectedCallback && googleFitStatus !== 'error' && !message) || oauthHandledRef.current) {
+            return;
+        }
+
+        oauthHandledRef.current = true;
+
+        const finalize = async () => {
+            if (isConnectedCallback) {
+                setGoogleFitConnectionState(true);
+                toast.success('Google Fit connected. Starting your first sync.');
+                try {
+                    await syncGoogleFit({ timezone, days: 30 });
+                    await refreshAfterGoogleFitSync();
+                } catch (apiError) {
+                    toast.error(extractErrorMessage(apiError, 'Google Fit connected, but sync failed.'));
+                }
+            } else {
+                toast.error(message || 'Google Fit connection failed.');
+            }
+
+            await loadStatus({ silent: true });
+            const nextParams = new URLSearchParams(searchParams);
+            nextParams.delete('googleFit');
+            nextParams.delete('connected');
+            nextParams.delete('message');
+            setSearchParams(nextParams, { replace: true });
+        };
+
+        void finalize();
+        // eslint-disable-next-line
+    }, [searchParams, setSearchParams, timezone]);
 
     const connected = Boolean(status?.connected);
     const timezone = status?.timezone || DEFAULT_TIMEZONE;
@@ -124,7 +166,7 @@ const SettingsDevices = () => {
         try {
             await disconnectGoogleFit();
             await loadStatus({ silent: true });
-            useDeviceStore.getState().setGoogleFitConnected(false);
+            setGoogleFitConnectionState(false);
             toast.success('Google Fit disconnected.');
         } catch (apiError) {
             toast.error(extractErrorMessage(apiError, 'Unable to disconnect Google Fit.'));

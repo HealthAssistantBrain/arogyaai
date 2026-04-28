@@ -2,7 +2,6 @@ import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
 import { fetchGoogleFitStatus } from '../lib/googleFitApi';
-import useDeviceStore from '../store/deviceStore';
 import {
   BarChart3,
   User,
@@ -24,12 +23,12 @@ import { ROUTES } from '../router/routes';
 import googleFitLogo from '../assets/google-fit.png';
 import { connectGoogleFit } from '../services/deviceService';
 import OnboardingHeader from '../components/OnboardingHeader';
+import { setGoogleFitConnectionState } from '../lib/googleFitConnectionState';
 
 const DeviceConnection = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const setOnboardingStep = useAuthStore((state) => state.setOnboardingStep);
-  const setGoogleFitConnectedStore = useDeviceStore((s) => s.setGoogleFitConnected);
 
   const [googleFitConnected, setGoogleFitConnected] = useState(false);
   const [statusLoading, setStatusLoading] = useState(true);
@@ -69,7 +68,7 @@ const DeviceConnection = () => {
         const isConnected = Boolean(data?.connected);
         if (!cancelled) {
           setGoogleFitConnected(isConnected);
-          setGoogleFitConnectedStore(isConnected);
+          setGoogleFitConnectionState(isConnected);
         }
       } catch (err) {
         console.error('[DeviceConnection] Status fetch failed:', err);
@@ -90,14 +89,14 @@ const DeviceConnection = () => {
     if (googleFitStatus === 'connected') {
       setConnectionBanner('Google Fit Connected ✅');
       setGoogleFitConnected(true);
-      setGoogleFitConnectedStore(true);
+      setGoogleFitConnectionState(true);
       toast.success('Successfully connected to Google Fit!');
       window.history.replaceState({}, '', window.location.pathname);
     } else if (googleFitStatus === 'error') {
       toast.error(googleFitMessage || 'Failed to connect Google Fit');
       window.history.replaceState({}, '', window.location.pathname);
     }
-  }, [googleFitStatus, googleFitMessage, setGoogleFitConnectedStore]);
+  }, [googleFitStatus, googleFitMessage]);
 
   const handleConnectGoogleFit = () => {
     setOnboardingStep(4);

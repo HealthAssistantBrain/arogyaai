@@ -57,7 +57,7 @@ services:
         HTTPS_PROXY: ${HTTPS_PROXY:-}
         NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,backend,postgres,redis,qdrant,prediction-service,rag-service,wearable-service}
         CUSTOM_CA_CERT_B64: ${CUSTOM_CA_CERT_B64:-}
-    command: ["celery", "-A", "pipelines.orchestration_pipeline.celery_app:celery_app", "worker", "--loglevel=INFO", "-Q", "ingestion,feature,ml,shap"]
+    command: ["celery", "-A", "core.celery_app", "worker", "--loglevel=info"]
     env_file:
       - path: ./apps/backend/.env
         required: false

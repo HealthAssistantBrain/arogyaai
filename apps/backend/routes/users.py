@@ -107,23 +107,36 @@ def get_user_devices(
     db: Session = Depends(get_db),
 ):
     """Return user's connected devices status."""
-    # Source-of-truth connection status is stored on the user record.
+    from services.google_fit_service import GoogleFitService
+
+    google_fit_status = GoogleFitService.get_status(db, current_user)
+    google_fit_connected = bool(google_fit_status.get("connected"))
+
     return [
         {
             "name": "Gmail",
+            "provider": "gmail",
             "status": "connected" if current_user.gmail_connected else "not_connected",
+            "is_connected": bool(current_user.gmail_connected),
         },
         {
             "name": "Apple ID",
+            "provider": "apple-id",
             "status": "connected" if current_user.apple_connected else "not_connected",
+            "is_connected": bool(current_user.apple_connected),
         },
         {
             "name": "Google Fit",
-            "status": "connected" if current_user.google_fit_connection else "not_connected",
+            "provider": "google-fit",
+            "status": "connected" if google_fit_connected else "not_connected",
+            "is_connected": google_fit_connected,
+            "last_synced_at": google_fit_status.get("last_synced_at"),
         },
         {
             "name": "Apple Health",
+            "provider": "apple-health",
             "status": "not_connected",
+            "is_connected": False,
         },
     ]
 

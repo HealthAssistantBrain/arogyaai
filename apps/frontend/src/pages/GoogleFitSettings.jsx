@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -22,6 +22,7 @@ import {
   syncGoogleFit,
 } from '../lib/googleFitApi';
 import { refreshAfterGoogleFitSync } from '../lib/googleFitRefresh';
+import { setGoogleFitConnectionState } from '../lib/googleFitConnectionState';
 
 const DEFAULT_TIMEZONE = import.meta.env.VITE_GOOGLE_FIT_DEFAULT_TIMEZONE || 'Asia/Kolkata';
 const DEFAULT_WINDOW_DAYS = 30;
@@ -87,6 +88,7 @@ const GoogleFitSettings = () => {
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const oauthHandledRef = useRef(false);
 
   async function loadStatus(nextTimezone = timezone, { silent = false } = {}) {
     if (!silent) {
@@ -97,10 +99,12 @@ const GoogleFitSettings = () => {
     try {
       const response = await fetchGoogleFitStatus(nextTimezone);
       setData(response);
+      setGoogleFitConnectionState(Boolean(response?.connected));
       if (response?.timezone) {
         setTimezone(response.timezone);
       }
     } catch (apiError) {
+      setGoogleFitConnectionState(false);
       setError(extractApiError(apiError, 'Unable to load Google Fit status right now.'));
     } finally {
       if (!silent) {
@@ -154,6 +158,7 @@ const GoogleFitSettings = () => {
 
     try {
       await disconnectGoogleFit();
+      setGoogleFitConnectionState(false);
       setData({
         connected: false,
         timezone,
@@ -187,11 +192,14 @@ const GoogleFitSettings = () => {
     const oauthState = searchParams.get('googleFit');
     const message = searchParams.get('message');
 
-    if (!oauthState && !message) {
+    if ((!oauthState && !message) || oauthHandledRef.current) {
       return;
     }
 
+    oauthHandledRef.current = true;
+
     if (oauthState === 'connected') {
+      setGoogleFitConnectionState(true);
       setNotice('Google account connected. Pulling your latest Google Fit steps now.');
       (async () => {
         try {

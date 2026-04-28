@@ -34,6 +34,10 @@ const buildNoCacheConfig = (cacheBust, params = {}) => ({
     headers: NO_CACHE_HEADERS,
 });
 
+const buildNoCacheHeadersConfig = () => ({
+    headers: NO_CACHE_HEADERS,
+});
+
 const toTimestampMs = (value) => {
     if (!value) return null;
     const parsed = Date.parse(value);
@@ -347,13 +351,12 @@ const useDashboardStore = create(
                 ) return;
 
                 const requestId = ++dashboardFetchSeq;
-                const cacheBust = `${Date.now()}-${requestId}`;
                 console.log('[Dashboard] Fetching dashboard data');
                 set({ loading: true, isFetching: true }, false, silent ? 'fetch/start:silent' : 'fetch/start');
                 set({ error: null }, false, 'fetch/clear-error');
 
                 try {
-                    const response = await api.get('/dashboard', buildNoCacheConfig(cacheBust));
+                    const response = await api.get('/dashboard', buildNoCacheHeadersConfig());
                     console.log('[Dashboard] response', response.data);
                     const bundle = response.data?.data ?? response.data ?? {};
                     if (requestId !== dashboardFetchSeq) {

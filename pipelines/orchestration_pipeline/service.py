@@ -2,20 +2,36 @@ from __future__ import annotations
 
 from typing import Any
 
-from pipelines.orchestration_pipeline.celery_app import CELERY_AVAILABLE, celery_app
-from pipelines.orchestration_pipeline.tasks import OrchestrationTasks, _SYNC_RESULTS
-
-if CELERY_AVAILABLE:
+try:
     from celery.result import AsyncResult
-else:  # pragma: no cover - only used when Celery is unavailable locally
+except ModuleNotFoundError:  # pragma: no cover - local test fallback
     AsyncResult = None
+
+from core.celery_app import CELERY_AVAILABLE, celery_app
+from pipelines.tasks import run_baseline_pipeline
 
 
 class OrchestrationPipelineService:
     @staticmethod
     def trigger_prediction(context: dict[str, Any]) -> dict[str, Any]:
-        workflow = OrchestrationTasks.build_chain(context)
-        result = workflow.apply_async()
+        try:
+            result = run_baseline_pipeline.delay(
+                str(context["user_id"]),
+                context.get("payload"),
+                context.get("report_id"),
+            )
+        except Exception as exc:
+            return {
+                "success": False,
+                "status": "fallback",
+                "source": "celery",
+                "error": f"Failed to enqueue pipeline: {exc}",
+                "data": {
+                    "task_id": None,
+                    "state": "FAILED",
+                },
+            }
+
         return {
             "success": True,
             "status": "processing",
@@ -29,32 +45,43 @@ class OrchestrationPipelineService:
 
     @staticmethod
     def get_status(task_id: str) -> dict[str, Any]:
-        if not CELERY_AVAILABLE:
-            sync_result = _SYNC_RESULTS.get(task_id)
-            if sync_result is not None:
+        if not CELERY_AVAILABLE or AsyncResult is None:
+            result = getattr(celery_app, "results", {}).get(task_id)
+            if result is None:
+                return {
+                    "success": True,
+                    "status": "processing",
+                    "source": "sync-fallback",
+                    "error": None,
+                    "data": {
+                        "task_id": task_id,
+                        "state": "PENDING",
+                        "ready": False,
+                    },
+                }
+
+            payload: dict[str, Any] = {
+                "task_id": task_id,
+                "state": result.state,
+                "ready": result.ready(),
+            }
+            if result.successful():
+                payload["result"] = result.result
                 return {
                     "success": True,
                     "status": "ready",
                     "source": "sync-fallback",
                     "error": None,
-                    "data": {
-                        "task_id": task_id,
-                        "state": sync_result.state,
-                        "ready": True,
-                        "result": sync_result.result,
-                    },
+                    "data": payload,
                 }
 
+            payload["error"] = str(result.result)
             return {
-                "success": True,
-                "status": "processing",
+                "success": False,
+                "status": "fallback",
                 "source": "sync-fallback",
-                "error": None,
-                "data": {
-                    "task_id": task_id,
-                    "state": "PENDING",
-                    "ready": False,
-                },
+                "error": str(result.result),
+                "data": payload,
             }
 
         result = AsyncResult(task_id, app=celery_app)
@@ -83,6 +110,9 @@ class OrchestrationPipelineService:
                 "error": str(result.result),
                 "data": payload,
             }
+
+        if result.state == "RETRY":
+            payload["retry"] = True
 
         return {
             "success": True,

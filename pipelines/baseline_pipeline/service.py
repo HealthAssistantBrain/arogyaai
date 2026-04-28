@@ -4,9 +4,12 @@ from datetime import datetime, timedelta, timezone
 from statistics import mean, pstdev
 from typing import Any
 
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from models import User, UserVital, UserVitalTypeEnum, VitalsData, WearableData
+from pipelines.contracts import PipelineContract
+from pipelines.schemas import BaselineMetricDTO
 from pipelines.storage_pipeline.service import StoragePipelineService
 
 
@@ -108,6 +111,7 @@ class BaselinePipelineService:
 
             metrics.append(
                 {
+                    "user_id": user.id,
                     "metric_name": f"{metric_name}_baseline",
                     "mean_7d": _mean(series_7d),
                     "mean_30d": _mean(series_30d),
@@ -122,7 +126,13 @@ class BaselinePipelineService:
                 }
             )
 
-        persisted = StoragePipelineService.store_baseline_metrics(db, user, metrics)
+        try:
+            validated_metrics = [BaselineMetricDTO.model_validate(metric) for metric in metrics]
+        except ValidationError as exc:
+            raise ValueError(f"Invalid baseline output: {exc}") from exc
+
+        PipelineContract.validate_baseline(validated_metrics)
+        persisted = StoragePipelineService.store_baseline_metrics(db, user, validated_metrics)
         return {
             "success": True,
             "status": "ready",
