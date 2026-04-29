@@ -8,18 +8,14 @@ except ModuleNotFoundError:  # pragma: no cover - local test fallback
     AsyncResult = None
 
 from core.celery_app import CELERY_AVAILABLE, celery_app
-from pipelines.tasks import run_baseline_pipeline
+from pipelines.orchestration_pipeline.tasks import OrchestrationTasks
 
 
 class OrchestrationPipelineService:
     @staticmethod
     def trigger_prediction(context: dict[str, Any]) -> dict[str, Any]:
         try:
-            result = run_baseline_pipeline.delay(
-                str(context["user_id"]),
-                context.get("payload"),
-                context.get("report_id"),
-            )
+            result = OrchestrationTasks.build_chain(context).apply_async()
         except Exception as exc:
             return {
                 "success": False,

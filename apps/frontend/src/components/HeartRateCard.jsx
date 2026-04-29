@@ -17,12 +17,18 @@ const HeartRateCard = () => {
   const error = heartRateSlice?.error ?? null;
   const message = heartRateSlice?.message ?? null;
   const connected = Boolean(googleFitSlice?.data?.connected);
+  const heartRateAvailable = googleFitSlice?.data?.data_availability?.heart_rate;
+  const missingScopes = Array.isArray(googleFitSlice?.data?.missing_scopes) ? googleFitSlice.data.missing_scopes : [];
   const latestReading = heartRateData.length > 0 ? heartRateData[heartRateData.length - 1] : null;
   const chartData = heartRateData.map((item) => ({
     t: new Date(item.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
     v: item.value,
   }));
-  const emptyMessage = 'No data yet. Connect your device or wait for sync.';
+  const emptyMessage = connected && heartRateAvailable === false
+    ? missingScopes.includes('heart_rate')
+      ? 'Heart rate permission is missing. Reconnect Google Fit to grant access.'
+      : 'Heart rate data not available.'
+    : 'No data yet. Connect your device or wait for sync.';
 
   return (
     <section className="rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.03]">

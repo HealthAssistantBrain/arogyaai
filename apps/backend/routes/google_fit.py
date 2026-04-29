@@ -9,6 +9,7 @@ from core.config import settings
 from database.session import get_db
 from routes.users import get_current_user_from_header
 from schemas.api_models import GoogleFitConnectRequest, GoogleFitSyncRequest
+from services.audit_service import log_event
 from services.google_fit_service import GoogleFitService
 
 router = APIRouter(prefix="/api/v1/google-fit", tags=["Google Fit"])
@@ -71,6 +72,10 @@ def _safe_not_connected_sync_result(db: Session, current_user, timezone: str | N
             "last_synced_at": status_payload.get("last_synced_at"),
             "last_sync_status": "disconnected",
             "timezone": status_payload.get("timezone"),
+            "data_availability": status_payload.get("data_availability"),
+            "scope_status": status_payload.get("scope_status"),
+            "missing_scopes": status_payload.get("missing_scopes"),
+            "needs_reconsent": status_payload.get("needs_reconsent"),
         },
     }
 
@@ -206,9 +211,21 @@ async def _run_google_fit_data_sync(
     response: Response,
     current_user,
     db: Session,
+    endpoint: str,
 ) -> dict[str, object] | Response:
     if not current_user.google_fit_connection:
-        return _safe_not_connected_sync_result(db, current_user)
+        result = _safe_not_connected_sync_result(db, current_user)
+        log_event(
+            current_user.id,
+            "wearable_sync",
+            endpoint,
+            {
+                "status": result.get("status"),
+                "connected": False,
+                "message": result.get("data", {}).get("message"),
+            },
+        )
+        return result
 
     connection = GoogleFitService.get_connection(db, current_user)
 
@@ -240,7 +257,29 @@ async def _run_google_fit_data_sync(
     except HTTPException as exc:
         if exc.status_code in {status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN}:
             _mark_google_fit_disconnected(db, current_user)
-            return _safe_not_connected_sync_result(db, current_user)
+            result = _safe_not_connected_sync_result(db, current_user)
+            log_event(
+                current_user.id,
+                "wearable_sync",
+                endpoint,
+                {
+                    "status": result.get("status"),
+                    "connected": False,
+                    "message": result.get("data", {}).get("message"),
+                    "http_status": exc.status_code,
+                },
+            )
+            return result
+        log_event(
+            current_user.id,
+            "wearable_sync",
+            endpoint,
+            {
+                "status": "failed",
+                "http_status": exc.status_code,
+                "error": str(exc.detail),
+            },
+        )
         raise
 
     connection = GoogleFitService.get_connection(db, current_user)
@@ -253,7 +292,21 @@ async def _run_google_fit_data_sync(
         response.headers["Cache-Control"] = "private, max-age=0, must-revalidate"
         last_updated = connection.last_synced_at.isoformat()
 
-    return {"status": result.get("status", "fresh"), "lastUpdated": last_updated, "data": result}
+    payload = {"status": result.get("status", "fresh"), "lastUpdated": last_updated, "data": result}
+    log_event(
+        current_user.id,
+        "wearable_sync",
+        endpoint,
+        {
+            "status": payload.get("status"),
+            "connected": result.get("connected"),
+            "partial": result.get("partial"),
+            "records_synced": len(result.get("data") or []),
+            "last_synced_at": result.get("last_synced_at"),
+            "missing_scopes": result.get("missing_scopes") or [],
+        },
+    )
+    return payload
 
 
 @router.get("/data-sync")
@@ -263,7 +316,7 @@ async def fetch_data(
     current_user=Depends(get_current_user_from_header),
     db: Session = Depends(get_db)
 ):
-    return await _run_google_fit_data_sync(request, response, current_user, db)
+    return await _run_google_fit_data_sync(request, response, current_user, db, "/api/v1/google-fit/data-sync")
 
 
 @wearable_router.get("/data")
@@ -273,7 +326,7 @@ async def fetch_google_fit_wearable_data(
     current_user=Depends(get_current_user_from_header),
     db: Session = Depends(get_db),
 ):
-    return await _run_google_fit_data_sync(request, response, current_user, db)
+    return await _run_google_fit_data_sync(request, response, current_user, db, "/api/v1/wearable/google-fit/data")
 
 
 @router.post("/sync")
@@ -284,15 +337,60 @@ async def sync_google_fit(
     db: Session = Depends(get_db),
 ):
     if not current_user.google_fit_connection:
-        return _safe_not_connected_sync_result(db, current_user, payload.timezone)["data"]
+        result = _safe_not_connected_sync_result(db, current_user, payload.timezone)["data"]
+        log_event(
+            current_user.id,
+            "wearable_sync",
+            "/api/v1/google-fit/sync",
+            {
+                "status": result.get("status"),
+                "connected": False,
+                "timezone": payload.timezone,
+                "days": payload.days,
+                "silent": silent,
+            },
+        )
+        return result
 
-    return await GoogleFitService.sync_steps(
-        db,
-        current_user,
-        timezone_name=payload.timezone,
-        days=payload.days,
-        silent=silent,
-    )
+    try:
+        result = await GoogleFitService.sync_steps(
+            db,
+            current_user,
+            timezone_name=payload.timezone,
+            days=payload.days,
+            silent=silent,
+        )
+        log_event(
+            current_user.id,
+            "wearable_sync",
+            "/api/v1/google-fit/sync",
+            {
+                "status": result.get("status"),
+                "connected": result.get("connected"),
+                "partial": result.get("partial"),
+                "timezone": payload.timezone,
+                "days": payload.days,
+                "silent": silent,
+                "records_synced": len(result.get("data") or []),
+                "last_synced_at": result.get("last_synced_at"),
+            },
+        )
+        return result
+    except HTTPException as exc:
+        log_event(
+            current_user.id,
+            "wearable_sync",
+            "/api/v1/google-fit/sync",
+            {
+                "status": "failed",
+                "timezone": payload.timezone,
+                "days": payload.days,
+                "silent": silent,
+                "http_status": exc.status_code,
+                "error": str(exc.detail),
+            },
+        )
+        raise
 
 
 @router.delete("/disconnect")

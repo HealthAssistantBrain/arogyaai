@@ -84,6 +84,20 @@ def _format_time(ts: datetime, tzinfo: ZoneInfo) -> str:
     return ts.astimezone(tzinfo).strftime("%I:%M %p").lstrip("0")
 
 
+def _sleep_hours_from_user_vital(row: UserVital) -> float | None:
+    if row.value is None:
+        return None
+    try:
+        value = float(row.value)
+    except (TypeError, ValueError):
+        return None
+
+    unit = str(row.unit or "").strip().lower()
+    if unit in {"minutes", "minute", "min", "mins"}:
+        return value / 60.0
+    return value
+
+
 def _sleep_stage_profile(duration_hours: float, sleep_score: float) -> dict[str, float]:
     deep_raw = 18.0 + (duration_hours - 7.0) * 1.8 + (sleep_score - 75.0) * 0.12
     rem_raw = 22.0 + (duration_hours - 7.0) * 1.0 + (sleep_score - 75.0) * 0.10
@@ -331,8 +345,9 @@ class SleepService:
         )
         for row in vitals_rows:
             recorded_at = row.timestamp if row.timestamp.tzinfo else row.timestamp.replace(tzinfo=timezone.utc)
-            reference_end = recorded_at + timedelta(hours=24)
-            duration_hours = _safe_float(row.value, 0.0) or 0.0
+            duration_hours = _sleep_hours_from_user_vital(row) or 0.0
+            unit = str(row.unit or "").strip().lower()
+            reference_end = recorded_at if unit in {"minutes", "minute", "min", "mins"} else recorded_at + timedelta(hours=24)
             night_key = _night_key(reference_end, tzinfo)
             sample = SleepNightSample(
                 night_key=night_key,

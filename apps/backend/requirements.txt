@@ -19,3 +19,8 @@ python-multipart
 celery
 requests
 supabase>=2.3.0,<2.7.0
+joblib
+scikit-learn
+shap
+qdrant-client
+fastembed

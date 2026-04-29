@@ -1,12 +1,14 @@
+import asyncio
+import logging
 import mimetypes
 import re
 import uuid
 from io import BytesIO
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urlparse
 
-from fastapi import HTTPException, UploadFile, status
+from fastapi import BackgroundTasks, HTTPException, UploadFile, status
 
 try:
     from pypdf import PdfReader
@@ -14,10 +16,11 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency
     PdfReader = None
 from sqlalchemy.orm import Session
 
-from core.config import settings
 from core.pipeline_logger import log_pipeline
 from integrations.supabase_storage import upload_report as _supabase_upload_report
 from models import Report, ReportStatusEnum, ReportTypeEnum, User
+
+logger = logging.getLogger("uvicorn.error")
 
 
 class ReportService:
@@ -31,6 +34,7 @@ class ReportService:
         current_user: User,
         file: UploadFile,
         report_type: str,
+        background_tasks: BackgroundTasks | None = None,
     ) -> dict[str, Any]:
         cls._validate_report_type(report_type)
         extension = Path(file.filename or "").suffix.lower()
@@ -66,7 +70,8 @@ class ReportService:
         try:
             log_pipeline("report", step="analyze_report", status="running", data="pending")
             analysis = await cls._analyze_report(file.filename or "report", file.content_type, file_bytes)
-            cls.persist_report(db, str(report.id), analysis.get("ocr_text", ""), analysis)
+            cls.persist_report(db, str(report.id), analysis.get("full_text") or analysis.get("ocr_text", ""), analysis)
+            cls._schedule_lab_pipeline(str(report.id), background_tasks=background_tasks)
             db.refresh(report)
             log_pipeline("report", step="analyze_report", status="healthy", data="fetched",
                          extra=f"source={analysis.get('source', '?')}")
@@ -206,6 +211,7 @@ class ReportService:
                 "Free mode currently supports direct text extraction from PDF reports.",
                 "For JPG or PNG reports, install Tesseract OCR and I can wire image reading too.",
             ],
+            "full_text": "",
             "ocr_text": "Image OCR is not configured on this machine yet.",
             "markers": [],
             "source": "local-fallback",
@@ -238,6 +244,7 @@ class ReportService:
                     "No readable text was found in this PDF in free mode.",
                     "If this is a scanned PDF, install Tesseract OCR and I can enable scanned-document extraction.",
                 ],
+                "full_text": "",
                 "ocr_text": "No text could be extracted from this PDF.",
                 "markers": [],
                 "source": "local-fallback",
@@ -249,10 +256,36 @@ class ReportService:
         return {
             "title": title,
             "summary": summary,
+            "full_text": normalized_text,
             "ocr_text": normalized_text[:1200],
             "markers": markers[:6],
             "source": "local-pdf",
         }
+
+    @staticmethod
+    def _load_lab_pipeline_runner() -> Callable[[str], Any]:
+        try:
+            from apps.backend.services.lab_pipeline_service import run_lab_pipeline
+        except ImportError:
+            from services.lab_pipeline_service import run_lab_pipeline
+
+        return run_lab_pipeline
+
+    @classmethod
+    def _schedule_lab_pipeline(
+        cls,
+        report_id: str,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> None:
+        try:
+            runner = cls._load_lab_pipeline_runner()
+            if background_tasks is not None:
+                background_tasks.add_task(runner, report_id)
+                return
+
+            asyncio.create_task(asyncio.to_thread(runner, report_id))
+        except Exception:
+            logger.exception("Failed to schedule lab pipeline for report %s", report_id)
 
     @staticmethod
     def _extract_markers(text: str) -> list[dict[str, str]]:

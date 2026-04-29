@@ -106,14 +106,17 @@ async def _fetch_ml_prediction(user: User) -> Optional[dict]:
     try:
         latest = StoragePipelineService.latest_risk_score(db, user)
         if latest is not None:
+            payload = latest.risk_payload if isinstance(latest.risk_payload, dict) else {}
+            cached_explanation = payload.get("rag_explanation") if isinstance(payload.get("rag_explanation"), dict) else {}
             return {
                 "prediction_id": str(latest.id),
                 "risk_score": float(latest.overall_score),
                 "risk_level": latest.risk_level.value if hasattr(latest.risk_level, "value") else str(latest.risk_level),
                 "confidence": float(latest.confidence_score) if latest.confidence_score is not None else None,
-                "drivers": latest.risk_payload.get("drivers", []) if latest.risk_payload else [],
-                "recommendations": latest.risk_payload.get("recommendations", []) if latest.risk_payload else [],
-                "analysis": latest.risk_payload.get("analysis") if latest.risk_payload else None,
+                "drivers": payload.get("drivers", []),
+                "recommendations": payload.get("recommendations", []),
+                "analysis": payload.get("analysis"),
+                "explanation": cached_explanation.get("payload"),
                 "feature_snapshot": latest.feature_snapshot or {},
                 "last_updated": latest.calculated_at.isoformat() if latest.calculated_at else None,
             }

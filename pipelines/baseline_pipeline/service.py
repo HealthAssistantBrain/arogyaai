@@ -29,6 +29,20 @@ def _std_dev(values: list[float]) -> float | None:
     return round(float(pstdev(values)), 2)
 
 
+def _sleep_hours_from_user_vital(row: UserVital) -> float | None:
+    if row.value is None:
+        return None
+    try:
+        value = float(row.value)
+    except (TypeError, ValueError):
+        return None
+
+    unit = str(row.unit or "").strip().lower()
+    if unit in {"minutes", "minute", "min", "mins"}:
+        return value / 60.0
+    return value
+
+
 class BaselinePipelineService:
     @staticmethod
     def _series(db: Session, user: User, days: int, kind: str) -> list[float]:
@@ -87,8 +101,9 @@ class BaselinePipelineService:
                 )
                 .all()
             ):
-                if row.value is not None:
-                    values.append(float(row.value))
+                duration_hours = _sleep_hours_from_user_vital(row)
+                if duration_hours is not None:
+                    values.append(duration_hours)
             for row in (
                 db.query(WearableData)
                 .filter(WearableData.user_id == user.id, WearableData.recorded_at >= cutoff)

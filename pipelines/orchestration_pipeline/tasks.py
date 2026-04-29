@@ -22,11 +22,18 @@ def _load_user(db, user_id: str) -> User:
     return user
 
 
-def _context_from_snapshot(snapshot: FeatureSnapshot, *, user_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+def _context_from_snapshot(
+    snapshot: FeatureSnapshot,
+    *,
+    user_id: str,
+    payload: dict[str, Any] | None = None,
+    report_id: str | None = None,
+) -> dict[str, Any]:
     return {
         "user_id": user_id,
         "payload": payload or {},
         "feature_snapshot": snapshot.to_dict(),
+        "report_id": report_id,
     }
 
 
@@ -38,6 +45,12 @@ class _SyncResult:
 
     def ready(self) -> bool:
         return True
+
+    def successful(self) -> bool:
+        return self.state == "SUCCESS"
+
+    def failed(self) -> bool:
+        return self.state == "FAILURE"
 
 
 class _SyncChain:
@@ -54,6 +67,8 @@ class _SyncChain:
         context = compute_baseline(context)
         result = _SyncResult(id=self.id, state="SUCCESS", result=context)
         _SYNC_RESULTS[self.id] = result
+        if hasattr(celery_app, "results"):
+            celery_app.results[self.id] = result
         self.state = result.state
         return result
 
@@ -84,7 +99,12 @@ def compute_features(context: dict[str, Any]) -> dict[str, Any]:
             persist=True,
             report_id=context.get("report_id"),
         )
-        return _context_from_snapshot(snapshot, user_id=str(user.id), payload=context.get("payload"))
+        return _context_from_snapshot(
+            snapshot,
+            user_id=str(user.id),
+            payload=context.get("payload"),
+            report_id=context.get("report_id"),
+        )
     finally:
         db.close()
 

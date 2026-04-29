@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 import sys
 
 import pytest
+from sqlalchemy.dialects import postgresql
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -99,4 +100,71 @@ def test_store_baseline_metrics_rolls_back_when_commit_fails():
             ],
         )
 
+    db.rollback.assert_called_once()
+
+
+def test_store_shap_values_uses_postgres_upsert_and_commits_once():
+    db = MagicMock()
+    user = SimpleNamespace(id=uuid4())
+    risk_score = SimpleNamespace(id=uuid4())
+    stored_row = SimpleNamespace(
+        feature_name="glucose",
+        shap_value=1.23,
+        abs_shap_value=1.23,
+        direction="increasing",
+        explanation="Glucose is elevated",
+        source_type="ml",
+        calculated_at=datetime.now(timezone.utc),
+    )
+    db.query.return_value.filter.return_value.all.return_value = [stored_row]
+
+    persisted = StoragePipelineService.store_shap_values(
+        db,
+        user,
+        risk_score=risk_score,
+        shap_entries=[
+            {
+                "feature_name": "glucose",
+                "shap_value": 1.23,
+                "direction": "increasing",
+                "explanation": "Glucose is elevated",
+            }
+        ],
+        source_type="ml",
+    )
+
+    assert persisted == [stored_row]
+    assert db.execute.call_count == 1
+    db.commit.assert_called_once()
+    db.rollback.assert_not_called()
+
+    compiled_sql = str(
+        db.execute.call_args.args[0].compile(
+            dialect=postgresql.dialect(),
+        )
+    )
+    assert "ON CONFLICT (prediction_id, feature_name) DO UPDATE" in compiled_sql
+    assert "updated_at = now()" in compiled_sql
+
+
+def test_store_shap_values_rolls_back_when_upsert_fails():
+    db = MagicMock()
+    db.execute.side_effect = RuntimeError("execute failed")
+    user = SimpleNamespace(id=uuid4())
+    risk_score = SimpleNamespace(id=uuid4())
+
+    with pytest.raises(RuntimeError, match="execute failed"):
+        StoragePipelineService.store_shap_values(
+            db,
+            user,
+            risk_score=risk_score,
+            shap_entries=[
+                {
+                    "feature_name": "glucose",
+                    "shap_value": 1.23,
+                }
+            ],
+        )
+
+    db.commit.assert_not_called()
     db.rollback.assert_called_once()

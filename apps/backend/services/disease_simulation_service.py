@@ -35,6 +35,20 @@ def _clamp(value: float, minimum: float, maximum: float) -> float:
     return max(minimum, min(maximum, value))
 
 
+def _sleep_hours_from_vital(record: UserVital) -> float | None:
+    if record.value is None:
+        return None
+    try:
+        value = float(record.value)
+    except (TypeError, ValueError):
+        return None
+
+    unit = str(record.unit or "").strip().lower()
+    if unit in {"minutes", "minute", "min", "mins"}:
+        return value / 60.0
+    return value
+
+
 def _age_from_dob(dob) -> int | None:
     if not dob:
         return None
@@ -154,7 +168,7 @@ class DiseaseSimulationService:
         height_cm = _safe_float(getattr(profile, "height_cm", None), 170.0) or 170.0
         bmi = round(weight_kg / ((height_cm / 100) ** 2), 1) if height_cm > 0 else None
 
-        avg_sleep = _avg([record.value for record in sleep_records]) or 7.0
+        avg_sleep = _avg([_sleep_hours_from_vital(record) for record in sleep_records]) or 7.0
         avg_steps = _safe_int(_avg([record.value for record in steps_records]), 7000) or 7000
         avg_heart_rate = _safe_int(_avg([record.value for record in heart_records]), None)
 

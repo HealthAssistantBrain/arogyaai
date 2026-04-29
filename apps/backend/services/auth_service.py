@@ -18,6 +18,7 @@ from schemas.api_models import OAuthLoginRequest, UserCreate, UserLogin, TokenRe
 from core.security import verify_password, get_password_hash, create_access_token, create_refresh_token
 from core.config import settings
 from core.utils import safe_input
+from services.audit_service import log_event
 from services.event_service import emit_event
 from services.user_service import UserService
 
@@ -396,6 +397,17 @@ class AuthService:
             logger.exception("[Auth] Failed to emit oauth login notification for user=%s", user.id)
 
         access_token, refresh_token, _ = AuthService._issue_session(db, user)
+        log_event(
+            user.id,
+            "login",
+            "/api/v1/auth/oauth",
+            {
+                "status": "success",
+                "method": "oauth",
+                "provider": provider,
+                "email": user.email,
+            },
+        )
 
         return {
             "success": True,
@@ -475,12 +487,33 @@ class AuthService:
         user = db.query(User).filter(User.email == user_data.email, User.is_deleted == False).first()
         
         if not user or not verify_password(user_data.password, user.password_hash):
+            log_event(
+                None,
+                "login",
+                "/api/v1/auth/login",
+                {
+                    "status": "failed",
+                    "method": "password",
+                    "email": user_data.email,
+                    "reason": "invalid_credentials",
+                },
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password"
             )
         
         access_token, refresh_token, _ = AuthService._issue_session(db, user)
+        log_event(
+            user.id,
+            "login",
+            "/api/v1/auth/login",
+            {
+                "status": "success",
+                "method": "password",
+                "email": user.email,
+            },
+        )
         try:
             emit_event("USER_LOGIN", user.id, {"email": user.email})
         except Exception:

@@ -4,7 +4,7 @@ Lab pipeline service - processes raw lab report text into structured DB records.
 Lives inside apps/backend/services/ so it is available inside the Docker container
 without requiring the monorepo pipelines/ directory (which is not COPYed into the image).
 
-Entry point: run_lab_pipeline(text, user_id, report_id, db)
+Entry point: run_lab_pipeline(report_id) or run_lab_pipeline(report_id, text=..., user_id=..., db=...)
 """
 from __future__ import annotations
 
@@ -17,6 +17,8 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from core.pipeline_logger import log_pipeline
+from database.session import SessionLocal
+from models import Report
 
 logger = logging.getLogger("uvicorn.error")
 # ---------------------------------------------------------------------------
@@ -268,7 +270,7 @@ def store_lab_results(
     return count
 
 
-def run_lab_pipeline(
+def _run_pipeline(
     text: str,
     user_id: UUID | str,
     report_id: UUID | str | None,
@@ -302,3 +304,70 @@ def run_lab_pipeline(
         logger.exception("lab_pipeline: failed for user=%s report=%s", user_id, report_id)
         log_pipeline("lab", step="run_lab_pipeline", status="unhealthy", data="failed")
         return []
+
+
+def _resolve_report(db: Session, report_id: UUID | str) -> Report | None:
+    try:
+        report_uuid = report_id if isinstance(report_id, UUID) else UUID(str(report_id))
+    except (TypeError, ValueError):
+        logger.warning("lab_pipeline: invalid report id %s", report_id)
+        return None
+
+    return (
+        db.query(Report)
+        .filter(
+            Report.id == report_uuid,
+            Report.is_deleted == False,
+        )
+        .first()
+    )
+
+
+def run_lab_pipeline(
+    report_id: UUID | str | None,
+    text: str | None = None,
+    user_id: UUID | str | None = None,
+    db: Session | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Full pipeline entrypoint.
+
+    Preferred usage is `run_lab_pipeline(report_id)` so background tasks can
+    reopen their own database session. Existing direct calls that provide
+    text/user/db are still supported.
+    """
+    owns_session = db is None
+    session = db or SessionLocal()
+
+    try:
+        resolved_report_id = report_id
+        resolved_text = (text or "").strip()
+        resolved_user_id = user_id
+
+        if resolved_user_id is None or not resolved_text:
+            if report_id is None:
+                logger.warning("lab_pipeline: report_id is required when text/user context is missing")
+                return []
+
+            report = _resolve_report(session, report_id)
+            if report is None:
+                logger.warning("lab_pipeline: report %s not found", report_id)
+                return []
+
+            resolved_report_id = report.id
+            resolved_user_id = report.user_id
+            resolved_text = (report.parsed_text or "").strip()
+
+            if not resolved_text and isinstance(report.summary_data, dict):
+                resolved_text = str(report.summary_data.get("full_text") or "").strip()
+
+            if not resolved_text:
+                logger.info("lab_pipeline: report %s has no extracted text yet", report_id)
+                log_pipeline("lab", step="load_report", status="healthy", data="empty",
+                             extra=f"report_id={report_id}")
+                return []
+
+        return _run_pipeline(resolved_text, resolved_user_id, resolved_report_id, session)
+    finally:
+        if owns_session:
+            session.close()

@@ -8,8 +8,9 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from models import User, UserProfile, UserVital, UserVitalTypeEnum, VitalsData, WearableData
+from models import LabResult, User, UserProfile, UserVital, UserVitalTypeEnum, VitalsData, WearableData
 from services.sleep_service import SleepService
+from pipelines.feature_pipeline.aggregation import avg_steps_7d, data_availability_7d, hr_mean_7d, sleep_efficiency_7d
 from pipelines.storage_pipeline.service import StoragePipelineService
 
 LOOKBACK_DAYS = 30
@@ -212,6 +213,20 @@ def _latest_user_vital_value(db: Session, user: User, vital_type: UserVitalTypeE
     return float(row.value)
 
 
+def _sleep_hours_from_vital(row: UserVital) -> float | None:
+    if row.value is None:
+        return None
+    try:
+        value = float(row.value)
+    except (TypeError, ValueError):
+        return None
+
+    unit = str(row.unit or "").strip().lower()
+    if unit in {"minutes", "minute", "min", "mins"}:
+        return value / 60.0
+    return value
+
+
 def _recent_heart_rates(db: Session, user: User, days: int = VITAL_LOOKBACK_DAYS) -> list[float]:
     cutoff = _now_utc() - timedelta(days=days)
     values = _recent_user_vital_values(db, user, UserVitalTypeEnum.HEART_RATE, cutoff)
@@ -256,9 +271,25 @@ def _recent_steps(db: Session, user: User, days: int = LOOKBACK_DAYS) -> list[fl
 
 def _recent_sleep_rows(db: Session, user: User, days: int = SLEEP_LOOKBACK_DAYS) -> tuple[list[float], list[float], int]:
     cutoff = _now_utc() - timedelta(days=days)
-    durations = _recent_user_vital_values(db, user, UserVitalTypeEnum.SLEEP, cutoff)
+    durations: list[float] = []
     scores: list[int] = []
-    source_rows = len(durations)
+    source_rows = 0
+
+    for row in (
+        db.query(UserVital)
+        .filter(
+            UserVital.user_id == user.id,
+            UserVital.vital_type == UserVitalTypeEnum.SLEEP,
+            UserVital.timestamp >= cutoff,
+        )
+        .order_by(UserVital.timestamp.asc())
+        .all()
+    ):
+        duration_hours = _sleep_hours_from_vital(row)
+        if duration_hours is None:
+            continue
+        durations.append(duration_hours)
+        source_rows += 1
 
     if durations:
         return durations, [], source_rows
@@ -281,6 +312,30 @@ def _recent_sleep_rows(db: Session, user: User, days: int = SLEEP_LOOKBACK_DAYS)
     return durations, [float(score) for score in scores], source_rows
 
 
+def _normalize_lab_marker(value: Any) -> str:
+    return " ".join(str(value or "").strip().lower().replace("_", " ").replace("-", " ").split())
+
+
+def _lab_name_matches(name: Any, marker: str) -> bool:
+    normalized_name = _normalize_lab_marker(name)
+    if not normalized_name:
+        return False
+
+    aliases = {
+        "glucose": ("glucose", "blood sugar"),
+        "cholesterol": ("cholesterol", "ldl", "hdl"),
+    }
+    candidates = aliases.get(_normalize_lab_marker(marker), (_normalize_lab_marker(marker),))
+    return any(candidate and candidate in normalized_name for candidate in candidates)
+
+
+def _latest_lab_marker_row(labs: Iterable[LabResult], marker: str) -> LabResult | None:
+    for row in labs:
+        if _lab_name_matches(getattr(row, "name", None) or getattr(row, "biomarker_name", None), marker):
+            return row
+    return None
+
+
 @dataclass(kw_only=True)
 class FeatureSnapshot:
     snapshot_id: UUID | str | None = None
@@ -295,17 +350,20 @@ class FeatureSnapshot:
     bp_category: str
     age: int | None
     cholesterol_proxy: float | None
+    glucose: float | None = None
+    cholesterol: float | None = None
     data_points: int
     data_completeness: float
     confidence: float
     latest_observation_at: datetime | None
-    source_breakdown: dict[str, int]
+    source_breakdown: dict[str, Any]
     notes: list[str]
     hr_mean_7d: float | None = None
     steps_avg_7d: float | None = None
     sleep_efficiency: float | None = None
     lifestyle_score: float | None = None
     activity_score: float | None = None
+    data_availability: dict[str, bool] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -321,6 +379,8 @@ class FeatureSnapshot:
             "bp_category": self.bp_category,
             "age": self.age,
             "cholesterol_proxy": self.cholesterol_proxy,
+            "glucose": self.glucose if self.glucose is not None else 0.0,
+            "cholesterol": self.cholesterol if self.cholesterol is not None else 0.0,
             "data_points": self.data_points,
             "data_completeness": self.data_completeness,
             "confidence": self.confidence,
@@ -332,6 +392,7 @@ class FeatureSnapshot:
             "sleep_efficiency": self.sleep_efficiency,
             "lifestyle_score": self.lifestyle_score,
             "activity_score": self.activity_score,
+            "data_availability": self.data_availability or {"steps": False, "heart_rate": False, "sleep": False},
         }
 
     @classmethod
@@ -359,6 +420,8 @@ class FeatureSnapshot:
             bp_category=data.get("bp_category") or "unknown",
             age=data.get("age"),
             cholesterol_proxy=data.get("cholesterol_proxy"),
+            glucose=data.get("glucose"),
+            cholesterol=data.get("cholesterol"),
             data_points=int(data.get("data_points") or 0),
             data_completeness=float(data.get("data_completeness") or 0.0),
             confidence=float(data.get("confidence") or 0.0),
@@ -370,6 +433,7 @@ class FeatureSnapshot:
             sleep_efficiency=data.get("sleep_efficiency"),
             lifestyle_score=data.get("lifestyle_score"),
             activity_score=data.get("activity_score"),
+            data_availability=dict(data.get("data_availability") or {"steps": False, "heart_rate": False, "sleep": False}),
         )
 
 
@@ -389,6 +453,12 @@ class FeaturePipelineService:
             .filter(VitalsData.user_id == user.id)
             .order_by(VitalsData.recorded_at.desc())
             .first()
+        )
+        labs = (
+            db.query(LabResult)
+            .filter(LabResult.user_id == user.id)
+            .order_by(LabResult.timestamp.desc())
+            .all()
         )
 
         sleep_summary = SleepService.get_sleep_summary(db, user)
@@ -419,6 +489,7 @@ class FeaturePipelineService:
         activity_level = None
         if steps:
             activity_level = int(round(float(mean(steps))))
+        data_availability = data_availability_7d(db, user.id)
 
         height_cm = _safe_float(getattr(profile, "height_cm", None))
         weight_kg = _safe_float(getattr(profile, "weight_kg", None))
@@ -438,6 +509,10 @@ class FeaturePipelineService:
         if age is None:
             age = _safe_int(getattr(profile, "age", None))
         cholesterol_proxy = _cholesterol_proxy(bmi, systolic_bp, diastolic_bp, activity_level, sleep_score, age)
+        glucose_row = _latest_lab_marker_row(labs, "glucose")
+        cholesterol_row = _latest_lab_marker_row(labs, "cholesterol")
+        glucose = _safe_float(getattr(glucose_row, "value", None))
+        cholesterol = _safe_float(getattr(cholesterol_row, "value", None))
 
         source_breakdown = {
             "heart_rate_points": len(heart_rates),
@@ -445,8 +520,10 @@ class FeaturePipelineService:
             "sleep_points": len(sleep_durations) + len(wearable_sleep_scores),
             "wearable_sleep_rows": sleep_source_rows,
             "bp_points": 1 if systolic_bp is not None or diastolic_bp is not None else 0,
+            "lab_points": int(glucose is not None) + int(cholesterol is not None),
+            "data_availability": data_availability,
         }
-        data_points = sum(source_breakdown.values())
+        data_points = int(sum(value for value in source_breakdown.values() if isinstance(value, (int, float))))
         measured_fields = [
             avg_hrv is not None,
             avg_rhr is not None,
@@ -458,6 +535,8 @@ class FeaturePipelineService:
             diastolic_bp is not None,
             age is not None,
             cholesterol_proxy is not None,
+            glucose is not None,
+            cholesterol is not None,
         ]
         data_completeness = round(sum(1 for field in measured_fields if field) / len(measured_fields), 2)
         latest_candidates = [
@@ -479,6 +558,10 @@ class FeaturePipelineService:
         )
         if latest_bp_row is not None:
             latest_candidates.append(_to_utc(latest_bp_row.timestamp))
+        if glucose_row is not None:
+            latest_candidates.append(_to_utc(getattr(glucose_row, "timestamp", None)))
+        if cholesterol_row is not None:
+            latest_candidates.append(_to_utc(getattr(cholesterol_row, "timestamp", None)))
         sleep_last = sleep_summary.get("last_updated")
         if sleep_last:
             try:
@@ -496,6 +579,14 @@ class FeaturePipelineService:
             notes.append("No recent blood pressure reading was found, so BP-based scoring leans on other cardiovascular signals.")
         if bmi is None:
             notes.append("BMI could not be calculated because height or weight is missing in the profile.")
+        if not data_availability.get("steps", False):
+            notes.append("Step data was unavailable in the last 7 days, so activity aggregates defaulted to 0.")
+        if not data_availability.get("heart_rate", False):
+            notes.append("Heart rate data was unavailable in the last 7 days, so heart-rate aggregates defaulted to 0.")
+        if not data_availability.get("sleep", False):
+            notes.append("Sleep data was unavailable in the last 7 days, so sleep aggregates defaulted to 0.")
+        if glucose is None and cholesterol is None:
+            notes.append("No recent lab results were found, so glucose and cholesterol remain at 0 in the feature snapshot.")
 
         recency_hours = None
         if latest_observation_at is not None:
@@ -506,22 +597,20 @@ class FeaturePipelineService:
 
         confidence = round(_clamp(42.0 + data_completeness * 38.0 + recency_factor * 20.0, 18.0, 96.0), 1)
 
-        hr_mean_7d = _mean(heart_rates)
-        steps_avg_7d = _mean(steps)
-        sleep_efficiency = None
-        if sleep_duration is not None:
-            sleep_efficiency = round(_clamp((sleep_duration / 8.0) * 100.0, 0.0, 100.0), 1)
-        elif sleep_score is not None:
-            sleep_efficiency = round(_clamp(sleep_score, 0.0, 100.0), 1)
+        hr_mean_7d_value = hr_mean_7d(db, user.id)
+        steps_avg_7d_value = avg_steps_7d(db, user.id)
+        sleep_efficiency_value = sleep_efficiency_7d(db, user.id)
 
         activity_score = None
         if activity_level is not None:
             activity_score = round(_clamp((activity_level / 12000.0) * 100.0, 0.0, 100.0), 1)
+        elif steps_avg_7d_value > 0:
+            activity_score = round(_clamp((steps_avg_7d_value / 12000.0) * 100.0, 0.0, 100.0), 1)
 
         lifestyle_score = None
-        if activity_score is not None or sleep_efficiency is not None:
+        if activity_score is not None or sleep_efficiency_value is not None:
             activity_component = activity_score if activity_score is not None else 55.0
-            sleep_component = sleep_efficiency if sleep_efficiency is not None else 55.0
+            sleep_component = sleep_efficiency_value if sleep_efficiency_value is not None else 55.0
             bmi_component = 100.0
             if bmi is not None:
                 bmi_component = _clamp(100.0 - max(0.0, bmi - 24.0) * 3.5, 0.0, 100.0)
@@ -539,17 +628,20 @@ class FeaturePipelineService:
             bp_category=bp_category,
             age=age,
             cholesterol_proxy=cholesterol_proxy,
+            glucose=glucose,
+            cholesterol=cholesterol,
             data_points=data_points,
             data_completeness=data_completeness,
             confidence=confidence,
             latest_observation_at=latest_observation_at,
             source_breakdown=source_breakdown,
             notes=notes,
-            hr_mean_7d=hr_mean_7d,
-            steps_avg_7d=steps_avg_7d,
-            sleep_efficiency=sleep_efficiency,
+            hr_mean_7d=hr_mean_7d_value,
+            steps_avg_7d=steps_avg_7d_value,
+            sleep_efficiency=sleep_efficiency_value,
             lifestyle_score=lifestyle_score,
             activity_score=activity_score,
+            data_availability=data_availability,
         )
 
         if overrides:

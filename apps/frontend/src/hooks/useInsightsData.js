@@ -32,6 +32,7 @@ export const useInsightsData = () => {
     cards: sortedCards,
     drivers: data?.drivers || [],
     analysis: data?.analysis || '',
+    explanation: data?.explanation || null,
     recommendations: data?.recommendations || [],
     lastUpdated: data?.lastUpdated || null,
     confidence: data?.confidence || 0,

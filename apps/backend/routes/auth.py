@@ -6,6 +6,7 @@ from models import User
 from schemas.api_models import OAuthLoginRequest, UserLogin, UserCreate, PasswordUpdate
 from core.session_cookies import clear_session_cookies
 from services.auth_service import AuthService
+from services.audit_service import log_event
 from services.onboarding_service import OnboardingService
 from routes.users import get_current_user_from_header
 
@@ -22,6 +23,16 @@ async def signup(user_data: UserCreate, response: Response, db: Session = Depend
 @router.post("/login")
 async def login(user_data: UserLogin, response: Response, db: Session = Depends(get_db)):
     """Legacy custom login is disabled. Use Supabase Auth signInWithPassword from the frontend."""
+    log_event(
+        None,
+        "login",
+        "/api/v1/auth/login",
+        {
+            "status": "disabled",
+            "reason": "legacy_custom_login_disabled",
+            "email": user_data.email,
+        },
+    )
     raise HTTPException(
         status_code=status.HTTP_410_GONE,
         detail="Custom login is disabled. Use Supabase Auth.",

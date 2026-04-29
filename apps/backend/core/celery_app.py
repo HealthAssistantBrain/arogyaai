@@ -84,7 +84,7 @@ if CELERY_AVAILABLE:
         "arogyaai",
         broker=CELERY_BROKER_URL,
         backend=CELERY_RESULT_BACKEND,
-        include=["pipelines.tasks"],
+        include=["pipelines.tasks", "pipelines.orchestration_pipeline.tasks"],
     )
 else:  # pragma: no cover - local test fallback
     celery_app = _FallbackCeleryApp()

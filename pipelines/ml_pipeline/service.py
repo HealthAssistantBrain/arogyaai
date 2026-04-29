@@ -1,16 +1,22 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import logging
 from typing import Any
 
 from sqlalchemy.orm import Session
 
+from models import FeatureSnapshotRecord
 from models import User
 from pipelines.feature_pipeline.service import FeaturePipelineService, FeatureSnapshot
 from pipelines.ml_pipeline.inference import MLPipelineInference
 from pipelines.ml_pipeline.model_loader import ModelLoader
+from pipelines.ml_pipeline.preprocess import build_feature_vector
+from pipelines.ml_pipeline.shap_explainer import ShapExplainer
 from pipelines.storage_pipeline.service import StoragePipelineService
-from services.risk_engine import RiskEngine
+from services.alert_service import generate_health_alerts
+
+logger = logging.getLogger("uvicorn.error")
 
 
 def _clamp(value: float, minimum: float, maximum: float) -> float:
@@ -18,11 +24,11 @@ def _clamp(value: float, minimum: float, maximum: float) -> float:
 
 
 def _risk_level(score: float) -> str:
-    if score >= 65.0:
+    if score >= 0.75:
         return "CRITICAL"
-    if score >= 45.0:
+    if score >= 0.50:
         return "HIGH"
-    if score >= 25.0:
+    if score >= 0.25:
         return "MODERATE"
     return "LOW"
 
@@ -67,6 +73,8 @@ class MLPipelineService:
         else:
             avg_risk = float(risk_payload.get("overall_score") or risk_payload.get("risk_score") or 0.0)
 
+        if avg_risk <= 1.0:
+            avg_risk *= 100.0
         risk_component = _clamp(100.0 - avg_risk, 0.0, 100.0)
 
         lifestyle_component = getattr(feature_snapshot, "lifestyle_score", None)
@@ -111,25 +119,28 @@ class MLPipelineService:
         health_score_record: Any,
         model_version: str | None,
         source: str,
+        factors: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        cards = risk_payload.get("cards") or []
-        top_card = cards[0] if cards else {}
-        overall_score = float(risk_payload.get("overall_score") or top_card.get("score") or 0.0)
-        risk_level = str(risk_payload.get("risk_level") or top_card.get("risk_level") or _risk_level(overall_score)).upper()
+        overall_score = float(risk_payload.get("overall_score") or risk_payload.get("risk_score") or 0.0)
+        risk_level = str(risk_payload.get("risk_level") or _risk_level(overall_score)).upper()
+        feature_payload = MLPipelineService._feature_snapshot_payload(feature_snapshot)
+        data_availability = feature_payload.get("data_availability") if isinstance(feature_payload, dict) else {}
 
         data = {
             "user_id": str(user.id),
             "prediction_id": str(risk_score_record.id),
             "health_score_id": str(health_score_record.id),
-            "risk_score": round(overall_score, 2),
+            "risk_score": round(overall_score, 6),
             "risk_level": risk_level,
             "model_version": model_version,
             "source": source,
             "analysis": risk_payload.get("analysis"),
-            "drivers": risk_payload.get("drivers") or [],
+            "drivers": factors,
+            "factors": factors,
             "recommendations": risk_payload.get("recommendations") or [],
             "risks": risk_payload.get("risks") or {},
-            "feature_snapshot": feature_snapshot.to_dict() if hasattr(feature_snapshot, "to_dict") else feature_snapshot,
+            "feature_snapshot": feature_payload,
+            "data_availability": data_availability if isinstance(data_availability, dict) else {},
             "health_score": float(health_score_record.score),
             "health_components": {
                 "risk_component": float(health_score_record.risk_component) if health_score_record.risk_component is not None else None,
@@ -151,6 +162,154 @@ class MLPipelineService:
         }
 
     @staticmethod
+    def _feature_snapshot_payload(feature_snapshot: Any) -> dict[str, Any]:
+        if isinstance(feature_snapshot, FeatureSnapshotRecord):
+            if isinstance(feature_snapshot.feature_payload, dict) and feature_snapshot.feature_payload:
+                payload = dict(feature_snapshot.feature_payload)
+                payload.setdefault("hr_mean_7d", float(feature_snapshot.hr_mean_7d) if feature_snapshot.hr_mean_7d is not None else 0.0)
+                payload.setdefault("steps_avg_7d", float(feature_snapshot.steps_avg_7d) if feature_snapshot.steps_avg_7d is not None else 0.0)
+                payload.setdefault("sleep_efficiency", float(feature_snapshot.sleep_efficiency) if feature_snapshot.sleep_efficiency is not None else 0.0)
+                if not isinstance(payload.get("data_availability"), dict):
+                    payload["data_availability"] = {"steps": False, "heart_rate": False, "sleep": False}
+                return payload
+            return {
+                "snapshot_id": str(feature_snapshot.id),
+                "bmi": float(feature_snapshot.bmi) if feature_snapshot.bmi is not None else None,
+                "hr_mean_7d": float(feature_snapshot.hr_mean_7d) if feature_snapshot.hr_mean_7d is not None else 0.0,
+                "steps_avg_7d": float(feature_snapshot.steps_avg_7d) if feature_snapshot.steps_avg_7d is not None else 0.0,
+                "sleep_efficiency": float(feature_snapshot.sleep_efficiency) if feature_snapshot.sleep_efficiency is not None else 0.0,
+                "lifestyle_score": float(feature_snapshot.lifestyle_score) if feature_snapshot.lifestyle_score is not None else None,
+                "activity_score": float(feature_snapshot.activity_score) if feature_snapshot.activity_score is not None else None,
+                "confidence": float(feature_snapshot.confidence) if feature_snapshot.confidence is not None else None,
+                "data_availability": {"steps": False, "heart_rate": False, "sleep": False},
+            }
+        if hasattr(feature_snapshot, "to_dict"):
+            return feature_snapshot.to_dict()
+        if isinstance(feature_snapshot, dict):
+            return dict(feature_snapshot)
+        return {}
+
+    @staticmethod
+    def _resolve_snapshot_record(db: Session, user: User, feature_snapshot: Any) -> FeatureSnapshotRecord | None:
+        if isinstance(feature_snapshot, FeatureSnapshotRecord):
+            return feature_snapshot
+
+        snapshot_id = getattr(feature_snapshot, "snapshot_id", None)
+        if snapshot_id is None and isinstance(feature_snapshot, dict):
+            snapshot_id = feature_snapshot.get("snapshot_id")
+
+        if snapshot_id is not None:
+            record = (
+                db.query(FeatureSnapshotRecord)
+                .filter(
+                    FeatureSnapshotRecord.id == snapshot_id,
+                    FeatureSnapshotRecord.user_id == user.id,
+                )
+                .one_or_none()
+            )
+            if record is not None:
+                return record
+
+        return None
+
+    @staticmethod
+    def _build_risk_payload(
+        *,
+        prediction_probability: float,
+        confidence: float,
+        model_version: str | None,
+        feature_snapshot_record: FeatureSnapshotRecord,
+    ) -> dict[str, Any]:
+        risk_level = _risk_level(prediction_probability)
+        feature_snapshot_payload = MLPipelineService._feature_snapshot_payload(feature_snapshot_record)
+        return {
+            "overall_score": float(prediction_probability),
+            "risk_score": float(prediction_probability),
+            "risk_level": risk_level,
+            "confidence": float(confidence),
+            "model_version": model_version,
+            "analysis": "RandomForestClassifier inference completed successfully.",
+            "recommendations": [],
+            "drivers": [],
+            "feature_snapshot": feature_snapshot_payload,
+            "feature_snapshot_id": str(feature_snapshot_record.id),
+            "risks": {
+                "overall_risk_score": float(prediction_probability),
+                "risk_level": risk_level,
+            },
+        }
+
+    @staticmethod
+    def _persist_risk_context(
+        db: Session,
+        user: User,
+        *,
+        feature_snapshot_record: FeatureSnapshotRecord,
+        risk_payload: dict[str, Any],
+        report_id: str | None = None,
+        run_id: str | None = None,
+    ) -> tuple[Any, Any]:
+        risk_score_record = StoragePipelineService.store_risk_score(
+            db,
+            user,
+            risk_payload=risk_payload,
+            feature_snapshot_id=feature_snapshot_record.id,
+            report_id=report_id or feature_snapshot_record.report_id,
+            model_version=risk_payload.get("model_version"),
+            source="ml",
+            status="ready",
+            run_id=run_id,
+        )
+
+        health_payload = MLPipelineService._compute_health_score(feature_snapshot_record, risk_payload)
+        health_score_record = StoragePipelineService.store_health_score(
+            db,
+            user,
+            risk_score=risk_score_record,
+            health_payload=health_payload,
+            source="ml",
+        )
+        return risk_score_record, health_score_record
+
+    @staticmethod
+    def _persist_shap_values(
+        db: Session,
+        user: User,
+        *,
+        feature_snapshot_record: FeatureSnapshotRecord,
+        risk_score_record: Any,
+        risk_payload: dict[str, Any],
+        loaded_model: Any,
+        features: list[float],
+    ) -> list[dict[str, Any]]:
+        shap_entries = ShapExplainer.explain(
+            feature_snapshot_record,
+            loaded_model=loaded_model,
+            features=features,
+        )
+        StoragePipelineService.store_shap_values(
+            db,
+            user,
+            risk_score=risk_score_record,
+            shap_entries=shap_entries,
+            source_type="ml",
+        )
+        risk_score_record.risk_payload = {
+            **(risk_score_record.risk_payload or risk_payload),
+            "drivers": shap_entries,
+        }
+        db.commit()
+        db.refresh(risk_score_record)
+        return shap_entries
+
+    @staticmethod
+    def run_latest_snapshot_prediction(db: Session, user: User) -> dict[str, Any]:
+        snapshot_record = StoragePipelineService.latest_feature_snapshot(db, user)
+        if snapshot_record is None:
+            raise ValueError("No feature snapshot available for this user.")
+        return MLPipelineService.predict_from_snapshot_record(db, user, snapshot_record)
+
+    @staticmethod
     def predict(db: Session, user: User, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         overrides = MLPipelineService._prepare_feature_overrides(payload)
         feature_snapshot = FeaturePipelineService.build_feature_snapshot(
@@ -161,10 +320,14 @@ class MLPipelineService:
             report_id=(payload or {}).get("report_id"),
         )
 
-        return MLPipelineService.predict_from_snapshot(
+        snapshot_record = MLPipelineService._resolve_snapshot_record(db, user, feature_snapshot)
+        if snapshot_record is None:
+            raise RuntimeError("Persisted feature snapshot could not be resolved for prediction.")
+
+        return MLPipelineService.predict_from_snapshot_record(
             db,
             user,
-            feature_snapshot,
+            snapshot_record,
             payload=payload,
             report_id=(payload or {}).get("report_id"),
         )
@@ -178,78 +341,111 @@ class MLPipelineService:
         payload: dict[str, Any] | None = None,
         report_id: str | None = None,
     ) -> dict[str, Any]:
-        if isinstance(feature_snapshot, dict):
-            feature_snapshot = FeatureSnapshot.from_dict(feature_snapshot)
+        snapshot_record = MLPipelineService._resolve_snapshot_record(db, user, feature_snapshot)
+        if snapshot_record is None:
+            if isinstance(feature_snapshot, dict):
+                feature_snapshot = FeatureSnapshot.from_dict(feature_snapshot)
+            feature_snapshot = FeaturePipelineService.build_feature_snapshot(
+                db,
+                user,
+                overrides=MLPipelineService._feature_snapshot_payload(feature_snapshot),
+                persist=True,
+                report_id=report_id,
+            )
+            snapshot_record = MLPipelineService._resolve_snapshot_record(db, user, feature_snapshot)
+            if snapshot_record is None:
+                raise RuntimeError("Persisted feature snapshot could not be resolved for prediction.")
 
+        return MLPipelineService.predict_from_snapshot_record(
+            db,
+            user,
+            snapshot_record,
+            payload=payload,
+            report_id=report_id,
+        )
+
+    @staticmethod
+    def predict_from_snapshot_record(
+        db: Session,
+        user: User,
+        feature_snapshot_record: FeatureSnapshotRecord,
+        *,
+        payload: dict[str, Any] | None = None,
+        report_id: str | None = None,
+    ) -> dict[str, Any]:
         loader = ModelLoader()
         loaded_model = loader.load()
+        if loaded_model is None:
+            raise RuntimeError("ML model could not be loaded.")
+
         inference = MLPipelineInference(loaded_model)
-        inference_result = inference.predict(feature_snapshot.to_dict()) if inference.available else None
+        inference_result = inference.predict(MLPipelineService._feature_snapshot_payload(feature_snapshot_record))
+        if inference_result is None:
+            raise RuntimeError("ML inference failed for the latest feature snapshot.")
 
-        if inference_result is not None:
-            risk_payload = {
-                "overall_score": inference_result.score,
-                "risk_level": inference_result.risk_level,
-                "confidence": inference_result.confidence,
-                "cards": [
-                    {
-                        "key": "model_prediction",
-                        "label": "Model Prediction",
-                        "score": inference_result.score,
-                        "risk_level": inference_result.risk_level,
-                        "summary": "Prediction produced by the loaded model artifact.",
-                    }
-                ],
-                "drivers": [],
-                "recommendations": [],
-                "risks": {
-                    "overall_risk_score": inference_result.score,
-                },
-                "analysis": "Model-backed inference completed.",
-                "data_points": getattr(feature_snapshot, "data_points", 0),
-            }
-            source = "ml"
-            model_version = inference_result.model_version
-        else:
-            rule_payload = RiskEngine.evaluate(feature_snapshot, user_id=str(user.id))
-            top_scores = [float(card.get("score") or 0.0) for card in rule_payload.get("risks", {}).get("cards", [])]
-            overall_score = round(sum(top_scores) / len(top_scores), 2) if top_scores else 0.0
-            risk_payload = {
-                **rule_payload,
-                "overall_score": overall_score,
-                "risk_level": _risk_level(overall_score),
-                "data_points": rule_payload.get("data_points") or getattr(feature_snapshot, "data_points", 0),
-            }
-            source = "rule_engine"
-            model_version = None
+        features = build_feature_vector(feature_snapshot_record, loaded_model.feature_names)
+        risk_payload = MLPipelineService._build_risk_payload(
+            prediction_probability=inference_result.score,
+            confidence=inference_result.confidence or inference_result.score,
+            model_version=inference_result.model_version,
+            feature_snapshot_record=feature_snapshot_record,
+        )
+        risk_payload["data_points"] = feature_snapshot_record.feature_payload.get("data_points") if isinstance(feature_snapshot_record.feature_payload, dict) else None
 
-        risk_score_record = StoragePipelineService.store_risk_score(
+        risk_score_record, health_score_record = MLPipelineService._persist_risk_context(
             db,
             user,
+            feature_snapshot_record=feature_snapshot_record,
             risk_payload=risk_payload,
-            feature_snapshot_id=getattr(feature_snapshot, "snapshot_id", None),
             report_id=report_id,
-            model_version=model_version,
-            source=source,
-            status="ready",
             run_id=(payload or {}).get("run_id"),
         )
+        generate_health_alerts(user.id, db)
 
-        health_payload = MLPipelineService._compute_health_score(feature_snapshot, risk_payload)
-        health_score_record = StoragePipelineService.store_health_score(
-            db,
-            user,
-            risk_score=risk_score_record,
-            health_payload=health_payload,
-            source=source,
-        )
+        factors: list[dict[str, Any]] = []
+        try:
+            factors = MLPipelineService._persist_shap_values(
+                db,
+                user,
+                feature_snapshot_record=feature_snapshot_record,
+                risk_score_record=risk_score_record,
+                risk_payload=risk_payload,
+                loaded_model=loaded_model,
+                features=features,
+            )
+        except Exception as exc:
+            db.rollback()
+            logger.exception(
+                "SHAP explanation failed for user=%s prediction=%s: %s",
+                user.id,
+                risk_score_record.id,
+                exc,
+            )
 
-        return MLPipelineService._compose_response(
+        response = MLPipelineService._compose_response(
             user=user,
-            feature_snapshot=feature_snapshot,
+            feature_snapshot=feature_snapshot_record,
             risk_payload=risk_payload,
             risk_score_record=risk_score_record,
             health_score_record=health_score_record,
-            model_version=model_version,
-            source=source,
+            model_version=inference_result.model_version,
+            source="ml",
+            factors=factors,
         )
+        try:
+            from services.prediction_explanation_service import PredictionExplanationService
+
+            response = PredictionExplanationService.hydrate_prediction_response_sync(
+                db,
+                user,
+                response,
+                prediction_id=str(risk_score_record.id),
+            )
+        except Exception as exc:
+            logger.exception(
+                "RAG explanation hydration failed for user=%s prediction=%s: %s",
+                user.id,
+                risk_score_record.id,
+                exc,
+            )
+        return response

@@ -173,6 +173,7 @@ const Dashboard = () => {
   // Each store key is now a slice: { data, status, source, last_updated }
   const hsData = healthScore?.data;
   const predData = prediction?.data;
+  const predictionExplanation = predData?.explanation ?? null;
   const alertsData = safeArray(alerts?.data?.alerts);
   const hasDashboardData = hasDashboardSnapshot && Boolean(safeObject(dashboardData) && Object.keys(safeObject(dashboardData)).length > 0);
 
@@ -185,10 +186,8 @@ const Dashboard = () => {
   const sleepSlice = vitals?.['sleep:24h'] ?? {};
   const stepsVitals = safeArray(stepsSlice?.data);
   const sleepVitals = safeArray(sleepSlice?.data);
-  const failedGoogleFitMetrics = Array.isArray(googleFit?.data?.raw_json?.failed_metrics)
-    ? googleFit.data.raw_json.failed_metrics
-    : [];
-  const sleepUnavailable = failedGoogleFitMetrics.includes('sleep') && sleepVitals.length === 0;
+  const googleFitAvailability = safeObject(googleFit?.data?.data_availability);
+  const sleepUnavailable = Boolean(googleFit?.data?.connected) && googleFitAvailability.sleep === false;
 
   // ── Derived display values ────────────────────────────────────────────────
   const score = safeNumber(hsData?.score, 75);
@@ -202,6 +201,7 @@ const Dashboard = () => {
   const trajectilePercentile = predData?.trajectory_percentile ?? '—';
   // Normalize recommendations — backend may return strings or {title, detail, ...} objects.
   const predRecs = safeArray(predData?.recommendations).map((r) => safeText(r)).filter(Boolean);
+  const explanationSources = safeArray(predictionExplanation?.sources).map((source) => source?.source).filter(Boolean);
 
   const googleFitLatestDaySteps = googleFit?.data?.stats?.latest_day?.steps;
   const canonicalGoogleFitSteps = Number.isFinite(Number(googleFitLatestDaySteps))
@@ -233,7 +233,8 @@ const Dashboard = () => {
     if (Number.isNaN(date.getTime())) return acc;
     const day = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
     const existing = acc.find((entry) => entry.day === day);
-    const hours = Number(item.value);
+    const rawValue = Number(item.value);
+    const hours = String(item.unit || '').toLowerCase().startsWith('min') ? rawValue / 60 : rawValue;
     if (!Number.isFinite(hours)) return acc;
     if (existing) {
       existing.hours = Number((existing.hours + hours).toFixed(2));
@@ -243,7 +244,13 @@ const Dashboard = () => {
     return acc;
   }, []);
   const avgSleep = sleepVitals.length > 0
-    ? (safeArray(sleepVitals).reduce((sum, item) => sum + Number(item.value), 0) / sleepVitals.length).toFixed(1)
+    ? (
+      safeArray(sleepVitals).reduce((sum, item) => {
+        const rawValue = Number(item.value);
+        const normalized = String(item.unit || '').toLowerCase().startsWith('min') ? rawValue / 60 : rawValue;
+        return sum + (Number.isFinite(normalized) ? normalized : 0);
+      }, 0) / sleepVitals.length
+    ).toFixed(1)
     : '—';
 
   const sidebarLinks = [
@@ -451,10 +458,21 @@ const Dashboard = () => {
                       </div>
                       <h2 className="text-3xl font-black text-white mb-4 tracking-tight">5-Year Health Trajectory</h2>
                       <p className="text-white/80 text-lg leading-relaxed max-w-2xl font-medium">
-                        Based on your metabolic markers, your cardiovascular health is projected to remain in the{' '}
-                        <span className="text-white font-black underline decoration-white/40 decoration-2 underline-offset-4">{trajectilePercentile}th percentile</span>.
-                        {predRecs[0] && <> {predRecs[0]}.</>}
+                        {predictionExplanation?.summary ? (
+                          predictionExplanation.summary
+                        ) : (
+                          <>
+                            Based on your metabolic markers, your cardiovascular health is projected to remain in the{' '}
+                            <span className="text-white font-black underline decoration-white/40 decoration-2 underline-offset-4">{trajectilePercentile}th percentile</span>.
+                            {predRecs[0] && <> {predRecs[0]}.</>}
+                          </>
+                        )}
                       </p>
+                      {explanationSources.length > 0 ? (
+                        <p className="mt-4 text-[11px] font-black uppercase tracking-[0.25em] text-white/60">
+                          Retrieved from {explanationSources.slice(0, 3).join(' • ')}
+                        </p>
+                      ) : null}
                       <div className="mt-8 flex flex-wrap gap-4">
                         <button className="bg-white text-[#6143f4] px-6 py-3 rounded-xl font-bold text-sm shadow-xl hover:scale-105 transition-all active:scale-95">Detailed Simulation</button>
                         <button className="bg-[#6143f4]/30 backdrop-blur-md text-white border border-white/30 px-6 py-3 rounded-xl font-bold text-sm hover:bg-[#6143f4]/40 transition-all active:scale-95">View Metabolic Data</button>

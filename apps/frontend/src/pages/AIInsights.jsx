@@ -29,6 +29,7 @@ const AIInsights = () => {
     cards,
     drivers,
     analysis,
+    explanation,
     recommendations,
     error,
     data,
@@ -45,6 +46,23 @@ const AIInsights = () => {
   useEffect(() => {
     console.log('INSIGHTS STATUS:', status);
   }, [status]);
+
+  const explanationDrivers = Array.isArray(explanation?.top_features)
+    ? explanation.top_features.map((feature) => ({
+      key: feature.feature_name,
+      label: feature.display_name || feature.feature_name,
+      impact: `${feature.shap_value >= 0 ? '+' : '-'}${Math.abs(Number(feature.shap_value || 0)).toFixed(3)}`,
+      contribution: Number(feature.abs_shap_value || Math.abs(Number(feature.shap_value || 0))),
+      direction: Number(feature.shap_value || 0) >= 0 ? 'increasing' : 'decreasing',
+      barWidth: `${Math.max(8, Math.min(100, Math.round(Number(feature.abs_shap_value || 0) * 1000)))}%`,
+    }))
+    : [];
+  const displaySummary = explanation?.summary || analysis;
+  const displayDrivers = explanationDrivers.length > 0 ? explanationDrivers : drivers;
+  const displayRecommendations = Array.isArray(explanation?.recommendations) && explanation.recommendations.length > 0
+    ? explanation.recommendations
+    : recommendations;
+  const displaySources = Array.isArray(explanation?.sources) ? explanation.sources : [];
 
   if (showSkeleton) {
     return <InsightsSkeleton />;
@@ -100,9 +118,10 @@ const AIInsights = () => {
               <PreventiveRecommendations
                 data={{
                   risks: cards,
-                  shap: drivers,
-                  summary: analysis,
-                  recommendations: recommendations,
+                  shap: displayDrivers,
+                  summary: displaySummary,
+                  recommendations: displayRecommendations,
+                  sources: displaySources,
                   labResults: [] // labResults should be fetched if available
                 }}
               />

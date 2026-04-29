@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Sequence
 
+import numpy as np
+
 from pipelines.ml_pipeline.inference import FEATURE_ORDER
 
 logger = logging.getLogger(__name__)
@@ -91,8 +93,9 @@ class HealthEngine:
 
             import shap
 
+            X = np.array(vector, dtype=float).reshape(1, -1)
             explainer = shap.Explainer(raw_model)
-            shap_values = explainer([vector])
+            shap_values = explainer(X)
             values = getattr(shap_values, "values", None)
             if values is None:
                 return []

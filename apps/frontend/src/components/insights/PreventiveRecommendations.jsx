@@ -56,7 +56,7 @@ const levelStyles = {
 };
 
 const PreventiveRecommendations = ({ data }) => {
-    const { risks, shap, summary, recommendations, labResults } = data;
+    const { risks, shap, summary, recommendations, sources, labResults } = data;
 
     const groupedRecommendations = safeArray(recommendations).reduce((acc, rec) => {
         const cat = rec.category?.toLowerCase() || 'lifestyle';
@@ -77,6 +77,18 @@ const PreventiveRecommendations = ({ data }) => {
                         <p className="text-lg text-white font-medium leading-relaxed max-w-4xl">
                             {summary || "Based on your latest biometrics, genetic markers, and lifestyle data, our AI has formulated these high-impact adjustments to optimize your long-term longevity and prevent chronic conditions."}
                         </p>
+                        {safeArray(sources).length > 0 ? (
+                            <div className="mt-4 flex flex-wrap gap-2">
+                                {safeArray(sources).slice(0, 3).map((source) => (
+                                    <span
+                                        key={`${source.source}-${source.chunk_id}`}
+                                        className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-white/80"
+                                    >
+                                        {source.source}
+                                    </span>
+                                ))}
+                            </div>
+                        ) : null}
                     </div>
                     <div className="absolute -bottom-10 -right-10 size-64 bg-white/10 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-1000" />
                 </div>

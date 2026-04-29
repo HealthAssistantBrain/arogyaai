@@ -5,7 +5,6 @@ import useDashboardStore from '../store/dashboardStore';
 import { useAuthStore } from '../store/authStore';
 import { ROUTES } from '../router/routes';
 import RiskUI from '../components/risk/RiskUI';
-import api from '../lib/axios';
 import RiskReportSkeleton from '../components/skeleton/RiskReportSkeleton';
 import SmartLoadingOverlay from '../components/ui/SmartLoadingOverlay';
 import useSmartFetchOverlay from '../hooks/useSmartFetchOverlay';
@@ -23,6 +22,7 @@ const RiskExplanation = () => {
 
     const hasPredictionSnapshot = dashboardCacheOwnerId === authUserId && Boolean(prediction?.data);
     const currentRiskData = riskData ?? (hasPredictionSnapshot ? prediction?.data : null);
+    const explanation = currentRiskData?.explanation ?? null;
     const showSkeleton = !currentRiskData && (isPageFetching || dashboardIsFetching || !dashboardHydrated);
     const showRefreshOverlay = useSmartFetchOverlay(
         isPageFetching || dashboardIsFetching,
@@ -40,22 +40,12 @@ const RiskExplanation = () => {
         const loadData = async () => {
             setIsPageFetching(true);
             try {
-                // Initialize stores
                 await Promise.all([
                     fetchHealthMetrics({ silent: true }),
                     fetchDashboardData({ silent: hasPredictionSnapshot })
                 ]);
-
-                // Try fetching latest prediction specifically
-                const response = await api.get('/api/v1/prediction/latest');
-                if (response.data?.success) {
-                    setRiskData(response.data.data);
-                } else if (prediction?.data) {
-                    setRiskData(prediction.data);
-                }
             } catch (error) {
                 console.error('Failed to load risk prediction:', error);
-                // Failover to prediction in store if available
                 if (prediction?.data) {
                     setRiskData(prediction.data);
                 }
@@ -77,6 +67,7 @@ const RiskExplanation = () => {
             <main className="flex-1 overflow-y-auto p-8 custom-scrollbar bg-slate-50/30 dark:bg-transparent">
                 <RiskUI
                     riskData={currentRiskData}
+                    explanation={explanation}
                     loading={!currentRiskData && (isPageFetching || dashboardIsFetching)}
                     onSimulatorClick={() => navigate(ROUTES.SIMULATOR)}
                 />

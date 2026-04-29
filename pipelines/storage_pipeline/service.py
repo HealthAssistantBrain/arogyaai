@@ -4,7 +4,8 @@ from __future__ import annotations
 from typing import Any, Iterable
 from uuid import UUID, uuid4
 
-from sqlalchemy import desc
+from sqlalchemy import desc, func
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from models import (
@@ -94,19 +95,27 @@ class StoragePipelineService:
         *,
         report_id: UUID | str | None = None,
     ) -> FeatureSnapshotRecord:
+        feature_payload = ensure_json_safe(getattr(snapshot, "to_dict", lambda: {})())
+        if not isinstance(feature_payload, dict):
+            feature_payload = {}
+        feature_payload.setdefault("hr_mean_7d", float(getattr(snapshot, "hr_mean_7d", 0.0) or 0.0))
+        feature_payload.setdefault("steps_avg_7d", float(getattr(snapshot, "steps_avg_7d", 0.0) or 0.0))
+        feature_payload.setdefault("sleep_efficiency", float(getattr(snapshot, "sleep_efficiency", 0.0) or 0.0))
+        feature_payload.setdefault("data_availability", getattr(snapshot, "data_availability", None) or {"steps": False, "heart_rate": False, "sleep": False})
+
         record = FeatureSnapshotRecord(
             user_id=user.id,
             report_id=report_id,
-            hr_mean_7d=getattr(snapshot, "hr_mean_7d", None),
-            steps_avg_7d=getattr(snapshot, "steps_avg_7d", None),
-            sleep_efficiency=getattr(snapshot, "sleep_efficiency", None),
+            hr_mean_7d=float(getattr(snapshot, "hr_mean_7d", 0.0) or 0.0),
+            steps_avg_7d=float(getattr(snapshot, "steps_avg_7d", 0.0) or 0.0),
+            sleep_efficiency=float(getattr(snapshot, "sleep_efficiency", 0.0) or 0.0),
             bmi=getattr(snapshot, "bmi", None),
             lifestyle_score=getattr(snapshot, "lifestyle_score", None),
             activity_score=getattr(snapshot, "activity_score", None),
             sleep_score=getattr(snapshot, "sleep_score", None),
             confidence=getattr(snapshot, "confidence", None),
             latest_observation_at=getattr(snapshot, "latest_observation_at", None),
-            feature_payload=ensure_json_safe(getattr(snapshot, "to_dict", lambda: {})()),
+            feature_payload=feature_payload,
             source_breakdown=ensure_json_safe(getattr(snapshot, "source_breakdown", None) or {}),
         )
         db.add(record)
@@ -347,48 +356,68 @@ class StoragePipelineService:
         shap_entries: Iterable[dict[str, Any]],
         source_type: str = "rule_fallback",
     ) -> list[ShapValueRecord]:
-        persisted: list[ShapValueRecord] = []
+        normalized_entries: dict[str, dict[str, Any]] = {}
+        ordered_feature_names: list[str] = []
         for item in shap_entries:
             feature_name = str(item.get("feature_name") or item.get("label") or item.get("key") or "").strip()
             if not feature_name:
                 continue
 
             value = _as_float(item.get("shap_value") or item.get("contribution"), default=0.0) or 0.0
-            record = (
-                db.query(ShapValueRecord)
-                .filter(
-                    ShapValueRecord.prediction_id == risk_score.id,
-                    ShapValueRecord.feature_name == feature_name,
-                )
-                .one_or_none()
-            )
-            if record is None:
-                record = ShapValueRecord(
-                    prediction_id=risk_score.id,
-                    user_id=user.id,
-                    feature_name=feature_name,
-                    shap_value=value,
-                    abs_shap_value=abs(value),
-                    direction=str(item.get("direction") or ("increasing" if value >= 0 else "decreasing")),
-                    explanation=str(item.get("explanation") or item.get("detail") or ""),
-                    source_type=source_type,
-                    shap_payload=ensure_json_safe(item),
-                )
-                db.add(record)
-            else:
-                record.shap_value = value
-                record.abs_shap_value = abs(value)
-                record.direction = str(item.get("direction") or ("increasing" if value >= 0 else "decreasing"))
-                record.explanation = str(item.get("explanation") or item.get("detail") or "")
-                record.source_type = source_type
-                record.shap_payload = ensure_json_safe(item)
-            persisted.append(record)
+            if feature_name not in normalized_entries:
+                ordered_feature_names.append(feature_name)
 
-        if persisted:
+            normalized_entries[feature_name] = {
+                "prediction_id": risk_score.id,
+                "user_id": user.id,
+                "feature_name": feature_name,
+                "shap_value": value,
+                "abs_shap_value": abs(value),
+                "direction": str(item.get("direction") or ("increasing" if value >= 0 else "decreasing")),
+                "explanation": str(item.get("explanation") or item.get("detail") or ""),
+                "source_type": source_type,
+                "shap_payload": ensure_json_safe(item),
+            }
+
+        if not normalized_entries:
+            return []
+
+        try:
+            for feature_name in ordered_feature_names:
+                values = normalized_entries[feature_name]
+                stmt = insert(ShapValueRecord).values(**values)
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["prediction_id", "feature_name"],
+                    set_={
+                        "shap_value": stmt.excluded.shap_value,
+                        "abs_shap_value": stmt.excluded.abs_shap_value,
+                        "direction": stmt.excluded.direction,
+                        "explanation": stmt.excluded.explanation,
+                        "source_type": stmt.excluded.source_type,
+                        "shap_payload": stmt.excluded.shap_payload,
+                        "updated_at": func.now(),
+                    },
+                )
+                db.execute(stmt)
             db.commit()
-            for record in persisted:
-                db.refresh(record)
-        return persisted
+        except Exception:
+            db.rollback()
+            raise
+
+        persisted = (
+            db.query(ShapValueRecord)
+            .filter(
+                ShapValueRecord.prediction_id == risk_score.id,
+                ShapValueRecord.feature_name.in_(ordered_feature_names),
+            )
+            .all()
+        )
+        persisted_by_feature = {record.feature_name: record for record in persisted}
+        return [
+            persisted_by_feature[feature_name]
+            for feature_name in ordered_feature_names
+            if feature_name in persisted_by_feature
+        ]
 
     @staticmethod
     def store_health_score(
@@ -529,6 +558,8 @@ class StoragePipelineService:
 
         risk_payload = latest_risk.risk_payload if isinstance(latest_risk.risk_payload, dict) else {}
         stored = StoragePipelineService._normalize_health_insights_payload(risk_payload.get("health_insights"))
+        cached_explanation = risk_payload.get("rag_explanation") if isinstance(risk_payload.get("rag_explanation"), dict) else {}
+        explanation_payload = cached_explanation.get("payload") if isinstance(cached_explanation.get("payload"), dict) else None
 
         base_risk = stored["risk"]
         if not base_risk:
@@ -608,6 +639,7 @@ class StoragePipelineService:
             "recommendations": recommendations if isinstance(recommendations, list) else [],
             "availability": availability,
             "analysis": risk_payload.get("analysis"),
+            "explanation": explanation_payload,
             "confidence": float(latest_risk.confidence_score) if latest_risk.confidence_score is not None else None,
             "feature_snapshot": latest_risk.feature_snapshot if isinstance(latest_risk.feature_snapshot, dict) else feature_payload,
             "data_points": risk_payload.get("data_points"),

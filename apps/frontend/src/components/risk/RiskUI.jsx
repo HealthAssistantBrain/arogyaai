@@ -16,7 +16,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../router/routes';
 
-const RiskUI = ({ riskData, loading, onSimulatorClick }) => {
+const RiskUI = ({ riskData, explanation, loading, onSimulatorClick }) => {
     const navigate = useNavigate();
 
     if (loading) {
@@ -40,6 +40,22 @@ const RiskUI = ({ riskData, loading, onSimulatorClick }) => {
         biological_age_delta = 'N/A',
         last_updated = null
     } = riskData || {};
+    const normalizedRiskScore = Number(risk_score) <= 1 ? Number(risk_score) * 100 : Number(risk_score);
+    const explanationSummary = explanation?.summary || '';
+    const explanationFactors = Array.isArray(explanation?.factors) ? explanation.factors : [];
+    const explanationRecommendations = Array.isArray(explanation?.recommendations) ? explanation.recommendations : [];
+    const explanationSources = Array.isArray(explanation?.sources) ? explanation.sources : [];
+    const topFeatures = Array.isArray(explanation?.top_features) ? explanation.top_features : [];
+    const shapDriverItems = topFeatures.length > 0
+        ? topFeatures.map((feature) => ({
+            key: feature.feature_name,
+            label: feature.display_name || feature.feature_name,
+            impact: `${feature.shap_value >= 0 ? '+' : '-'}${Math.abs(Number(feature.shap_value || 0)).toFixed(3)}`,
+            contribution: Number(feature.abs_shap_value || Math.abs(Number(feature.shap_value || 0))),
+            direction: Number(feature.shap_value || 0) >= 0 ? 'increasing' : 'decreasing',
+        }))
+        : drivers;
+    const displayedRecommendations = explanationRecommendations.length > 0 ? explanationRecommendations : recommendations;
 
     const getRiskColor = (level) => {
         const l = level?.toLowerCase();
@@ -100,7 +116,7 @@ const RiskUI = ({ riskData, loading, onSimulatorClick }) => {
                             <circle className="text-slate-100 dark:text-slate-800" cx="50" cy="50" fill="transparent" r="45" stroke="currentColor" strokeWidth="8"></circle>
                             <motion.circle
                                 initial={{ strokeDashoffset: 282.7 }}
-                                animate={{ strokeDashoffset: 282.7 - (282.7 * risk_score / 100) }}
+                                animate={{ strokeDashoffset: 282.7 - (282.7 * normalizedRiskScore / 100) }}
                                 transition={{ duration: 1.5, ease: "easeOut" }}
                                 className="text-[#6143f4]"
                                 cx="50"
@@ -114,7 +130,7 @@ const RiskUI = ({ riskData, loading, onSimulatorClick }) => {
                             ></motion.circle>
                         </svg>
                         <div className="absolute inset-0 flex flex-col items-center justify-center">
-                            <span className="text-5xl font-black text-[#13082a] dark:text-white leading-none">{Math.round(risk_score)}%</span>
+                            <span className="text-5xl font-black text-[#13082a] dark:text-white leading-none">{Math.round(normalizedRiskScore)}%</span>
                             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">Risk Level</span>
                         </div>
                     </div>
@@ -145,7 +161,9 @@ const RiskUI = ({ riskData, loading, onSimulatorClick }) => {
                     </div>
                     <div className="space-y-6">
                         <p className="text-slate-600 dark:text-slate-300 leading-relaxed text-lg font-medium">
-                            The <span className="font-bold text-[#13082a] dark:text-white border-b-2 border-[#6143f4]/30">ArogyaAI Engine</span> has analyzed your health trajectory.
+                            {explanationSummary || (
+                                <>The <span className="font-bold text-[#13082a] dark:text-white border-b-2 border-[#6143f4]/30">ArogyaAI Engine</span> has analyzed your health trajectory.</>
+                            )}
                         </p>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 pt-2">
                             <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/30 border border-slate-100 dark:border-white/5 transition-colors hover:bg-[#6143f4]/5">
@@ -155,14 +173,22 @@ const RiskUI = ({ riskData, loading, onSimulatorClick }) => {
                             <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/30 border border-slate-100 dark:border-white/5 transition-colors hover:bg-[#6143f4]/5">
                                 <p className="text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest leading-none">Primary Driver</p>
                                 <p className="text-sm font-black text-[#13082a] dark:text-white leading-none">
-                                    {drivers[0]?.label || 'Metabolic Trends'}
+                                    {explanationFactors[0]?.title || shapDriverItems[0]?.label || 'Metabolic Trends'}
                                 </p>
                             </div>
                             <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/30 border border-slate-100 dark:border-white/5 transition-colors hover:bg-[#6143f4]/5">
                                 <p className="text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest leading-none">Action Priority</p>
-                                <p className="text-sm font-black text-[#13082a] dark:text-white leading-none">High</p>
+                                <p className="text-sm font-black text-[#13082a] dark:text-white leading-none">{displayedRecommendations.length > 0 ? 'Grounded' : 'Monitor'}</p>
                             </div>
                         </div>
+                        {explanationSources.length > 0 ? (
+                            <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/30 border border-slate-100 dark:border-white/5 p-4">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Retrieved Sources</p>
+                                <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+                                    {explanationSources.slice(0, 3).map((source) => source.source).join(' • ')}
+                                </p>
+                            </div>
+                        ) : null}
                     </div>
                 </div>
 
@@ -185,7 +211,7 @@ const RiskUI = ({ riskData, loading, onSimulatorClick }) => {
                         </div>
                     </div>
                     <div className="space-y-7">
-                        {drivers.length > 0 ? drivers.map((driver) => (
+                        {shapDriverItems.length > 0 ? shapDriverItems.map((driver) => (
                             <div key={driver.key || driver.label} className="relative group cursor-help">
                                 <div className="flex items-center justify-between mb-2">
                                     <span className="text-sm font-bold text-[#13082a] dark:text-white group-hover:text-[#6143f4] transition-colors">{driver.label}</span>
@@ -212,7 +238,7 @@ const RiskUI = ({ riskData, loading, onSimulatorClick }) => {
                 <div className="col-span-12 lg:col-span-4 bg-white dark:bg-[#1a1433] rounded-3xl p-8 shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col group">
                     <h3 className="text-xl font-bold text-[#13082a] dark:text-white mb-6 uppercase leading-none">Recommendations</h3>
                     <div className="space-y-4 flex-1">
-                        {recommendations.length > 0 ? recommendations.map((rec, i) => {
+                        {displayedRecommendations.length > 0 ? displayedRecommendations.map((rec, i) => {
                             const title = typeof rec === 'string' ? rec : rec.title;
                             return (
                                 <div key={i} className={`p-4 rounded-2xl border bg-slate-50 dark:bg-white/5 border-slate-100 dark:border-white/5 flex flex-col gap-2 transition-transform hover:scale-[1.02] active:scale-[0.98] group/factor shadow-sm hover:shadow-md`}>
@@ -224,7 +250,7 @@ const RiskUI = ({ riskData, loading, onSimulatorClick }) => {
                                             <p className="text-sm font-bold text-[#13082a] dark:text-white leading-tight">{title}</p>
                                         </div>
                                     </div>
-                                    {rec.detail && <p className="text-xs text-slate-500 dark:text-slate-400">{rec.detail}</p>}
+                                    {typeof rec !== 'string' && rec.detail ? <p className="text-xs text-slate-500 dark:text-slate-400">{rec.detail}</p> : null}
                                 </div>
                             );
                         }) : (

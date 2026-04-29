@@ -9,6 +9,8 @@ from core.pipeline_logger import log_pipeline
 from models import User
 from pipelines.ml_pipeline.service import MLPipelineService
 from schemas.api_models import PredictionRequest
+from services.audit_service import log_event
+from services.prediction_explanation_service import PredictionExplanationService
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -22,37 +24,45 @@ async def get_health_prediction(
     """
     Coordinates health risk prediction through the local hybrid pipeline.
 
-    If a DB session and resolved user are provided, the pipeline persists
-    feature, risk, SHAP, and health-score outputs. Otherwise it returns a safe
-    fallback envelope.
+    Requires a DB session and resolved user because the ML pipeline persists
+    feature, risk, SHAP, and health-score outputs as part of the request flow.
     """
     payload = data.model_dump()
     payload["user_id"] = user_id
 
-    if db is not None and current_user is not None:
-        log_pipeline("ml", step="predict", status="running", data="pending")
-        try:
-            result = MLPipelineService.predict(db, current_user, payload)
-            log_pipeline("ml", step="predict", status="healthy", data="fetched")
-            return result
-        except Exception as exc:
-            log_pipeline("ml", step="predict", status="unhealthy", data="failed")
-            logger.exception("MLPipeline prediction failed for user=%s: %s", user_id, exc)
-            raise
+    if db is None or current_user is None:
+        raise RuntimeError("Prediction requests require a database session and authenticated user.")
 
-    log_pipeline("ml", step="predict", status="healthy", data="fallback")
-    return {
-        "success": True,
-        "status": "fallback",
-        "source": "computed",
-        "error": None,
-        "data": {
-            "risk_score": 45.2,
-            "risk_level": "Moderate",
-            "recommendations": [
-                "Maintain current activity level",
-                "Schedule a routine check-up in 6 months",
-                "Focus on consistent sleep patterns",
-            ],
-        },
-    }
+    log_pipeline("ml", step="predict", status="running", data="pending")
+    try:
+        result = MLPipelineService.predict(db, current_user, payload)
+        result = await PredictionExplanationService.hydrate_prediction_response(db, current_user, result)
+        log_pipeline("ml", step="predict", status="healthy", data="fetched")
+        result_data = result.get("data") or {}
+        log_event(
+            current_user.id,
+            "prediction_run",
+            "/api/v1/prediction/compute",
+            {
+                "status": "success",
+                "prediction_id": result_data.get("prediction_id"),
+                "risk_score": result_data.get("risk_score"),
+                "health_score": result_data.get("health_score"),
+                "input_keys": sorted(payload.keys()),
+            },
+        )
+        return result
+    except Exception as exc:
+        log_pipeline("ml", step="predict", status="unhealthy", data="failed")
+        log_event(
+            current_user.id,
+            "prediction_run",
+            "/api/v1/prediction/compute",
+            {
+                "status": "failed",
+                "error": str(exc),
+                "input_keys": sorted(payload.keys()),
+            },
+        )
+        logger.exception("MLPipeline prediction failed for user=%s: %s", user_id, exc)
+        raise

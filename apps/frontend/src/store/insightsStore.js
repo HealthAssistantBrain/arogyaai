@@ -91,6 +91,7 @@ const normalizeInsightsPayload = (envelope = {}) => {
     cards: normalizeRiskCards(payload.risks ?? {}),
     drivers: normalizeDrivers(payload.drivers ?? []),
     analysis: payload.analysis ?? '',
+    explanation: payload.explanation ?? null,
     recommendations: Array.isArray(payload.recommendations) ? payload.recommendations : [],
     lastUpdated: payload.last_updated ?? envelope.last_updated ?? null,
     confidence: Number(payload.confidence ?? 0),

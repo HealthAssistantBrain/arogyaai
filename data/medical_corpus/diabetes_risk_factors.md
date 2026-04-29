@@ -1,0 +1,11 @@
+# Diabetes Risk Factors
+
+Type 2 diabetes risk grows when several metabolic and lifestyle signals begin to move in the wrong direction at the same time. Excess body fat, especially around the abdomen, is associated with insulin resistance because muscle and liver cells respond less effectively to insulin. When insulin resistance rises, the pancreas needs to release more insulin to keep blood glucose in a healthy range. Over time, this compensation can become less effective and fasting glucose or long-term glucose markers may begin to worsen.
+
+Weight gain is not the only driver. Low physical activity reduces how efficiently muscle tissue uses glucose, and long periods of sitting are linked with poorer metabolic flexibility even in people who are not obese. Family history, older age, elevated blood pressure, poor sleep, and abnormal cholesterol patterns often travel together with diabetes risk because they reflect overlapping cardiometabolic stress. A high resting heart rate can also appear alongside deconditioning, stress, poor sleep, or low aerobic fitness, all of which can signal a less favorable metabolic profile.
+
+Sleep matters because short sleep duration and fragmented sleep can disturb appetite hormones, worsen insulin sensitivity, and raise stress-hormone exposure. When sleep is consistently poor, people often have lower energy for exercise and less stable food choices, which compounds risk rather than acting as a single isolated factor. This is why diabetes prevention usually focuses on the full pattern of health behaviors rather than one measurement alone.
+
+Risk interpretation should stay grounded in context. A single elevated feature does not diagnose diabetes, but a pattern of higher BMI, lower activity, poorer sleep, and elevated blood pressure suggests a physiologic environment that may increase future risk. Practical prevention usually focuses on improving daily movement, weight management, sleep consistency, and follow-up testing when risk markers cluster together.
+
+For an explanation system, the safest framing is to connect model drivers back to mechanisms that are already well described in the retrieved knowledge base. That means describing why clustered lifestyle and metabolic factors may push risk upward, while avoiding any claim that the model alone confirms disease.

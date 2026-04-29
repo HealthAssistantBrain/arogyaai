@@ -57,6 +57,12 @@ function extractApiError(error, fallback) {
   return error?.response?.data?.error || error?.response?.data?.detail || error?.message || fallback;
 }
 
+function availabilityText(isAvailable, isMissingScope) {
+  if (isAvailable) return 'Available';
+  if (isMissingScope) return 'Permission missing';
+  return 'Not available';
+}
+
 function StatCard({ label, value, helper, icon: Icon, accent }) {
   return (
     <div className="rounded-3xl border border-slate-200/70 dark:border-white/10 bg-white dark:bg-white/[0.03] p-5 shadow-sm">
@@ -232,6 +238,8 @@ const GoogleFitSettings = () => {
     latest_day: null,
     active_day_count: 0,
   };
+  const availability = data?.data_availability || { steps: false, heart_rate: false, sleep: false };
+  const missingScopes = Array.isArray(data?.missing_scopes) ? data.missing_scopes : [];
 
   return (
     <div className="min-h-screen bg-[#f6f5f8] text-[#13082a] dark:bg-[#0B0819] dark:text-slate-100">
@@ -354,6 +362,26 @@ const GoogleFitSettings = () => {
                     your current flow working, but future migration planning is recommended.
                   </p>
                 </div>
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-[1.5rem] border border-slate-200/70 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-[#131022]">
+              <p className="text-[12px] font-black uppercase tracking-[0.14em] text-[#13082a] dark:text-white">
+                Data availability
+              </p>
+              <div className="mt-3 grid gap-3 md:grid-cols-3">
+                {[
+                  { key: 'steps', label: 'Steps' },
+                  { key: 'heart_rate', label: 'Heart Rate' },
+                  { key: 'sleep', label: 'Sleep' },
+                ].map((item) => (
+                  <div key={item.key} className="rounded-2xl border border-slate-200/70 bg-white px-4 py-3 dark:border-white/10 dark:bg-white/5">
+                    <p className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">{item.label}</p>
+                    <p className="mt-2 text-[14px] font-semibold text-[#13082a] dark:text-white">
+                      {availabilityText(Boolean(availability[item.key]), missingScopes.includes(item.key))}
+                    </p>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
