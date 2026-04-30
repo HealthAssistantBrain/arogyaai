@@ -1,390 +1,759 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useAuthStore } from '../store/authStore';
-import { getApiUrl } from '../lib/apiBaseUrl';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
-    LayoutDashboard,
-    Brain,
-    Sliders,
-    Calendar,
-    FlaskConical,
-    Settings,
-    History,
-    Search,
-    Bell,
-    AlertCircle,
-    Stethoscope,
-    Activity,
-    Watch,
-    Syringe,
-    Sparkles,
-    ChevronDown,
-    ChevronUp,
-    Download,
-    CalendarDays,
-    Clock,
-    Wind
+  Activity,
+  AlertCircle,
+  CalendarDays,
+  ClipboardPlus,
+  Download,
+  FileText,
+  History,
+  Search,
+  Sparkles,
+  Stethoscope,
+  Watch,
 } from 'lucide-react';
-import { ROUTES } from '../router/routes';
-import { openCommandPalette } from '../components/CommandPalette';
 
+import MedicalHistoryPanel from '../components/timeline/MedicalHistoryPanel';
 import { useFetchLock } from '../hooks/useFetchLock';
+import { getApiUrl } from '../lib/apiBaseUrl';
 import { safeFetch } from '../lib/safeApi';
-import { safeArray } from '../utils/safeData';
+import { useAuthStore } from '../store/authStore';
+import { safeArray, safeText } from '../utils/safeData';
 
-const API_BASE_URL = getApiUrl(import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000');
+const API_BASE_URL = getApiUrl(
+  import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+);
+
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+const parseEventDateValue = (value) => {
+  if (!value) return null;
+
+  if (typeof value === 'string' && DATE_ONLY_PATTERN.test(value)) {
+    const [year, month, day] = value.split('-').map(Number);
+    return new Date(year, month - 1, day, 12, 0, 0, 0);
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const formatEventDate = (value, variant = 'full') => {
+  const parsed = parseEventDateValue(value);
+  if (!parsed) return 'Unknown Date';
+
+  const hasExplicitTime = typeof value === 'string' && value.includes('T');
+  if (variant === 'compact') {
+    return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  if (hasExplicitTime) {
+    return parsed.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+
+  return parsed.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+};
+
+const compareTimelineYears = (left, right) => {
+  if (left === 'Unknown') return 1;
+  if (right === 'Unknown') return -1;
+  return Number(left) - Number(right);
+};
+
+const getSeverityTone = (value) => {
+  const normalized = safeText(value).toLowerCase();
+
+  if (!normalized) {
+    return 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300';
+  }
+  if (
+    normalized.includes('critical') ||
+    normalized.includes('high') ||
+    normalized.includes('9/10') ||
+    normalized.includes('10/10')
+  ) {
+    return 'border-red-200 bg-red-50 text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300';
+  }
+  if (
+    normalized.includes('moderate') ||
+    normalized.includes('medium') ||
+    normalized.includes('5/10') ||
+    normalized.includes('6/10') ||
+    normalized.includes('7/10') ||
+    normalized.includes('8/10')
+  ) {
+    return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300';
+  }
+  return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300';
+};
+
+const decorateTimelineEvent = (event) => {
+  let icon = Activity;
+  let iconColor = 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300';
+  let dotColor = 'bg-slate-400';
+
+  switch (event.type) {
+    case 'Alerts':
+      icon = AlertCircle;
+      iconColor = 'bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-300';
+      dotColor = 'bg-red-500';
+      break;
+    case 'Tests':
+      icon = Stethoscope;
+      iconColor = 'bg-[#6143f4]/10 text-[#6143f4] dark:bg-[#6143f4]/15 dark:text-[#c1b6ff]';
+      dotColor = 'bg-[#6143f4]';
+      break;
+    case 'Reports':
+      icon = FileText;
+      iconColor = 'bg-amber-100 text-amber-600 dark:bg-amber-500/10 dark:text-amber-300';
+      dotColor = 'bg-amber-500';
+      break;
+    case 'Clinical History':
+      icon = ClipboardPlus;
+      iconColor = 'bg-[#009cde]/10 text-[#009cde] dark:bg-[#009cde]/15 dark:text-[#8ad6ff]';
+      dotColor = 'bg-[#009cde]';
+      break;
+    case 'Device':
+      icon = Watch;
+      iconColor = 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300';
+      dotColor = 'bg-slate-400';
+      break;
+    case 'Vitals':
+      icon = Activity;
+      iconColor = 'bg-[#009cde]/10 text-[#009cde] dark:bg-[#009cde]/15 dark:text-[#8ad6ff]';
+      dotColor = 'bg-[#009cde]';
+      break;
+    default:
+      break;
+  }
+
+  const eventDateValue = event.event_date || event.timestamp || null;
+  const parsedDate = parseEventDateValue(eventDateValue);
+  const severity =
+    event.severity ||
+    safeArray(event.metrics).find((metric) => safeText(metric?.label).toLowerCase() === 'severity')?.value ||
+    null;
+
+  return {
+    ...event,
+    icon,
+    iconColor,
+    dotColor,
+    event_date: eventDateValue,
+    date: formatEventDate(eventDateValue, 'full'),
+    compactDate: formatEventDate(eventDateValue, 'compact'),
+    yearLabel: parsedDate ? String(parsedDate.getFullYear()) : 'Unknown',
+    sortTime: parsedDate?.getTime?.() ?? 0,
+    severity,
+  };
+};
+
+function TimelineDetailCard({ event }) {
+  if (!event) return null;
+
+  const possibleConditions = safeArray(event.possible_conditions);
+  const recommendations = safeArray(event.recommendations);
+  const metrics = safeArray(event.metrics);
+  const labData = safeArray(event.labData);
+  const summaryLines = safeArray(event.metadata?.summary);
+  const detailTone = getSeverityTone(event.severity);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 22, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 18, scale: 0.98 }}
+      className="mt-8 rounded-[2rem] border border-slate-200/80 bg-white/95 p-6 shadow-[0_28px_80px_-42px_rgba(15,23,42,0.35)] backdrop-blur dark:border-slate-800 dark:bg-[#120d24]/92"
+    >
+      <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+        <div className="flex items-start gap-4">
+          <div className={`flex size-12 items-center justify-center rounded-[1.25rem] shadow-inner ${event.iconColor}`}>
+            <event.icon size={22} />
+          </div>
+
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] text-slate-500 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
+                {event.type}
+              </span>
+              {event.severity ? (
+                <span className={`rounded-full border px-3 py-1 text-xs font-bold ${detailTone}`}>
+                  {event.severity}
+                </span>
+              ) : null}
+            </div>
+
+            <h3 className="mt-4 text-2xl font-black tracking-tight text-slate-950 dark:text-white">{event.title}</h3>
+            <p className="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
+              {event.date}
+              <span className="mx-2">•</span>
+              {event.source}
+            </p>
+          </div>
+        </div>
+
+        <div className="rounded-[1.4rem] border border-[#6143f4]/10 bg-[linear-gradient(180deg,rgba(97,67,244,0.08),rgba(0,156,222,0.06))] px-4 py-3 dark:border-[#6143f4]/20 dark:bg-[linear-gradient(180deg,rgba(97,67,244,0.12),rgba(15,23,42,0.12))]">
+          <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#6143f4]">Selected Event</p>
+          <p className="mt-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            {event.type === 'Reports' ? 'Historical report review' : 'Clinical timeline detail'}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+        <div className="space-y-5">
+          <div className="rounded-[1.6rem] border border-slate-200/80 bg-slate-50/80 p-5 dark:border-slate-800 dark:bg-slate-900/45">
+            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Event Summary</p>
+            <p className="mt-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300">{event.description}</p>
+          </div>
+
+          {event.insights ? (
+            <div className="rounded-[1.6rem] border border-[#6143f4]/10 bg-[#6143f4]/5 p-5 dark:border-[#6143f4]/20 dark:bg-[#6143f4]/10">
+              <div className="flex items-center gap-2 text-[#6143f4]">
+                <Sparkles size={15} />
+                <p className="text-[11px] font-black uppercase tracking-[0.24em]">AI Summary</p>
+              </div>
+              <p className="mt-3 text-sm leading-relaxed text-slate-700 dark:text-slate-200">{event.insights}</p>
+            </div>
+          ) : summaryLines.length > 1 ? (
+            <div className="rounded-[1.6rem] border border-[#6143f4]/10 bg-[#6143f4]/5 p-5 dark:border-[#6143f4]/20 dark:bg-[#6143f4]/10">
+              <div className="flex items-center gap-2 text-[#6143f4]">
+                <Sparkles size={15} />
+                <p className="text-[11px] font-black uppercase tracking-[0.24em]">AI Summary</p>
+              </div>
+              <p className="mt-3 text-sm leading-relaxed text-slate-700 dark:text-slate-200">{summaryLines[1]}</p>
+            </div>
+          ) : null}
+
+          {possibleConditions.length > 0 ? (
+            <div className="rounded-[1.6rem] border border-slate-200/80 bg-white/80 p-5 dark:border-slate-800 dark:bg-slate-950/30">
+              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Possible Conditions</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {possibleConditions.map((condition) => (
+                  <span
+                    key={`${event.id}:${condition}`}
+                    className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold text-slate-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200"
+                  >
+                    {condition}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {recommendations.length > 0 ? (
+            <div className="rounded-[1.6rem] border border-slate-200/80 bg-white/80 p-5 dark:border-slate-800 dark:bg-slate-950/30">
+              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Recommended Next Steps</p>
+              <div className="mt-3 space-y-3">
+                {recommendations.map((recommendation) => (
+                  <div
+                    key={`${event.id}:${recommendation}`}
+                    className="rounded-[1.1rem] border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm leading-relaxed text-slate-600 dark:border-slate-700 dark:bg-slate-900/55 dark:text-slate-200"
+                  >
+                    {recommendation}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="space-y-5">
+          {metrics.length > 0 ? (
+            <div className="rounded-[1.6rem] border border-slate-200/80 bg-white/85 p-5 dark:border-slate-800 dark:bg-slate-950/35">
+              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Event Details</p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {metrics.map((metric) => (
+                  <div
+                    key={`${event.id}:${metric.label}`}
+                    className="rounded-[1.1rem] border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-900/60"
+                  >
+                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">{metric.label}</p>
+                    <p className={`mt-2 text-sm font-bold ${metric.color || 'text-slate-900 dark:text-white'}`}>
+                      {metric.value}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {labData.length > 0 ? (
+            <div className="rounded-[1.6rem] border border-slate-200/80 bg-white/85 p-5 dark:border-slate-800 dark:bg-slate-950/35">
+              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Measurements</p>
+              <div className="mt-4 grid gap-3">
+                {labData.map((lab) => (
+                  <div
+                    key={`${event.id}:${lab.label}`}
+                    className="rounded-[1.1rem] border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/60"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">{lab.label}</p>
+                        <p className={`mt-2 text-sm font-bold ${lab.valueColor || 'text-slate-900 dark:text-white'}`}>
+                          {lab.value}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${lab.progress ?? 50}%` }}
+                        transition={{ duration: 0.9, ease: 'easeOut' }}
+                        className={`${lab.color || 'bg-[#6143f4]'} h-full rounded-full`}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
 
 const Timeline = () => {
-    const navigate = useNavigate();
-    const profileLoading = useAuthStore((state) => state.profileLoading);
-    const [activeFilter, setActiveFilter] = useState('All');
-    const [searchQuery, setSearchQuery] = useState('');
-    const [expandedEvents, setExpandedEvents] = useState({});
-    const [timelineEvents, setTimelineEvents] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const { acquireLock, releaseLock } = useFetchLock();
+  const profileLoading = useAuthStore((state) => state.profileLoading);
+  const [activeFilter, setActiveFilter] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState('timeline');
+  const [selectedEventId, setSelectedEventId] = useState(null);
+  const [timelineEvents, setTimelineEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const { acquireLock, releaseLock } = useFetchLock();
+  const timelineScrollRef = useRef(null);
+  const eventRefs = useRef({});
 
-    useEffect(() => {
-        let isMounted = true;
-        const fetchTimeline = async () => {
-            const currentToken = useAuthStore.getState().token;
-            if (!currentToken) {
-                if (isMounted) setLoading(false);
-                return;
-            }
-            if (!acquireLock('timeline_fetch')) return;
+  const fetchTimeline = useCallback(async () => {
+    const currentToken = useAuthStore.getState().token;
+    if (!currentToken) {
+      setTimelineEvents([]);
+      setSelectedEventId(null);
+      setLoading(false);
+      return;
+    }
+    if (!acquireLock('timeline_fetch')) return;
 
-            try {
-                if (isMounted) setLoading(true);
-                const json = await safeFetch(`${API_BASE_URL}/health/timeline`, {
-                    headers: { Authorization: `Bearer ${currentToken}` }
-                });
+    try {
+      setLoading(true);
+      const json = await safeFetch(`${API_BASE_URL}/health/timeline`, {
+        headers: { Authorization: `Bearer ${currentToken}` },
+      });
 
-                const timelinePayload = safeArray(json?.data ?? json);
+      const mappedEvents = safeArray(json?.data ?? json).map(decorateTimelineEvent);
+      setTimelineEvents(mappedEvents);
+      setSelectedEventId(mappedEvents.length > 0 ? mappedEvents[mappedEvents.length - 1].id : null);
+      setError(null);
+    } catch (fetchError) {
+      console.error('fetch timeline error:', fetchError);
+      setError(fetchError?.message || 'Unable to load timeline.');
+    } finally {
+      setLoading(false);
+      releaseLock('timeline_fetch');
+    }
+  }, [acquireLock, releaseLock]);
 
-                const mappedEvents = timelinePayload.map(event => {
-                    let icon = Activity;
-                    let iconColor = 'bg-gray-100 text-gray-500';
-                    let dotColor = 'bg-gray-400';
+  useEffect(() => {
+    let isMounted = true;
 
-                    switch (event.type) {
-                        case 'Alerts':
-                            icon = AlertCircle;
-                            iconColor = 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400';
-                            dotColor = 'bg-red-500 ring-red-500/20';
-                            break;
-                        case 'Tests':
-                            icon = Stethoscope;
-                            iconColor = 'bg-[#6143f4]/10 text-[#6143f4]';
-                            dotColor = 'bg-[#6143f4]';
-                            break;
-                        case 'Device':
-                            icon = Watch;
-                            iconColor = 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400';
-                            dotColor = 'bg-slate-400';
-                            break;
-                        case 'Vitals':
-                            icon = Activity;
-                            iconColor = 'bg-[#009cde]/10 text-[#009cde]';
-                            dotColor = 'bg-[#009cde]';
-                            break;
-                    }
-
-                    let displayDate = 'Unknown Date';
-                    if (event.timestamp) {
-                        const d = new Date(event.timestamp);
-                        displayDate = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-                    }
-
-                    return {
-                        ...event,
-                        icon,
-                        iconColor,
-                        dotColor,
-                        date: displayDate
-                    };
-                });
-
-                if (isMounted) {
-                    setTimelineEvents(mappedEvents);
-                    setError(null);
-                    if (mappedEvents.length > 0) {
-                        setExpandedEvents({ [mappedEvents[0].id]: true });
-                    } else {
-                        setExpandedEvents({});
-                    }
-                }
-            } catch (err) {
-                console.error("fetch timeline error:", err);
-                if (isMounted) setError(err.message);
-            } finally {
-                if (isMounted) setLoading(false);
-                releaseLock('timeline_fetch');
-            }
-        };
-        fetchTimeline();
-
-        return () => {
-            isMounted = false;
-        };
-    }, [acquireLock, releaseLock]);
-
-    const toggleEvent = (id) => {
-        setExpandedEvents(prev => ({ ...prev, [id]: !prev[id] }));
+    const run = async () => {
+      if (!isMounted) return;
+      await fetchTimeline();
     };
 
-    const filters = ['All', 'Disease', 'Tests', 'Symptoms', 'Alerts'];
+    run();
 
-    const cleanedData = timelineEvents.filter(item => {
-        return !(
-            item.source === "wearable" ||
-            item.type === "steps" ||
-            item.type === "heart_rate" ||
-            item.type === "sleep" ||
-            item.type === "Device" ||
-            item.type === "Vitals"
-        );
-    });
+    return () => {
+      isMounted = false;
+    };
+  }, [fetchTimeline]);
 
-    const filteredEvents = cleanedData.filter(event => {
-        let matchesFilter = true;
-        if (activeFilter !== 'All') {
-            if (activeFilter === 'Tests') matchesFilter = event.type === 'Tests' || event.category === 'hematology';
-            else if (activeFilter === 'Alerts') matchesFilter = event.type === 'Alerts';
-            else if (activeFilter === 'Disease') matchesFilter = event.category === 'disease' || event.category === 'condition';
-            else if (activeFilter === 'Symptoms') matchesFilter = event.category === 'symptom' || event.type === 'Symptom';
-            else matchesFilter = false;
-        }
+  const filters = ['All', 'Reports', 'Tests', 'Symptoms', 'Alerts'];
 
-        if (!matchesFilter) return false;
+  const cleanedData = timelineEvents.filter((item) => {
+    return !(
+      item.source === 'wearable' ||
+      item.type === 'steps' ||
+      item.type === 'heart_rate' ||
+      item.type === 'sleep' ||
+      item.type === 'Device' ||
+      item.type === 'Vitals'
+    );
+  });
 
-        if (!searchQuery || searchQuery.trim() === '') return true;
+  const filteredEvents = cleanedData.filter((event) => {
+    let matchesFilter = true;
 
-        const q = searchQuery.toLowerCase();
-        return (
-            (event.type && event.type.toLowerCase().includes(q)) ||
-            (event.title && event.title.toLowerCase().includes(q)) ||
-            (event.name && event.name.toLowerCase().includes(q)) ||
-            (event.category && event.category.toLowerCase().includes(q)) ||
-            (event.source && event.source.toLowerCase().includes(q)) ||
-            (event.description && event.description.toLowerCase().includes(q))
-        );
-    });
-
-    const sortedData = [...filteredEvents].sort((a, b) => {
-        const dateA = a.timestamp ? new Date(a.timestamp) : new Date(0);
-        const dateB = b.timestamp ? new Date(b.timestamp) : new Date(0);
-        return dateB - dateA;
-    });
-
-    const recentData = sortedData.slice(0, 10);
-
-    const sidebarLinks = [
-        { icon: LayoutDashboard, label: 'Dashboard', path: ROUTES.DASHBOARD },
-        { icon: Brain, label: 'AI Insights', path: ROUTES.INSIGHTS },
-        { icon: Sliders, label: 'Disease Simulator', path: ROUTES.SIMULATOR },
-        { icon: Calendar, label: 'Health Timeline', path: ROUTES.TIMELINE, active: true },
-        { icon: FlaskConical, label: 'Lab Results', path: ROUTES.LAB_RESULTS },
-        { icon: Settings, label: 'Settings', path: ROUTES.SETTINGS },
-    ];
-
-    if (profileLoading || loading) {
-        return (
-            <div className="flex min-h-screen items-center justify-center bg-[#f6f5f8] dark:bg-[#131022] text-sm font-bold text-slate-500">
-                <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}>
-                    <Activity className="text-[#6143f4] size-8 mb-4 mx-auto" />
-                </motion.div>
-                <span className="ml-3">Loading Timeline...</span>
-            </div>
-        );
+    if (activeFilter !== 'All') {
+      if (activeFilter === 'Reports') {
+        matchesFilter = event.type === 'Reports' || event.category === 'report';
+      } else if (activeFilter === 'Tests') {
+        matchesFilter = event.type === 'Tests' || event.category === 'hematology';
+      } else if (activeFilter === 'Alerts') {
+        matchesFilter = event.type === 'Alerts';
+      } else if (activeFilter === 'Symptoms') {
+        matchesFilter = event.category === 'symptom' || event.type === 'Clinical History' || event.type === 'Symptom';
+      } else {
+        matchesFilter = false;
+      }
     }
 
+    if (!matchesFilter) return false;
+    if (!searchQuery.trim()) return true;
+
+    const query = searchQuery.toLowerCase();
+    return [
+      event.type,
+      event.title,
+      event.name,
+      event.category,
+      event.source,
+      event.description,
+      event.insights,
+      ...(safeArray(event.possible_conditions)),
+      ...(safeArray(event.metadata?.summary)),
+    ].some((value) => safeText(value).toLowerCase().includes(query));
+  });
+
+  const visibleEvents = [...filteredEvents].sort((left, right) => left.sortTime - right.sortTime);
+
+  useEffect(() => {
+    if (visibleEvents.length === 0) {
+      if (selectedEventId !== null) {
+        setSelectedEventId(null);
+      }
+      return;
+    }
+
+    const hasSelectedEvent = visibleEvents.some((event) => event.id === selectedEventId);
+
+    if (!selectedEventId || !hasSelectedEvent) {
+      setSelectedEventId(visibleEvents[visibleEvents.length - 1].id);
+    }
+  }, [selectedEventId, visibleEvents]);
+
+  const groupedEventsMap = {};
+  visibleEvents.forEach((event) => {
+    const yearKey = event.yearLabel || 'Unknown';
+    if (!groupedEventsMap[yearKey]) {
+      groupedEventsMap[yearKey] = [];
+    }
+    groupedEventsMap[yearKey].push(event);
+  });
+
+  const groupedEvents = Object.entries(groupedEventsMap)
+    .sort(([leftYear], [rightYear]) => compareTimelineYears(leftYear, rightYear))
+    .map(([year, events]) => ({ year, events }));
+
+  const selectedEvent =
+    visibleEvents.find((event) => event.id === selectedEventId) ?? visibleEvents[visibleEvents.length - 1] ?? null;
+
+  const currentYear = String(new Date().getFullYear());
+  const firstVisibleEvent = visibleEvents[0] ?? null;
+  const lastVisibleEvent = visibleEvents[visibleEvents.length - 1] ?? null;
+
+  const handleSelectEvent = (id) => {
+    setSelectedEventId(id);
+
+    const node = eventRefs.current[id];
+    if (!node) return;
+
+    window.requestAnimationFrame(() => {
+      node.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'center',
+      });
+    });
+  };
+
+  if (profileLoading || loading) {
     return (
-        <div className="bg-[#f6f5f8] dark:bg-[#131022] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-row overflow-hidden antialiased">
-            {/* Sidebar Navigation - Matched Stitch */}
-
-
-            {/* Main Content Area */}
-            <main className="flex-1 flex flex-col min-w-0 bg-[#f6f5f8] dark:bg-[#0f0c1d] overflow-hidden">
-                
-
-                <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-                    <div className="max-w-5xl mx-auto space-y-8">
-                        <section className="flex flex-wrap items-center justify-between gap-4 pb-4">
-                            <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                                {filters.map((filter) => (
-                                    <button
-                                        key={filter}
-                                        onClick={() => setActiveFilter(filter)}
-                                        className={`px-6 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all duration-300 ${activeFilter === filter
-                                            ? 'bg-[#6143f4] text-white shadow-xl shadow-[#6143f4]/20'
-                                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-semibold border border-slate-200 dark:border-slate-700 hover:border-[#6143f4]/50'
-                                            }`}
-                                    >
-                                        {filter === 'All' ? 'All Events' : filter}
-                                    </button>
-                                ))}
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <div className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-semibold">
-                                    <CalendarDays size={14} className="text-slate-400" />
-                                    <span>Recent Timeline</span>
-                                </div>
-                                <button className="flex items-center gap-2 px-5 py-2 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition-all shadow-lg active:scale-95 leading-none">
-                                    <Download size={14} />
-                                    Export Summary
-                                </button>
-                            </div>
-                        </section>
-
-                        <div className="relative space-y-8 pb-20">
-                            {/* Vertical Line - Refined Width */}
-                            {recentData.length > 0 && <div className="absolute left-6 top-4 bottom-0 w-0.5 bg-slate-200 dark:bg-slate-800 rounded-full"></div>}
-
-                            {recentData.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-                                    <History size={48} className="mb-4 opacity-20" />
-                                    <p className="text-lg font-semibold">
-                                        {cleanedData.length > 0 && searchQuery ? "No matching results found" : "No recent health events"}
-                                    </p>
-                                    <p className="text-sm mt-2">
-                                        {cleanedData.length > 0 && searchQuery ? "Try a different search term or clear the filter." : "Try adjusting your filters or wait for a data sync."}
-                                    </p>
-                                </div>
-                            ) : recentData.map((event) => (
-                                <motion.div
-                                    key={event.id}
-                                    initial={{ opacity: 0, x: -20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    className="relative pl-16 group"
-                                >
-                                    {/* Timeline Dot */}
-                                    <div className={`absolute left-[1.125rem] top-4 size-3 rounded-full ${event.dotColor} z-10 ${event.type === 'Alert' ? 'ring-4 ring-red-500/20' : ''} transition-transform duration-500 group-hover:scale-125`}></div>
-
-                                    <div className={`bg-white dark:bg-[#1a1433] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden hover:shadow-xl hover:shadow-[#6143f4]/5 transition-all duration-300 ${event.onClick ? 'cursor-pointer' : ''}`} onClick={event.onClick}>
-                                        <div className="p-6">
-                                            <div className="flex items-start justify-between mb-2">
-                                                <div className="flex items-center gap-4">
-                                                    <div className={`size-10 rounded-xl ${event.iconColor} flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform duration-500`}>
-                                                        <event.icon size={20} />
-                                                    </div>
-                                                    <div>
-                                                        <h3 className="font-bold text-lg leading-none text-slate-900 dark:text-white">{event.title}</h3>
-                                                        <p className="text-xs text-slate-500 font-medium mt-1 inline-flex items-center gap-1">
-                                                            <span>{event.date}</span>
-                                                            <span className="mx-1">•</span>
-                                                            <span>{event.source}</span>
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <button
-                                                    onClick={() => toggleEvent(event.id)}
-                                                    className="text-slate-300 hover:text-[#6143f4] transition-colors p-1"
-                                                >
-                                                    {expandedEvents[event.id] ? <ChevronUp size={24} /> : <ChevronDown size={24} />}
-                                                </button>
-                                            </div>
-
-                                            <p className={`text-sm text-slate-600 dark:text-slate-400 font-medium leading-relaxed mt-2 ${!expandedEvents[event.id] ? 'line-clamp-2' : ''}`}>
-                                                {event.description}
-                                            </p>
-
-                                            <AnimatePresence>
-                                                {expandedEvents[event.id] && (
-                                                    <motion.div
-                                                        initial={{ height: 0, opacity: 0 }}
-                                                        animate={{ height: 'auto', opacity: 1 }}
-                                                        exit={{ height: 0, opacity: 0 }}
-                                                        className="overflow-hidden"
-                                                    >
-                                                        {event.metrics && event.metrics.length > 0 && (
-                                                            <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-4">
-                                                                {event.metrics.map(metric => (
-                                                                    <div key={metric.label} className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-transparent hover:border-[#6143f4]/10 transition-colors">
-                                                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide leading-none mb-1">{metric.label}</p>
-                                                                        <p className={`text-sm font-bold ${metric.color || 'text-slate-900 dark:text-white'}`}>{metric.value}</p>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        )}
-
-                                                        {event.insights && (
-                                                            <div className="mt-6 pt-2">
-                                                                <div className="bg-[#6143f4]/5 border border-[#6143f4]/10 rounded-xl p-4">
-                                                                    <div className="flex items-center gap-2 mb-3">
-                                                                        <Sparkles size={14} className="text-[#6143f4] animate-pulse" />
-                                                                        <p className="text-xs font-bold text-[#6143f4] uppercase tracking-wide leading-none">AI Insights</p>
-                                                                    </div>
-                                                                    <p className="text-sm text-[#13082a] dark:text-slate-300 leading-relaxed font-semibold italic mb-4">
-                                                                        "{event.insights}"
-                                                                    </p>
-
-                                                                    {event.labData && event.labData.length > 0 && (
-                                                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                                                            {event.labData.map(lab => (
-                                                                                <div key={lab.label} className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-[#6143f4]/10 shadow-sm transition-transform hover:scale-[1.02]">
-                                                                                    <p className="text-[10px] text-slate-400 font-bold leading-none mb-1">{lab.label}</p>
-                                                                                    <p className={`text-sm font-bold ${lab.valueColor || 'text-slate-900 dark:text-white'}`}>{lab.value}</p>
-                                                                                    <div className="w-full bg-slate-100 dark:bg-slate-700 h-1 rounded-full mt-2 overflow-hidden shadow-inner">
-                                                                                        <motion.div
-                                                                                            initial={{ width: 0 }}
-                                                                                            animate={{ width: `${lab.progress}%` }}
-                                                                                            transition={{ duration: 1.2, ease: "easeOut" }}
-                                                                                            className={`${lab.color || 'bg-[#6143f4]'} h-full rounded-full`}
-                                                                                        ></motion.div>
-                                                                                    </div>
-                                                                                </div>
-                                                                            ))}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                        {(!event.insights && !!event.labData && event.labData.length > 0) && (
-                                                            <div className="mt-6 pt-2 border-t border-slate-100 dark:border-slate-800">
-                                                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
-                                                                    {event.labData.map(lab => (
-                                                                        <div key={lab.label} className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-[#6143f4]/10 shadow-sm transition-transform hover:scale-[1.02]">
-                                                                            <p className="text-[10px] text-slate-400 font-bold leading-none mb-1">{lab.label}</p>
-                                                                            <p className={`text-sm font-bold ${lab.valueColor || 'text-slate-900 dark:text-white'}`}>{lab.value}</p>
-                                                                            <div className="w-full bg-slate-100 dark:bg-slate-700 h-1 rounded-full mt-2 overflow-hidden shadow-inner">
-                                                                                <motion.div
-                                                                                    initial={{ width: 0 }}
-                                                                                    animate={{ width: `${lab.progress}%` }}
-                                                                                    transition={{ duration: 1.2, ease: "easeOut" }}
-                                                                                    className={`${lab.color || 'bg-[#6143f4]'} h-full rounded-full`}
-                                                                                ></motion.div>
-                                                                            </div>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                    </motion.div>
-                                                )}
-                                            </AnimatePresence>
-                                        </div>
-                                    </div>
-                                </motion.div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            </main>
-
-            <style dangerouslySetInnerHTML={{
-                __html: `
-                .custom-scrollbar::-webkit-scrollbar { width: 5px; }
-                .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-                .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(97, 67, 244, 0.1); border-radius: 20px; }
-                .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(97, 67, 244, 0.2); }
-                .scrollbar-hide::-webkit-scrollbar { display: none; }
-                .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-            `}} />
-        </div>
+      <div className="flex min-h-screen items-center justify-center bg-[#f6f5f8] text-sm font-bold text-slate-500 dark:bg-[#131022]">
+        <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}>
+          <Activity className="mx-auto mb-4 size-8 text-[#6143f4]" />
+        </motion.div>
+        <span className="ml-3">Loading Timeline...</span>
+      </div>
     );
+  }
+
+  return (
+    <div className="min-h-screen bg-[linear-gradient(180deg,#f6f5f8_0%,#eef4fb_100%)] font-display text-[#13082a] antialiased dark:bg-[linear-gradient(180deg,#131022_0%,#090612_100%)] dark:text-slate-100">
+      <main className="mx-auto max-w-[1480px] p-5 sm:p-8">
+        <section className="overflow-hidden rounded-[2.25rem] border border-slate-200/80 bg-white/80 shadow-[0_28px_90px_-44px_rgba(15,23,42,0.4)] backdrop-blur dark:border-slate-800 dark:bg-[#110d21]/88">
+          <div className="border-b border-slate-200/80 bg-[radial-gradient(circle_at_top_left,rgba(97,67,244,0.12),transparent_45%),radial-gradient(circle_at_top_right,rgba(0,156,222,0.12),transparent_38%)] px-6 py-7 dark:border-slate-800">
+            <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+              <div>
+                <div className="inline-flex items-center gap-2 rounded-full border border-[#6143f4]/10 bg-[#6143f4]/5 px-3 py-1 text-[10px] font-black uppercase tracking-[0.28em] text-[#6143f4]">
+                  <Sparkles size={12} />
+                  Longitudinal Record
+                </div>
+                <h1 className="mt-4 text-4xl font-black tracking-tight text-slate-950 dark:text-white">Health Timeline</h1>
+                <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                  Review health events in true clinical order, then switch into intake mode when you want to add new medical history.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
+                  <CalendarDays size={15} className="text-slate-400" />
+                  <span>Year-based Clinical View</span>
+                </div>
+                <button className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-bold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200">
+                  <Download size={15} />
+                  <span>Export Summary</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex flex-wrap items-center gap-2">
+                {filters.map((filter) => (
+                  <button
+                    key={filter}
+                    onClick={() => setActiveFilter(filter)}
+                    className={`rounded-full px-5 py-2 text-sm font-bold whitespace-nowrap transition-all ${
+                      activeFilter === filter
+                        ? 'bg-slate-950 text-white shadow-xl shadow-slate-950/10 dark:bg-white dark:text-slate-950'
+                        : 'border border-slate-200 bg-white text-slate-600 hover:border-[#6143f4]/30 hover:text-[#6143f4] dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300'
+                    }`}
+                  >
+                    {filter === 'All' ? 'All Events' : filter}
+                  </button>
+                ))}
+              </div>
+
+              <div className="relative w-full max-w-md">
+                <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search complaints, reports, conditions..."
+                  className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 text-sm text-slate-700 outline-none transition focus:border-[#6143f4] focus:ring-4 focus:ring-[#6143f4]/10 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-center">
+              <div className="inline-flex items-center rounded-full border border-slate-200/80 bg-white/70 p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900/60">
+                {[
+                  { key: 'timeline', label: 'Health Timeline' },
+                  { key: 'intake', label: 'Add Medical History' },
+                ].map((mode) => (
+                  <button
+                    key={mode.key}
+                    type="button"
+                    onClick={() => setViewMode(mode.key)}
+                    className={`rounded-full px-5 py-2.5 text-sm font-bold transition-all ${
+                      viewMode === mode.key
+                        ? 'bg-[linear-gradient(135deg,#6143f4_0%,#8f67ff_56%,#009cde_100%)] text-white shadow-[0_16px_34px_-18px_rgba(97,67,244,0.8)]'
+                        : 'text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
+                    }`}
+                  >
+                    {mode.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6 sm:p-8">
+            {viewMode === 'timeline' ? (
+              <>
+                {error ? (
+                  <div className="rounded-[1.6rem] border border-red-200 bg-red-50 px-5 py-4 text-sm font-medium text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
+                    {error}
+                  </div>
+                ) : null}
+
+                {visibleEvents.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center rounded-[1.8rem] border border-dashed border-slate-200 bg-slate-50/70 py-20 text-slate-400 dark:border-slate-800 dark:bg-slate-900/35">
+                    <History size={48} className="mb-4 opacity-20" />
+                    <p className="text-lg font-semibold">
+                      {cleanedData.length > 0 && searchQuery ? 'No matching results found' : 'No recent health events'}
+                    </p>
+                    <p className="mt-2 text-sm">
+                      {cleanedData.length > 0 && searchQuery
+                        ? 'Try a different search term or clear the filter.'
+                        : 'Switch to Add Medical History to begin building a longitudinal record.'}
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+                      <div className="rounded-[1.7rem] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(244,247,252,0.92))] p-5 dark:border-slate-800 dark:bg-[linear-gradient(180deg,rgba(17,13,33,0.92),rgba(11,17,30,0.88))]">
+                        <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Timeline Window</p>
+                        <div className="mt-3 flex flex-wrap items-center gap-3">
+                          <p className="text-xl font-black text-slate-950 dark:text-white">
+                            {visibleEvents.length} event{visibleEvents.length === 1 ? '' : 's'}
+                          </p>
+                          <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
+                            {firstVisibleEvent?.date} to {lastVisibleEvent?.date}
+                          </span>
+                        </div>
+                        <p className="mt-3 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                          Scroll across the rail to move year by year through reports, alerts, labs, and structured symptom history.
+                        </p>
+                      </div>
+
+                      <div className="rounded-[1.7rem] border border-[#6143f4]/10 bg-[linear-gradient(180deg,rgba(97,67,244,0.08),rgba(0,156,222,0.05))] p-5 dark:border-[#6143f4]/20 dark:bg-[linear-gradient(180deg,rgba(97,67,244,0.12),rgba(15,23,42,0.12))]">
+                        <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#6143f4]">Current Year</p>
+                        <p className="mt-3 text-3xl font-black tracking-tight text-slate-950 dark:text-white">{currentYear}</p>
+                        <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                          The current year block is highlighted so the most recent clinical context stays easy to spot.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 rounded-[2rem] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,255,0.95),rgba(239,244,252,0.92))] p-4 dark:border-slate-800 dark:bg-[linear-gradient(180deg,rgba(16,13,28,0.92),rgba(10,16,28,0.88))]">
+                      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 px-2">
+                        <div>
+                          <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Horizontal Timeline</p>
+                          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                            Events are grouped by year and ordered by their real clinical date.
+                          </p>
+                        </div>
+                        <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
+                          Snap scroll enabled
+                        </span>
+                      </div>
+
+                      <div
+                        ref={timelineScrollRef}
+                        className="overflow-x-auto pb-4"
+                        style={{ scrollBehavior: 'smooth', scrollSnapType: 'x mandatory', scrollbarWidth: 'thin' }}
+                      >
+                        <div className="relative flex min-w-max items-end gap-8 px-3 pb-10 pt-6">
+                          <div className="pointer-events-none absolute bottom-4 left-3 right-3 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent dark:via-slate-600" />
+
+                          {groupedEvents.map(({ year, events }) => {
+                            const isCurrentYear = year === currentYear;
+
+                            return (
+                              <motion.section
+                                key={year}
+                                initial={{ opacity: 0.45, scale: 0.96, y: 18 }}
+                                whileInView={{ opacity: 1, scale: 1, y: 0 }}
+                                viewport={{ root: timelineScrollRef, amount: 0.35 }}
+                                transition={{ duration: 0.45, ease: 'easeOut' }}
+                                className={`shrink-0 rounded-[1.8rem] border p-5 ${
+                                  isCurrentYear
+                                    ? 'border-[#6143f4]/20 bg-[linear-gradient(180deg,rgba(97,67,244,0.1),rgba(255,255,255,0.82))] dark:bg-[linear-gradient(180deg,rgba(97,67,244,0.16),rgba(13,18,31,0.86))]'
+                                    : 'border-slate-200/80 bg-white/78 dark:border-slate-800 dark:bg-slate-950/28'
+                                }`}
+                                style={{
+                                  minWidth: `${Math.max(320, events.length * 230)}px`,
+                                  scrollSnapAlign: 'center',
+                                }}
+                              >
+                                <div className="flex items-center justify-between gap-3">
+                                  <div>
+                                    <p className={`text-[11px] font-black uppercase tracking-[0.24em] ${isCurrentYear ? 'text-[#6143f4]' : 'text-slate-400'}`}>
+                                      {isCurrentYear ? 'Current Year' : 'Timeline Year'}
+                                    </p>
+                                    <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950 dark:text-white">{year}</h2>
+                                  </div>
+
+                                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
+                                    {events.length} event{events.length === 1 ? '' : 's'}
+                                  </span>
+                                </div>
+
+                                <div className="mt-8 flex items-end gap-6">
+                                  {events.map((event) => {
+                                    const isSelected = selectedEvent?.id === event.id;
+
+                                    return (
+                                      <motion.button
+                                        key={event.id}
+                                        ref={(node) => {
+                                          if (node) {
+                                            eventRefs.current[event.id] = node;
+                                          } else {
+                                            delete eventRefs.current[event.id];
+                                          }
+                                        }}
+                                        type="button"
+                                        onClick={() => handleSelectEvent(event.id)}
+                                        initial={{ opacity: 0.55, scale: 0.95 }}
+                                        whileInView={{ opacity: 1, scale: 1 }}
+                                        viewport={{ root: timelineScrollRef, amount: 0.5 }}
+                                        transition={{ duration: 0.35, ease: 'easeOut' }}
+                                        className="relative flex w-[210px] shrink-0 flex-col items-center pb-10 text-left"
+                                      >
+                                        <div
+                                          className={`w-full rounded-[1.4rem] border p-4 transition-all duration-300 ${
+                                            isSelected
+                                              ? 'border-[#6143f4]/20 bg-white shadow-[0_22px_44px_-24px_rgba(97,67,244,0.6)] dark:bg-[#15102a]'
+                                              : 'border-slate-200 bg-white/85 hover:-translate-y-1 hover:border-[#6143f4]/20 hover:shadow-[0_18px_36px_-26px_rgba(15,23,42,0.45)] dark:border-slate-800 dark:bg-slate-950/55'
+                                          }`}
+                                        >
+                                          <div className="flex items-start gap-3">
+                                            <div className={`flex size-10 items-center justify-center rounded-[1rem] shadow-inner ${event.iconColor}`}>
+                                              <event.icon size={18} />
+                                            </div>
+                                            <div className="min-w-0">
+                                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">{event.type}</p>
+                                              <h3 className="mt-1 line-clamp-2 text-sm font-black leading-tight text-slate-900 dark:text-white">
+                                                {event.title}
+                                              </h3>
+                                            </div>
+                                          </div>
+
+                                          <p className="mt-3 text-xs font-semibold text-slate-500 dark:text-slate-400">{event.compactDate}</p>
+                                          <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                                            {event.description}
+                                          </p>
+                                        </div>
+
+                                        <div className="pointer-events-none absolute bottom-4 left-1/2 h-6 w-px -translate-x-1/2 bg-slate-300 dark:bg-slate-600" />
+                                        <span
+                                          className={`pointer-events-none absolute bottom-0 left-1/2 size-5 -translate-x-1/2 rounded-full border-4 border-white ${event.dotColor} transition-all dark:border-[#110d21] ${
+                                            isSelected ? 'scale-125 shadow-[0_0_0_8px_rgba(97,67,244,0.14)]' : ''
+                                          }`}
+                                        />
+                                      </motion.button>
+                                    );
+                                  })}
+                                </div>
+                              </motion.section>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    <AnimatePresence mode="wait">
+                      {selectedEvent ? <TimelineDetailCard key={selectedEvent.id} event={selectedEvent} /> : null}
+                    </AnimatePresence>
+                  </>
+                )}
+              </>
+            ) : (
+              <div className="mx-auto max-w-[880px]">
+                <MedicalHistoryPanel onTimelineRefresh={fetchTimeline} />
+              </div>
+            )}
+          </div>
+        </section>
+      </main>
+    </div>
+  );
 };
 
 export default Timeline;

@@ -3,6 +3,7 @@ import logging
 import mimetypes
 import re
 import uuid
+from datetime import date
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable
@@ -19,6 +20,7 @@ from sqlalchemy.orm import Session
 from core.pipeline_logger import log_pipeline
 from integrations.supabase_storage import upload_report as _supabase_upload_report
 from models import Report, ReportStatusEnum, ReportTypeEnum, User
+from services.notification_service import trigger_notification
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -34,9 +36,11 @@ class ReportService:
         current_user: User,
         file: UploadFile,
         report_type: str,
+        date_of_report: str | None = None,
         background_tasks: BackgroundTasks | None = None,
     ) -> dict[str, Any]:
         cls._validate_report_type(report_type)
+        normalized_report_date = cls._normalize_report_date(date_of_report)
         extension = Path(file.filename or "").suffix.lower()
         if extension not in cls.ALLOWED_EXTENSIONS:
             raise HTTPException(
@@ -61,6 +65,7 @@ class ReportService:
             user_id=current_user.id,
             report_type=ReportTypeEnum(report_type),
             file_url=public_url,
+            summary_data={"upload_metadata": {"date_of_report": normalized_report_date}} if normalized_report_date else None,
             status=ReportStatusEnum.PROCESSING,
         )
         db.add(report)
@@ -73,6 +78,22 @@ class ReportService:
             cls.persist_report(db, str(report.id), analysis.get("full_text") or analysis.get("ocr_text", ""), analysis)
             cls._schedule_lab_pipeline(str(report.id), background_tasks=background_tasks)
             db.refresh(report)
+            try:
+                await trigger_notification(
+                    user_id=str(current_user.id),
+                    event_type="health_alert",
+                    title="Lab Report Processed",
+                    message="Your medical report has been analyzed.",
+                    data={
+                        "report_id": str(report.id),
+                        "report_type": report.report_type.value,
+                        "summary": "Your uploaded report is ready for review in ArogyaAI.",
+                        "url": "/lab-results",
+                        "severity": "info",
+                    },
+                )
+            except Exception:
+                logger.exception("Failed to trigger processed-report notification for report %s", report.id)
             log_pipeline("report", step="analyze_report", status="healthy", data="fetched",
                          extra=f"source={analysis.get('source', '?')}")
         except Exception as exc:
@@ -105,6 +126,7 @@ class ReportService:
                 "ocr_text": analysis["ocr_text"],
                 "markers": analysis["markers"],
                 "summary_source": analysis["source"],
+                "date_of_report": normalized_report_date,
                 "summary_view": cls._build_summary_view(
                     analysis["ocr_text"],
                     analysis["summary"],
@@ -179,9 +201,20 @@ class ReportService:
         report = db.query(Report).filter(Report.id == report_id).first()
         if not report:
             return None
-            
+
+        existing_summary = report.summary_data if isinstance(report.summary_data, dict) else {}
+        merged_summary = dict(existing_summary)
+        merged_summary.update(summary_data or {})
+        existing_upload_metadata = existing_summary.get("upload_metadata") if isinstance(existing_summary.get("upload_metadata"), dict) else {}
+        next_upload_metadata = summary_data.get("upload_metadata") if isinstance(summary_data.get("upload_metadata"), dict) else {}
+        if existing_upload_metadata or next_upload_metadata:
+            merged_summary["upload_metadata"] = {
+                **existing_upload_metadata,
+                **next_upload_metadata,
+            }
+
         report.parsed_text = parsed_text
-        report.summary_data = summary_data
+        report.summary_data = merged_summary
         report.status = ReportStatusEnum.COMPLETED
         db.commit()
         db.refresh(report)
@@ -364,6 +397,7 @@ class ReportService:
             ocr_text = summary_data.get("ocr_text", parsed_text)
             raw_summary = summary_data.get("summary") or summary_data.get("patient_summary") or []
             summary_lines = raw_summary if isinstance(raw_summary, list) else [raw_summary]
+            upload_metadata = summary_data.get("upload_metadata") if isinstance(summary_data.get("upload_metadata"), dict) else {}
             
             analysis = {
                 "title": summary_data.get("title", file_name),
@@ -381,6 +415,7 @@ class ReportService:
                 "notes": summary_data.get("notes", []),
                 "source": analysis["source"],
             }
+            date_of_report = upload_metadata.get("date_of_report")
         elif parsed_text and not cls._looks_like_fallback_text(parsed_text):
             analysis = cls._build_local_analysis(file_name, parsed_text)
             summary_view = cls._build_summary_view(
@@ -390,6 +425,7 @@ class ReportService:
                 analysis["title"],
                 analysis["source"],
             )
+            date_of_report = None
         elif parsed_text:
             analysis = {
                 "title": file_name,
@@ -401,6 +437,7 @@ class ReportService:
             summary_view = cls._build_summary_view(
                 analysis["ocr_text"], [], [], file_name, "local-fallback"
             )
+            date_of_report = None
         else:
             analysis = {
                 "title": file_name,
@@ -410,6 +447,7 @@ class ReportService:
                 "source": "stored-empty",
             }
             summary_view = cls._build_summary_view("", [], [], file_name, "stored-empty")
+            date_of_report = None
         if parsed_path:
             # File is now in Supabase Storage — cannot stat remote files.
             # file_size was already captured at upload time and stored by callers.
@@ -432,6 +470,7 @@ class ReportService:
             "summary_source": analysis["source"],
             "summary_view": summary_view,
             "summary_data": report.summary_data or {},
+            "date_of_report": date_of_report,
         }
 
     @classmethod
@@ -521,3 +560,18 @@ class ReportService:
         allowed = {item.value for item in ReportTypeEnum}
         if report_type not in allowed:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid report type.")
+
+    @staticmethod
+    def _normalize_report_date(value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = str(value).strip()
+        if not text:
+            return None
+        try:
+            return date.fromisoformat(text).isoformat()
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="date_of_report must be in YYYY-MM-DD format.",
+            ) from exc

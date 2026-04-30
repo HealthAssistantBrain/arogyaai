@@ -59,12 +59,28 @@ def test_build_feature_snapshot_uses_latest_lab_results():
     labs_query = MagicMock()
     labs_query.filter.return_value.order_by.return_value.all.return_value = lab_rows
 
+    conditions_query = MagicMock()
+    conditions_query.filter.return_value.all.return_value = [
+        SimpleNamespace(condition_name="Diabetes", is_deleted=False),
+        SimpleNamespace(condition_name="Hypertension", is_deleted=False),
+    ]
+
+    history_query = MagicMock()
+    history_query.filter.return_value.order_by.return_value.first.return_value = SimpleNamespace(
+        chief_complaint="Chest pain for 2 days",
+        associated_symptoms=["fatigue", "dizziness"],
+        duration="2 days",
+        onset="sudden",
+        severity=8,
+        created_at=latest_glucose_at,
+    )
+
     bp_query = MagicMock()
     bp_query.filter.return_value.order_by.return_value.first.return_value = None
 
-    db.query.side_effect = [vitals_query, labs_query, bp_query]
+    db.query.side_effect = [history_query, conditions_query, vitals_query, labs_query, bp_query]
 
-    with patch("pipelines.feature_pipeline.service._latest_profile", return_value=SimpleNamespace(height_cm=172.0, weight_kg=74.0, date_of_birth=None, age=34)), patch(
+    with patch("pipelines.feature_pipeline.service._latest_profile", return_value=SimpleNamespace(height_cm=172.0, weight_kg=74.0, date_of_birth=None, age=34, gender="female", family_history="Stroke, Type 2 Diabetes", allergies="Penicillin", goals="Mediterranean", sleep_hours=6.5, stress_level=4, occupation="Teacher", city="Kolkata", marital_status="married", surgeries="Appendectomy", hospitalizations=True, hospitalization_details="Observation in 2023", current_medications="Metformin", smoking=False, alcohol=True)), patch(
         "pipelines.feature_pipeline.service.SleepService.get_sleep_summary",
         return_value={"data": {}, "last_updated": None},
     ), patch("pipelines.feature_pipeline.service._recent_heart_rates", return_value=[]), patch(
@@ -96,3 +112,14 @@ def test_build_feature_snapshot_uses_latest_lab_results():
     payload = snapshot.to_dict()
     assert payload["glucose"] == 108.0
     assert payload["cholesterol"] == 142.0
+    assert payload["sex"] == "female"
+    assert payload["sleep"] == 6.5
+    assert payload["stress"] == 4
+    assert payload["disease_flags"] == {"diabetes": True, "hypertension": True}
+    assert payload["family_history_flags"] == {"stroke": True, "type_2_diabetes": True}
+    assert payload["symptom_flags"]["chest_pain"] is True
+    assert payload["symptom_flags"]["fatigue"] is True
+    assert payload["severity_score"] == 8
+    assert payload["user_profile"]["occupation"] == "Teacher"
+    assert payload["medical_history"]["medications"] == "Metformin"
+    assert payload["initial_clinical_snapshot"]["duration"] == "2 days"

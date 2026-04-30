@@ -16,6 +16,7 @@ from models import (
     UserVital,
     UserVitalTypeEnum,
 )
+from services.event_service import emit_event
 
 ALERT_DEDUPE_WINDOW = timedelta(hours=12)
 ACTIVE_ALERT_LIMIT = 20
@@ -203,50 +204,68 @@ def generate_health_alerts(user_id: Any, db: Session | None = None) -> list[dict
             return []
 
         created_any = False
+        created_alerts: list[Alert] = []
 
         latest_heart_rate = _latest_user_vital(session, user_uuid, UserVitalTypeEnum.HEART_RATE)
         if latest_heart_rate is not None and latest_heart_rate.value is not None and float(latest_heart_rate.value) > 100.0:
-            created_any = bool(
-                _store_alert(
-                    session,
-                    user_id=user_uuid,
-                    alert_type=AlertTypeEnum.VITAL_ANOMALY,
-                    severity=SeverityEnum.CRITICAL,
-                    title="High heart rate detected",
-                    message=f"Latest heart rate was {float(latest_heart_rate.value):.0f} bpm, above the 100 bpm threshold.",
-                )
-            ) or created_any
+            created_alert = _store_alert(
+                session,
+                user_id=user_uuid,
+                alert_type=AlertTypeEnum.VITAL_ANOMALY,
+                severity=SeverityEnum.CRITICAL,
+                title="High heart rate detected",
+                message=f"Latest heart rate was {float(latest_heart_rate.value):.0f} bpm, above the 100 bpm threshold.",
+            )
+            if created_alert is not None:
+                created_alerts.append(created_alert)
+                created_any = True
 
         latest_sleep = _latest_user_vital(session, user_uuid, UserVitalTypeEnum.SLEEP)
         sleep_minutes = _sleep_minutes(latest_sleep)
         if sleep_minutes is not None and sleep_minutes < 300.0:
-            created_any = bool(
-                _store_alert(
-                    session,
-                    user_id=user_uuid,
-                    alert_type=AlertTypeEnum.VITAL_ANOMALY,
-                    severity=SeverityEnum.WARNING,
-                    title="Low sleep duration detected",
-                    message=f"Latest sleep duration was {sleep_minutes:.0f} minutes, below the 300 minute threshold.",
-                )
-            ) or created_any
+            created_alert = _store_alert(
+                session,
+                user_id=user_uuid,
+                alert_type=AlertTypeEnum.VITAL_ANOMALY,
+                severity=SeverityEnum.WARNING,
+                title="Low sleep duration detected",
+                message=f"Latest sleep duration was {sleep_minutes:.0f} minutes, below the 300 minute threshold.",
+            )
+            if created_alert is not None:
+                created_alerts.append(created_alert)
+                created_any = True
 
         latest_risk = _latest_risk_score(session, user_uuid)
         normalized_risk_score = _normalized_risk_score(latest_risk)
         if normalized_risk_score is not None and normalized_risk_score > 0.7:
-            created_any = bool(
-                _store_alert(
-                    session,
-                    user_id=user_uuid,
-                    alert_type=AlertTypeEnum.VITAL_ANOMALY,
-                    severity=SeverityEnum.CRITICAL,
-                    title="Elevated health risk score detected",
-                    message=f"Latest risk score was {normalized_risk_score:.2f}, above the 0.70 threshold.",
-                )
-            ) or created_any
+            created_alert = _store_alert(
+                session,
+                user_id=user_uuid,
+                alert_type=AlertTypeEnum.VITAL_ANOMALY,
+                severity=SeverityEnum.CRITICAL,
+                title="Elevated health risk score detected",
+                message=f"Latest risk score was {normalized_risk_score:.2f}, above the 0.70 threshold.",
+            )
+            if created_alert is not None:
+                created_alerts.append(created_alert)
+                created_any = True
 
         if created_any:
             session.commit()
+            for alert in created_alerts:
+                try:
+                    emit_event(
+                        "HEALTH_ALERT_GENERATED",
+                        user_uuid,
+                        {
+                            "title": alert.title,
+                            "description": alert.message,
+                            "severity": _ui_severity(alert.severity),
+                            "alert_id": str(alert.id),
+                        },
+                    )
+                except Exception:
+                    pass
 
         alerts = _list_active_alert_models(session, user_uuid)
         return [_serialize_alert(alert) for alert in alerts]

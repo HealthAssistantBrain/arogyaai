@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, EmailStr, Field
 from typing import Optional
 
 class UserLogin(BaseModel):
@@ -65,11 +65,25 @@ class UserProfileUpdate(BaseModel):
     avatar_url: Optional[str] = None
     height_cm: Optional[float] = None
     weight_kg: Optional[float] = None
+    occupation: Optional[str] = None
+    city: Optional[str] = None
+    marital_status: Optional[str] = None
     blood_group: Optional[str] = None
     allergies: Optional[str] = None
+    family_history: Optional[str] = None
+    surgeries: Optional[str] = None
+    hospitalizations: Optional[bool] = None
+    hospitalization_details: Optional[str] = None
+    current_medications: Optional[str] = None
     phone_number: Optional[str] = None
     date_of_birth: Optional[str] = None
     gender: Optional[str] = None
+    sleep_hours: Optional[float] = None
+    stress_level: Optional[int] = None
+    smoking: Optional[bool] = None
+    alcohol: Optional[bool] = None
+    appetite: Optional[str] = None
+    bowel_habits: Optional[str] = None
 
 class ProfileUpdateSchema(BaseModel):
     full_name: str
@@ -87,11 +101,25 @@ class UserOnboardingSave(BaseModel):
     date_of_birth: Optional[str] = None
     age: Optional[int] = None
     gender: Optional[str] = None
+    occupation: Optional[str] = None
+    city: Optional[str] = None
+    marital_status: Optional[str] = None
     phone_number: Optional[str] = None
     height_cm: Optional[float] = None
     weight_kg: Optional[float] = None
     activity_level: Optional[int] = None
     goals: Optional[str] = None
+    family_history: Optional[str] = None
+    surgeries: Optional[str] = None
+    hospitalizations: Optional[bool] = None
+    hospitalization_details: Optional[str] = None
+    current_medications: Optional[str] = None
+    sleep_hours: Optional[float] = None
+    stress_level: Optional[int] = None
+    smoking: Optional[bool] = None
+    alcohol: Optional[bool] = None
+    appetite: Optional[str] = None
+    bowel_habits: Optional[str] = None
     blood_group: Optional[str] = None
     allergies: Optional[str] = None
     is_onboarding_done: Optional[bool] = None
@@ -103,20 +131,51 @@ class UserSettingsUpdate(BaseModel):
     fetch_interval_minutes: int
 
 
+class NotificationPreferencesUpdate(BaseModel):
+    email_enabled: Optional[bool] = None
+    push_enabled: Optional[bool] = None
+    ai_insights_email: Optional[bool] = None
+    ai_insights_push: Optional[bool] = None
+    health_alerts_email: Optional[bool] = None
+    health_alerts_push: Optional[bool] = None
+    reminders_email: Optional[bool] = None
+    reminders_push: Optional[bool] = None
+
+
+class PushSubscriptionPayload(BaseModel):
+    endpoint: str
+    expirationTime: Optional[int] = None
+    keys: dict[str, str]
+
+
+class NotificationDeviceRegistration(BaseModel):
+    subscription: PushSubscriptionPayload
+    platform: str = "web"
+    device_name: Optional[str] = None
+
+
 class SimulatorInput(BaseModel):
-    sleep_hours: Optional[float] = None
-    daily_steps: Optional[int] = None
-    weight_kg: Optional[float] = None
-    stress_level: Optional[int] = None
-    weekly_exercise_hours: Optional[float] = None
-    heart_rate_bpm: Optional[int] = None
+    model_config = ConfigDict(populate_by_name=True)
+
+    sleep: Optional[float] = Field(default=None, validation_alias=AliasChoices("sleep", "sleep_hours"))
+    steps: Optional[int] = Field(default=None, validation_alias=AliasChoices("steps", "daily_steps"))
+    heart_rate: Optional[int] = Field(default=None, validation_alias=AliasChoices("heart_rate", "heart_rate_bpm"))
     systolic_bp: Optional[int] = None
     diastolic_bp: Optional[int] = None
-    spo2: Optional[float] = None
-    fasting_glucose: Optional[float] = None
+    weight: Optional[float] = Field(default=None, validation_alias=AliasChoices("weight", "weight_kg"))
 
 
 class DiseaseSimulationRequest(BaseModel):
     focus_condition: str = "cardiovascular"
     timeframe_months: int = 6
     simulation: SimulatorInput = Field(default_factory=SimulatorInput)
+
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ChatRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=2000)
+    history: list[ChatMessage] = Field(default_factory=list)

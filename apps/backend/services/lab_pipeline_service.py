@@ -296,6 +296,25 @@ def _run_pipeline(
 
         log_pipeline("lab", step="store_results", status="running", data="pending")
         count = store_lab_results(db, user_id, report_id, normalized)
+        abnormal_rows = [
+            item for item in normalized
+            if str(item.get("status") or "").strip().lower() in {"high", "low", "abnormal", "critical"}
+        ]
+        if abnormal_rows:
+            try:
+                from services.event_service import emit_event
+
+                emit_event(
+                    "LAB_RESULT_ABNORMAL",
+                    user_id,
+                    {
+                        "report_id": str(report_id) if report_id is not None else None,
+                        "abnormal_count": len(abnormal_rows),
+                        "abnormal_names": [item.get("name") for item in abnormal_rows if item.get("name")],
+                    },
+                )
+            except Exception:
+                logger.exception("lab_pipeline: failed to emit abnormal lab notification event")
         logger.info("lab_pipeline: stored %d results (user=%s report=%s)", count, user_id, report_id)
         log_pipeline("lab", step="complete", status="healthy",
                      data="fetched", extra=f"stored={count}")

@@ -45,6 +45,9 @@ def test_generate_health_alerts_persists_threshold_breaches():
         alert_service,
         "_list_active_alert_models",
         side_effect=lambda *args, **kwargs: list(captured_alerts),
+    ), patch.object(
+        alert_service,
+        "emit_event",
     ):
         alerts = alert_service.generate_health_alerts(user_id, db)
 
@@ -86,6 +89,9 @@ def test_generate_health_alerts_skips_recent_duplicates():
         alert_service,
         "_list_active_alert_models",
         return_value=[],
+    ), patch.object(
+        alert_service,
+        "emit_event",
     ):
         alerts = alert_service.generate_health_alerts(user_id, db)
 

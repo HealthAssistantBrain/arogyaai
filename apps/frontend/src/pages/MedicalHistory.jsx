@@ -27,18 +27,38 @@ const MedicalHistory = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const setOnboardingStep = useAuthStore((state) => state.setOnboardingStep);
-  const healthProfile = useAuthStore((state) => state.healthProfile);
-  const saveOnboarding = useAuthStore((state) => state.saveOnboarding);
+  const profile = useAuthStore((state) => state.profile);
 
   const [conditions, setConditions] = useState([]);
   const [allergies, setAllergies] = useState([]);
   const [familyHistory, setFamilyHistory] = useState([]);
+  const [surgeries, setSurgeries] = useState('');
+  const [hospitalizations, setHospitalizations] = useState(null);
+  const [hospitalizationDetails, setHospitalizationDetails] = useState('');
+  const [currentMedications, setCurrentMedications] = useState('');
 
   useEffect(() => {
-    if (healthProfile?.allergies) {
-      setAllergies(healthProfile.allergies.split(',').map((item) => item.trim()).filter(Boolean));
-    }
-  }, [healthProfile?.allergies]);
+    const medicalHistory = profile?.medical_history || {};
+    setConditions(Array.isArray(medicalHistory.conditions) ? medicalHistory.conditions : []);
+    setAllergies(
+      Array.isArray(medicalHistory.allergies)
+        ? medicalHistory.allergies
+        : String(profile?.allergies || '').split(',').map((item) => item.trim()).filter(Boolean)
+    );
+    setFamilyHistory(
+      Array.isArray(medicalHistory.family_history)
+        ? medicalHistory.family_history
+        : String(profile?.family_history || '').split(',').map((item) => item.trim()).filter(Boolean)
+    );
+    setSurgeries(medicalHistory.surgeries || profile?.surgeries || '');
+    setHospitalizations(
+      typeof medicalHistory.hospitalizations === 'boolean'
+        ? medicalHistory.hospitalizations
+        : (typeof profile?.hospitalizations === 'boolean' ? profile.hospitalizations : null)
+    );
+    setHospitalizationDetails(medicalHistory.hospitalization_details || profile?.hospitalization_details || '');
+    setCurrentMedications(medicalHistory.medications || profile?.current_medications || '');
+  }, [profile]);
 
   const toggleItem = (item, state, setState) => {
     if (state.includes(item)) {
@@ -52,7 +72,11 @@ const MedicalHistory = () => {
     return api.post('/users/medical-history', {
       conditions: conditions || [],
       allergies: allergies || [],
-      family_history: familyHistory || []
+      family_history: familyHistory || [],
+      surgeries,
+      hospitalizations,
+      hospitalization_details: hospitalizationDetails,
+      current_medications: currentMedications,
     });
   };
 
@@ -60,6 +84,7 @@ const MedicalHistory = () => {
     if (e && e.preventDefault) e.preventDefault();
     try {
       await saveStep2Data();
+      await useAuthStore.getState().fetchProfile();
     } catch (err) {
       console.log("Non-blocking API error:", err);
     }
@@ -74,6 +99,7 @@ const MedicalHistory = () => {
   const handleSaveAndExit = async () => {
     try {
       await saveStep2Data();
+      await useAuthStore.getState().fetchProfile();
       setOnboardingStep(3);
       toast.success('Progress saved');
     } catch (err) {
@@ -234,6 +260,69 @@ const MedicalHistory = () => {
                   ))}
                 </AnimatePresence>
               </div>
+            </section>
+
+            <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="size-8 rounded-lg bg-[#6143f4]/10 flex items-center justify-center">
+                    <Activity className="text-[#6143f4]" size={18} />
+                  </div>
+                  <h3 className="text-xl font-bold dark:text-white">Past History</h3>
+                </div>
+                <textarea
+                  value={surgeries}
+                  onChange={(e) => setSurgeries(e.target.value)}
+                  className="min-h-28 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6143f4] dark:text-white"
+                  placeholder="Surgeries or procedures, if any"
+                />
+              </div>
+
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="size-8 rounded-lg bg-[#6143f4]/10 flex items-center justify-center">
+                    <Brain className="text-[#6143f4]" size={18} />
+                  </div>
+                  <h3 className="text-xl font-bold dark:text-white">Hospitalizations</h3>
+                </div>
+                <div className="flex gap-3">
+                  {[
+                    { label: 'Yes', value: true },
+                    { label: 'No', value: false },
+                  ].map((option) => (
+                    <button
+                      key={option.label}
+                      type="button"
+                      onClick={() => setHospitalizations(option.value)}
+                      className={hospitalizations === option.value ? activeClass : inactiveClass}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  value={hospitalizationDetails}
+                  onChange={(e) => setHospitalizationDetails(e.target.value)}
+                  disabled={!hospitalizations}
+                  className="min-h-28 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6143f4] disabled:opacity-50 dark:text-white"
+                  placeholder="Optional details such as reason or year"
+                />
+              </div>
+            </section>
+
+            <section>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="size-8 rounded-lg bg-[#6143f4]/10 flex items-center justify-center">
+                  <Network className="text-[#6143f4]" size={18} />
+                </div>
+                <h3 className="text-xl font-bold dark:text-white">Current Medications</h3>
+              </div>
+              <textarea
+                value={currentMedications}
+                onChange={(e) => setCurrentMedications(e.target.value)}
+                className="w-full min-h-28 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6143f4] dark:text-white"
+                placeholder="List medications or leave blank"
+              />
             </section>
 
             {/* Action Buttons */}

@@ -26,6 +26,7 @@ async def upload_report(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     report_type: str = Form("OTHER"),
+    date_of_report: str | None = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_from_header),
 ):
@@ -35,6 +36,7 @@ async def upload_report(
             current_user,
             file,
             report_type,
+            date_of_report=date_of_report,
             background_tasks=background_tasks,
         )
         log_event(
@@ -47,6 +49,7 @@ async def upload_report(
                 "file_name": file.filename,
                 "file_size": result.get("data", {}).get("file_size"),
                 "report_type": report_type,
+                "date_of_report": result.get("data", {}).get("date_of_report"),
             },
         )
         return result
@@ -59,6 +62,7 @@ async def upload_report(
                 "status": "failed",
                 "file_name": file.filename,
                 "report_type": report_type,
+                "date_of_report": date_of_report,
                 "error": str(exc),
             },
         )

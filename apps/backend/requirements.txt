@@ -18,6 +18,7 @@ pypdf
 python-multipart
 celery
 requests
+pywebpush
 supabase>=2.3.0,<2.7.0
 joblib
 scikit-learn

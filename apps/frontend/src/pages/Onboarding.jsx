@@ -18,6 +18,7 @@ import { useAuthStore } from '../store/authStore';
 import { ROUTES } from '../router/routes';
 import api from '../lib/axios';
 import OnboardingHeader from '../components/OnboardingHeader';
+import { calculateAge } from '../utils/calculateAge';
 
 const getOnboardingRoute = (step) => {
   switch (step) {
@@ -61,6 +62,9 @@ const Onboarding = () => {
       fullName: profile?.full_name || user?.full_name || user?.name || '',
       gender: normalizedProfileGender || normalizedHealthGender || '',
       dob: profile?.date_of_birth || profile?.dob || healthProfile?.date_of_birth || '',
+      occupation: profile?.occupation || profile?.user_profile?.occupation || '',
+      city: profile?.city || profile?.user_profile?.city || '',
+      maritalStatus: profile?.marital_status || profile?.user_profile?.marital_status || '',
       height: profile?.height_cm || healthProfile?.height || '',
       weight: profile?.weight_kg || healthProfile?.weight || '',
       bloodGroup: profile?.blood_group || healthProfile?.blood_group || '',
@@ -78,10 +82,13 @@ const Onboarding = () => {
     setValue('fullName', profile?.full_name || user?.full_name || user?.name || '');
     setValue('gender', normalizedProfileGender || normalizedHealthGender || '');
     setValue('dob', profile?.date_of_birth || profile?.dob || '');
+    setValue('occupation', profile?.occupation || profile?.user_profile?.occupation || '');
+    setValue('city', profile?.city || profile?.user_profile?.city || '');
+    setValue('maritalStatus', profile?.marital_status || profile?.user_profile?.marital_status || '');
     setValue('height', profile?.height_cm || healthProfile?.height || '');
     setValue('weight', profile?.weight_kg || healthProfile?.weight || '');
     setValue('bloodGroup', profile?.blood_group || healthProfile?.blood_group || '');
-  }, [healthProfile?.blood_group, healthProfile?.height, healthProfile?.weight, normalizedHealthGender, normalizedProfileGender, profile?.blood_group, profile?.date_of_birth, profile?.dob, profile?.full_name, profile?.height_cm, profile?.weight_kg, setValue, user?.full_name, user?.name]);
+  }, [healthProfile?.blood_group, healthProfile?.height, healthProfile?.weight, normalizedHealthGender, normalizedProfileGender, profile?.blood_group, profile?.city, profile?.date_of_birth, profile?.dob, profile?.full_name, profile?.height_cm, profile?.marital_status, profile?.occupation, profile?.user_profile?.city, profile?.user_profile?.marital_status, profile?.user_profile?.occupation, profile?.weight_kg, setValue, user?.full_name, user?.name]);
 
   useEffect(() => {
     if (!stepFromUrl && !stepFromStorage) {
@@ -125,10 +132,15 @@ const Onboarding = () => {
   };
 
   const saveProfile = async (data) => {
+    const derivedAge = calculateAge(data.dob);
     const payload = {
       full_name: data.fullName,
       date_of_birth: data.dob,
+      age: derivedAge,
       gender: data.gender === 'other' ? 'non-binary' : data.gender,
+      occupation: data.occupation,
+      city: data.city,
+      marital_status: data.maritalStatus,
       height_cm: Number(data.height),
       weight_kg: Number(data.weight),
       blood_group: data.bloodGroup,
@@ -282,6 +294,55 @@ const Onboarding = () => {
                     </div>
                   </div>
 
+                  <div className="flex flex-col gap-2">
+                    <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Occupation</label>
+                    <div className="relative group">
+                      <User size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" />
+                      <input
+                        {...register('occupation')}
+                        className="w-full pl-12 pr-4 py-4 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-[#6143f4] focus:border-transparent outline-none transition-all dark:text-white"
+                        placeholder="e.g. Teacher"
+                        type="text"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="flex flex-col gap-2">
+                    <label className="text-sm font-bold text-slate-700 dark:text-slate-300">City</label>
+                    <div className="relative group">
+                      <Contact size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" />
+                      <input
+                        {...register('city')}
+                        className="w-full pl-12 pr-4 py-4 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-[#6143f4] focus:border-transparent outline-none transition-all dark:text-white"
+                        placeholder="e.g. Kolkata"
+                        type="text"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Marital Status <span className="text-slate-400 font-medium">(optional)</span></label>
+                    <div className="relative group">
+                      <select
+                        {...register('maritalStatus')}
+                        className="w-full pl-4 pr-10 py-4 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-[#6143f4] focus:border-transparent outline-none transition-all dark:text-white appearance-none"
+                      >
+                        <option value="">Prefer not to say</option>
+                        <option value="single">Single</option>
+                        <option value="married">Married</option>
+                        <option value="divorced">Divorced</option>
+                        <option value="widowed">Widowed</option>
+                      </select>
+                      <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-400">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Height */}
                   <div className="flex flex-col gap-2">
                     <label className="text-sm font-bold text-slate-700 dark:text-slate-300 flex justify-between">

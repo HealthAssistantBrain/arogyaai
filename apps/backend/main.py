@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 from starlette.requests import Request
 
 # Import modular routers
-from routes import aqi, auth, intelligence, users, prediction, dashboard, google_fit, vitals, notifications, user_data, reports, sleep, insights, lab_results, timeline, dashboard_ws
+from routes import aqi, auth, intelligence, users, prediction, dashboard, google_fit, vitals, notifications, user_data, reports, sleep, insights, lab_results, timeline, dashboard_ws, clinical_history, settings as settings_routes, devices as devices_routes, chat
 
 from database.session import engine
 from core.config import settings
@@ -200,10 +200,14 @@ app.include_router(reports.router)
 app.include_router(lab_results.router)
 app.include_router(vitals.router)
 app.include_router(notifications.router)
+app.include_router(settings_routes.router)
+app.include_router(devices_routes.router)
 app.include_router(user_data.router)
 app.include_router(sleep.router)
 app.include_router(insights.router)
 app.include_router(timeline.router)
+app.include_router(clinical_history.router)
+app.include_router(chat.router)
 
 
 @app.on_event("startup")

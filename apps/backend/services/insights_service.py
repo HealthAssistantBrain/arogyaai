@@ -27,6 +27,8 @@ class InsightsService:
                     "confidence": 0,
                     "data_points": 0,
                     "feature_snapshot": {},
+                    "clinical_history": None,
+                    "clinical_features": {},
                 },
                 "last_updated": None,
             }
@@ -45,6 +47,8 @@ class InsightsService:
                 "confidence": stored.get("confidence") or 0,
                 "data_points": stored.get("data_points") or 0,
                 "feature_snapshot": stored.get("feature_snapshot", {}) if isinstance(stored.get("feature_snapshot"), dict) else {},
+                "clinical_history": stored.get("clinical_history") if isinstance(stored.get("clinical_history"), dict) else None,
+                "clinical_features": stored.get("clinical_features", {}) if isinstance(stored.get("clinical_features"), dict) else {},
             },
             "last_updated": stored.get("last_updated"),
         }
@@ -67,6 +71,7 @@ class InsightsService:
                         "has_lab": False,
                         "has_baseline": False,
                     },
+                    "clinical_history": None,
                 },
                 "last_updated": None,
             }
@@ -81,6 +86,7 @@ class InsightsService:
                 "drivers": data.get("drivers", []) if isinstance(data.get("drivers"), list) else [],
                 "recommendations": data.get("recommendations", []) if isinstance(data.get("recommendations"), list) else [],
                 "availability": data.get("availability", {}) if isinstance(data.get("availability"), dict) else {},
+                "clinical_history": data.get("clinical_history") if isinstance(data.get("clinical_history"), dict) else None,
             },
             "last_updated": data.get("last_updated"),
         }

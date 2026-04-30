@@ -128,6 +128,12 @@ class UserDataService:
             payload["age"] = normalized.get("age")
         if "gender" in normalized:
             payload["gender"] = normalized.get("gender")
+        if "occupation" in normalized:
+            payload["occupation"] = normalized.get("occupation")
+        if "city" in normalized:
+            payload["city"] = normalized.get("city")
+        if "marital_status" in normalized:
+            payload["marital_status"] = normalized.get("marital_status")
         if "height_cm" in normalized:
             payload["height_cm"] = normalized.get("height_cm")
         if "weight_kg" in normalized:
@@ -136,6 +142,28 @@ class UserDataService:
             payload["activity_level"] = normalized.get("activity_level")
         if "goals" in normalized:
             payload["goals"] = normalized.get("goals")
+        if "family_history" in normalized:
+            payload["family_history"] = normalized.get("family_history")
+        if "surgeries" in normalized:
+            payload["surgeries"] = normalized.get("surgeries")
+        if "hospitalizations" in normalized:
+            payload["hospitalizations"] = normalized.get("hospitalizations")
+        if "hospitalization_details" in normalized:
+            payload["hospitalization_details"] = normalized.get("hospitalization_details")
+        if "current_medications" in normalized or "medications" in normalized:
+            payload["current_medications"] = normalized.get("current_medications", normalized.get("medications"))
+        if "sleep_hours" in normalized or "sleep" in normalized:
+            payload["sleep_hours"] = normalized.get("sleep_hours", normalized.get("sleep"))
+        if "stress_level" in normalized or "stress" in normalized:
+            payload["stress_level"] = normalized.get("stress_level", normalized.get("stress"))
+        if "smoking" in normalized:
+            payload["smoking"] = normalized.get("smoking")
+        if "alcohol" in normalized:
+            payload["alcohol"] = normalized.get("alcohol")
+        if "appetite" in normalized:
+            payload["appetite"] = normalized.get("appetite")
+        if "bowel_habits" in normalized:
+            payload["bowel_habits"] = normalized.get("bowel_habits")
         if "blood_group" in normalized:
             payload["blood_group"] = normalized.get("blood_group")
         if "allergies" in normalized:
@@ -158,7 +186,33 @@ class UserDataService:
 
         profile_payload = {
             key: normalized.get(key)
-            for key in ("full_name", "date_of_birth", "age", "gender", "phone_number", "height_cm", "weight_kg", "activity_level", "goals", "blood_group", "allergies")
+            for key in (
+                "full_name",
+                "date_of_birth",
+                "age",
+                "gender",
+                "occupation",
+                "city",
+                "marital_status",
+                "phone_number",
+                "height_cm",
+                "weight_kg",
+                "activity_level",
+                "goals",
+                "family_history",
+                "surgeries",
+                "hospitalizations",
+                "hospitalization_details",
+                "current_medications",
+                "sleep_hours",
+                "stress_level",
+                "smoking",
+                "alcohol",
+                "appetite",
+                "bowel_habits",
+                "blood_group",
+                "allergies",
+            )
             if key in normalized and normalized.get(key) is not None
         }
         result = UserDataService.update_profile(db, user, profile_payload)

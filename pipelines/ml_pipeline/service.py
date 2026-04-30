@@ -47,17 +47,24 @@ class MLPipelineService:
             "avg_rhr",
             "sleep_score",
             "sleep_duration",
+            "sleep",
             "activity_level",
             "bmi",
             "systolic_bp",
             "diastolic_bp",
             "age",
+            "sex",
+            "stress",
             "cholesterol_proxy",
             "hr_mean_7d",
             "steps_avg_7d",
             "sleep_efficiency",
             "lifestyle_score",
             "activity_score",
+            "disease_flags",
+            "family_history_flags",
+            "symptom_flags",
+            "severity_score",
         ):
             if key in data_points:
                 overrides[key] = data_points[key]
@@ -444,6 +451,30 @@ class MLPipelineService:
         except Exception as exc:
             logger.exception(
                 "RAG explanation hydration failed for user=%s prediction=%s: %s",
+                user.id,
+                risk_score_record.id,
+                exc,
+            )
+        try:
+            from services.notification_service import trigger_notification_sync
+
+            explanation = (response.get("data") or {}).get("explanation") or {}
+            trigger_notification_sync(
+                user_id=str(user.id),
+                event_type="ai_insight",
+                title="AI Insight Ready",
+                message="Your health risk analysis is available.",
+                data={
+                    "prediction_id": str(risk_score_record.id),
+                    "risk_score": (response.get("data") or {}).get("risk_score"),
+                    "risk_level": (response.get("data") or {}).get("risk_level"),
+                    "summary": explanation.get("summary") or (response.get("data") or {}).get("analysis"),
+                    "url": "/insights",
+                },
+            )
+        except Exception as exc:
+            logger.exception(
+                "AI insight notification emission failed for user=%s prediction=%s: %s",
                 user.id,
                 risk_score_record.id,
                 exc,

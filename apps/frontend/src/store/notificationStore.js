@@ -19,6 +19,7 @@ const deriveNotificationCounts = (notifications = []) => {
     unread: unreadNotifications.length,
     ai_insight: countForType('ai_insight'),
     health_alert: countForType('health_alert'),
+    simulation: countForType('simulation'),
     appointment: countForType('appointment'),
     system: countForType('system'),
     activity: countForType('activity'),

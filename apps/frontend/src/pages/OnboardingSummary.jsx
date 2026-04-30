@@ -42,17 +42,15 @@ const OnboardingSummary = () => {
   useEffect(() => {
     async function fetchUserProfile() {
       try {
-        const currentProfile = useAuthStore.getState().profile;
-        if (!(currentProfile?.id || currentProfile?.user_id)) {
-          await fetchProfile();
-        }
+        await fetchProfile();
       } catch (err) {
         console.error("Non-blocking error fetching profile:", err);
       }
       try {
         const summaries = await fetchConnectedDeviceSummaries();
+        const knownProviders = new Set(['google fit', 'apple health', 'fitbit']);
         setDevices(
-          summaries.filter((device) => device.name !== 'Gmail' && device.name !== 'Apple ID')
+          summaries.filter((device) => !knownProviders.has(String(device.name || '').toLowerCase()))
         );
       } catch (err) {
         console.error("Non-blocking error fetching devices:", err);
@@ -71,14 +69,19 @@ const OnboardingSummary = () => {
 
   const authConnections = [
     {
-      name: 'Gmail',
-      connected: !!userData?.gmail_connected,
-      value: userData?.gmail_connected ? 'Connected' : '---',
+      name: 'Google Fit',
+      connected: !!userData?.device_connections?.google_fit_connected,
+      value: userData?.device_connections?.google_fit_connected ? 'Connected' : 'Not Connected',
     },
     {
-      name: 'Apple ID',
-      connected: !!userData?.apple_connected,
-      value: userData?.apple_connected ? 'Connected' : '---',
+      name: 'Apple Health',
+      connected: !!userData?.device_connections?.apple_health_connected,
+      value: userData?.device_connections?.apple_health_connected ? 'Connected' : 'Not Connected',
+    },
+    {
+      name: 'Fitbit',
+      connected: !!userData?.device_connections?.fitbit_connected,
+      value: userData?.device_connections?.fitbit_connected ? 'Connected' : 'Not Connected',
     },
   ];
 
@@ -204,13 +207,21 @@ const OnboardingSummary = () => {
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 font-medium">Gender</span>
-                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.gender)}</span>
+                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.user_profile?.sex || userData?.gender)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 font-medium">Height/Weight</span>
                     <span className="font-bold text-[#13082A] dark:text-white">
                       {userData?.height && userData?.weight ? `${userData.height} cm / ${userData.weight} kg` : "---"}
                     </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500 font-medium">Occupation</span>
+                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.user_profile?.occupation || userData?.occupation)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500 font-medium">City</span>
+                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.user_profile?.city || userData?.city)}</span>
                   </div>
                 </div>
               </motion.div>
@@ -229,15 +240,23 @@ const OnboardingSummary = () => {
                 <div className="space-y-3">
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 font-medium">Conditions</span>
-                    <span className="font-bold text-[#13082A] dark:text-white">{formatMedicalField(userData?.conditions)}</span>
+                    <span className="font-bold text-[#13082A] dark:text-white">{formatMedicalField(userData?.medical_history?.conditions || userData?.conditions)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 font-medium">Allergies</span>
-                    <span className="font-bold text-[#13082A] dark:text-white">{formatMedicalField(userData?.allergies)}</span>
+                    <span className="font-bold text-[#13082A] dark:text-white">{formatMedicalField(userData?.medical_history?.allergies || userData?.allergies)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 font-medium">Family History</span>
-                    <span className="font-bold text-[#13082A] dark:text-white">{formatMedicalField(userData?.family_history)}</span>
+                    <span className="font-bold text-[#13082A] dark:text-white">{formatMedicalField(userData?.medical_history?.family_history || userData?.family_history)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500 font-medium">Surgeries</span>
+                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.medical_history?.surgeries || userData?.surgeries)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500 font-medium">Medications</span>
+                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.medical_history?.medications || userData?.current_medications)}</span>
                   </div>
                 </div>
               </motion.div>
@@ -260,15 +279,51 @@ const OnboardingSummary = () => {
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 font-medium">Diet</span>
-                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.diet)}</span>
+                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.lifestyle_profile?.diet || userData?.diet)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 font-medium">Sleep</span>
-                    <span className="font-bold text-[#13082A] dark:text-white">{userData?.sleep ? `${userData.sleep} hrs` : "---"}</span>
+                    <span className="font-bold text-[#13082A] dark:text-white">{userData?.lifestyle_profile?.sleep_hours || userData?.sleep ? `${userData?.lifestyle_profile?.sleep_hours || userData?.sleep} hrs` : "---"}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 font-medium">Stress</span>
-                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.stress)}</span>
+                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.lifestyle_profile?.stress_level || userData?.stress)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500 font-medium">Smoking / Alcohol</span>
+                    <span className="font-bold text-[#13082A] dark:text-white">
+                      {`${typeof userData?.lifestyle_profile?.smoking === 'boolean' ? (userData.lifestyle_profile.smoking ? 'yes' : 'no') : safeValue(userData?.smoking)} / ${typeof userData?.lifestyle_profile?.alcohol === 'boolean' ? (userData.lifestyle_profile.alcohol ? 'yes' : 'no') : safeValue(userData?.alcohol)}`}
+                    </span>
+                  </div>
+                </div>
+              </motion.div>
+
+              <motion.div variants={itemVariants} className="p-6 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <Stethoscope className="text-[#6143f4]" size={20} />
+                    <h3 className="font-bold text-lg dark:text-white">Clinical Snapshot</h3>
+                  </div>
+                  <button onClick={() => handleEdit(3)} className="text-slate-400 hover:text-[#6143f4] transition-colors">
+                    <Edit3 size={18} />
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500 font-medium">Chief Complaint</span>
+                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.initial_clinical_snapshot?.chief_complaint || userData?.chief_complaint)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500 font-medium">Symptoms</span>
+                    <span className="font-bold text-[#13082A] dark:text-white">{formatMedicalField(userData?.initial_clinical_snapshot?.symptoms || userData?.symptoms)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500 font-medium">Duration</span>
+                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.initial_clinical_snapshot?.duration || userData?.duration)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500 font-medium">Severity</span>
+                    <span className="font-bold text-[#13082A] dark:text-white">{userData?.initial_clinical_snapshot?.severity || userData?.severity ? `${userData?.initial_clinical_snapshot?.severity || userData?.severity}/10` : '---'}</span>
                   </div>
                 </div>
               </motion.div>
@@ -297,8 +352,8 @@ const OnboardingSummary = () => {
                     devices.map(device => (
                       <div key={device.name} className="flex justify-between text-sm">
                         <span className="text-slate-500 font-medium">{device.name}</span>
-                        <span className={`font-bold ${device.status === 'connected' ? 'text-green-500' : 'text-slate-400'}`}>
-                          {device.status === 'connected' ? 'Connected' : 'Not Connected'}
+                        <span className={`font-bold ${device.is_connected ? 'text-green-500' : 'text-slate-400'}`}>
+                          {device.is_connected ? 'Connected' : 'Not Connected'}
                         </span>
                       </div>
                     ))

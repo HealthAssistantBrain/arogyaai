@@ -1,110 +1,659 @@
 import { create } from 'zustand';
 import { createJSONStorage, devtools, persist } from 'zustand/middleware';
 import api from '../lib/axios';
+import { safeArray, safeObject, safeText } from '../utils/safeData';
 import { useAuthStore } from './authStore';
 
 const INSIGHTS_STORAGE_KEY = 'arogyaai-insights';
 const STALE_THRESHOLD_MS = 60_000;
+const METRIC_THRESHOLDS = {
+  steps: { good: 8000, caution: 5000 },
+  sleep: { low: 7, high: 9 },
+  resting_hr: { low: 50, high: 80 },
+};
 
-const clamp = (value, min = 0, max = 100) => Math.max(min, Math.min(max, Number(value) || 0));
+const CATEGORY_LABELS = {
+  lifestyle: 'Lifestyle',
+  diet: 'Diet',
+  fitness: 'Fitness',
+  sleep: 'Sleep',
+};
+
+const CATEGORY_ALIASES = {
+  activity: 'fitness',
+  cardiovascular: 'fitness',
+  circadian: 'sleep',
+  diet: 'diet',
+  exercise: 'fitness',
+  fitness: 'fitness',
+  lifestyle: 'lifestyle',
+  metabolic: 'diet',
+  nutrition: 'diet',
+  recovery: 'sleep',
+  sleep: 'sleep',
+  stress: 'lifestyle',
+  wellness: 'lifestyle',
+};
+
+const PRIORITY_VALUES = new Set(['high', 'medium', 'low']);
+
+const toFiniteNumber = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
 
 const titleCase = (value) =>
   String(value || '')
-    .split(/[_\s]+/)
+    .split(/[_\s-]+/)
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
     .join(' ');
 
-const computeRiskMeta = (value) => {
-  const score = Number(value);
-  if (!Number.isFinite(score)) {
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+const normalizeProbability = (value) => {
+  const numeric = toFiniteNumber(value);
+  if (numeric === null) {
     return null;
   }
 
-  const riskLevel = score >= 65 ? 'CRITICAL' : score >= 45 ? 'HIGH' : score >= 25 ? 'MODERATE' : 'LOW';
-  const status = score >= 65 ? 'Critical' : score >= 45 ? 'High' : score >= 25 ? 'Moderate' : 'Low';
+  const normalized = Math.abs(numeric) > 1 ? numeric / 100 : numeric;
+  return clamp(normalized, 0, 1);
+};
+
+const toPercent = (value) => {
+  const probability = normalizeProbability(value);
+  return probability === null ? null : Math.round(probability * 1000) / 10;
+};
+
+const getRiskLabel = (value) => {
+  const probability = normalizeProbability(value);
+  if (probability === null) {
+    return null;
+  }
+  if (probability < 0.3) {
+    return 'LOW';
+  }
+  if (probability <= 0.7) {
+    return 'MEDIUM';
+  }
+  return 'HIGH';
+};
+
+const getRiskTone = (value) => {
+  const probability = normalizeProbability(value);
+  if (probability === null) {
+    return 'slate';
+  }
+  if (probability < 0.3) {
+    return 'green';
+  }
+  if (probability <= 0.7) {
+    return 'yellow';
+  }
+  return 'red';
+};
+
+const formatRecommendationCategory = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (CATEGORY_LABELS[normalized]) {
+    return normalized;
+  }
+  return CATEGORY_ALIASES[normalized] || 'lifestyle';
+};
+
+const normalizePriority = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return PRIORITY_VALUES.has(normalized) ? normalized : 'medium';
+};
+
+const safeDate = (value) => {
+  if (!value) {
+    return null;
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const latestTimestamp = (...values) => {
+  const latest = values
+    .flat()
+    .map((value) => safeDate(value))
+    .filter(Boolean)
+    .sort((left, right) => left - right)
+    .at(-1);
+
+  return latest ? latest.toISOString() : null;
+};
+
+const getMetricEnvelope = (metricsResponse = {}) => {
+  const payload = safeObject(metricsResponse.data ?? metricsResponse);
+  return safeObject(payload.metrics);
+};
+
+const getDashboardBundle = (dashboardResponse = {}) => safeObject(dashboardResponse.data ?? dashboardResponse);
+
+const getExplanationPayload = (explanationResponse = {}) => safeObject(explanationResponse.data ?? explanationResponse);
+
+const normalizeSource = (item, index) => {
+  const payload = safeObject(item);
+  const source = safeText(payload.source, `Source ${index + 1}`);
+  const title = safeText(payload.title);
+  const snippet = safeText(payload.snippet ?? payload.quote ?? payload.excerpt);
+  const chunkId = safeText(payload.chunk_id ?? payload.chunkId);
 
   return {
-    score,
-    riskLevel,
-    status,
-    progress: clamp(score),
-    deltaFromNeutral: Number((score - 50).toFixed(1)),
-    trend: `${score >= 50 ? '+' : '-'}${Math.abs(score - 50).toFixed(1)}% vs neutral`,
+    id: `${source}-${chunkId || index}`,
+    source,
+    title,
+    snippet,
   };
 };
 
-const normalizeRiskCards = (risks = {}) => {
-  const cardSpecs = [
-    { key: 'diabetes', title: 'Diabetes', value: risks.diabetes_risk },
-    { key: 'hypertension', title: 'Hypertension', value: risks.hypertension_risk },
-    { key: 'cad', title: 'CAD', value: risks.cad_risk },
+const normalizeRecommendation = (item, index) => {
+  const payload = typeof item === 'string' ? { title: item, description: item } : safeObject(item);
+  const title = safeText(payload.title, `Recommendation ${index + 1}`);
+  const description = safeText(payload.description ?? payload.detail ?? payload.text);
+
+  if (!title && !description) {
+    return null;
+  }
+
+  const category = formatRecommendationCategory(payload.category);
+  return {
+    id: `${category}-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${index}`,
+    title: title || description,
+    description: description || title,
+    category,
+    categoryLabel: CATEGORY_LABELS[category],
+    priority: normalizePriority(payload.priority),
+  };
+};
+
+const normalizeFactor = (item, index) => {
+  const payload = safeObject(item);
+  const featureName = safeText(
+    payload.feature_name ?? payload.feature ?? payload.key,
+    `factor_${index + 1}`
+  );
+  const title = safeText(
+    payload.title ?? payload.display_name,
+    titleCase(featureName)
+  );
+  const signedImpact =
+    toFiniteNumber(payload.shap_value) ??
+    toFiniteNumber(payload.impact) ??
+    toFiniteNumber(payload.abs_shap_value) ??
+    0;
+  const normalizedImpact = Math.abs(signedImpact) > 1 ? Math.abs(signedImpact) / 100 : Math.abs(signedImpact);
+  const impactPercent = Math.max(1, Math.round(normalizedImpact * 100));
+  const directionValue = safeText(payload.direction).toLowerCase();
+  const direction = directionValue
+    ? (['decrease', 'decreasing', 'negative', 'lower'].some((token) => directionValue.includes(token)) ? 'decrease' : 'increase')
+    : signedImpact < 0
+      ? 'decrease'
+      : 'increase';
+
+  return {
+    id: `${featureName}-${index}`,
+    featureName,
+    title,
+    impact: signedImpact,
+    impactPercent,
+    direction,
+    description: safeText(payload.description ?? payload.explanation),
+    summary: `${title} ${direction === 'increase' ? 'increased' : 'decreased'} risk by ${impactPercent}%`,
+  };
+};
+
+const normalizeRiskCard = (item, index, fallbackSummary = '') => {
+  const payload = safeObject(item);
+  const title = safeText(payload.title ?? payload.label, `Condition ${index + 1}`);
+  const rawScore =
+    payload.score ??
+    payload.value ??
+    payload.risk_score ??
+    payload.riskScore ??
+    payload.probability ??
+    null;
+  const score = normalizeProbability(rawScore);
+
+  if (score === null) {
+    return null;
+  }
+
+  return {
+    id: safeText(payload.key, title.toLowerCase().replace(/[^a-z0-9]+/g, '-')),
+    title,
+    score,
+    percent: toPercent(score),
+    label: getRiskLabel(score),
+    tone: getRiskTone(score),
+    summary: safeText(payload.summary, fallbackSummary),
+  };
+};
+
+const buildRiskCards = (explanationPayload, dashboardBundle) => {
+  const prediction = safeObject(safeObject(dashboardBundle.prediction).data);
+  const fallbackSummary = safeText(prediction.analysis ?? explanationPayload.summary);
+
+  const arrayCandidates = [
+    prediction.cards,
+    safeObject(prediction.risks).cards,
+    safeObject(prediction.risk_payload).cards,
+    prediction.condition_cards,
+    prediction.conditions,
   ];
 
-  return cardSpecs.reduce((acc, card) => {
-    const meta = computeRiskMeta(card.value);
-    if (!meta) return acc;
+  const explicitCards = arrayCandidates
+    .find((candidate) => Array.isArray(candidate) && candidate.length > 0);
 
-    acc.push({
-      key: card.key,
-      title: card.title,
-      label: card.title,
-      value: meta.score,
-      score: meta.score,
-      riskLevel: meta.riskLevel,
-      status: meta.status,
-      progress: meta.progress,
-      deltaFromNeutral: meta.deltaFromNeutral,
-      trend: meta.trend,
-    });
-    return acc;
-  }, []);
+  if (Array.isArray(explicitCards) && explicitCards.length > 0) {
+    return explicitCards
+      .map((item, index) => normalizeRiskCard(item, index, fallbackSummary))
+      .filter(Boolean);
+  }
+
+  const riskObjectCandidates = [
+    safeObject(explanationPayload.risk_scores),
+    safeObject(prediction.risks),
+    safeObject(prediction.risk_scores),
+    safeObject(prediction.condition_scores),
+  ];
+
+  const riskObject = riskObjectCandidates.find((candidate) => Object.keys(candidate).length > 0) || {};
+  const objectCards = Object.entries(riskObject)
+    .filter(([key]) => key !== 'cards')
+    .map(([key, value], index) => normalizeRiskCard({ key, title: titleCase(key.replace(/_risk$/i, '')), score: value }, index, fallbackSummary))
+    .filter(Boolean);
+
+  if (objectCards.length > 0) {
+    return objectCards;
+  }
+
+  const overallScore = explanationPayload.risk_score ?? prediction.risk_score;
+  const overallCard = normalizeRiskCard(
+    { key: 'overall-risk', title: 'Overall Risk', score: overallScore },
+    0,
+    fallbackSummary
+  );
+
+  return overallCard ? [overallCard] : [];
 };
 
-const normalizeDrivers = (drivers = []) => {
-  const items = Array.isArray(drivers) ? drivers : [];
-  const maxMagnitude = Math.max(...items.map((item) => Math.abs(Number(item.contribution ?? 0))), 1);
+const buildFactors = (explanationPayload = {}) => {
+  const factorItems = safeArray(explanationPayload.factors);
+  const keyDriverItems = safeArray(explanationPayload.key_drivers).map((item) => ({
+    ...safeObject(item),
+    title: safeText(item?.title ?? item?.feature_name),
+    feature_name: safeText(item?.feature_name),
+    shap_value: item?.impact,
+    abs_shap_value: Math.abs(toFiniteNumber(item?.impact) ?? 0),
+    direction: item?.direction,
+    description: safeText(item?.description),
+  }));
+  const topFeatureItems = safeArray(explanationPayload.top_features).map((item) => ({
+    ...safeObject(item),
+    title: safeText(item?.display_name ?? item?.feature_name),
+    feature_name: safeText(item?.feature_name),
+    shap_value: item?.shap_value,
+    abs_shap_value: item?.abs_shap_value,
+    direction: item?.direction,
+    description: safeText(item?.explanation),
+  }));
 
-  return items.map((driver) => {
-    const contribution = Number(driver.contribution ?? 0);
+  const preferredItems =
+    factorItems.length > 0
+      ? factorItems
+      : keyDriverItems.length > 0
+        ? keyDriverItems
+        : topFeatureItems;
+
+  const normalized = preferredItems
+    .map((item, index) => normalizeFactor(item, index))
+    .filter(Boolean)
+    .sort((left, right) => Math.abs(right.impact) - Math.abs(left.impact));
+
+  return normalized.slice(0, 3);
+};
+
+const getLatestMetricValue = (items = [], valueKeys = ['value']) => {
+  const latest = safeArray(items)
+    .map((item) => safeObject(item))
+    .sort((left, right) => {
+      const leftDate = safeDate(left.timestamp ?? left.date ?? left.last_updated)?.getTime() ?? 0;
+      const rightDate = safeDate(right.timestamp ?? right.date ?? right.last_updated)?.getTime() ?? 0;
+      return leftDate - rightDate;
+    })
+    .at(-1);
+
+  if (!latest) {
+    return null;
+  }
+
+  for (const key of valueKeys) {
+    const value = toFiniteNumber(latest[key]);
+    if (value !== null) {
+      return value;
+    }
+  }
+
+  return null;
+};
+
+const getObjectMetricValue = (metrics, aliases = []) => {
+  for (const alias of aliases) {
+    const rawMetric = metrics[alias];
+    if (rawMetric === undefined || rawMetric === null) {
+      continue;
+    }
+
+    if (typeof rawMetric === 'object' && !Array.isArray(rawMetric)) {
+      const value =
+        toFiniteNumber(rawMetric.value) ??
+        toFiniteNumber(rawMetric.current) ??
+        toFiniteNumber(rawMetric.latest) ??
+        toFiniteNumber(rawMetric.reading) ??
+        null;
+
+      if (value !== null) {
+        return {
+          value,
+          unit: safeText(rawMetric.unit),
+          lastUpdated: rawMetric.last_updated ?? rawMetric.lastUpdated ?? null,
+        };
+      }
+    }
+
+    const value = toFiniteNumber(rawMetric);
+    if (value !== null) {
+      return { value, unit: '', lastUpdated: null };
+    }
+  }
+
+  return null;
+};
+
+const buildMetricInsight = ({ key, label, unit, value, lastUpdated }) => {
+  if (value === null) {
     return {
-      key: driver.key ?? driver.label,
-      label: driver.label ?? titleCase(driver.key),
-      impact: driver.impact ?? `${contribution >= 0 ? '+' : '-'}${Math.abs(contribution).toFixed(1)}`,
-      contribution,
-      direction: driver.direction ?? (contribution >= 0 ? 'increasing' : 'decreasing'),
-      domains: Array.isArray(driver.domains) ? driver.domains : [],
-      detail: driver.detail ?? '',
-      value: driver.value ?? null,
-      barWidth: `${Math.max(8, Math.round((Math.abs(contribution) / maxMagnitude) * 100))}%`,
+      key,
+      label,
+      value: null,
+      unit,
+      lastUpdated,
+      assessment: 'Insufficient data for this insight',
     };
-  });
-};
+  }
 
-const normalizeInsightsPayload = (envelope = {}) => {
-  const payload = envelope.data ?? {};
-  const status = envelope.status ?? payload.status ?? 'ready';
+  if (key === 'steps') {
+    if (value < METRIC_THRESHOLDS.steps.caution) {
+      return {
+        key,
+        label,
+        value: Math.round(value),
+        unit,
+        lastUpdated,
+        assessment: 'Your activity is well below the optimal range',
+      };
+    }
+    if (value < METRIC_THRESHOLDS.steps.good) {
+      return {
+        key,
+        label,
+        value: Math.round(value),
+        unit,
+        lastUpdated,
+        assessment: 'Your activity is below the optimal range',
+      };
+    }
+    return {
+      key,
+      label,
+      value: Math.round(value),
+      unit,
+      lastUpdated,
+      assessment: 'Your activity is within the optimal range',
+    };
+  }
 
+  if (key === 'resting_hr') {
+    if (value > METRIC_THRESHOLDS.resting_hr.high) {
+      return {
+        key,
+        label,
+        value: Math.round(value),
+        unit,
+        lastUpdated,
+        assessment: 'Your resting heart rate is above the optimal range',
+      };
+    }
+    if (value < METRIC_THRESHOLDS.resting_hr.low) {
+      return {
+        key,
+        label,
+        value: Math.round(value),
+        unit,
+        lastUpdated,
+        assessment: 'Your resting heart rate is below the typical resting range',
+      };
+    }
+    return {
+      key,
+      label,
+      value: Math.round(value),
+      unit,
+      lastUpdated,
+      assessment: 'Your resting heart rate is within the optimal range',
+    };
+  }
+
+  if (value < METRIC_THRESHOLDS.sleep.low) {
+    return {
+      key,
+      label,
+      value: Math.round(value * 10) / 10,
+      unit,
+      lastUpdated,
+      assessment: 'Your sleep is below the optimal range',
+    };
+  }
+  if (value > METRIC_THRESHOLDS.sleep.high) {
+    return {
+      key,
+      label,
+      value: Math.round(value * 10) / 10,
+      unit,
+      lastUpdated,
+      assessment: 'Your sleep is above the optimal range',
+    };
+  }
   return {
-    status,
-    risks: payload.risks ?? {},
-    cards: normalizeRiskCards(payload.risks ?? {}),
-    drivers: normalizeDrivers(payload.drivers ?? []),
-    analysis: payload.analysis ?? '',
-    explanation: payload.explanation ?? null,
-    recommendations: Array.isArray(payload.recommendations) ? payload.recommendations : [],
-    lastUpdated: payload.last_updated ?? envelope.last_updated ?? null,
-    confidence: Number(payload.confidence ?? 0),
-    dataPoints: Number(payload.data_points ?? 0),
-    featureSnapshot: payload.feature_snapshot ?? {},
+    key,
+    label,
+    value: Math.round(value * 10) / 10,
+    unit,
+    lastUpdated,
+    assessment: 'Your sleep is within the optimal range',
   };
 };
+
+const buildMetricInsights = (metricsResponse, dashboardBundle) => {
+  const metrics = getMetricEnvelope(metricsResponse);
+  const history = safeObject(safeObject(dashboardBundle.history).data);
+  const vitals = safeObject(dashboardBundle.vitals);
+  const featureSnapshot = safeObject(safeObject(safeObject(dashboardBundle.prediction).data).feature_snapshot);
+
+  const stepsMetric =
+    getObjectMetricValue(metrics, ['steps', 'activity_level', 'daily_steps']) ??
+    {
+      value:
+        toFiniteNumber(dashboardBundle.steps) ??
+        getLatestMetricValue(safeObject(vitals['steps:24h']).data, ['value']) ??
+        toFiniteNumber(safeObject(safeObject(dashboardBundle.googleFit).data).stats?.latest_day?.steps),
+      unit: 'steps',
+      lastUpdated:
+        safeObject(vitals['steps:24h']).last_updated ??
+        safeObject(dashboardBundle.googleFit).last_updated ??
+        dashboardBundle.last_updated ??
+        null,
+    };
+
+  const restingHrMetric =
+    getObjectMetricValue(metrics, ['resting_hr', 'restingHr', 'rhr', 'heart_rate']) ??
+    {
+      value:
+        toFiniteNumber(featureSnapshot.avg_rhr) ??
+        getLatestMetricValue(safeObject(vitals['heart_rate:24h']).data, ['value']),
+      unit: 'bpm',
+      lastUpdated:
+        safeObject(metrics.resting_hr).last_updated ??
+        safeObject(vitals['heart_rate:24h']).last_updated ??
+        dashboardBundle.last_updated ??
+        null,
+    };
+
+  const sleepSeries = safeArray(history.sleep ?? dashboardBundle.sleep);
+  const sleepValues = sleepSeries
+    .map((item) => toFiniteNumber(item.hours ?? item.value))
+    .filter((value) => value !== null);
+  const averageSleep =
+    sleepValues.length > 0
+      ? sleepValues.reduce((sum, value) => sum + value, 0) / sleepValues.length
+      : null;
+  const sleepMetric =
+    getObjectMetricValue(metrics, ['sleep', 'sleep_duration', 'sleep_hours']) ??
+    {
+      value: averageSleep,
+      unit: 'hrs',
+      lastUpdated:
+        safeObject(metrics.sleep).last_updated ??
+        dashboardBundle.last_updated ??
+        null,
+    };
+
+  return [
+    buildMetricInsight({
+      key: 'steps',
+      label: 'Steps',
+      value: stepsMetric.value ?? null,
+      unit: safeText(stepsMetric.unit, 'steps'),
+      lastUpdated: stepsMetric.lastUpdated ?? null,
+    }),
+    buildMetricInsight({
+      key: 'resting_hr',
+      label: 'Heart Rate',
+      value: restingHrMetric.value ?? null,
+      unit: safeText(restingHrMetric.unit, 'bpm'),
+      lastUpdated: restingHrMetric.lastUpdated ?? null,
+    }),
+    buildMetricInsight({
+      key: 'sleep',
+      label: 'Sleep',
+      value: sleepMetric.value ?? null,
+      unit: safeText(sleepMetric.unit, 'hrs'),
+      lastUpdated: sleepMetric.lastUpdated ?? null,
+    }),
+  ];
+};
+
+const normalizeInsightsPayload = ({ explanationResponse, dashboardResponse, metricsResponse }) => {
+  const explanationPayload = getExplanationPayload(explanationResponse);
+  const dashboardBundle = getDashboardBundle(dashboardResponse);
+  const explanationEnvelope = safeObject(explanationResponse);
+  const dashboardEnvelope = safeObject(dashboardResponse);
+  const metricsEnvelope = safeObject(metricsResponse);
+  const prediction = safeObject(safeObject(dashboardBundle.prediction).data);
+
+  const recommendations = safeArray(explanationPayload.recommendations)
+    .map((item, index) => normalizeRecommendation(item, index))
+    .filter(Boolean);
+  const riskCards = buildRiskCards(explanationPayload, dashboardBundle);
+  const factors = buildFactors(explanationPayload);
+  const metricInsights = buildMetricInsights(metricsResponse, dashboardBundle);
+  const sources = safeArray(explanationPayload.sources).map((item, index) => normalizeSource(item, index));
+  const groupedRecommendations = recommendations.reduce((acc, item) => {
+    if (!acc[item.category]) {
+      acc[item.category] = [];
+    }
+    acc[item.category].push(item);
+    return acc;
+  }, {});
+
+  const summary = safeText(explanationPayload.summary ?? prediction.analysis);
+  const outcome = safeObject(explanationPayload.outcome);
+  const possibleConditions = safeArray(explanationPayload.possible_conditions)
+    .map((item) => safeText(item))
+    .filter(Boolean);
+  const symptoms = safeArray(explanationPayload.symptoms)
+    .map((item) => safeText(item))
+    .filter(Boolean);
+  const riskScore = normalizeProbability(explanationPayload.risk_score ?? prediction.risk_score);
+  const percentFromPayload = toFiniteNumber(explanationPayload.risk_percent);
+  const riskPercent = percentFromPayload !== null
+    ? (percentFromPayload > 1 ? percentFromPayload : percentFromPayload * 100)
+    : toPercent(riskScore);
+  const riskLabel = getRiskLabel(riskScore);
+  const lastUpdated = latestTimestamp(
+    explanationEnvelope.last_updated,
+    dashboardEnvelope.last_updated,
+    metricsEnvelope.last_updated,
+    dashboardBundle.last_updated,
+    prediction.last_updated,
+    ...metricInsights.map((item) => item.lastUpdated),
+  );
+
+  const hasAnyData = Boolean(
+    riskCards.length ||
+    summary ||
+    factors.length ||
+    recommendations.length ||
+    metricInsights.some((item) => item.value !== null) ||
+    sources.length
+  );
+
+  return {
+    status: explanationEnvelope.status ?? (hasAnyData ? 'ready' : 'insufficient_data'),
+    predictionId: safeText(explanationPayload.prediction_id ?? prediction.prediction_id),
+    riskScore,
+    riskPercent,
+    riskLabel,
+    riskCards,
+    summary,
+    factors,
+    outcome: {
+      severity: safeText(outcome.severity),
+      headline: safeText(outcome.headline),
+      summary: safeText(outcome.summary ?? summary),
+      riskScore: normalizeProbability(outcome.risk_score),
+    },
+    possibleConditions,
+    symptoms,
+    recommendations,
+    groupedRecommendations,
+    sources,
+    metricInsights,
+    lastUpdated,
+    hasAnyData,
+  };
+};
+
+const collectErrors = (...responses) => responses
+  .filter((item) => item.status === 'rejected')
+  .map((item) =>
+    item.reason?.response?.data?.error ||
+    item.reason?.response?.data?.detail ||
+    item.reason?.message ||
+    'Unable to load a backend data source.'
+  )
+  .filter(Boolean);
 
 const getCurrentUserId = () => useAuthStore.getState()?.user?.id ?? null;
 
 export const useInsightsStore = create(
   persist(
     devtools((set, get) => ({
+      insights: null,
       data: null,
       error: null,
       loading: false,
@@ -115,13 +664,13 @@ export const useInsightsStore = create(
 
       setHasHydratedCache: (value = true) => set({ hasHydratedCache: !!value }, false, 'insights/cacheHydrated'),
 
-      fetchInsights: async ({ force = false } = {}) => {
+      fetchInsights: async ({ force = false, silent = false } = {}) => {
         const state = get();
         const currentUserId = getCurrentUserId();
         const ownsCache = Boolean(currentUserId) && state.cacheOwnerId === currentUserId;
 
         if (!force && state.isFetching) {
-          return state.data;
+          return state.insights;
         }
 
         if (
@@ -130,37 +679,68 @@ export const useInsightsStore = create(
           state.lastFetchedAt &&
           (Date.now() - state.lastFetchedAt) < STALE_THRESHOLD_MS
         ) {
-          return state.data;
+          return state.insights;
         }
 
-        set({ loading: true, isFetching: true, error: null }, false, 'insights/fetchStart');
-
-        try {
-          const response = await api.get('/insights');
-          const nextData = normalizeInsightsPayload(response.data ?? {});
-
-          set({
-            data: nextData,
+        set(
+          {
+            loading: !silent && !state.insights,
+            isFetching: true,
             error: null,
-            loading: false,
-            isFetching: false,
-            lastFetchedAt: Date.now(),
-            cacheOwnerId: currentUserId,
-          }, false, 'insights/fetchSuccess');
+          },
+          false,
+          'insights/fetchStart'
+        );
 
-          return nextData;
-        } catch (error) {
-          set({
-            error: error?.response?.data?.error || error?.response?.data?.detail || error?.message || 'Unable to load insights.',
-            loading: false,
-            isFetching: false,
-          }, false, 'insights/fetchError');
+        const [explanationResult, dashboardResult, metricsResult] = await Promise.allSettled([
+          api.get('/prediction/explanation', {
+            params: force ? { force_refresh: true } : {},
+          }),
+          api.get('/dashboard'),
+          api.get('/health/metrics'),
+        ]);
 
-          return get().data;
+        const nextInsights = normalizeInsightsPayload({
+          explanationResponse: explanationResult.status === 'fulfilled' ? explanationResult.value.data ?? {} : {},
+          dashboardResponse: dashboardResult.status === 'fulfilled' ? dashboardResult.value.data ?? {} : {},
+          metricsResponse: metricsResult.status === 'fulfilled' ? metricsResult.value.data ?? {} : {},
+        });
+
+        const errors = collectErrors(explanationResult, dashboardResult, metricsResult);
+
+        if (nextInsights.hasAnyData || errors.length === 0) {
+          set(
+            {
+              insights: nextInsights,
+              data: nextInsights,
+              error: errors.length > 0 ? errors.join(' ') : null,
+              loading: false,
+              isFetching: false,
+              lastFetchedAt: Date.now(),
+              cacheOwnerId: currentUserId,
+            },
+            false,
+            'insights/fetchSuccess'
+          );
+
+          return nextInsights;
         }
+
+        set(
+          {
+            error: errors.join(' ') || 'Unable to load insights.',
+            loading: false,
+            isFetching: false,
+          },
+          false,
+          'insights/fetchError'
+        );
+
+        return state.insights;
       },
 
       clearInsightsCache: () => set({
+        insights: null,
         data: null,
         error: null,
         loading: false,
@@ -173,6 +753,7 @@ export const useInsightsStore = create(
       name: INSIGHTS_STORAGE_KEY,
       storage: createJSONStorage(() => window.localStorage),
       partialize: (state) => ({
+        insights: state.insights,
         data: state.data,
         lastFetchedAt: state.lastFetchedAt,
         cacheOwnerId: state.cacheOwnerId,

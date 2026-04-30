@@ -16,6 +16,7 @@ from .device          import Device, DeviceTypeEnum
 from .vitals_data     import VitalsData
 from .wearable_data   import WearableData
 from .medical_history import MedicalHistory
+from .clinical_history import ClinicalHistory
 from .report          import Report, ReportTypeEnum, ReportStatusEnum
 from .risk_score      import RiskScore, RiskLevelEnum
 from .recommendation  import Recommendation, RecCategoryEnum, PriorityEnum
@@ -25,6 +26,8 @@ from .shap_value     import ShapValueRecord
 from .health_score   import HealthScoreRecord
 from .alert           import Alert, AlertTypeEnum, SeverityEnum
 from .notification    import Notification, NotificationTypeEnum, NotificationSeverityEnum
+from .notification_preference import NotificationPreference
+from .notification_device import NotificationDevice
 from .user_device     import (
     PROVIDER_APPLE_HEALTH,
     PROVIDER_FITBIT,
@@ -49,6 +52,7 @@ __all__ = [
     "VitalsData",
     "WearableData",
     "MedicalHistory",
+    "ClinicalHistory",
     "Report",
     "RiskScore",
     "Recommendation",
@@ -58,6 +62,8 @@ __all__ = [
     "HealthScoreRecord",
     "Alert",
     "Notification",
+    "NotificationPreference",
+    "NotificationDevice",
     "UserDevice",
     "UserVital",
     "UserSetting",

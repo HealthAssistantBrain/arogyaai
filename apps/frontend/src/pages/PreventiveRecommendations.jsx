@@ -1,352 +1,481 @@
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useRef } from 'react';
 import {
-    FlaskConical,
+    Activity,
+    AlertTriangle,
+    Brain,
+    Dumbbell,
     Moon,
-    Search,
+    RefreshCcw,
     Sparkles,
     Utensils,
-    Dumbbell,
-    ArrowRight,
-    AlarmClock,
-    Thermometer,
-    CalendarDays,
     Wind,
-    Bell,
-    Brain,
-    Activity,
 } from 'lucide-react';
-import { ROUTES } from '../router/routes';
-import { openCommandPalette } from '../components/CommandPalette';
+import useHealthStore from '../store/healthStore';
+import useDashboardStore from '../store/dashboardStore';
+import SmartLoadingOverlay from '../components/ui/SmartLoadingOverlay';
+import useSmartFetchOverlay from '../hooks/useSmartFetchOverlay';
+
+const CATEGORY_CONFIG = {
+    lifestyle: {
+        title: 'Lifestyle Improvements',
+        icon: Sparkles,
+        iconClass: 'text-[#6143f4]',
+        panelClass: 'border-[#6143f4]/10 bg-white dark:bg-[#1a1433]',
+    },
+    diet: {
+        title: 'Dietary Optimization',
+        icon: Utensils,
+        iconClass: 'text-[#009cde]',
+        panelClass: 'border-[#009cde]/10 bg-white dark:bg-[#1a1433]',
+    },
+    fitness: {
+        title: 'Fitness & Activity',
+        icon: Dumbbell,
+        iconClass: 'text-orange-500',
+        panelClass: 'border-orange-500/10 bg-white dark:bg-[#1a1433]',
+    },
+    sleep: {
+        title: 'Sleep Optimization',
+        icon: Moon,
+        iconClass: 'text-indigo-500',
+        panelClass: 'border-indigo-500/10 bg-white dark:bg-[#1a1433]',
+    },
+    environment: {
+        title: 'Environmental Risk',
+        icon: Wind,
+        iconClass: 'text-emerald-500',
+        panelClass: 'border-emerald-500/10 bg-white dark:bg-[#1a1433]',
+    },
+};
+
+const PRIORITY_STYLES = {
+    high: 'bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-300 ring-1 ring-red-500/20',
+    medium: 'bg-amber-500/10 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300 ring-1 ring-amber-500/20',
+    low: 'bg-slate-200 text-slate-700 dark:bg-slate-700/60 dark:text-slate-200 ring-1 ring-slate-300/60 dark:ring-slate-600',
+};
+
+const formatMetricValue = (metric) => {
+    const value = Number(metric?.value);
+    if (!Number.isFinite(value)) {
+        return '--';
+    }
+
+    const precision = Number.isFinite(Number(metric?.precision)) ? Number(metric.precision) : 0;
+    const fixed = value.toFixed(precision);
+    return fixed.endsWith('.0') ? fixed.slice(0, -2) : fixed;
+};
+
+const formatUpdatedAt = (value) => {
+    if (!value) return 'Waiting for new data';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return 'Waiting for new data';
+    }
+
+    return date.toLocaleString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+    });
+};
+
+const formatImpact = (value) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+        return '0.000';
+    }
+
+    return `${numeric >= 0 ? '+' : '-'}${Math.abs(numeric).toFixed(3)}`;
+};
+
+const RecommendationSkeleton = () => (
+    <div className="space-y-10">
+        <div className="rounded-[28px] border border-slate-200/80 bg-white/90 p-8 shadow-sm dark:border-white/5 dark:bg-[#1a1433]">
+            <div className="h-4 w-32 animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
+            <div className="mt-5 h-12 w-3/4 animate-pulse rounded-2xl bg-slate-200 dark:bg-white/10" />
+            <div className="mt-4 h-4 w-full animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
+            <div className="mt-3 h-4 w-5/6 animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            {[0, 1, 2].map((index) => (
+                <div
+                    key={index}
+                    className="rounded-3xl border border-slate-200/80 bg-white/90 p-6 shadow-sm dark:border-white/5 dark:bg-[#1a1433]"
+                >
+                    <div className="h-4 w-20 animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
+                    <div className="mt-4 h-10 w-24 animate-pulse rounded-2xl bg-slate-200 dark:bg-white/10" />
+                    <div className="mt-4 h-3 w-28 animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
+                </div>
+            ))}
+        </div>
+
+        <div className="grid grid-cols-1 gap-8 xl:grid-cols-2">
+            {[0, 1, 2, 3].map((index) => (
+                <div
+                    key={index}
+                    className="rounded-3xl border border-slate-200/80 bg-white/90 p-6 shadow-sm dark:border-white/5 dark:bg-[#1a1433]"
+                >
+                    <div className="h-5 w-44 animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
+                    <div className="mt-6 space-y-4">
+                        {[0, 1].map((line) => (
+                            <div
+                                key={line}
+                                className="rounded-2xl border border-slate-100 bg-slate-50/70 p-5 dark:border-white/5 dark:bg-white/[0.03]"
+                            >
+                                <div className="h-4 w-32 animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
+                                <div className="mt-4 h-3 w-full animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
+                                <div className="mt-3 h-3 w-4/5 animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ))}
+        </div>
+    </div>
+);
 
 const PreventiveRecommendations = () => {
-    const navigate = useNavigate();
+    const explanation = useHealthStore((state) => state.explanation);
+    const recommendations = useHealthStore((state) => state.recommendations);
+    const loading = useHealthStore((state) => state.loading);
+    const error = useHealthStore((state) => state.error);
+    const metrics = useHealthStore((state) => state.metrics);
+    const metricsLoading = useHealthStore((state) => state.metricsLoading);
+    const fetchExplanation = useHealthStore((state) => state.fetchExplanation);
+    const fetchHealthMetrics = useHealthStore((state) => state.fetchHealthMetrics);
 
-    const lifestyleImprovements = [
-        {
-            icon: Brain,
-            title: 'Stress Management',
-            description:
-                'Implement 10-min box breathing twice daily to lower cortisol levels which are currently elevated.',
-            color: 'text-[#6143f4]',
-            bgColor: 'bg-[#6143f4]/10',
-        },
-        {
-            icon: Activity,
-            title: 'Cessation Support',
-            description:
-                'Continue your nicotine-free streak. Your lung capacity has improved by 12% in the last 30 days.',
-            color: 'text-[#009cde]',
-            bgColor: 'bg-[#009cde]/10',
-        },
-    ];
+    const fetchDashboardData = useDashboardStore((state) => state.fetchDashboardData);
+    const dashboardIsFetching = useDashboardStore((state) => state.isFetching);
+    const dashboardUpdatedAt = useDashboardStore((state) => state.dashboardUpdatedAt);
+    const dashboardHydrated = useDashboardStore((state) => state.hasHydratedCache);
+    const predictionId = useDashboardStore((state) => state.prediction?.data?.prediction_id ?? null);
 
-    const dietaryOptimization = [
-        {
-            title: 'Mediterranean Shift',
-            description: 'Increase intake of extra virgin olive oil and leafy greens.',
-            priority: 'High Priority',
-            priorityColor: 'text-[#009cde] bg-[#009cde]/10',
-            borderColor: 'border-l-4 border-[#009cde]',
-        },
-        {
-            title: 'Sodium Regulation',
-            description: 'Keep daily sodium intake below 2,300mg to stabilize blood pressure.',
-            priority: 'Standard',
-            priorityColor: 'text-slate-400 bg-slate-100',
-            borderColor: '',
-        },
-    ];
+    const refreshKeyRef = useRef(null);
+    const hasExplanationSnapshot = Boolean(explanation);
+    const showSkeleton = !hasExplanationSnapshot && (loading || metricsLoading || dashboardIsFetching || !dashboardHydrated);
+    const showRefreshOverlay = useSmartFetchOverlay(
+        loading || metricsLoading || dashboardIsFetching,
+        hasExplanationSnapshot,
+        { exitDelayMs: 200 }
+    );
 
-    const labTests = [
-        {
-            name: 'HbA1c & Fasting Insulin',
-            category: 'Metabolic Health Marker',
-            reason: 'To monitor blood glucose regulation after recent dietary changes.',
-            date: 'Oct 15, 2024',
-        },
-        {
-            name: 'Lipid Profile (ApoB focus)',
-            category: 'Cardiovascular Screening',
-            reason: 'ApoB provides a more accurate measure of atherogenic risk than LDL-C alone.',
-            date: 'Nov 02, 2024',
-        },
-        {
-            name: 'Vitamin D (25-OH)',
-            category: 'Immune & Bone Health',
-            reason:
-                'Verify if the current supplementation dose is sufficient for target range (50-80 ng/mL).',
-            date: 'Oct 15, 2024',
-        },
-    ];
+    useEffect(() => {
+        const silent = hasExplanationSnapshot;
+        const loadPage = async () => {
+            try {
+                await Promise.all([
+                    fetchDashboardData({ silent }),
+                    fetchHealthMetrics({ silent }),
+                    fetchExplanation({ silent, predictionId }),
+                ]);
+            } catch (loadError) {
+                console.error('Failed to load recommendations page:', loadError);
+            }
+        };
+
+        void loadPage();
+    }, [fetchDashboardData, fetchHealthMetrics, fetchExplanation, hasExplanationSnapshot, predictionId]);
+
+    useEffect(() => {
+        if (!dashboardUpdatedAt) {
+            return;
+        }
+
+        const refreshKey = `${predictionId ?? 'latest'}:${dashboardUpdatedAt}`;
+        if (refreshKeyRef.current === refreshKey) {
+            return;
+        }
+
+        refreshKeyRef.current = refreshKey;
+        void Promise.all([
+            fetchHealthMetrics({ force: true, silent: true }),
+            fetchExplanation({ force: true, silent: true, predictionId }),
+        ]);
+    }, [dashboardUpdatedAt, fetchExplanation, fetchHealthMetrics, predictionId]);
+
+    const groupedRecommendations = useMemo(() => {
+        const grouped = recommendations.reduce((acc, recommendation) => {
+            const category = CATEGORY_CONFIG[recommendation.category] ? recommendation.category : 'lifestyle';
+            if (!acc[category]) {
+                acc[category] = [];
+            }
+            acc[category].push(recommendation);
+            return acc;
+        }, {});
+
+        return Object.entries(CATEGORY_CONFIG)
+            .map(([key, config]) => ({
+                key,
+                config,
+                items: grouped[key] ?? [],
+            }))
+            .filter((section) => section.items.length > 0);
+    }, [recommendations]);
+
+    const metricCards = useMemo(() => metrics?.cards ?? [], [metrics]);
+    const factors = useMemo(() => explanation?.factors ?? [], [explanation]);
+    const strongestFactorMagnitude = useMemo(
+        () => Math.max(...factors.map((factor) => Math.abs(Number(factor.impact) || 0)), 0.001),
+        [factors]
+    );
+
+    const handleRetry = () => {
+        void Promise.all([
+            fetchDashboardData({ force: true }),
+            fetchHealthMetrics({ force: true }),
+            fetchExplanation({ force: true, predictionId }),
+        ]);
+    };
+
+    if (showSkeleton) {
+        return (
+            <div className="min-h-screen bg-[#f6f5f8] px-6 py-8 text-[#13082a] dark:bg-[#131022] dark:text-slate-100 lg:px-8">
+                <div className="mx-auto max-w-7xl">
+                    <RecommendationSkeleton />
+                </div>
+            </div>
+        );
+    }
+
+    if (!hasExplanationSnapshot && error) {
+        return (
+            <div className="min-h-screen bg-[#f6f5f8] px-6 py-8 text-[#13082a] dark:bg-[#131022] dark:text-slate-100 lg:px-8">
+                <div className="mx-auto flex max-w-3xl flex-col items-center rounded-[32px] border border-red-200 bg-white p-10 text-center shadow-sm dark:border-red-500/20 dark:bg-[#1a1433]">
+                    <div className="flex size-16 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
+                        <AlertTriangle size={28} />
+                    </div>
+                    <h2 className="mt-6 text-3xl font-black tracking-tight">Unable to load personalized recommendations</h2>
+                    <p className="mt-3 max-w-xl text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-400">
+                        {error}
+                    </p>
+                    <button
+                        onClick={handleRetry}
+                        className="mt-8 inline-flex items-center gap-2 rounded-2xl bg-[#6143f4] px-5 py-3 text-sm font-black uppercase tracking-[0.2em] text-white transition-transform hover:scale-[1.02]"
+                    >
+                        <RefreshCcw size={16} />
+                        Retry
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <div className="flex-1 flex flex-col min-w-0 bg-[#f6f5f8] dark:bg-[#131022] text-[#13082a] dark:text-slate-100 min-h-screen antialiased">
-            {/* Top Header */}
-            
+        <div className="relative min-h-screen bg-[#f6f5f8] text-[#13082a] dark:bg-[#131022] dark:text-slate-100">
+            {showRefreshOverlay ? <SmartLoadingOverlay label="Refreshing recommendations" /> : null}
 
-            {/* Page Content */}
-            <div className="p-8 max-w-7xl mx-auto w-full space-y-12">
-                {/* Title */}
-                <div className="max-w-4xl">
-                    <h2 className="text-4xl lg:text-5xl font-black tracking-tight text-[#13082a] dark:text-white leading-tight mb-4 uppercase">
-                        Personalized Health Recommendations
-                    </h2>
-                    <p className="text-lg text-slate-600 dark:text-slate-400 leading-relaxed font-medium">
-                        Based on your latest biometrics, genetic markers, and lifestyle data, our AI has
-                        formulated these high-impact adjustments to optimize your long-term longevity and
-                        prevent chronic conditions.
-                    </p>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                    {/* Lifestyle Improvements */}
-                    <section className="space-y-6">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Sparkles size={20} className="text-[#6143f4] animate-pulse" />
-                            <h3 className="text-xl font-bold uppercase tracking-tight">Lifestyle Improvements</h3>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                            {lifestyleImprovements.map((item) => {
-                                const Icon = item.icon;
-                                return (
-                                    <div
-                                        key={item.title}
-                                        className="bg-white dark:bg-[#1a1433] rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-white/5 hover:translate-y-[-4px] hover:shadow-xl transition-all duration-300 group"
-                                    >
-                                        <div
-                                            className={`size-12 rounded-xl ${item.bgColor} ${item.color} flex items-center justify-center mb-5 shadow-inner transition-transform group-hover:scale-110`}
-                                        >
-                                            <Icon size={24} />
-                                        </div>
-                                        <h4 className="font-black text-lg mb-1 text-[#13082a] dark:text-white uppercase tracking-tight">
-                                            {item.title}
-                                        </h4>
-                                        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-bold italic opacity-80">
-                                            {item.description}
-                                        </p>
-                                    </div>
-                                );
-                            })}
-
-                            {/* AQI Monitor Card */}
-                            <div
-                                onClick={() => navigate(ROUTES.AQI_MONITOR)}
-                                className="bg-gradient-to-br from-[#13082a] to-[#0c091a] rounded-2xl p-6 shadow-xl border border-[#6143f4]/30 hover:translate-y-[-4px] transition-all duration-300 group cursor-pointer relative overflow-hidden"
-                            >
-                                <div className="absolute -right-4 -top-4 opacity-10 group-hover:rotate-12 transition-transform duration-700">
-                                    <Wind size={80} className="text-white" />
-                                </div>
-                                <div className="size-12 rounded-xl bg-[#6143f4]/20 text-[#6143f4] flex items-center justify-center mb-5 shadow-lg border border-[#6143f4]/30">
-                                    <Wind size={24} className="animate-pulse" />
-                                </div>
-                                <h4 className="font-black text-lg mb-1 text-white uppercase tracking-tight">
-                                    Environmental Risk
-                                </h4>
-                                <p className="text-xs text-white/50 leading-relaxed font-bold italic mb-4">
-                                    Current AQI: <span className="text-[#6143f4]">Unhealthy</span>. Avoid outdoor
-                                    cardio.
-                                </p>
-                                <span className="text-[10px] font-black uppercase tracking-widest text-[#6143f4] flex items-center gap-1">
-                                    Check Air Quality <ArrowRight size={12} />
+            <div className="mx-auto max-w-7xl px-6 py-8 lg:px-8">
+                <div className="space-y-10">
+                    <section className="relative overflow-hidden rounded-[32px] border border-white/60 bg-gradient-to-br from-[#13082a] via-[#1a1433] to-[#0f172a] p-8 text-white shadow-2xl shadow-[#13082a]/10 lg:p-10">
+                        <div className="relative z-10 flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+                            <div className="max-w-4xl">
+                                <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.2em] text-white/80">
+                                    <Brain size={14} />
+                                    Live AI Output
                                 </span>
-                            </div>
-                        </div>
-                    </section>
-
-                    {/* Dietary Optimization */}
-                    <section className="space-y-6">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Utensils size={20} className="text-[#009cde]" />
-                            <h3 className="text-xl font-bold uppercase tracking-tight">Dietary Optimization</h3>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                            {dietaryOptimization.map((item) => (
-                                <div
-                                    key={item.title}
-                                    className={`bg-white dark:bg-[#1a1433] rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-white/5 hover:translate-y-[-4px] hover:shadow-xl transition-all duration-300 ${item.borderColor}`}
-                                >
-                                    <h4 className="font-black mb-1 text-[#13082a] dark:text-white uppercase tracking-tight text-sm">
-                                        {item.title}
-                                    </h4>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-bold opacity-80 mb-5">
-                                        {item.description}
-                                    </p>
-                                    <span
-                                        className={`text-[10px] font-black uppercase tracking-widest ${item.priorityColor} px-2.5 py-1 rounded-full shadow-sm`}
-                                    >
-                                        {item.priority}
-                                    </span>
-                                </div>
-                            ))}
-                        </div>
-                    </section>
-
-                    {/* Fitness & Activity */}
-                    <section className="space-y-6">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Dumbbell size={20} className="text-orange-500" />
-                            <h3 className="text-xl font-bold uppercase tracking-tight">Fitness & Activity</h3>
-                        </div>
-                        <div className="bg-white dark:bg-[#1a1433] rounded-2xl p-8 shadow-sm border border-slate-200 dark:border-slate-800 transition-all duration-300 group relative overflow-hidden">
-                            <div className="flex flex-col sm:flex-row items-start justify-between gap-6 relative z-10">
-                                <div className="flex-1">
-                                    <h4 className="font-black text-xl mb-3 text-[#13082a] dark:text-white tracking-tight uppercase leading-none">
-                                        Zone 2 Cardiovascular Training
-                                    </h4>
-                                    <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed mb-6 font-medium">
-                                        Aim for 150 minutes per week at a heart rate of 125-135 BPM. This will improve
-                                        mitochondrial density and metabolic flexibility.
-                                    </p>
-                                    <div className="flex gap-2">
-                                        <div className="px-3.5 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-xs font-black uppercase tracking-widest leading-none">
-                                            3x / Week
-                                        </div>
-                                        <div className="px-3.5 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-xs font-black uppercase tracking-widest leading-none">
-                                            50 min sessions
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-
-                    {/* Sleep Optimization */}
-                    <section className="space-y-6">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Moon size={20} className="text-indigo-500" />
-                            <h3 className="text-xl font-bold uppercase tracking-tight">Sleep Optimization</h3>
-                        </div>
-                        <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-2xl p-8 text-white shadow-xl relative overflow-hidden group">
-                            <div className="relative z-10">
-                                <h4 className="font-black text-xl mb-2 tracking-tight uppercase leading-none">
-                                    Digital Detox Routine
-                                </h4>
-                                <p className="text-indigo-100 text-sm mb-5 font-semibold leading-relaxed">
-                                    Eliminate blue light exposure 90 minutes before your target sleep time of 10:30 PM.
+                                <h1 className="mt-5 text-4xl font-black uppercase tracking-tight lg:text-5xl">
+                                    Personalized Health Recommendations
+                                </h1>
+                                <p className="mt-4 max-w-3xl text-base font-medium leading-relaxed text-white/75 lg:text-lg">
+                                    {explanation?.summary || 'Personalized recommendations update as new SHAP factors and health metrics arrive.'}
                                 </p>
-                                <ul className="space-y-3">
-                                    <li className="flex items-center gap-3 text-xs font-black uppercase tracking-widest bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl border border-white/5 w-fit shadow-md">
-                                        <AlarmClock size={16} />
-                                        Fixed wake time: 6:30 AM
-                                    </li>
-                                    <li className="flex items-center gap-3 text-xs font-black uppercase tracking-widest bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl border border-white/5 w-fit shadow-md">
-                                        <Thermometer size={16} />
-                                        Room temp: 65°F (18°C)
-                                    </li>
-                                </ul>
                             </div>
-                            <Moon
-                                size={120}
-                                className="absolute -right-8 -bottom-8 text-white/10 rotate-12 group-hover:rotate-0 transition-transform duration-1000"
-                                strokeWidth={1}
-                            />
+
+                            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                                <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
+                                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/50">Risk Level</p>
+                                    <p className="mt-2 text-xl font-black">{explanation?.riskLevel || 'Pending'}</p>
+                                </div>
+                                <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
+                                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/50">Risk Score</p>
+                                    <p className="mt-2 text-xl font-black">
+                                        {Number.isFinite(Number(explanation?.riskPercent))
+                                            ? `${Number(explanation.riskPercent).toFixed(1)}%`
+                                            : '--'}
+                                    </p>
+                                </div>
+                                <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
+                                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/50">Last Updated</p>
+                                    <p className="mt-2 text-sm font-black uppercase tracking-[0.16em] text-white/85">
+                                        {formatUpdatedAt(metrics?.lastUpdated ?? dashboardUpdatedAt)}
+                                    </p>
+                                </div>
+                            </div>
                         </div>
+
+                        <div className="absolute -right-16 -top-16 size-72 rounded-full bg-[#6143f4]/20 blur-3xl" />
+                        <div className="absolute -bottom-24 left-1/3 size-72 rounded-full bg-[#009cde]/20 blur-3xl" />
                     </section>
-                </div>
 
-                {/* Recommended Lab Tests */}
-                <section className="mt-12">
-                    <div className="flex items-center justify-between mb-8">
-                        <div className="flex items-center gap-2">
-                            <FlaskConical size={24} className="text-[#6143f4]" />
-                            <h3 className="text-2xl font-black uppercase tracking-tight">Recommended Lab Tests</h3>
-                        </div>
-                        <button className="text-[#6143f4] font-black text-sm hover:underline flex items-center gap-1 group">
-                            View Full History <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
-                        </button>
-                    </div>
-                    <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1a1433] shadow-md">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left">
-                                <thead className="bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-slate-800">
-                                    <tr>
-                                        <th className="px-8 py-5 text-sm font-black uppercase tracking-widest text-[#13082a] dark:text-white">
-                                            Test Name
-                                        </th>
-                                        <th className="px-8 py-5 text-sm font-black uppercase tracking-widest text-[#13082a] dark:text-white">
-                                            Why it matters
-                                        </th>
-                                        <th className="px-8 py-5 text-sm font-black uppercase tracking-widest text-[#13082a] dark:text-white">
-                                            Suggested Date
-                                        </th>
-                                        <th className="px-8 py-5 text-sm font-black uppercase tracking-widest text-right text-[#13082a] dark:text-white">
-                                            Action
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                    {labTests.map((test) => (
-                                        <tr
-                                            key={test.name}
-                                            className="hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors group"
-                                        >
-                                            <td className="px-8 py-6">
-                                                <p className="font-bold text-sm text-[#13082a] dark:text-white group-hover:text-[#6143f4] transition-colors">
-                                                    {test.name}
-                                                </p>
-                                                <p className="text-[11px] text-slate-400 font-bold uppercase mt-1 tracking-tighter leading-none">
-                                                    {test.category}
-                                                </p>
-                                            </td>
-                                            <td className="px-8 py-6 text-sm text-slate-600 dark:text-slate-400 leading-relaxed max-w-sm italic">
-                                                {test.reason}
-                                            </td>
-                                            <td className="px-8 py-6">
-                                                <div className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-slate-300">
-                                                    <CalendarDays size={16} className="text-slate-400" />
-                                                    {test.date}
-                                                </div>
-                                            </td>
-                                            <td className="px-8 py-6 text-right">
-                                                <button className="px-5 py-2.5 bg-[#6143f4]/10 text-[#6143f4] text-xs font-black uppercase tracking-widest rounded-xl hover:bg-[#6143f4] hover:text-white transition-all shadow-sm active:scale-95 leading-none">
-                                                    Order Kit
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </section>
-
-                {/* Bottom CTA */}
-                <section className="mt-12 mb-12">
-                    <div className="bg-gradient-to-br from-[#6143f4] to-[#009cde] rounded-3xl p-10 lg:p-14 text-white flex flex-col lg:flex-row items-center justify-between gap-10 shadow-2xl shadow-[#6143f4]/30 relative overflow-hidden group">
-                        <div className="relative z-10 max-w-2xl">
-                            <h3 className="text-4xl font-black mb-5 tracking-tight leading-none uppercase">
-                                Want to dive deeper?
-                            </h3>
-                            <p className="text-white/80 text-xl font-medium leading-relaxed italic">
-                                Schedule a session with an ArogyaAI specialist to review these recommendations and
-                                build a clinical roadmap tailored to your genomic data.
-                            </p>
-                        </div>
-                        <div className="relative z-10 flex gap-4 w-full lg:w-auto">
+                    {error ? (
+                        <div className="flex flex-col gap-4 rounded-3xl border border-amber-300/70 bg-amber-50 p-5 text-sm font-medium text-amber-900 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex items-start gap-3">
+                                <AlertTriangle className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-300" size={18} />
+                                <p>{error}</p>
+                            </div>
                             <button
-                                onClick={() => navigate(ROUTES.HELP)}
-                                className="flex-1 lg:flex-none px-10 py-5 bg-white text-[#6143f4] font-black text-xs uppercase tracking-[0.3em] rounded-2xl hover:scale-[1.05] transition-all shadow-2xl active:scale-95 flex items-center justify-center gap-3"
+                                onClick={handleRetry}
+                                className="inline-flex items-center gap-2 rounded-2xl bg-amber-500 px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-white"
                             >
-                                <ArrowRight size={18} />
-                                Open Support Center
+                                <RefreshCcw size={14} />
+                                Retry
                             </button>
                         </div>
-                        <div className="absolute top-0 right-0 size-80 bg-white/10 rounded-full -mr-20 -mt-20 blur-3xl group-hover:scale-150 transition-transform duration-1000"></div>
-                        <div className="absolute bottom-0 left-0 size-64 bg-black/10 rounded-full -ml-20 -mb-20 blur-3xl group-hover:scale-150 transition-transform duration-1000"></div>
-                    </div>
-                </section>
+                    ) : null}
 
-                {/* Footer */}
-                <footer className="mt-20 py-10 border-t border-slate-200 dark:border-slate-800 text-center text-slate-400 dark:text-slate-500 text-sm font-semibold">
-                    <p>
-                        © 2024 ArogyaAI Preventive Systems. All AI insights are for informational purposes and
-                        should be discussed with a healthcare professional.
-                    </p>
-                </footer>
+                    <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                        {metricCards.map((metric) => (
+                            <div
+                                key={metric.key}
+                                className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm dark:border-white/5 dark:bg-[#1a1433]"
+                            >
+                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
+                                    {metric.label}
+                                </p>
+                                <div className="mt-4 flex items-end gap-2">
+                                    <span className="text-3xl font-black text-[#13082a] dark:text-white">
+                                        {formatMetricValue(metric)}
+                                    </span>
+                                    <span className="pb-1 text-sm font-bold text-slate-400 dark:text-slate-500">
+                                        {metric.unit || ''}
+                                    </span>
+                                </div>
+                                <p className="mt-4 text-sm font-medium text-slate-500 dark:text-slate-400">
+                                    {metric.caption || metric.emptyMessage || 'Waiting for new health data.'}
+                                </p>
+                            </div>
+                        ))}
+                    </section>
+
+                    <section className="grid grid-cols-1 gap-8 xl:grid-cols-2">
+                        {groupedRecommendations.length > 0 ? (
+                            groupedRecommendations.map(({ key, config, items }) => {
+                                const Icon = config.icon;
+                                return (
+                                    <div
+                                        key={key}
+                                        className={`rounded-[28px] border p-6 shadow-sm ${config.panelClass}`}
+                                    >
+                                        <div className="mb-6 flex items-center gap-3">
+                                            <div className={`flex size-11 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/5 ${config.iconClass}`}>
+                                                <Icon size={22} />
+                                            </div>
+                                            <h2 className="text-xl font-black uppercase tracking-tight">{config.title}</h2>
+                                        </div>
+
+                                        <div className="space-y-4">
+                                            {items.map((recommendation) => (
+                                                <article
+                                                    key={recommendation.id}
+                                                    className="rounded-2xl border border-slate-100 bg-slate-50/80 p-5 transition-transform duration-300 hover:-translate-y-1 hover:shadow-lg dark:border-white/5 dark:bg-white/[0.03]"
+                                                >
+                                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                                        <div>
+                                                            <h3 className="text-lg font-black tracking-tight text-[#13082a] dark:text-white">
+                                                                {recommendation.title}
+                                                            </h3>
+                                                            <p className="mt-3 text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-400">
+                                                                {recommendation.description}
+                                                            </p>
+                                                        </div>
+                                                        <span
+                                                            className={`inline-flex w-fit items-center rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] ${PRIORITY_STYLES[recommendation.priority] || PRIORITY_STYLES.medium}`}
+                                                        >
+                                                            {recommendation.priority}
+                                                        </span>
+                                                    </div>
+                                                </article>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        ) : (
+                            <div className="xl:col-span-2 rounded-[28px] border border-dashed border-slate-300 bg-white/90 p-10 text-center shadow-sm dark:border-slate-700 dark:bg-[#1a1433]">
+                                <div className="mx-auto flex size-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-500 dark:bg-white/5 dark:text-slate-300">
+                                    <Activity size={28} />
+                                </div>
+                                <h2 className="mt-6 text-2xl font-black tracking-tight">No recommendations yet</h2>
+                                <p className="mx-auto mt-3 max-w-2xl text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">
+                                    No personalized recommendations available yet. Connect more data sources.
+                                </p>
+                            </div>
+                        )}
+                    </section>
+
+                    <section className="rounded-[28px] border border-slate-200/80 bg-white p-8 shadow-sm dark:border-white/5 dark:bg-[#1a1433]">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                            <div>
+                                <span className="inline-flex items-center gap-2 rounded-full bg-[#6143f4]/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.2em] text-[#6143f4]">
+                                    <Brain size={14} />
+                                    SHAP Drivers
+                                </span>
+                                <h2 className="mt-4 text-2xl font-black tracking-tight">Why the model generated these recommendations</h2>
+                                <p className="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
+                                    These live factors come from the latest explanation payload and update whenever the backend prediction changes.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="mt-8 space-y-5">
+                            {factors.length > 0 ? (
+                                factors.map((factor) => {
+                                    const numericImpact = Number(factor.impact) || 0;
+                                    const width = `${Math.max(
+                                        8,
+                                        Math.round((Math.abs(numericImpact) / strongestFactorMagnitude) * 100)
+                                    )}%`;
+                                    const increasingRisk = numericImpact >= 0;
+
+                                    return (
+                                        <div key={`${factor.featureName}-${factor.title}`} className="space-y-2">
+                                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                                <div>
+                                                    <p className="font-black text-[#13082a] dark:text-white">{factor.title}</p>
+                                                    {factor.description ? (
+                                                        <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
+                                                            {factor.description}
+                                                        </p>
+                                                    ) : null}
+                                                </div>
+                                                <span
+                                                    className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] ${
+                                                        increasingRisk
+                                                            ? 'bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-300'
+                                                            : 'bg-emerald-500/10 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+                                                    }`}
+                                                >
+                                                    {increasingRisk ? 'Raises Risk' : 'Lowers Risk'}
+                                                    {formatImpact(numericImpact)}
+                                                </span>
+                                            </div>
+
+                                            <div className="relative h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                                                <div
+                                                    className={`absolute top-0 h-full rounded-full ${
+                                                        increasingRisk ? 'left-0 bg-red-500' : 'right-0 bg-emerald-500'
+                                                    }`}
+                                                    style={{ width }}
+                                                />
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            ) : (
+                                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 p-6 text-center dark:border-slate-700 dark:bg-white/[0.03]">
+                                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                                        SHAP factor data has not arrived yet. The page will refresh automatically once the prediction service publishes a new explanation.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    </section>
+                </div>
             </div>
         </div>
     );
 };
 
 export default PreventiveRecommendations;
-

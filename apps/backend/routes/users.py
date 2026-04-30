@@ -11,9 +11,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from database.session import get_db
-from models import User, UserProfile
+from models import MedicalHistory, User, UserProfile
 from core.session_cookies import clear_session_cookies
 from services.user_service import UserService
+from services.clinical_history_service import ClinicalHistoryService
 from services.auth_service import AuthService
 
 router = APIRouter(prefix="/api/v1/users", tags=["Users"])
@@ -80,15 +81,7 @@ def get_me(
     db: Session = Depends(get_db),
 ):
     """Returns the authenticated user's core profile data via UserService."""
-    data = UserService.get_user_me(db, current_user)
-    
-    # Enrich with conditions
-    from models.medical_history import MedicalHistory
-    history = db.query(MedicalHistory).filter(MedicalHistory.user_id == current_user.id).all()
-    if history:
-        data["data"]["conditions"] = [h.condition_name for h in history]
-        
-    return data
+    return UserService.get_user_me(db, current_user)
 
 
 @router.post("/create-from-auth")
@@ -172,36 +165,36 @@ def update_profile(
     """Upserts extending user profile via UserService."""
     return UserService.update_user_profile(db, current_user, updates)
 
-
-from models.medical_history import MedicalHistory
-
 @router.post("/medical-history")
 def update_medical_history(
     payload: dict,
     current_user: User = Depends(get_current_user_from_header),
     db: Session = Depends(get_db),
 ):
-    """Saves medical history data (conditions, allergies, family_history)."""
+    """Saves structured medical history while keeping the existing conditions storage intact."""
     try:
-        # Load profile to save allergies
-        profile = UserService.get_or_create_user_profile(db, current_user)
-        
-        allergies = payload.get("allergies", [])
-        if isinstance(allergies, list):
-            profile.allergies = allergies
-            
+        profile_updates = {
+            "allergies": payload.get("allergies"),
+            "family_history": payload.get("family_history"),
+            "surgeries": payload.get("surgeries"),
+            "hospitalizations": payload.get("hospitalizations"),
+            "hospitalization_details": payload.get("hospitalization_details"),
+            "current_medications": payload.get("current_medications", payload.get("medications")),
+        }
+        UserService.update_user_profile(db, current_user, profile_updates)
+
         conditions = payload.get("conditions", [])
         if isinstance(conditions, list):
-            # Replace current conditions
             db.query(MedicalHistory).filter(MedicalHistory.user_id == current_user.id).delete()
             for cond in conditions:
-                db.add(MedicalHistory(user_id=current_user.id, condition_name=cond))
-                
+                normalized = str(cond or "").strip()
+                if normalized:
+                    db.add(MedicalHistory(user_id=current_user.id, condition_name=normalized))
+
         db.commit()
-        return {"success": True, "message": "Medical history saved successfully."}
+        return UserService.get_user_me(db, current_user)
     except Exception as e:
         db.rollback()
-        # Keep non-critical log but return OK to not block UI progression abruptly
         return {"success": False, "error": str(e)}
 
 
@@ -211,7 +204,7 @@ def update_lifestyle(
     current_user: User = Depends(get_current_user_from_header),
     db: Session = Depends(get_db),
 ):
-    """Saves lifestyle assessment data (activity, diet, sleep, stress)."""
+    """Saves lifestyle assessment plus the optional onboarding clinical snapshot."""
     activity_raw = payload.get("activity")
     if isinstance(activity_raw, str):
         normalized_activity = activity_raw.strip().lower()
@@ -233,12 +226,31 @@ def update_lifestyle(
     elif isinstance(diet, str):
         goals = diet.strip() or None
 
-    UserService.update_user_profile(
+    result = UserService.update_user_profile(
         db,
         current_user,
         {
             "activity_level": activity_level,
             "goals": goals,
+            "sleep_hours": payload.get("sleep"),
+            "stress_level": payload.get("stress"),
+            "smoking": payload.get("smoking"),
+            "alcohol": payload.get("alcohol"),
+            "appetite": payload.get("appetite"),
+            "bowel_habits": payload.get("bowel_habits"),
+        },
+    )
+
+    clinical_snapshot = ClinicalHistoryService.upsert_initial_snapshot(
+        db,
+        current_user,
+        {
+            "chief_complaint": payload.get("chief_complaint"),
+            "associated_symptoms": payload.get("symptoms", payload.get("associated_symptoms", [])),
+            "duration_value": payload.get("duration_value"),
+            "duration_unit": payload.get("duration_unit"),
+            "onset": payload.get("onset"),
+            "severity": payload.get("severity"),
         },
     )
 
@@ -248,7 +260,7 @@ def update_lifestyle(
         "data": {
             "activity_level": activity_level,
             "goals": goals,
-            "sleep": payload.get("sleep"),
-            "stress": payload.get("stress"),
+            "lifestyle_profile": (result.get("data") or {}).get("lifestyle_profile"),
+            "initial_clinical_snapshot": clinical_snapshot,
         },
     }

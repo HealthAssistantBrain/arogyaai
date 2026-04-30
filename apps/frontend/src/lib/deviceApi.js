@@ -83,6 +83,25 @@ function normalizeDeviceSummary(record = {}) {
 }
 
 export async function fetchConnectedDeviceSummaries() {
+  const newDevicesResponse = await safeApiGet(
+    apiClient,
+    '/devices',
+    {},
+    {
+      fallback: null,
+      ignoreStatuses: [404, 405],
+      logLabel: 'GET /devices',
+    }
+  );
+
+  const newBackendDevices = normalizeListResponse(newDevicesResponse?.data)
+    .map((device) => normalizeDeviceSummary(device))
+    .filter(Boolean);
+
+  if (newBackendDevices.length > 0) {
+    return newBackendDevices;
+  }
+
   const response = await safeApiGet(
     apiClient,
     '/users/devices',

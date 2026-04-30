@@ -46,6 +46,7 @@ const NotificationHistory = () => {
         { name: 'Unread', count: unreadCount },
         { name: 'Critical', hasDot: true },
         { name: 'AI Insights' },
+        { name: 'Simulations' },
         { name: 'System Updates' },
     ];
 
@@ -58,6 +59,8 @@ const NotificationHistory = () => {
                 return list.filter(n => n.priority === 'high' || n.type === 'critical');
             case 'AI Insights':
                 return list.filter(n => n.type === 'ai_insight');
+            case 'Simulations':
+                return list.filter(n => n.type === 'simulation');
             case 'System Updates':
                 return list.filter(n => n.type === 'system');
             default:
@@ -76,6 +79,7 @@ const NotificationHistory = () => {
         if (!notif) return;
         markAsRead(id);
         if (notif.type === 'ai_insight') navigate(ROUTES.INSIGHTS);
+        else if (notif.type === 'simulation') navigate(ROUTES.SIMULATOR);
         else if (notif.type === 'lab_result') navigate(ROUTES.LAB_RESULTS);
     };
 

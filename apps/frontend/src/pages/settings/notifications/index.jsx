@@ -1,264 +1,303 @@
-import { useState } from 'react';
-import {
-    Bell, Check, Mail, Sparkles, AlertTriangle, Calendar, Clock, CheckCircle2
-} from 'lucide-react';
+import { useEffect, useMemo, useRef } from 'react';
+import { AlertTriangle, Bell, Check, LoaderCircle, Mail, Sparkles } from 'lucide-react';
+import toast from 'react-hot-toast';
+
+import useNotificationPreferencesStore from '../../../store/notificationPreferencesStore';
+import { ensurePushSubscription, removeCurrentPushSubscription } from '../../../services/pushSubscriptionService';
+
+const PREFERENCE_LABELS = {
+  email_enabled: 'Email notifications',
+  push_enabled: 'Push notifications',
+  ai_insights_email: 'AI insights email',
+  ai_insights_push: 'AI insights push',
+  health_alerts_email: 'Health alerts email',
+  health_alerts_push: 'Health alerts push',
+  reminders_email: 'Reminders email',
+  reminders_push: 'Reminders push',
+};
+
+const SECTIONS = [
+  {
+    id: 'ai_insights',
+    title: 'AI Insights',
+    description: 'Updates when new model-driven analysis, risk explanations, and recommendation bundles are ready.',
+    icon: Sparkles,
+    color: 'text-[#6143f4]',
+    bgColor: 'bg-[#6143f4]/10',
+    emailKey: 'ai_insights_email',
+    pushKey: 'ai_insights_push',
+  },
+  {
+    id: 'health_alerts',
+    title: 'Health Alerts',
+    description: 'Critical notifications tied to abnormal vitals, elevated risk states, and abnormal lab detections.',
+    icon: AlertTriangle,
+    color: 'text-red-500',
+    bgColor: 'bg-red-500/10',
+    emailKey: 'health_alerts_email',
+    pushKey: 'health_alerts_push',
+  },
+  {
+    id: 'reminders',
+    title: 'Reminders',
+    description: 'Appointment-style reminders and scheduled nudges routed through the same delivery pipeline.',
+    icon: Bell,
+    color: 'text-[#009cde]',
+    bgColor: 'bg-[#009cde]/10',
+    emailKey: 'reminders_email',
+    pushKey: 'reminders_push',
+  },
+];
+
+function Toggle({ active, pending, onClick, color = 'bg-[#6143f4]' }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`relative inline-flex h-8 w-14 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-4 focus:ring-[#6143f4]/10 ${active ? color : 'bg-slate-200 dark:bg-slate-700'}`}
+    >
+      {pending ? (
+        <span className="absolute inset-0 flex items-center justify-center">
+          <LoaderCircle size={14} className="animate-spin text-white" />
+        </span>
+      ) : null}
+      <span
+        style={{ transform: active ? 'translateX(24px)' : 'translateX(0)' }}
+        className="pointer-events-none inline-block h-6 w-6 rounded-full bg-white shadow-lg ring-0 mt-0.5 ml-0.5 transition-transform duration-200 ease-in-out"
+      />
+    </button>
+  );
+}
+
+function ChannelCheckbox({ checked, pending, label, onClick }) {
+  return (
+    <button type="button" onClick={onClick} className="flex items-center gap-4">
+      <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase">{label}</span>
+      <div className={`flex size-6 items-center justify-center rounded-lg border-2 transition-all ${checked ? 'border-[#6143f4] bg-[#6143f4] text-white' : 'border-slate-200 dark:border-white/10'}`}>
+        {pending ? <LoaderCircle size={13} className="animate-spin" /> : checked ? <Check size={14} strokeWidth={4} /> : null}
+      </div>
+    </button>
+  );
+}
 
 const SettingsNotifications = () => {
-    // State for Global Channels
-    const [globalChannels, setGlobalChannels] = useState({
-        email: true,
-        push: true,
-    });
+  const {
+    preferences,
+    pendingKeys,
+    isLoading,
+    error,
+    fetchPreferences,
+    applyOptimisticPreferences,
+    restoreServerPreferences,
+    commitPreferences,
+  } = useNotificationPreferencesStore();
 
-    // State for Category Preferences
-    const [preferences, setPreferences] = useState([
-        {
-            id: 'ai_insights',
-            title: 'AI Insights',
-            description: 'Receive alerts when AI detects new health patterns or potential anomalies in your data.',
-            icon: Sparkles,
-            color: 'text-indigo-500',
-            bgColor: 'bg-indigo-50',
-            email: true,
-            push: true,
-        },
-        {
-            id: 'health_alerts',
-            title: 'Health Alerts',
-            description: 'Critical notifications regarding abnormal lab results or vital sign deviations.',
-            icon: AlertTriangle,
-            color: 'text-red-500',
-            bgColor: 'bg-red-50',
-            email: true,
-            push: true,
-        },
-        {
-            id: 'appointment_reminders',
-            title: 'Appointment Reminders',
-            description: 'Notifications about upcoming visits, screenings, and follow-ups.',
-            icon: Calendar,
-            color: 'text-blue-500',
-            bgColor: 'bg-blue-50',
-            email: false,
-            push: true,
-        },
-    ]);
+  const debounceTimerRef = useRef(null);
+  const latestVersionRef = useRef(0);
+  const isSavingRef = useRef(false);
+  const latestSnapshotRef = useRef(preferences);
+  const latestKeysRef = useRef([]);
 
-    // State for Reminders
-    const [reminders, setReminders] = useState({
-        medication: true,
-        sync: true,
-        sleep: false,
-    });
+  useEffect(() => {
+    latestSnapshotRef.current = preferences;
+  }, [preferences]);
 
-    // State for Frequency
-    const [frequency, setFrequency] = useState({
-        aiDigest: 'Immediate',
-        healthReport: 'Weekly',
-    });
+  useEffect(() => {
+    void fetchPreferences().catch(() => {});
+  }, [fetchPreferences]);
 
-    const handleGlobalToggle = (channel) => {
-        setGlobalChannels((prev) => ({ ...prev, [channel]: !prev[channel] }));
-    };
+  useEffect(() => () => {
+    if (debounceTimerRef.current) {
+      window.clearTimeout(debounceTimerRef.current);
+    }
+  }, []);
 
-    const handlePreferenceToggle = (id, channel) => {
-        setPreferences((prev) =>
-            prev.map((pref) =>
-                pref.id === id ? { ...pref, [channel]: !pref[channel] } : pref
-            )
-        );
-    };
+  const statusSummary = useMemo(() => {
+    const enabledChannels = [];
+    if (preferences.email_enabled) enabledChannels.push('email');
+    if (preferences.push_enabled) enabledChannels.push('push');
+    return enabledChannels.length > 0 ? enabledChannels.join(' + ') : 'delivery paused';
+  }, [preferences.email_enabled, preferences.push_enabled]);
 
-    const handleReminderToggle = (reminder) => {
-        setReminders((prev) => ({ ...prev, [reminder]: !prev[reminder] }));
-    };
+  const flushLatestPreferences = async () => {
+    if (isSavingRef.current) {
+      return;
+    }
 
-    const handleFrequencyChange = (category, value) => {
-        setFrequency((prev) => ({ ...prev, [category]: value }));
-    };
+    const version = latestVersionRef.current;
+    const snapshot = latestSnapshotRef.current;
+    const changedKeys = [...new Set(latestKeysRef.current)];
+    isSavingRef.current = true;
 
-    const Toggle = ({ active, onClick, color = 'bg-[#6143f4]' }) => (
-        <button
-            onClick={onClick}
-            className={`relative inline-flex h-8 w-14 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-4 focus:ring-[#6143f4]/10 ${active ? color : 'bg-slate-200 dark:bg-slate-700'}`}
-        >
-            <span
-                style={{ transform: active ? 'translateX(24px)' : 'translateX(0)' }}
-                className="pointer-events-none inline-block h-6 w-6 rounded-full bg-white shadow-lg ring-0 mt-0.5 ml-0.5 transition-transform duration-200 ease-in-out"
-            />
-        </button>
-    );
+    try {
+      await commitPreferences(snapshot, changedKeys);
+      if (changedKeys.length === 1) {
+        toast.success(`${PREFERENCE_LABELS[changedKeys[0]]} updated.`);
+      } else {
+        toast.success('Notification preferences saved.');
+      }
+      latestKeysRef.current = [];
+    } catch (saveError) {
+      toast.error(saveError?.response?.data?.error || saveError?.message || 'Unable to save notification preferences.');
+    } finally {
+      isSavingRef.current = false;
+      if (latestVersionRef.current !== version) {
+        void flushLatestPreferences();
+      }
+    }
+  };
 
-    return (
-        <div className="max-w-5xl mx-auto space-y-12 pb-16">
+  const queueSave = (nextPreferences, changedKeys) => {
+    latestVersionRef.current += 1;
+    latestSnapshotRef.current = nextPreferences;
+    latestKeysRef.current = [...new Set([...latestKeysRef.current, ...changedKeys])];
 
-            {/* Page Header */}
-            <div className="space-y-4 pb-4 border-b border-[#6143f4]/5">
-                <h2 className="text-5xl font-black text-[#13082a] dark:text-white tracking-tighter uppercase italic leading-none">Notification Settings</h2>
-                <p className="text-lg text-slate-500 dark:text-slate-400 font-bold uppercase tracking-tight opacity-80 leading-snug">Configure how and when you want to receive updates from ArogyaAI. Customizing these alerts ensures you receive critical health insights without information overload.</p>
-            </div>
+    if (debounceTimerRef.current) {
+      window.clearTimeout(debounceTimerRef.current);
+    }
 
-            {/* Section 1: Global Channels */}
-            <section className="space-y-8">
-                <div className="flex items-center gap-4">
-                    <div className="size-1.5 bg-[#6143f4] rounded-full"></div>
-                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] leading-none">Global Broadcast Channels</h3>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="bg-white/80 dark:bg-[#131022]/80 backdrop-blur-xl p-8 rounded-[3rem] flex items-center justify-between shadow-sm border border-slate-100 dark:border-white/5 hover:border-[#6143f4]/20 transition-all duration-500 group">
-                        <div className="flex items-center gap-6">
-                            <div className="size-16 bg-[#6143f4]/10 rounded-2xl flex items-center justify-center text-[#6143f4] group-hover:scale-110 transition-transform shadow-inner shrink-0">
-                                <Mail size={32} />
-                            </div>
-                            <div>
-                                <p className="text-2xl font-black uppercase tracking-tighter italic leading-none text-[#13082a] dark:text-white mb-2">Email Alerts</p>
-                                <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest leading-none">Weekly reports & summaries</p>
-                            </div>
-                        </div>
-                        <div className="shrink-0"><Toggle active={globalChannels.email} onClick={() => handleGlobalToggle('email')} /></div>
-                    </div>
-                    <div className="bg-white/80 dark:bg-[#131022]/80 backdrop-blur-xl p-8 rounded-[3rem] flex items-center justify-between shadow-sm border border-slate-100 dark:border-white/5 hover:border-[#009cde]/20 transition-all duration-500 group">
-                        <div className="flex items-center gap-6">
-                            <div className="size-16 bg-[#009cde]/10 rounded-2xl flex items-center justify-center text-[#009cde] group-hover:scale-110 transition-transform shadow-inner shrink-0">
-                                <Bell size={32} />
-                            </div>
-                            <div>
-                                <p className="text-2xl font-black uppercase tracking-tighter italic leading-none text-[#13082a] dark:text-white mb-2">Push Notifications</p>
-                                <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest leading-none">Real-time web & mobile alerts</p>
-                            </div>
-                        </div>
-                        <div className="shrink-0"><Toggle active={globalChannels.push} onClick={() => handleGlobalToggle('push')} color="bg-[#009cde]" /></div>
-                    </div>
-                </div>
-            </section>
+    debounceTimerRef.current = window.setTimeout(() => {
+      void flushLatestPreferences();
+    }, 300);
+  };
 
-            {/* Section 2: Category Preferences */}
-            <section className="space-y-8">
-                <div className="flex items-center gap-4">
-                    <div className="size-1.5 bg-[#009cde] rounded-full"></div>
-                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] leading-none">Clinical Intelligence Subscriptions</h3>
-                </div>
-                <div className="bg-white dark:bg-[#131022] rounded-[3.5rem] shadow-[0_40px_80px_-20px_rgba(19,8,42,0.05)] border border-[#6143f4]/5 overflow-hidden">
-                    <div className="divide-y divide-slate-100 dark:divide-white/5">
-                        {preferences.map((item) => {
-                            const PrefIcon = item.icon;
-                            return (
-                                <div key={item.id} className="p-8 sm:p-10 flex flex-col sm:flex-row items-start sm:items-center justify-between hover:bg-[#6143f4]/[0.02] transition-all gap-8 group/row">
-                                    <div className="flex items-start gap-6">
-                                        <div className={`size-16 ${item.bgColor} dark:bg-white/5 rounded-2xl flex items-center justify-center ${item.color} shrink-0 shadow-inner group-hover/row:scale-110 transition-transform`}>
-                                            <PrefIcon size={32} />
-                                        </div>
-                                        <div className="space-y-2 max-w-xl">
-                                            <p className="text-2xl font-black uppercase tracking-tighter italic leading-none text-[#13082a] dark:text-white">{item.title}</p>
-                                            <p className="text-sm text-slate-500 dark:text-slate-400 font-bold leading-snug uppercase tracking-tight opacity-70">{item.description}</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-6 sm:gap-12 shrink-0 self-start sm:self-center w-full sm:w-auto">
-                                        <div className="flex items-center gap-4 group/box cursor-pointer" onClick={() => handlePreferenceToggle(item.id, 'email')}>
-                                            <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase">Email</span>
-                                            <div className={`size-6 rounded-lg border-2 transition-all flex items-center justify-center ${item.email ? 'bg-[#6143f4] border-[#6143f4] text-white' : 'border-slate-200 dark:border-white/10'}`}>
-                                                {item.email && <Check size={14} strokeWidth={4} />}
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-4 group/box cursor-pointer" onClick={() => handlePreferenceToggle(item.id, 'push')}>
-                                            <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase">Push</span>
-                                            <div className={`size-6 rounded-lg border-2 transition-all flex items-center justify-center ${item.push ? 'bg-[#6143f4] border-[#6143f4] text-white' : 'border-slate-200 dark:border-white/10'}`}>
-                                                {item.push && <Check size={14} strokeWidth={4} />}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            </section>
+  const handleToggle = async (key) => {
+    const currentPreferences = useNotificationPreferencesStore.getState().preferences;
+    const nextValue = !currentPreferences[key];
+    const nextPreferences = { ...currentPreferences, [key]: nextValue };
+    applyOptimisticPreferences({ [key]: nextValue }, [key]);
 
-            {/* Section 3: Frequency & Reminders Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
-                {/* Frequency Controls */}
-                <section className="space-y-8">
-                    <div className="flex items-center gap-4">
-                        <div className="size-1.5 bg-[#6143f4] rounded-full"></div>
-                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] leading-none">Diagnostic Schedule</h3>
-                    </div>
-                    <div className="bg-white dark:bg-[#131022] p-8 sm:p-10 rounded-[3.5rem] shadow-[0_40px_80px_-20px_rgba(97,67,244,0.05)] border border-[#6143f4]/5 space-y-10">
-                        <div className="space-y-6">
-                            <label className="flex items-center gap-3 text-[10px] font-black uppercase tracking-widest text-slate-400 leading-none">
-                                <Clock size={14} className="text-[#6143f4]" /> AI Insights Digest
-                            </label>
-                            <div className="grid grid-cols-3 gap-3">
-                                {['Immediate', 'Daily', 'Weekly'].map((opt) => (
-                                    <button
-                                        key={opt}
-                                        onClick={() => handleFrequencyChange('aiDigest', opt)}
-                                        className={`py-4 px-2 sm:px-4 rounded-2xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all shadow-sm ${frequency.aiDigest === opt
-                                                ? 'bg-[#6143f4] text-white shadow-[#6143f4]/30 border-transparent'
-                                                : 'bg-slate-50 dark:bg-white/5 text-slate-500 border border-slate-100 dark:border-white/5 hover:bg-slate-100 dark:hover:bg-white/10'
-                                            }`}
-                                    >
-                                        {opt}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                        <div className="space-y-6">
-                            <label className="flex items-center gap-3 text-[10px] font-black uppercase tracking-widest text-slate-400 leading-none">
-                                <CheckCircle2 size={14} className="text-[#009cde]" /> Health Performance Reports
-                            </label>
-                            <div className="grid grid-cols-3 gap-3">
-                                {['Daily', 'Weekly', 'Monthly'].map((opt) => (
-                                    <button
-                                        key={opt}
-                                        onClick={() => handleFrequencyChange('healthReport', opt)}
-                                        className={`py-4 px-2 sm:px-4 rounded-2xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all shadow-sm ${frequency.healthReport === opt
-                                                ? 'bg-[#6143f4] text-white shadow-[#6143f4]/30 border-transparent'
-                                                : 'bg-slate-50 dark:bg-white/5 text-slate-500 border border-slate-100 dark:border-white/5 hover:bg-slate-100 dark:hover:bg-white/10'
-                                            }`}
-                                    >
-                                        {opt}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                </section>
+    if (key === 'push_enabled') {
+      try {
+        if (nextValue) {
+          await ensurePushSubscription();
+        } else {
+          await removeCurrentPushSubscription().catch(() => false);
+        }
+      } catch (pushError) {
+        restoreServerPreferences([key]);
+        toast.error(pushError?.message || 'Unable to configure push notifications.');
+        return;
+      }
+    }
 
-                {/* Reminder Preferences */}
-                <section className="space-y-8">
-                    <div className="flex items-center gap-4">
-                        <div className="size-1.5 bg-[#009cde] rounded-full"></div>
-                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] leading-none">Adherence Triggers</h3>
-                    </div>
-                    <div className="bg-white dark:bg-[#131022] p-8 sm:p-10 rounded-[3.5rem] shadow-[0_40px_80px_-20px_rgba(97,67,244,0.05)] border border-[#6143f4]/5 space-y-6 sm:space-y-8">
-                        {[
-                            { id: 'medication', title: 'Medication Reminders', desc: 'Adherence prompts via mobile app' },
-                            { id: 'sync', title: 'Sync Reminders', desc: "Alert if wearable hasn't synced for 24h" },
-                            { id: 'sleep', title: 'Sleep Goal Alerts', desc: 'Gentle reminders to wind down' },
-                        ].map((rem, idx, arr) => (
-                            <div key={rem.id} className={`flex items-center justify-between pb-6 sm:pb-8 ${idx !== arr.length - 1 ? 'border-b border-slate-100 dark:border-white/5' : ''}`}>
-                                <div className="space-y-2 pr-4">
-                                    <p className="text-xl font-black uppercase tracking-tighter italic leading-none text-[#13082a] dark:text-white">{rem.title}</p>
-                                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest opacity-60 leading-none">{rem.desc}</p>
-                                </div>
-                                <div className="shrink-0"><Toggle active={reminders[rem.id]} onClick={() => handleReminderToggle(rem.id)} /></div>
-                            </div>
-                        ))}
-                    </div>
-                </section>
-            </div>
+    queueSave(nextPreferences, [key]);
+  };
 
-            {/* Section 4: Action Footer */}
-            <div className="pt-12 flex flex-col sm:flex-row items-center justify-end gap-6 border-t border-[#6143f4]/15">
-                <button className="w-full sm:w-auto px-12 py-5 rounded-[1.5rem] border-2 border-slate-200 dark:border-white/10 font-black text-xs uppercase tracking-[0.2em] text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 transition-all shadow-sm leading-none">
-                    Discard Changes
-                </button>
-                <button className="w-full sm:w-auto px-16 py-5 rounded-[1.5rem] bg-[#6143f4] text-white font-black text-xs uppercase tracking-[0.2em] shadow-[0_20px_40px_-10px_rgba(97,67,244,0.4)] hover:bg-[#4a34c1] hover:scale-105 active:scale-95 transition-all leading-none">
-                    Save Preferences
-                </button>
-            </div>
+  return (
+    <div className="max-w-5xl mx-auto space-y-12 pb-16">
+      <div className="space-y-4 pb-4 border-b border-[#6143f4]/5">
+        <h2 className="text-5xl font-black text-[#13082a] dark:text-white tracking-tighter uppercase italic leading-none">Notification Settings</h2>
+        <p className="text-lg text-slate-500 dark:text-slate-400 font-bold uppercase tracking-tight opacity-80 leading-snug">
+          Control how ArogyaAI delivers real alerts, AI insight summaries, and reminder traffic across email and browser push.
+        </p>
+      </div>
+
+      {error ? (
+        <div className="rounded-[2rem] border border-red-500/15 bg-red-500/10 px-6 py-5 text-sm font-bold uppercase tracking-tight text-red-500">
+          {error}
         </div>
-    );
+      ) : null}
+
+      <section className="space-y-8">
+        <div className="flex items-center gap-4">
+          <div className="size-1.5 bg-[#6143f4] rounded-full"></div>
+          <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] leading-none">Global Delivery Channels</h3>
+        </div>
+
+        <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
+          <div className="flex items-center justify-between rounded-[3rem] border border-slate-100 bg-white/80 p-8 shadow-sm transition-all duration-500 hover:border-[#6143f4]/20 dark:border-white/5 dark:bg-[#131022]/80">
+            <div className="flex items-center gap-6">
+              <div className="flex size-16 items-center justify-center rounded-2xl bg-[#6143f4]/10 text-[#6143f4] shadow-inner">
+                <Mail size={30} />
+              </div>
+              <div>
+                <p className="text-2xl font-black uppercase tracking-tighter italic leading-none text-[#13082a] dark:text-white">Email Alerts</p>
+                <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-slate-400">SMTP or SendGrid backed delivery</p>
+              </div>
+            </div>
+            <Toggle
+              active={preferences.email_enabled}
+              pending={Boolean(pendingKeys.email_enabled)}
+              onClick={() => void handleToggle('email_enabled')}
+            />
+          </div>
+
+          <div className="flex items-center justify-between rounded-[3rem] border border-slate-100 bg-white/80 p-8 shadow-sm transition-all duration-500 hover:border-[#009cde]/20 dark:border-white/5 dark:bg-[#131022]/80">
+            <div className="flex items-center gap-6">
+              <div className="flex size-16 items-center justify-center rounded-2xl bg-[#009cde]/10 text-[#009cde] shadow-inner">
+                <Bell size={30} />
+              </div>
+              <div>
+                <p className="text-2xl font-black uppercase tracking-tighter italic leading-none text-[#13082a] dark:text-white">Push Notifications</p>
+                <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Service worker + backend web push</p>
+              </div>
+            </div>
+            <Toggle
+              active={preferences.push_enabled}
+              pending={Boolean(pendingKeys.push_enabled)}
+              onClick={() => void handleToggle('push_enabled')}
+              color="bg-[#009cde]"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-8">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="size-1.5 bg-[#009cde] rounded-full"></div>
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] leading-none">Event-Level Delivery Matrix</h3>
+          </div>
+          <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">Active: {statusSummary}</p>
+        </div>
+
+        <div className="overflow-hidden rounded-[3.5rem] border border-[#6143f4]/5 bg-white shadow-[0_40px_80px_-20px_rgba(19,8,42,0.05)] dark:bg-[#131022]">
+          <div className="divide-y divide-slate-100 dark:divide-white/5">
+            {SECTIONS.map((section) => {
+              const SectionIcon = section.icon;
+
+              return (
+                <div key={section.id} className="flex flex-col gap-8 p-8 sm:flex-row sm:items-center sm:justify-between sm:p-10">
+                  <div className="flex items-start gap-6">
+                    <div className={`flex size-16 items-center justify-center rounded-2xl ${section.bgColor} ${section.color}`}>
+                      <SectionIcon size={30} />
+                    </div>
+                    <div className="max-w-2xl space-y-2">
+                      <p className="text-2xl font-black uppercase tracking-tighter italic leading-none text-[#13082a] dark:text-white">{section.title}</p>
+                      <p className="text-sm font-bold uppercase tracking-tight text-slate-500 dark:text-slate-400 opacity-75">{section.description}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-8">
+                    <ChannelCheckbox
+                      checked={preferences[section.emailKey]}
+                      pending={Boolean(pendingKeys[section.emailKey])}
+                      label="Email"
+                      onClick={() => void handleToggle(section.emailKey)}
+                    />
+                    <ChannelCheckbox
+                      checked={preferences[section.pushKey]}
+                      pending={Boolean(pendingKeys[section.pushKey])}
+                      label="Push"
+                      onClick={() => void handleToggle(section.pushKey)}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {isLoading ? (
+        <div className="flex items-center gap-4 rounded-[2rem] border border-[#6143f4]/10 bg-white/70 px-6 py-5 dark:border-white/5 dark:bg-[#131022]/70">
+          <LoaderCircle size={18} className="animate-spin text-[#6143f4]" />
+          <span className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Loading notification preferences</span>
+        </div>
+      ) : null}
+    </div>
+  );
 };
 
 export default SettingsNotifications;

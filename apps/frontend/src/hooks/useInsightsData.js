@@ -1,8 +1,9 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import useInsightsStore from '../store/insightsStore';
 
 export const useInsightsData = () => {
   const {
+    insights,
     data,
     error,
     loading,
@@ -17,27 +18,16 @@ export const useInsightsData = () => {
     void fetchInsights();
   }, [fetchInsights]);
 
-  const sortedCards = useMemo(() => {
-    const cards = data?.cards || [];
-    return [...cards].sort((left, right) => Number(right.score ?? 0) - Number(left.score ?? 0));
-  }, [data?.cards]);
+  const payload = insights || data || null;
 
   return {
     loading,
     isFetching,
     error,
-    data: data || null,
-    status: data?.status || null,
-    risks: data?.risks || {},
-    cards: sortedCards,
-    drivers: data?.drivers || [],
-    analysis: data?.analysis || '',
-    explanation: data?.explanation || null,
-    recommendations: data?.recommendations || [],
-    lastUpdated: data?.lastUpdated || null,
-    confidence: data?.confidence || 0,
-    dataPoints: data?.dataPoints || 0,
-    featureSnapshot: data?.featureSnapshot || {},
+    data: payload,
+    insights: payload,
+    status: payload?.status || null,
+    lastUpdated: payload?.lastUpdated || null,
     lastFetchedAt,
     cacheOwnerId,
     hasHydratedCache,

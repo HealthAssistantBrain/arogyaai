@@ -8,7 +8,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from models import LabResult, User, UserProfile, UserVital, UserVitalTypeEnum, VitalsData, WearableData
+from models import ClinicalHistory, LabResult, MedicalHistory, User, UserProfile, UserVital, UserVitalTypeEnum, VitalsData, WearableData
 from services.sleep_service import SleepService
 from pipelines.feature_pipeline.aggregation import avg_steps_7d, data_availability_7d, hr_mean_7d, sleep_efficiency_7d
 from pipelines.storage_pipeline.service import StoragePipelineService
@@ -179,6 +179,102 @@ def _cholesterol_proxy(
 
 def _latest_profile(db: Session, user: User) -> UserProfile | None:
     return db.query(UserProfile).filter(UserProfile.user_id == user.id).first()
+
+
+def _latest_clinical_history(db: Session, user: User) -> ClinicalHistory | None:
+    return (
+        db.query(ClinicalHistory)
+        .filter(ClinicalHistory.user_id == user.id)
+        .order_by(ClinicalHistory.created_at.desc())
+        .first()
+    )
+
+
+def _normalize_flag_label(value: Any) -> str:
+    return "_".join(str(value or "").strip().lower().replace("-", " ").split())
+
+
+def _split_text_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        items = value
+    elif isinstance(value, str):
+        items = [part.strip() for part in value.split(",")]
+    else:
+        items = []
+
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        text = str(item or "").strip()
+        key = text.lower()
+        if not text or key in seen:
+            continue
+        seen.add(key)
+        cleaned.append(text)
+    return cleaned
+
+
+def _text_flag_map(values: list[str]) -> dict[str, bool]:
+    flags: dict[str, bool] = {}
+    for value in values:
+        key = _normalize_flag_label(value)
+        if key:
+            flags[key] = True
+    return flags
+
+
+def _conditions_for_user(db: Session, user: User) -> list[str]:
+    return [
+        row.condition_name
+        for row in (
+            db.query(MedicalHistory)
+            .filter(MedicalHistory.user_id == user.id, MedicalHistory.is_deleted == False)
+            .all()
+        )
+        if row.condition_name
+    ]
+
+
+def _clinical_snapshot_payload(history: ClinicalHistory | None) -> dict[str, Any]:
+    if history is None:
+        return {
+            "chief_complaint": None,
+            "symptoms": [],
+            "duration": None,
+            "onset": None,
+            "severity": None,
+        }
+    return {
+        "chief_complaint": str(history.chief_complaint or "").strip() or None,
+        "symptoms": _split_text_list(history.associated_symptoms or []),
+        "duration": str(history.duration or "").strip() or None,
+        "onset": str(history.onset or "").strip() or None,
+        "severity": _safe_int(history.severity, default=0) or 0,
+    }
+
+
+def _symptom_flags(history: ClinicalHistory | None) -> dict[str, bool]:
+    canonical_keywords = {
+        "fever": ("fever",),
+        "cough": ("cough",),
+        "chest_pain": ("chest pain",),
+        "fatigue": ("fatigue",),
+        "dizziness": ("dizziness",),
+        "breathlessness": ("breathlessness", "shortness of breath"),
+    }
+    if history is None:
+        return {key: False for key in canonical_keywords}
+
+    combined = " ".join(
+        [
+            str(history.chief_complaint or "").lower(),
+            " ".join(item.lower() for item in _split_text_list(history.associated_symptoms or [])),
+        ]
+    )
+    return {
+        key: any(keyword in combined for keyword in keywords)
+        for key, keywords in canonical_keywords.items()
+    }
 
 
 def _recent_user_vital_values(db: Session, user: User, vital_type: UserVitalTypeEnum, cutoff: datetime) -> list[float]:
@@ -358,6 +454,17 @@ class FeatureSnapshot:
     latest_observation_at: datetime | None
     source_breakdown: dict[str, Any]
     notes: list[str]
+    sex: str | None = None
+    sleep: float | None = None
+    stress: int | None = None
+    disease_flags: dict[str, bool] | None = None
+    family_history_flags: dict[str, bool] | None = None
+    symptom_flags: dict[str, bool] | None = None
+    severity_score: int = 0
+    user_profile: dict[str, Any] | None = None
+    medical_history: dict[str, Any] | None = None
+    lifestyle_profile: dict[str, Any] | None = None
+    initial_clinical_snapshot: dict[str, Any] | None = None
     hr_mean_7d: float | None = None
     steps_avg_7d: float | None = None
     sleep_efficiency: float | None = None
@@ -373,7 +480,10 @@ class FeatureSnapshot:
             "sleep_score": self.sleep_score,
             "sleep_duration": self.sleep_duration,
             "activity_level": self.activity_level,
+            "sex": self.sex,
             "bmi": self.bmi,
+            "sleep": self.sleep,
+            "stress": self.stress,
             "systolic_bp": self.systolic_bp,
             "diastolic_bp": self.diastolic_bp,
             "bp_category": self.bp_category,
@@ -381,12 +491,20 @@ class FeatureSnapshot:
             "cholesterol_proxy": self.cholesterol_proxy,
             "glucose": self.glucose if self.glucose is not None else 0.0,
             "cholesterol": self.cholesterol if self.cholesterol is not None else 0.0,
+            "disease_flags": self.disease_flags or {},
+            "family_history_flags": self.family_history_flags or {},
+            "symptom_flags": self.symptom_flags or {},
+            "severity_score": int(self.severity_score or 0),
             "data_points": self.data_points,
             "data_completeness": self.data_completeness,
             "confidence": self.confidence,
             "latest_observation_at": self.latest_observation_at.isoformat() if self.latest_observation_at else None,
             "source_breakdown": self.source_breakdown,
             "notes": self.notes,
+            "user_profile": self.user_profile or {},
+            "medical_history": self.medical_history or {},
+            "lifestyle_profile": self.lifestyle_profile or {},
+            "initial_clinical_snapshot": self.initial_clinical_snapshot or {},
             "hr_mean_7d": self.hr_mean_7d,
             "steps_avg_7d": self.steps_avg_7d,
             "sleep_efficiency": self.sleep_efficiency,
@@ -414,7 +532,10 @@ class FeatureSnapshot:
             sleep_score=data.get("sleep_score"),
             sleep_duration=data.get("sleep_duration"),
             activity_level=data.get("activity_level"),
+            sex=data.get("sex"),
             bmi=data.get("bmi"),
+            sleep=data.get("sleep"),
+            stress=data.get("stress"),
             systolic_bp=data.get("systolic_bp"),
             diastolic_bp=data.get("diastolic_bp"),
             bp_category=data.get("bp_category") or "unknown",
@@ -422,12 +543,20 @@ class FeatureSnapshot:
             cholesterol_proxy=data.get("cholesterol_proxy"),
             glucose=data.get("glucose"),
             cholesterol=data.get("cholesterol"),
+            disease_flags=dict(data.get("disease_flags") or {}),
+            family_history_flags=dict(data.get("family_history_flags") or {}),
+            symptom_flags=dict(data.get("symptom_flags") or {}),
+            severity_score=int(data.get("severity_score") or 0),
             data_points=int(data.get("data_points") or 0),
             data_completeness=float(data.get("data_completeness") or 0.0),
             confidence=float(data.get("confidence") or 0.0),
             latest_observation_at=parsed_latest,
             source_breakdown=dict(data.get("source_breakdown") or {}),
             notes=list(data.get("notes") or []),
+            user_profile=dict(data.get("user_profile") or {}),
+            medical_history=dict(data.get("medical_history") or {}),
+            lifestyle_profile=dict(data.get("lifestyle_profile") or {}),
+            initial_clinical_snapshot=dict(data.get("initial_clinical_snapshot") or {}),
             hr_mean_7d=data.get("hr_mean_7d"),
             steps_avg_7d=data.get("steps_avg_7d"),
             sleep_efficiency=data.get("sleep_efficiency"),
@@ -448,6 +577,8 @@ class FeaturePipelineService:
         report_id: str | None = None,
     ) -> FeatureSnapshot:
         profile = _latest_profile(db, user)
+        latest_history = _latest_clinical_history(db, user)
+        conditions = _conditions_for_user(db, user)
         latest_vitals = (
             db.query(VitalsData)
             .filter(VitalsData.user_id == user.id)
@@ -485,10 +616,14 @@ class FeaturePipelineService:
                 sleep_score = _sleep_score_from_duration(_mean(sleep_durations), avg_hrv, avg_rhr)
         if sleep_duration is None and sleep_durations:
             sleep_duration = round(float(mean(sleep_durations)), 1)
+        if sleep_duration is None:
+            sleep_duration = _safe_float(getattr(profile, "sleep_hours", None))
 
         activity_level = None
         if steps:
             activity_level = int(round(float(mean(steps))))
+        elif getattr(profile, "activity_level", None) is not None:
+            activity_level = _safe_int(getattr(profile, "activity_level", None))
         data_availability = data_availability_7d(db, user.id)
 
         height_cm = _safe_float(getattr(profile, "height_cm", None))
@@ -508,11 +643,21 @@ class FeaturePipelineService:
         age = _age_from_dob(getattr(profile, "date_of_birth", None))
         if age is None:
             age = _safe_int(getattr(profile, "age", None))
+        sex = str(getattr(profile, "gender", "") or "").strip().lower() or None
+        stress = _safe_int(getattr(profile, "stress_level", None))
         cholesterol_proxy = _cholesterol_proxy(bmi, systolic_bp, diastolic_bp, activity_level, sleep_score, age)
         glucose_row = _latest_lab_marker_row(labs, "glucose")
         cholesterol_row = _latest_lab_marker_row(labs, "cholesterol")
         glucose = _safe_float(getattr(glucose_row, "value", None))
         cholesterol = _safe_float(getattr(cholesterol_row, "value", None))
+
+        family_history_items = _split_text_list(getattr(profile, "family_history", None))
+        allergies = _split_text_list(getattr(profile, "allergies", None))
+        diet_preferences = _split_text_list(getattr(profile, "goals", None))
+        initial_snapshot = _clinical_snapshot_payload(latest_history)
+        symptom_flags = _symptom_flags(latest_history)
+        disease_flags = _text_flag_map(conditions)
+        family_history_flags = _text_flag_map(family_history_items)
 
         source_breakdown = {
             "heart_rate_points": len(heart_rates),
@@ -521,6 +666,9 @@ class FeaturePipelineService:
             "wearable_sleep_rows": sleep_source_rows,
             "bp_points": 1 if systolic_bp is not None or diastolic_bp is not None else 0,
             "lab_points": int(glucose is not None) + int(cholesterol is not None),
+            "condition_points": len(conditions),
+            "family_history_points": len(family_history_items),
+            "symptom_points": sum(1 for enabled in symptom_flags.values() if enabled),
             "data_availability": data_availability,
         }
         data_points = int(sum(value for value in source_breakdown.values() if isinstance(value, (int, float))))
@@ -600,6 +748,8 @@ class FeaturePipelineService:
         hr_mean_7d_value = hr_mean_7d(db, user.id)
         steps_avg_7d_value = avg_steps_7d(db, user.id)
         sleep_efficiency_value = sleep_efficiency_7d(db, user.id)
+        if (sleep_efficiency_value is None or sleep_efficiency_value == 0) and sleep_duration is not None:
+            sleep_efficiency_value = round(_clamp((float(sleep_duration) / 8.0) * 100.0, 0.0, 100.0), 1)
 
         activity_score = None
         if activity_level is not None:
@@ -622,7 +772,10 @@ class FeaturePipelineService:
             sleep_score=sleep_score,
             sleep_duration=sleep_duration,
             activity_level=activity_level,
+            sex=sex,
             bmi=bmi,
+            sleep=sleep_duration,
+            stress=stress,
             systolic_bp=systolic_bp,
             diastolic_bp=diastolic_bp,
             bp_category=bp_category,
@@ -630,12 +783,44 @@ class FeaturePipelineService:
             cholesterol_proxy=cholesterol_proxy,
             glucose=glucose,
             cholesterol=cholesterol,
+            disease_flags=disease_flags,
+            family_history_flags=family_history_flags,
+            symptom_flags=symptom_flags,
+            severity_score=int(initial_snapshot.get("severity") or 0),
             data_points=data_points,
             data_completeness=data_completeness,
             confidence=confidence,
             latest_observation_at=latest_observation_at,
             source_breakdown=source_breakdown,
             notes=notes,
+            user_profile={
+                "name": getattr(profile, "full_name", None) or getattr(user, "full_name", None),
+                "age": age,
+                "sex": sex,
+                "occupation": getattr(profile, "occupation", None),
+                "city": getattr(profile, "city", None),
+                "marital_status": getattr(profile, "marital_status", None),
+            },
+            medical_history={
+                "conditions": conditions,
+                "allergies": allergies,
+                "family_history": family_history_items,
+                "surgeries": getattr(profile, "surgeries", None),
+                "hospitalizations": bool(getattr(profile, "hospitalizations", False)) if getattr(profile, "hospitalizations", None) is not None else None,
+                "hospitalization_details": getattr(profile, "hospitalization_details", None),
+                "medications": getattr(profile, "current_medications", None),
+            },
+            lifestyle_profile={
+                "activity_level": activity_level,
+                "diet": diet_preferences,
+                "sleep_hours": sleep_duration,
+                "stress_level": stress,
+                "smoking": bool(getattr(profile, "smoking", False)) if getattr(profile, "smoking", None) is not None else None,
+                "alcohol": bool(getattr(profile, "alcohol", False)) if getattr(profile, "alcohol", None) is not None else None,
+                "appetite": getattr(profile, "appetite", None),
+                "bowel_habits": getattr(profile, "bowel_habits", None),
+            },
+            initial_clinical_snapshot=initial_snapshot,
             hr_mean_7d=hr_mean_7d_value,
             steps_avg_7d=steps_avg_7d_value,
             sleep_efficiency=sleep_efficiency_value,

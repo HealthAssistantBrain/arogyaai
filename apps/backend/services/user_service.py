@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 
 from core.utils import safe_input
-from models import User, UserProfile, Session as DBSession
+from models import User, UserDeviceProviderEnum, UserProfile, Session as DBSession
 
 
 def _to_float(value: Any) -> Optional[float]:
@@ -48,11 +48,185 @@ def _activity_label(activity_level: Optional[int]) -> Optional[str]:
     return "Very Active"
 
 
+def _clean_text(value: Any, max_chars: int = 4000) -> Optional[str]:
+    text = safe_input(value, max_chars=max_chars)
+    return text or None
+
+
+def _split_text_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        items = value
+    elif isinstance(value, str):
+        items = [part.strip() for part in value.split(",")]
+    else:
+        items = []
+
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        text = str(item or "").strip()
+        key = text.lower()
+        if not text or key in seen:
+            continue
+        seen.add(key)
+        cleaned.append(text)
+    return cleaned
+
+
+def _join_text_list(value: Any) -> Optional[str]:
+    items = _split_text_list(value)
+    return ", ".join(items) if items else None
+
+
+def _to_bool(value: Any) -> Optional[bool]:
+    if value in (None, ""):
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+
+    normalized = str(value).strip().lower()
+    if normalized in {"yes", "true", "1", "y"}:
+        return True
+    if normalized in {"no", "false", "0", "n"}:
+        return False
+    return None
+
+
+def _yes_no_label(value: Optional[bool]) -> Optional[str]:
+    if value is None:
+        return None
+    return "yes" if value else "no"
+
+
+def _parse_duration(value: Any) -> tuple[Optional[int], Optional[str]]:
+    text = str(value or "").strip()
+    if not text:
+        return None, None
+
+    parts = text.split()
+    try:
+        duration_value = int(parts[0]) if parts else None
+    except (TypeError, ValueError):
+        duration_value = None
+
+    duration_unit = parts[1].lower() if len(parts) > 1 else None
+    if duration_unit and duration_unit.endswith("s"):
+        duration_unit = duration_unit[:-1]
+    if duration_unit not in {"hour", "day", "week"}:
+        duration_unit = None
+
+    return duration_value, duration_unit
+
+
+def _serialize_device_connections(user: User) -> dict[str, bool]:
+    google_fit_connection = getattr(user, "google_fit_connection", None)
+    user_devices = list(getattr(user, "user_devices", []) or [])
+
+    def _device_connected(provider: UserDeviceProviderEnum) -> bool:
+        return any(
+            getattr(device, "provider", None) == provider and bool(getattr(device, "is_active", False))
+            for device in user_devices
+        )
+
+    google_fit_connected = bool(
+        getattr(google_fit_connection, "access_token_encrypted", None)
+        or getattr(google_fit_connection, "refresh_token_encrypted", None)
+    ) or _device_connected(UserDeviceProviderEnum.GOOGLE_FIT)
+
+    return {
+        "google_fit_connected": google_fit_connected,
+        "apple_health_connected": _device_connected(UserDeviceProviderEnum.APPLE_HEALTH),
+        "fitbit_connected": _device_connected(UserDeviceProviderEnum.FITBIT),
+    }
+
+
+def _serialize_initial_clinical_snapshot(user: User) -> dict[str, Any]:
+    histories = list(getattr(user, "clinical_histories", []) or [])
+    latest_history = max(
+        histories,
+        key=lambda item: item.created_at or datetime.min.replace(tzinfo=timezone.utc),
+        default=None,
+    )
+    if latest_history is None:
+        return {
+            "chief_complaint": None,
+            "symptoms": [],
+            "duration": None,
+            "duration_value": None,
+            "duration_unit": None,
+            "onset": None,
+            "severity": None,
+        }
+
+    duration_value, duration_unit = _parse_duration(getattr(latest_history, "duration", None))
+    return {
+        "chief_complaint": _clean_text(getattr(latest_history, "chief_complaint", None)),
+        "symptoms": _split_text_list(getattr(latest_history, "associated_symptoms", []) or []),
+        "duration": _clean_text(getattr(latest_history, "duration", None)),
+        "duration_value": duration_value,
+        "duration_unit": duration_unit,
+        "onset": _clean_text(getattr(latest_history, "onset", None), max_chars=50),
+        "severity": _to_int(getattr(latest_history, "severity", None)),
+    }
+
+
+def _serialize_structured_sections(user: User, profile: Optional[UserProfile]) -> dict[str, Any]:
+    conditions = [
+        row.condition_name
+        for row in (getattr(user, "medical_history", []) or [])
+        if getattr(row, "condition_name", None) and not bool(getattr(row, "is_deleted", False))
+    ]
+    allergies = _split_text_list(profile.allergies if profile else None)
+    family_history = _split_text_list(profile.family_history if profile else None)
+    device_connections = _serialize_device_connections(user)
+    initial_snapshot = _serialize_initial_clinical_snapshot(user)
+
+    return {
+        "user_profile": {
+            "name": profile.full_name if profile and profile.full_name else user.full_name,
+            "age": _to_int(profile.age) if profile and profile.age is not None else _age_from_date_of_birth(profile.date_of_birth) if profile else None,
+            "sex": profile.gender if profile else None,
+            "occupation": profile.occupation if profile else None,
+            "city": profile.city if profile else None,
+            "marital_status": profile.marital_status if profile else None,
+        },
+        "medical_history": {
+            "conditions": conditions,
+            "allergies": allergies,
+            "family_history": family_history,
+            "surgeries": profile.surgeries if profile else None,
+            "hospitalizations": _to_bool(profile.hospitalizations) if profile else None,
+            "hospitalization_details": profile.hospitalization_details if profile else None,
+            "medications": profile.current_medications if profile else None,
+        },
+        "lifestyle_profile": {
+            "activity_level": _to_int(profile.activity_level) if profile else None,
+            "diet": _split_text_list(profile.goals if profile else None),
+            "sleep_hours": _to_float(profile.sleep_hours) if profile else None,
+            "stress_level": _to_int(profile.stress_level) if profile else None,
+            "smoking": _to_bool(profile.smoking) if profile else None,
+            "alcohol": _to_bool(profile.alcohol) if profile else None,
+            "appetite": profile.appetite if profile else None,
+            "bowel_habits": profile.bowel_habits if profile else None,
+        },
+        "initial_clinical_snapshot": initial_snapshot,
+        "device_connections": device_connections,
+    }
+
+
 def _serialize_profile(user: User, profile: Optional[UserProfile]) -> dict:
     dob_value = profile.date_of_birth.isoformat() if profile and profile.date_of_birth else None
     derived_age = _age_from_date_of_birth(profile.date_of_birth) if profile else None
     activity_level = _to_int(profile.activity_level) if profile else None
     goals = profile.goals if profile and profile.goals else None
+    sections = _serialize_structured_sections(user, profile)
+    user_profile_payload = sections["user_profile"]
+    medical_history_payload = sections["medical_history"]
+    lifestyle_payload = sections["lifestyle_profile"]
+    initial_snapshot = sections["initial_clinical_snapshot"]
+    device_connections = sections["device_connections"]
     return {
         "id": str(user.id),
         "user_id": str(user.id),
@@ -68,6 +242,10 @@ def _serialize_profile(user: User, profile: Optional[UserProfile]) -> dict:
         "dob": dob_value,
         "age": _to_int(profile.age) if profile and profile.age is not None else derived_age,
         "gender": profile.gender if profile else None,
+        "sex": profile.gender if profile else None,
+        "occupation": profile.occupation if profile else None,
+        "city": profile.city if profile else None,
+        "marital_status": profile.marital_status if profile else None,
         "height_cm": _to_float(profile.height_cm) if profile else None,
         "height": _to_float(profile.height_cm) if profile else None,
         "weight_kg": _to_float(profile.weight_kg) if profile else None,
@@ -75,9 +253,33 @@ def _serialize_profile(user: User, profile: Optional[UserProfile]) -> dict:
         "activity_level": activity_level,
         "activity": _activity_label(activity_level),
         "goals": goals,
-        "diet": goals,
+        "diet": lifestyle_payload["diet"],
+        "sleep": lifestyle_payload["sleep_hours"],
+        "sleep_hours": lifestyle_payload["sleep_hours"],
+        "stress": lifestyle_payload["stress_level"],
+        "stress_level": lifestyle_payload["stress_level"],
+        "smoking": _yes_no_label(lifestyle_payload["smoking"]),
+        "alcohol": _yes_no_label(lifestyle_payload["alcohol"]),
+        "appetite": lifestyle_payload["appetite"],
+        "bowel_habits": lifestyle_payload["bowel_habits"],
+        "conditions": medical_history_payload["conditions"],
+        "family_history": profile.family_history if profile else None,
+        "surgeries": medical_history_payload["surgeries"],
+        "hospitalizations": medical_history_payload["hospitalizations"],
+        "hospitalization_details": medical_history_payload["hospitalization_details"],
+        "current_medications": medical_history_payload["medications"],
         "blood_group": profile.blood_group if profile else None,
         "allergies": profile.allergies if profile else None,
+        "chief_complaint": initial_snapshot["chief_complaint"],
+        "symptoms": initial_snapshot["symptoms"],
+        "duration": initial_snapshot["duration"],
+        "onset": initial_snapshot["onset"],
+        "severity": initial_snapshot["severity"],
+        "user_profile": user_profile_payload,
+        "medical_history": medical_history_payload,
+        "lifestyle_profile": lifestyle_payload,
+        "initial_clinical_snapshot": initial_snapshot,
+        "device_connections": device_connections,
         "is_email_verified": user.is_email_verified,
         "is_onboarding_done": user.is_onboarding_done,
         "onboarding_step": user.onboarding_step,
@@ -203,6 +405,15 @@ class UserService:
             gender = safe_input(updates.get("gender"), max_chars=20)
             profile.gender = gender or None
 
+        if "occupation" in updates:
+            profile.occupation = _clean_text(updates.get("occupation"), max_chars=150)
+
+        if "city" in updates:
+            profile.city = _clean_text(updates.get("city"), max_chars=120)
+
+        if "marital_status" in updates:
+            profile.marital_status = _clean_text(updates.get("marital_status"), max_chars=50)
+
         if "age" in updates:
             age_value = _to_int(updates.get("age"))
             if age_value is not None and not 0 <= age_value <= 130:
@@ -243,14 +454,58 @@ class UserService:
             goals = safe_input(updates.get("goals"), max_chars=4000)
             profile.goals = goals or None
 
+        if "family_history" in updates:
+            profile.family_history = _join_text_list(updates.get("family_history"))
+
+        if "surgeries" in updates:
+            profile.surgeries = _clean_text(updates.get("surgeries"))
+
+        if "hospitalizations" in updates:
+            profile.hospitalizations = _to_bool(updates.get("hospitalizations"))
+
+        if "hospitalization_details" in updates:
+            profile.hospitalization_details = _clean_text(updates.get("hospitalization_details"))
+
+        if "current_medications" in updates or "medications" in updates:
+            profile.current_medications = _clean_text(updates.get("current_medications", updates.get("medications")))
+
+        if "sleep_hours" in updates or "sleep" in updates:
+            sleep_hours = _to_float(updates.get("sleep_hours", updates.get("sleep")))
+            if sleep_hours is not None and not 0 <= sleep_hours <= 24:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Sleep hours must be between 0 and 24",
+                )
+            profile.sleep_hours = sleep_hours
+
+        if "stress_level" in updates or "stress" in updates:
+            stress_level = _to_int(updates.get("stress_level", updates.get("stress")))
+            if stress_level is not None and not 1 <= stress_level <= 10:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Stress level must be between 1 and 10",
+                )
+            profile.stress_level = stress_level
+
+        if "smoking" in updates:
+            profile.smoking = _to_bool(updates.get("smoking"))
+
+        if "alcohol" in updates:
+            profile.alcohol = _to_bool(updates.get("alcohol"))
+
+        if "appetite" in updates:
+            profile.appetite = _clean_text(updates.get("appetite"), max_chars=20)
+
+        if "bowel_habits" in updates:
+            profile.bowel_habits = _clean_text(updates.get("bowel_habits"), max_chars=20)
+
         if "blood_group" in updates:
             blood_group_input = safe_input(updates.get("blood_group"), max_chars=10)
             blood_group = blood_group_input.upper() if blood_group_input else None
             profile.blood_group = blood_group or None
 
         if "allergies" in updates:
-            allergies = safe_input(updates.get("allergies"), max_chars=4000)
-            profile.allergies = allergies or None
+            profile.allergies = _join_text_list(updates.get("allergies")) or _clean_text(updates.get("allergies"))
 
         if profile.date_of_birth is not None:
             profile.age = _age_from_date_of_birth(profile.date_of_birth)

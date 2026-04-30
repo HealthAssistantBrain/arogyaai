@@ -40,11 +40,29 @@ class OnboardingService:
     @staticmethod
     def _build_feature_overrides(profile_data: dict[str, Any]) -> dict[str, Any]:
         overrides: dict[str, Any] = {}
-        for key in ("age", "activity_level", "height_cm", "weight_kg"):
+        for key in ("age", "activity_level", "height_cm", "weight_kg", "sleep", "stress", "severity_score"):
             value = profile_data.get(key)
             if value is not None:
                 overrides[key] = value
+        if profile_data.get("sex") is not None:
+            overrides["sex"] = profile_data.get("sex")
+        if isinstance(profile_data.get("symptom_flags"), dict):
+            overrides["symptom_flags"] = profile_data.get("symptom_flags")
+        if isinstance(profile_data.get("disease_flags"), dict):
+            overrides["disease_flags"] = profile_data.get("disease_flags")
+        if isinstance(profile_data.get("family_history_flags"), dict):
+            overrides["family_history_flags"] = profile_data.get("family_history_flags")
         return overrides
+
+    @staticmethod
+    def _extract_onboarding_payload(profile_data: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "user_profile": profile_data.get("user_profile") or {},
+            "medical_history": profile_data.get("medical_history") or {},
+            "lifestyle_profile": profile_data.get("lifestyle_profile") or {},
+            "initial_clinical_snapshot": profile_data.get("initial_clinical_snapshot") or {},
+            "device_connections": profile_data.get("device_connections") or {},
+        }
 
     @staticmethod
     def _upsert_default_baselines(db: Session, user: User, feature_snapshot, prediction_payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -118,13 +136,15 @@ class OnboardingService:
             latest_health = StoragePipelineService.latest_health_score(db, user)
             latest_risk = StoragePipelineService.latest_risk_score(db, user)
             latest_baselines = StoragePipelineService.latest_baseline_metrics(db, user)
+            profile_data = UserService.get_user_me(db, user).get("data", {})
             return {
                 "success": True,
                 "status": "ready",
                 "source": "db",
                 "error": None,
                 "data": {
-                    "user": UserService.get_user_me(db, user).get("data"),
+                    "user": profile_data,
+                    "onboarding_payload": OnboardingService._extract_onboarding_payload(profile_data),
                     "onboarding_completed": True,
                     "pipelines_triggered": False,
                     "health_score": float(latest_health.score) if latest_health is not None else None,
@@ -162,6 +182,7 @@ class OnboardingService:
                 "error": None,
                 "data": {
                     "user": profile_data,
+                    "onboarding_payload": OnboardingService._extract_onboarding_payload(profile_data),
                     "onboarding_completed": True,
                     "pipelines_triggered": True,
                     "task_id": task_data.get("task_id"),
@@ -186,6 +207,7 @@ class OnboardingService:
             "error": task_response.get("error"),
             "data": {
                 "user": profile_data,
+                "onboarding_payload": OnboardingService._extract_onboarding_payload(profile_data),
                 "onboarding_completed": True,
                 "pipelines_triggered": False,
                 "task_id": None,

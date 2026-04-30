@@ -67,6 +67,7 @@ def test_upload_and_summarize_queues_background_lab_pipeline():
         "markers": [{"name": "Hemoglobin", "value": "13.8", "unit": "g/dL", "flag": "captured"}],
         "source": "local-pdf",
     }
+    notification_trigger = AsyncMock()
 
     with patch.object(ReportService, "_persist_file", return_value=("reports/user/cbc-report.pdf", "https://example.test/cbc-report.pdf")), patch.object(
         ReportService,
@@ -80,6 +81,9 @@ def test_upload_and_summarize_queues_background_lab_pipeline():
         ReportService,
         "_load_lab_pipeline_runner",
         return_value=lab_runner,
+    ), patch(
+        "services.report_service.trigger_notification",
+        notification_trigger,
     ):
         result = asyncio.run(
             ReportService.upload_and_summarize(
@@ -97,6 +101,7 @@ def test_upload_and_summarize_queues_background_lab_pipeline():
     task = background_tasks.tasks[0]
     assert task.func is lab_runner
     assert task.args == (str(report_id),)
+    notification_trigger.assert_awaited_once()
 
 
 def test_run_lab_pipeline_can_resolve_report_from_report_id():

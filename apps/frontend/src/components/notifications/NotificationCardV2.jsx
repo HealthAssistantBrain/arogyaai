@@ -49,6 +49,13 @@ const NotificationCardV2 = ({
                     iconColor: 'text-[#009cde]',
                     bg: 'bg-[#009cde]/10'
                 };
+            case 'simulation':
+                return {
+                    icon: FlaskConical,
+                    accent: 'border-l-emerald-500',
+                    iconColor: 'text-emerald-500',
+                    bg: 'bg-emerald-500/10'
+                };
             case 'system':
                 return {
                     icon: Watch,

@@ -29,6 +29,20 @@ const diets = [
   'Plant-based', 'High Protein', 'Low Carb', 'Gluten-Free',
   'Ketogenic', 'Mediterranean', 'No Preference'
 ];
+const symptomOptions = ['fever', 'cough', 'chest pain', 'fatigue', 'dizziness', 'breathlessness'];
+
+const resolveActivityLabel = (value) => {
+  if (typeof value === 'string' && ['Sedentary', 'Active', 'Very Active'].includes(value)) {
+    return value;
+  }
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return 'Sedentary';
+  }
+  if (numericValue < 5000) return 'Sedentary';
+  if (numericValue < 10000) return 'Active';
+  return 'Very Active';
+};
 
 const Lifestyle = () => {
   const navigate = useNavigate();
@@ -37,24 +51,40 @@ const Lifestyle = () => {
   const saveOnboarding = useAuthStore((state) => state.saveOnboarding);
   const profile = useAuthStore((state) => state.profile);
   const [selectedDiets, setSelectedDiets] = useState([]);
+  const [selectedSymptoms, setSelectedSymptoms] = useState([]);
 
   const [loading, setLoading] = useState(false);
 
   const { register, handleSubmit, watch, getValues, setValue } = useForm({
     defaultValues: {
-      activity: profile?.activity || 'Sedentary',
-      sleep: 7.5,
-      stress: 3
+      activity: resolveActivityLabel(profile?.activity || profile?.lifestyle_profile?.activity_level),
+      sleep: profile?.sleep_hours || profile?.lifestyle_profile?.sleep_hours || 7.5,
+      stress: profile?.stress_level || profile?.lifestyle_profile?.stress_level || 3,
+      smoking: profile?.lifestyle_profile?.smoking ?? null,
+      alcohol: profile?.lifestyle_profile?.alcohol ?? null,
+      appetite: profile?.lifestyle_profile?.appetite || '',
+      bowelHabits: profile?.lifestyle_profile?.bowel_habits || '',
+      chiefComplaint: profile?.initial_clinical_snapshot?.chief_complaint || '',
+      durationValue: profile?.initial_clinical_snapshot?.duration_value || '',
+      durationUnit: profile?.initial_clinical_snapshot?.duration_unit || 'days',
+      onset: profile?.initial_clinical_snapshot?.onset || '',
+      severity: profile?.initial_clinical_snapshot?.severity || 4,
     }
   });
 
   const sleepValue = watch('sleep');
   const stressValue = watch('stress');
   const activityValue = watch('activity');
+  const severityValue = watch('severity');
 
   useEffect(() => {
+    const lifestyleProfile = profile?.lifestyle_profile || {};
+    const clinicalSnapshot = profile?.initial_clinical_snapshot || {};
     if (profile?.activity) {
       setValue('activity', profile.activity);
+    }
+    if (lifestyleProfile?.activity_level && !profile?.activity) {
+      setValue('activity', resolveActivityLabel(lifestyleProfile.activity_level));
     }
     if (profile?.goals) {
       setSelectedDiets(
@@ -63,8 +93,26 @@ const Lifestyle = () => {
           .map((item) => item.trim())
           .filter(Boolean)
       );
+    } else if (Array.isArray(lifestyleProfile?.diet)) {
+      setSelectedDiets(lifestyleProfile.diet);
     }
-  }, [profile?.activity, profile?.goals, setValue]);
+    if (lifestyleProfile?.sleep_hours) {
+      setValue('sleep', lifestyleProfile.sleep_hours);
+    }
+    if (lifestyleProfile?.stress_level) {
+      setValue('stress', lifestyleProfile.stress_level);
+    }
+    setValue('smoking', lifestyleProfile?.smoking ?? null);
+    setValue('alcohol', lifestyleProfile?.alcohol ?? null);
+    setValue('appetite', lifestyleProfile?.appetite || '');
+    setValue('bowelHabits', lifestyleProfile?.bowel_habits || '');
+    setValue('chiefComplaint', clinicalSnapshot?.chief_complaint || '');
+    setValue('durationValue', clinicalSnapshot?.duration_value || '');
+    setValue('durationUnit', clinicalSnapshot?.duration_unit || 'days');
+    setValue('onset', clinicalSnapshot?.onset || '');
+    setValue('severity', clinicalSnapshot?.severity || 4);
+    setSelectedSymptoms(Array.isArray(clinicalSnapshot?.symptoms) ? clinicalSnapshot.symptoms : []);
+  }, [profile, setValue]);
 
   const toggleDiet = (diet) => {
     if (diet === 'No Preference') {
@@ -79,6 +127,14 @@ const Lifestyle = () => {
     }
   };
 
+  const toggleSymptom = (symptom) => {
+    if (selectedSymptoms.includes(symptom)) {
+      setSelectedSymptoms(selectedSymptoms.filter((item) => item !== symptom));
+      return;
+    }
+    setSelectedSymptoms([...selectedSymptoms, symptom]);
+  };
+
   const onSubmit = async (data) => {
     setLoading(true);
     try {
@@ -86,7 +142,17 @@ const Lifestyle = () => {
         activity: data.activity,
         diet: selectedDiets,
         sleep: parseFloat(data.sleep),
-        stress: parseInt(data.stress, 10)
+        stress: parseInt(data.stress, 10),
+        smoking: data.smoking,
+        alcohol: data.alcohol,
+        appetite: data.appetite || null,
+        bowel_habits: data.bowelHabits || null,
+        chief_complaint: data.chiefComplaint || null,
+        symptoms: selectedSymptoms,
+        duration_value: data.durationValue ? parseInt(data.durationValue, 10) : null,
+        duration_unit: data.durationUnit || null,
+        onset: data.onset || null,
+        severity: data.severity ? parseInt(data.severity, 10) : null,
       });
       await useAuthStore.getState().fetchProfile();
     } catch (err) {
@@ -119,7 +185,17 @@ const Lifestyle = () => {
         activity: data.activity,
         diet: selectedDiets,
         sleep: parseFloat(data.sleep),
-        stress: parseInt(data.stress, 10)
+        stress: parseInt(data.stress, 10),
+        smoking: data.smoking,
+        alcohol: data.alcohol,
+        appetite: data.appetite || null,
+        bowel_habits: data.bowelHabits || null,
+        chief_complaint: data.chiefComplaint || null,
+        symptoms: selectedSymptoms,
+        duration_value: data.durationValue ? parseInt(data.durationValue, 10) : null,
+        duration_unit: data.durationUnit || null,
+        onset: data.onset || null,
+        severity: data.severity ? parseInt(data.severity, 10) : null,
       });
       await useAuthStore.getState().fetchProfile();
       await saveOnboarding({ onboarding_step: 4 });
@@ -295,6 +371,140 @@ const Lifestyle = () => {
                   </div>
                 </motion.section>
               </div>
+
+              <motion.section variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="space-y-5">
+                  <div className="flex items-center gap-2 text-emerald-600">
+                    <User size={22} />
+                    <h3 className="text-lg font-bold text-[#13082A] dark:text-white">Personal History</h3>
+                  </div>
+                  <input type="hidden" {...register('smoking')} />
+                  <input type="hidden" {...register('alcohol')} />
+
+                  <div className="space-y-4">
+                    {[
+                      { key: 'smoking', label: 'Smoking' },
+                      { key: 'alcohol', label: 'Alcohol' },
+                    ].map((item) => (
+                      <div key={item.key} className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 px-4 py-3">
+                        <span className="font-semibold">{item.label}</span>
+                        <div className="flex gap-2">
+                          {[
+                            { label: 'Yes', value: true },
+                            { label: 'No', value: false },
+                          ].map((option) => (
+                            <button
+                              key={option.label}
+                              type="button"
+                              onClick={() => setValue(item.key, option.value)}
+                              className={watch(item.key) === option.value ? activeDietClass : inactiveDietClass}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-2">
+                      <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Appetite</label>
+                      <select
+                        {...register('appetite')}
+                        className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 px-4 py-3 outline-none focus:ring-2 focus:ring-[#6143f4] dark:text-white"
+                      >
+                        <option value="">Select</option>
+                        <option value="low">Low</option>
+                        <option value="normal">Normal</option>
+                        <option value="high">High</option>
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Bowel Habits</label>
+                      <select
+                        {...register('bowelHabits')}
+                        className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 px-4 py-3 outline-none focus:ring-2 focus:ring-[#6143f4] dark:text-white"
+                      >
+                        <option value="">Select</option>
+                        <option value="normal">Normal</option>
+                        <option value="irregular">Irregular</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-5">
+                  <div className="flex items-center gap-2 text-[#6143f4]">
+                    <TrendingUp size={22} />
+                    <h3 className="text-lg font-bold text-[#13082A] dark:text-white">Current Health Status</h3>
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Chief Complaint <span className="text-slate-400 font-medium">(optional)</span></label>
+                    <input
+                      {...register('chiefComplaint')}
+                      className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 px-4 py-3 outline-none focus:ring-2 focus:ring-[#6143f4] dark:text-white"
+                      placeholder="e.g. Headache for 2 days"
+                      type="text"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    {symptomOptions.map((symptom) => (
+                      <button
+                        key={symptom}
+                        type="button"
+                        onClick={() => toggleSymptom(symptom)}
+                        className={selectedSymptoms.includes(symptom) ? activeDietClass : inactiveDietClass}
+                      >
+                        {symptom}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="flex gap-3">
+                      <input
+                        {...register('durationValue')}
+                        className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 px-4 py-3 outline-none focus:ring-2 focus:ring-[#6143f4] dark:text-white"
+                        min="1"
+                        placeholder="Duration"
+                        type="number"
+                      />
+                      <select
+                        {...register('durationUnit')}
+                        className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 px-4 py-3 outline-none focus:ring-2 focus:ring-[#6143f4] dark:text-white"
+                      >
+                        <option value="hours">hours</option>
+                        <option value="days">days</option>
+                        <option value="weeks">weeks</option>
+                      </select>
+                    </div>
+                    <select
+                      {...register('onset')}
+                      className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 px-4 py-3 outline-none focus:ring-2 focus:ring-[#6143f4] dark:text-white"
+                    >
+                      <option value="">Onset</option>
+                      <option value="sudden">Sudden</option>
+                      <option value="gradual">Gradual</option>
+                    </select>
+                  </div>
+
+                  <div className="px-2">
+                    <div className="flex justify-between text-xs font-bold text-slate-400 mb-2 uppercase tracking-widest">
+                      <span>Mild</span>
+                      <span>Severity {severityValue}/10</span>
+                      <span>Severe</span>
+                    </div>
+                    <input
+                      {...register('severity')}
+                      className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-[#6143f4]"
+                      max="10" min="1" step="1" type="range"
+                    />
+                  </div>
+                </div>
+              </motion.section>
 
               {/* AI Insight Bar */}
               <motion.div variants={itemVariants} className="bg-[#6143f4]/5 border border-[#6143f4]/10 p-4 rounded-lg flex gap-4 items-start">

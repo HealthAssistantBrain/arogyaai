@@ -24,6 +24,7 @@ const FILTERS = [
     { name: 'All', apiType: null, color: 'text-slate-500', bg: 'bg-slate-500/10' },
     { name: 'AI Insights', apiType: 'ai_insight', color: 'text-[#6143f4]', bg: 'bg-[#6143f4]/10' },
     { name: 'Health Alerts', apiType: 'health_alert', color: 'text-red-500', bg: 'bg-red-500/10' },
+    { name: 'Simulations', apiType: 'simulation', color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
     { name: 'Appointments', apiType: 'appointment', color: 'text-[#009cde]', bg: 'bg-[#009cde]/10' },
     { name: 'System', apiType: 'system', color: 'text-amber-500', bg: 'bg-amber-500/10' },
 ];
@@ -34,6 +35,9 @@ const TYPE_META = {
     },
     health_alert: {
         actionPath: ROUTES.TIMELINE,
+    },
+    simulation: {
+        actionPath: ROUTES.SIMULATOR,
     },
     appointment: {
         actionPath: ROUTES.NOTIFICATIONS_HISTORY,

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from models import (
     BaselineMetricRecord,
+    ClinicalHistory,
     FeatureSnapshotRecord,
     HealthScoreRecord,
     LabResult,
@@ -551,6 +552,15 @@ class StoragePipelineService:
         )
 
     @staticmethod
+    def latest_clinical_history(db: Session, user: User) -> ClinicalHistory | None:
+        return (
+            db.query(ClinicalHistory)
+            .filter(ClinicalHistory.user_id == user.id)
+            .order_by(desc(ClinicalHistory.created_at))
+            .first()
+        )
+
+    @staticmethod
     def fetch_health_insights(db: Session, user: User) -> dict[str, Any] | None:
         latest_risk = StoragePipelineService.latest_risk_score(db, user)
         if latest_risk is None:
@@ -633,6 +643,19 @@ class StoragePipelineService:
             "has_baseline": bool(StoragePipelineService.latest_baseline_metrics(db, user)),
         }
 
+        clinical_history_payload = None
+        latest_clinical_history = StoragePipelineService.latest_clinical_history(db, user)
+        if latest_clinical_history is not None:
+            try:
+                from services.clinical_history_service import ClinicalHistoryService
+
+                clinical_history_payload = ClinicalHistoryService.serialize(
+                    latest_clinical_history,
+                    feature_payload=feature_payload,
+                )
+            except Exception:
+                clinical_history_payload = None
+
         return {
             "risk": base_risk if isinstance(base_risk, dict) else {},
             "drivers": drivers if isinstance(drivers, list) else [],
@@ -642,6 +665,12 @@ class StoragePipelineService:
             "explanation": explanation_payload,
             "confidence": float(latest_risk.confidence_score) if latest_risk.confidence_score is not None else None,
             "feature_snapshot": latest_risk.feature_snapshot if isinstance(latest_risk.feature_snapshot, dict) else feature_payload,
+            "clinical_history": clinical_history_payload,
+            "clinical_features": (
+                clinical_history_payload.get("analysis", {}).get("ml_features", {})
+                if isinstance(clinical_history_payload, dict)
+                else {}
+            ),
             "data_points": risk_payload.get("data_points"),
             "last_updated": latest_risk.calculated_at.isoformat() if latest_risk.calculated_at else None,
         }
