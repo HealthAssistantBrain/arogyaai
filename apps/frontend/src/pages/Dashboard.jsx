@@ -57,6 +57,7 @@ import api from '../lib/axios';
 import HeartRateCard from '../components/HeartRateCard';
 import { fetchConnectedDeviceSummaries, GOOGLE_FIT_PROVIDER } from '../lib/deviceApi';
 import { refreshAfterGoogleFitSync } from '../lib/googleFitRefresh';
+import { getApiRootUrl } from '../lib/apiBaseUrl';
 import { safeArray, safeNumber, safeObject, safeText } from '../utils/safeData';
 import { useFetchLock } from '../hooks/useFetchLock';
 import useDeviceStore from '../store/deviceStore';
@@ -68,6 +69,43 @@ import AssistantOverlay from '../components/assistant/AssistantOverlay';
 import { useAppStore } from '../store/useAppStore';
 import SmartLoadingOverlay from '../components/ui/SmartLoadingOverlay';
 import useSmartFetchOverlay from '../hooks/useSmartFetchOverlay';
+
+const DASHBOARD_WS_ROOT = getApiRootUrl(
+  import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+)
+  .replace(/localhost/g, '127.0.0.1')
+  .replace(/^https:/i, 'wss:')
+  .replace(/^http:/i, 'ws:');
+
+const TEST_ICON_RULES = [
+  { match: ['ecg', 'holter', 'cardio', 'heart'], icon: Heart },
+  { match: ['glucose', 'hba1c', 'metabolic'], icon: Zap },
+  { match: ['lipid', 'cholesterol'], icon: FlaskConical },
+  { match: ['sleep'], icon: Moon },
+  { match: ['baseline', 'preventive', 'repeat'], icon: ClipboardList },
+];
+
+const getTestIcon = (testName = '') => {
+  const normalized = testName.toLowerCase();
+  return TEST_ICON_RULES.find((rule) => rule.match.some((token) => normalized.includes(token)))?.icon ?? Microscope;
+};
+
+const priorityStyles = {
+  high: 'bg-red-500 text-white',
+  medium: 'bg-[#009CDE] text-white',
+  low: 'bg-slate-100 dark:bg-slate-800 text-slate-500',
+};
+
+const iconStyles = {
+  high: 'text-red-500 bg-red-50 dark:bg-red-500/10',
+  medium: 'text-[#009CDE] bg-[#009CDE]/10',
+  low: 'text-[#6143f4] bg-[#6143f4]/10',
+};
+
+const normalizePriority = (priority) => {
+  const normalized = String(priority || 'low').toLowerCase();
+  return ['high', 'medium', 'low'].includes(normalized) ? normalized : 'low';
+};
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -81,6 +119,7 @@ const Dashboard = () => {
     loading, isFetching, error, fetchDashboardData, googleFit } = useDashboardStore();
   const vitals = useDashboardStore((s) => s.vitals);
   const dashboardData = useDashboardStore((s) => s.dashboardData);
+  const setDashboardData = useDashboardStore((s) => s.setDashboardData);
   const lastFetchedAt = useDashboardStore((s) => s.lastFetchedAt);
   const cacheOwnerId = useDashboardStore((s) => s.cacheOwnerId);
   const hasHydratedCache = useDashboardStore((s) => s.hasHydratedCache);
@@ -88,6 +127,7 @@ const Dashboard = () => {
   const metricsLoading = useHealthStore((s) => s.metricsLoading);
   const fetchHealthMetrics = useHealthStore((s) => s.fetchHealthMetrics);
   const authUser = useAuthStore((s) => s.user);
+  const authToken = useAuthStore((s) => s.token || s.accessToken);
 
   const setDevices = useDeviceStore((s) => s.setDevices);
   const isAssistantOpen = useAppStore((s) => s.isAssistantOpen);
@@ -150,6 +190,33 @@ const Dashboard = () => {
     void fetchHealthMetrics({ silent: true });
   }, [authReady, fetchHealthMetrics]);
 
+  useEffect(() => {
+    if (!authReady || !authUserId || !authToken || typeof WebSocket === 'undefined') return undefined;
+
+    const socket = new WebSocket(`${DASHBOARD_WS_ROOT}/ws/dashboard/${authUserId}?token=${encodeURIComponent(authToken)}`);
+    const pingTimer = window.setInterval(() => {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send('ping');
+      }
+    }, 25000);
+
+    socket.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message?.type === 'dashboard.update' && message?.data) {
+          setDashboardData(message.data, { replace: false, source: 'ws' });
+        }
+      } catch (err) {
+        console.warn('Dashboard realtime payload ignored', err);
+      }
+    };
+
+    return () => {
+      window.clearInterval(pingTimer);
+      socket.close();
+    };
+  }, [authReady, authToken, authUserId, setDashboardData]);
+
   // ── Sync handler ──────────────────────────────────────────────────────────
   const handleSync = async () => {
     try {
@@ -175,6 +242,21 @@ const Dashboard = () => {
   const predData = prediction?.data;
   const predictionExplanation = predData?.explanation ?? null;
   const alertsData = safeArray(alerts?.data?.alerts);
+  const recommendedTests = safeArray(
+    dashboardData?.recommended_tests ?? dashboardData?.recommendedTests?.data
+  ).map((item) => {
+    const raw = safeObject(item);
+    const testName = safeText(raw.test_name ?? raw.name ?? raw.title);
+    const priority = normalizePriority(raw.priority);
+    return {
+      testName,
+      reason: safeText(raw.reason, 'Recommended from your latest health signals.'),
+      priority,
+      timeline: safeText(raw.timeline, '1 month'),
+      confidence: safeNumber(raw.confidence, 0),
+      Icon: getTestIcon(testName),
+    };
+  }).filter((item) => item.testName);
   const hasDashboardData = hasDashboardSnapshot && Boolean(safeObject(dashboardData) && Object.keys(safeObject(dashboardData)).length > 0);
 
   useEffect(() => {
@@ -225,6 +307,7 @@ const Dashboard = () => {
       sleepVitalsLength: sleepVitals.length,
       alertsType: Array.isArray(alertsData) ? 'array' : typeof alertsData,
       alertsLength: alertsData.length,
+      recommendedTestsLength: recommendedTests.length,
     });
   }
 
@@ -659,21 +742,29 @@ const Dashboard = () => {
                   <motion.div variants={itemVariants} className="bg-white dark:bg-slate-900 p-8 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
                     <h3 className="text-slate-500 font-bold text-xs uppercase tracking-[0.2em] mb-8">Recommended Tests</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {[
-                        { icon: Microscope, title: 'CBC with Differential', date: 'Due in 14 days', badge: 'Annual', color: 'text-[#6143f4]', bg: 'bg-[#6143f4]/10' },
-                        { icon: Heart, title: '24-Hr Holter Monitor', date: 'Schedule ASAP', badge: 'Priority', color: 'text-[#009CDE]', bg: 'bg-[#009CDE]/10', urgent: true },
-                        { icon: Zap, title: 'HbA1c Blood Test', date: 'Due in 3 months', badge: 'Routine', color: 'text-[#6143f4]', bg: 'bg-[#6143f4]/10' },
-                        { icon: Eye, title: 'Retinal Imaging', date: 'Due in 45 days', badge: 'Vision', color: 'text-[#009CDE]', bg: 'bg-[#009CDE]/10' }
-                      ].map((test, i) => (
-                        <div key={i} className="p-4 border border-slate-100 dark:border-slate-800 rounded-xl hover:border-[#6143f4]/30 transition-all cursor-pointer group hover:shadow-lg hover:shadow-black/5 bg-white dark:bg-slate-900">
+                      {recommendedTests.length === 0 ? (
+                        <div className="md:col-span-2 flex items-center gap-3 rounded-xl border border-dashed border-slate-200 p-4 text-sm font-medium text-slate-400 dark:border-white/10 dark:text-slate-500">
+                          <ClipboardList size={18} />
+                          Baseline preventive tests will appear after your next dashboard refresh.
+                        </div>
+                      ) : recommendedTests.map((test, i) => (
+                        <div key={`${test.testName}-${i}`} title={test.reason} className="p-4 border border-slate-100 dark:border-slate-800 rounded-xl hover:border-[#6143f4]/30 transition-all cursor-pointer group hover:shadow-lg hover:shadow-black/5 bg-white dark:bg-slate-900">
                           <div className="flex items-center justify-between mb-3">
-                            <div className={`${test.bg} ${test.color} p-2 rounded-lg transition-transform group-hover:scale-110 shadow-sm border border-white dark:border-slate-800`}>
-                              <test.icon size={18} />
+                            <div className={`${iconStyles[test.priority]} p-2 rounded-lg transition-transform group-hover:scale-110 shadow-sm border border-white dark:border-slate-800`}>
+                              <test.Icon size={18} />
                             </div>
-                            <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full ${test.urgent ? 'bg-[#009CDE] text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{test.badge}</span>
+                            <div className="flex items-center gap-2">
+                              <Info size={14} className="text-slate-300" aria-label={test.reason} />
+                              <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full ${priorityStyles[test.priority]}`}>{test.priority}</span>
+                            </div>
                           </div>
-                          <p className="text-sm font-bold text-[#13082A] dark:text-white leading-tight truncate">{test.title}</p>
-                          <p className="text-xs text-slate-500 font-medium mt-1 uppercase tracking-wider">{test.date}</p>
+                          <p className="text-sm font-bold text-[#13082A] dark:text-white leading-tight truncate">{test.testName}</p>
+                          <p className="text-xs text-slate-500 font-medium mt-1 uppercase tracking-wider">{test.timeline}</p>
+                          {test.confidence > 0 ? (
+                            <p className="text-[10px] text-slate-400 font-black mt-3 uppercase tracking-widest">
+                              {Math.round(test.confidence * 100)}% confidence
+                            </p>
+                          ) : null}
                         </div>
                       ))}
                     </div>

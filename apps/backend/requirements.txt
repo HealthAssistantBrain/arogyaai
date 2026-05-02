@@ -12,6 +12,7 @@ alembic
 psycopg2-binary
 redis
 httpx
+certifi
 cryptography
 APScheduler
 pypdf
@@ -22,6 +23,11 @@ pywebpush
 supabase>=2.3.0,<2.7.0
 joblib
 scikit-learn
+pandas
+lightgbm
+xgboost
 shap
 qdrant-client
 fastembed
+sentence-transformers
+llama-index

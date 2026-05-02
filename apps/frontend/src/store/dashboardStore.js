@@ -50,6 +50,7 @@ const dashboardSignature = (bundle) => JSON.stringify({
     prediction: bundle?.prediction?.data ?? null,
     profile: bundle?.profile?.data ?? null,
     alerts: bundle?.alerts?.data ?? null,
+    recommendedTests: bundle?.recommendedTests?.data ?? bundle?.recommended_tests ?? null,
     googleFit: bundle?.googleFit?.data ?? null,
     heartRate: bundle?.vitals?.[vitalKey('heart_rate', DEFAULT_VITAL_RANGE)]?.data ?? null,
     steps: bundle?.vitals?.[vitalKey('steps', DEFAULT_VITAL_RANGE)]?.data ?? null,
@@ -70,6 +71,7 @@ const extractPayloadTimestamp = (payload) => {
         payload?.prediction?.last_updated,
         payload?.profile?.last_updated,
         payload?.alerts?.last_updated,
+        payload?.recommendedTests?.last_updated,
         payload?.vitals?.[vitalKey('heart_rate', DEFAULT_VITAL_RANGE)]?.last_updated,
         payload?.vitals?.[vitalKey('steps', DEFAULT_VITAL_RANGE)]?.last_updated,
         payload?.vitals?.[vitalKey('sleep', DEFAULT_VITAL_RANGE)]?.last_updated,
@@ -109,6 +111,8 @@ const buildDashboardState = (currentState, payload = {}, replace = false) => {
     if (payload.prediction) nextDashboardData.prediction = payload.prediction;
     if (payload.profile) nextDashboardData.profile = payload.profile;
     if (payload.alerts) nextDashboardData.alerts = payload.alerts;
+    if (payload.recommendedTests) nextDashboardData.recommendedTests = payload.recommendedTests;
+    if (payload.recommended_tests !== undefined) nextDashboardData.recommended_tests = safeArray(payload.recommended_tests).filter(Boolean);
     if (payload.googleFit) nextDashboardData.googleFit = payload.googleFit;
     if (payload.vitals) nextDashboardData.vitals = payload.vitals;
     if (payload.health_score !== undefined) nextDashboardData.health_score = payload.health_score;
@@ -124,6 +128,7 @@ const buildDashboardState = (currentState, payload = {}, replace = false) => {
     if (payload.prediction) currentState = { ...currentState, prediction: payload.prediction };
     if (payload.profile) currentState = { ...currentState, profile: payload.profile };
     if (payload.alerts) currentState = { ...currentState, alerts: payload.alerts };
+    if (payload.recommendedTests) currentState = { ...currentState, recommendedTests: payload.recommendedTests };
     if (payload.googleFit) currentState = { ...currentState, googleFit: payload.googleFit };
 
     if (payload.vitals) {
@@ -151,7 +156,7 @@ const buildDashboardState = (currentState, payload = {}, replace = false) => {
     const canonicalSleepSlice = currentVitals[vitalKey('sleep', DEFAULT_VITAL_RANGE)] ?? coerceVitalSlice({}, 'sleep', DEFAULT_VITAL_RANGE);
     // Normalize insight/recommendation items to strings so React can render them safely.
     // Backend may return { title, detail, category, priority } objects.
-    const canonicalInsights = safeArray(payload.insights ?? payload.prediction?.data?.recommendations)
+    const canonicalInsights = safeArray(payload.insights ?? payload.prediction?.data?.recommendations ?? nextDashboardData.insights)
         .map((item) => safeText(item))
         .filter(Boolean);
     const canonicalStepData = safeArray(canonicalStepsSlice.data);
@@ -169,6 +174,11 @@ const buildDashboardState = (currentState, payload = {}, replace = false) => {
                 : (Number.isFinite(latestStepValue) ? Math.round(latestStepValue) : 0),
             sleep: safeArray(canonicalSleepSlice.data),
             insights: canonicalInsights,
+            recommended_tests: safeArray(
+                payload.recommended_tests ??
+                payload.recommendedTests?.data ??
+                nextDashboardData.recommended_tests
+            ).filter(Boolean),
             vitals: safeObject(currentVitals),
         },
     };
@@ -213,6 +223,7 @@ const useDashboardStore = create(
             prediction: emptySlice(),
             profile: emptySlice(),
             alerts: emptySlice(),
+            recommendedTests: emptySlice(),
             googleFit: emptySlice(),
             vitals: {},
             dashboardData: null,
@@ -229,6 +240,45 @@ const useDashboardStore = create(
             _pollTimer: null,
 
             setHasHydratedCache: (value = true) => set({ hasHydratedCache: !!value }, false, 'dashboard/cacheHydrated'),
+
+            invalidateWearableCache: (types = ['heart_rate', 'steps', 'sleep'], range = DEFAULT_VITAL_RANGE) => {
+                const keys = safeArray(types).map((type) => vitalKey(type, range));
+                set((state) => {
+                    const nextVitals = { ...(safeObject(state.vitals)) };
+                    keys.forEach((key) => {
+                        const [type = key] = key.split(':');
+                        nextVitals[key] = {
+                            type,
+                            range,
+                            data: [],
+                            total_count: 0,
+                            last_updated: null,
+                            missing: [],
+                            status: 'processing',
+                            source: 'db',
+                        };
+                    });
+
+                    const nextDashboardData = state.dashboardData
+                        ? {
+                            ...(safeObject(state.dashboardData)),
+                            steps: 0,
+                            vitals: {
+                                ...(safeObject(state.dashboardData?.vitals)),
+                                ...Object.fromEntries(keys.map((key) => [key, nextVitals[key]])),
+                            },
+                        }
+                        : state.dashboardData;
+
+                    return {
+                        vitals: nextVitals,
+                        dashboardData: nextDashboardData,
+                        lastFetched: null,
+                        lastFetchedAt: null,
+                        dashboardUpdatedAt: null,
+                    };
+                }, false, 'dashboard/invalidate-wearables');
+            },
 
             fetchVitals: async (type, range = DEFAULT_VITAL_RANGE, { force = false, silent = false, requestId = null, cacheBust = null } = {}) => {
                 const key = vitalKey(type, range);
@@ -409,6 +459,7 @@ const useDashboardStore = create(
                         prediction: emptySlice(),
                         profile: emptySlice(),
                         alerts: emptySlice(),
+                        recommendedTests: emptySlice(),
                         googleFit: emptySlice(),
                         vitals: {},
                         dashboardData: null,
@@ -437,6 +488,7 @@ const useDashboardStore = create(
                 prediction: state.prediction,
                 profile: state.profile,
                 alerts: state.alerts,
+                recommendedTests: state.recommendedTests,
                 googleFit: state.googleFit,
                 vitals: state.vitals,
                 dashboardData: state.dashboardData,

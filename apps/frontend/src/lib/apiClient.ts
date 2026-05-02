@@ -11,7 +11,7 @@ const API_URL = getApiUrl(env.VITE_API_BASE_URL || env.VITE_API_URL || 'http://l
 
 export const apiClient = axios.create({
   baseURL: API_URL,
-  timeout: 10000,
+  timeout: 60000,
   headers: { 'Content-Type': 'application/json' },
   withCredentials: true // Required for HTTP-only cookies if strictly used
 });

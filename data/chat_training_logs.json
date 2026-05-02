@@ -1,0 +1,944 @@
+[
+  {
+    "timestamp": "2026-05-01T04:40:24.191042+00:00",
+    "input": {
+      "query": "hi",
+      "history": [
+        {
+          "role": "assistant",
+          "content": "Hello! I'm your ArogyaAI clinical assistant. Ask about symptoms, wearable changes, labs, or your risk predictions and I'll reason with your health data plus retrieved medical guidance."
+        }
+      ]
+    },
+    "context": {
+      "conversation_history": [
+        {
+          "role": "assistant",
+          "content": "Hello! I'm your ArogyaAI clinical assistant. Ask about symptoms, wearable changes, labs, or your risk predictions and I'll reason with your health data plus retrieved medical guidance."
+        }
+      ],
+      "patient_vitals": {
+        "steps": {
+          "latest": 3790.0,
+          "unit": "count",
+          "timestamp": "2026-04-29T18:30:00+00:00",
+          "avg_24h": null,
+          "avg_7d": 4841.67,
+          "trend": "stable"
+        },
+        "heart_rate": {
+          "latest": 95.0,
+          "unit": "bpm",
+          "timestamp": "2026-04-27T20:30:00+00:00",
+          "avg_24h": null,
+          "avg_7d": 78.18,
+          "trend": "stable"
+        }
+      },
+      "vital_highlights": [],
+      "patient_profile": {
+        "age": null,
+        "gender": "male",
+        "height_cm": 178.0,
+        "weight_kg": 76.0,
+        "activity_level": null,
+        "sleep_hours": null,
+        "stress_level": null,
+        "family_history": "",
+        "allergies": "None",
+        "current_medications": "",
+        "goals": ""
+      },
+      "ml_risk_scores": {
+        "risk_level": "HIGH",
+        "ml_risk_level": "HIGH",
+        "overall_risk": 0.7,
+        "condition_risks": {
+          "diabetes": 0.74,
+          "respiratory": 0.605,
+          "cardiovascular": 0.74
+        },
+        "health_score": 45.48,
+        "prediction_id": "45e04090-e340-4594-92d3-395ba849a5e1"
+      },
+      "shap_drivers": [
+        {
+          "feature_name": "diastolic_bp",
+          "label": "Diastolic BP",
+          "impact": 2.6061,
+          "direction": "positive",
+          "feature_value": 80.0,
+          "explanation": "diastolic_bp has a positive contribution to the prediction."
+        },
+        {
+          "feature_name": "sleep_hours",
+          "label": "Sleep Hours",
+          "impact": 0.161,
+          "direction": "positive",
+          "feature_value": 0.0,
+          "explanation": "sleep_hours has a positive contribution to the prediction."
+        },
+        {
+          "feature_name": "symptom_fatigue",
+          "label": "Symptom Fatigue",
+          "impact": 0.0256,
+          "direction": "positive",
+          "feature_value": 0.0,
+          "explanation": "symptom_fatigue has a positive contribution to the prediction."
+        },
+        {
+          "feature_name": "heart_rate",
+          "label": "Heart Rate",
+          "impact": -0.0092,
+          "direction": "negative",
+          "feature_value": 78.18,
+          "explanation": "heart_rate has a negative contribution to the prediction."
+        },
+        {
+          "feature_name": "feature",
+          "label": "Feature",
+          "impact": 0.0,
+          "direction": "positive",
+          "feature_value": null,
+          "explanation": ""
+        }
+      ],
+      "symptoms": [
+        "Daytime fatigue",
+        "Daytime cognitive slowing"
+      ],
+      "rag_context": [
+        {
+          "title": "Diabetes Clinical Reference",
+          "source": "diabetes.md",
+          "category": "diabetes",
+          "topic": "diabetes assessment and early management",
+          "disease_type": "diabetes",
+          "source_url": "",
+          "source_org": "ArogyaAI",
+          "retrieval_method": "sparse",
+          "excerpt": "### Diabetes Clinical Reference ## Symptoms Diabetes can present gradually, especially in type 2 diabetes, and early symptoms may be subtle. Common symptoms include increased thirst, frequent urination, increased hunger, fatigue, blurred vision, slow wound...",
+          "score": 0.4897362637362637,
+          "citation": {
+            "source": "diabetes.md",
+            "title": "Diabetes Clinical Reference",
+            "url": ""
+          }
+        },
+        {
+          "title": "Sleep Clinical Reference",
+          "source": "sleep.md",
+          "category": "sleep",
+          "topic": "sleep quality and metabolic health",
+          "disease_type": "sleep",
+          "source_url": "",
+          "source_org": "ArogyaAI",
+          "retrieval_method": "sparse",
+          "excerpt": "### Sleep Clinical Reference ## Symptoms Sleep problems may present as difficulty falling asleep, frequent awakenings, early morning waking, non-restorative sleep, daytime sleepiness, morning headache, irritability, poor concentration, low motivation, fatig...",
+          "score": 0.22686813186813184,
+          "citation": {
+            "source": "sleep.md",
+            "title": "Sleep Clinical Reference",
+            "url": ""
+          }
+        },
+        {
+          "title": "General Symptoms Clinical Reference",
+          "source": "general_symptoms.md",
+          "category": "general",
+          "topic": "general symptom triage and safety",
+          "disease_type": "general",
+          "source_url": "",
+          "source_org": "ArogyaAI",
+          "retrieval_method": "sparse",
+          "excerpt": "### General Symptoms Clinical Reference ## Symptoms General symptoms such as fever, fatigue, dizziness, headache, nausea, abdominal discomfort, body aches, weakness, appetite change, and unexplained weight change are common and nonspecific. They may reflect...",
+          "score": 0.1862354728515482,
+          "citation": {
+            "source": "general_symptoms.md",
+            "title": "General Symptoms Clinical Reference",
+            "url": ""
+          }
+        }
+      ]
+    },
+    "output": {
+      "clinical_insight": "The current question centers on Daytime fatigue, Daytime cognitive slowing. Risk score 0.70 (HIGH) is being interpreted using retrieved medical guidance. The strongest model drivers are Diastolic blood pressure, Sleep Hours, Symptom Fatigue. The explanation is limited to evidence found in sle... Retrieved medical guidance highlights diabetes clinical reference as relevant context.",
+      "possible_causes": [
+        "This could relate to type 2 diabetes risk.",
+        "This could relate to cardiovascular disease risk.",
+        "This could relate to respiratory strain.",
+        "Retrieved guidance on diabetes clinical reference suggests a diabetes explanation may be worth considering."
+      ],
+      "risk_level_from_ml": "HIGH",
+      "clinical_risk_level": "HIGH",
+      "follow_up_questions": [
+        "What symptoms are you noticing, when did they start, and how severe are they from 1 to 10?",
+        "Have you noticed any triggers, recent illness, medication changes, dehydration, or unusual exertion around the same time?"
+      ],
+      "recommendations": [
+        "Because the symptoms may represent a higher-risk pattern, prioritize urgent clinical evaluation rather than self-monitoring alone.",
+        "### Sleep Clinical Reference ## Symptoms Sleep problems may present as difficulty falling asleep, frequent awakenings, early morning waking, non-restorative sleep, daytime sleepiness, morning headache, irritability, poor concentration, low motivation, fatigue, or reduced exerc...",
+        "### Cardiovascular Clinical Reference ## Symptoms Cardiovascular symptoms include chest pressure, tightness, heaviness, burning, shortness of breath, palpitations, dizziness, fainting, swelling of the legs, reduced exercise tolerance, fatigue, and pain radiating to the jaw, sh...",
+        "### Diabetes Clinical Reference ## Symptoms Diabetes can present gradually, especially in type 2 diabetes, and early symptoms may be subtle"
+      ],
+      "safety_note": "Seek urgent in-person medical care now if symptoms are severe, worsening, or paired with fainting, shortness of breath, new weakness, or persistent chest pressure.",
+      "formatted_response": "1. Clinical Insight\n- The current question centers on Daytime fatigue, Daytime cognitive slowing. Risk score 0.70 (HIGH) is being interpreted using retrieved medical guidance. The strongest model drivers are Diastolic blood pressure, Sleep Hours, Symptom Fatigue. The explanation is limited to evidence found in sle... Retrieved medical guidance highlights diabetes clinical reference as relevant context.\n\n2. Possible Causes\n- This could relate to type 2 diabetes risk.\n- This could relate to cardiovascular disease risk.\n- This could relate to respiratory strain.\n- Retrieved guidance on diabetes clinical reference suggests a diabetes explanation may be worth considering.\n\n3. Risk Level (from ML)\n- ML risk level: HIGH. Your latest ML risk estimate is 70.0% (HIGH). Your current health score is 45.5. Because the current symptom pattern includes a potential red flag, this should be treated more cautiously than a routine question.\n\n4. Follow-up Questions (IMPORTANT)\n- What symptoms are you noticing, when did they start, and how severe are they from 1 to 10?\n- Have you noticed any triggers, recent illness, medication changes, dehydration, or unusual exertion around the same time?\n\n5. Recommendations\n- Because the symptoms may represent a higher-risk pattern, prioritize urgent clinical evaluation rather than self-monitoring alone.\n- ### Sleep Clinical Reference ## Symptoms Sleep problems may present as difficulty falling asleep, frequent awakenings, early morning waking, non-restorative sleep, daytime sleepiness, morning headache, irritability, poor concentration, low motivation, fatigue, or reduced exerc...\n- ### Cardiovascular Clinical Reference ## Symptoms Cardiovascular symptoms include chest pressure, tightness, heaviness, burning, shortness of breath, palpitations, dizziness, fainting, swelling of the legs, reduced exercise tolerance, fatigue, and pain radiating to the jaw, sh...\n- ### Diabetes Clinical Reference ## Symptoms Diabetes can present gradually, especially in type 2 diabetes, and early symptoms may be subtle\n\n6. Safety Note\n- Seek urgent in-person medical care now if symptoms are severe, worsening, or paired with fainting, shortness of breath, new weakness, or persistent chest pressure."
+    },
+    "fine_tuning_example": {
+      "instruction": "You are a clinical assistant. Do not give final diagnosis. Ask relevant follow-up questions before concluding. Use patient vitals, ML risk scores, SHAP drivers, symptoms, and RAG context. Return the six sections: Clinical Insight, Possible Causes, Risk Level (from ML), Follow-up Questions (IMPORTANT), Recommendations, Safety Note.",
+      "input": "{\n  \"query\": \"hi\",\n  \"context\": {\n    \"conversation_history\": [\n      {\n        \"role\": \"assistant\",\n        \"content\": \"Hello! I'm your ArogyaAI clinical assistant. Ask about symptoms, wearable changes, labs, or your risk predictions and I'll reason with your health data plus retrieved medical guidance.\"\n      }\n    ],\n    \"patient_vitals\": {\n      \"steps\": {\n        \"latest\": 3790.0,\n        \"unit\": \"count\",\n        \"timestamp\": \"2026-04-29T18:30:00+00:00\",\n        \"avg_24h\": null,\n        \"avg_7d\": 4841.67,\n        \"trend\": \"stable\"\n      },\n      \"heart_rate\": {\n        \"latest\": 95.0,\n        \"unit\": \"bpm\",\n        \"timestamp\": \"2026-04-27T20:30:00+00:00\",\n        \"avg_24h\": null,\n        \"avg_7d\": 78.18,\n        \"trend\": \"stable\"\n      }\n    },\n    \"vital_highlights\": [],\n    \"patient_profile\": {\n      \"age\": null,\n      \"gender\": \"male\",\n      \"height_cm\": 178.0,\n      \"weight_kg\": 76.0,\n      \"activity_level\": null,\n      \"sleep_hours\": null,\n      \"stress_level\": null,\n      \"family_history\": \"\",\n      \"allergies\": \"None\",\n      \"current_medications\": \"\",\n      \"goals\": \"\"\n    },\n    \"ml_risk_scores\": {\n      \"risk_level\": \"HIGH\",\n      \"ml_risk_level\": \"HIGH\",\n      \"overall_risk\": 0.7,\n      \"condition_risks\": {\n        \"diabetes\": 0.74,\n        \"respiratory\": 0.605,\n        \"cardiovascular\": 0.74\n      },\n      \"health_score\": 45.48,\n      \"prediction_id\": \"45e04090-e340-4594-92d3-395ba849a5e1\"\n    },\n    \"shap_drivers\": [\n      {\n        \"feature_name\": \"diastolic_bp\",\n        \"label\": \"Diastolic BP\",\n        \"impact\": 2.6061,\n        \"direction\": \"positive\",\n        \"feature_value\": 80.0,\n        \"explanation\": \"diastolic_bp has a positive contribution to the prediction.\"\n      },\n      {\n        \"feature_name\": \"sleep_hours\",\n        \"label\": \"Sleep Hours\",\n        \"impact\": 0.161,\n        \"direction\": \"positive\",\n        \"feature_value\": 0.0,\n        \"explanation\": \"sleep_hours has a positive contribution to the prediction.\"\n      },\n      {\n        \"feature_name\": \"symptom_fatigue\",\n        \"label\": \"Symptom Fatigue\",\n        \"impact\": 0.0256,\n        \"direction\": \"positive\",\n        \"feature_value\": 0.0,\n        \"explanation\": \"symptom_fatigue has a positive contribution to the prediction.\"\n      },\n      {\n        \"feature_name\": \"heart_rate\",\n        \"label\": \"Heart Rate\",\n        \"impact\": -0.0092,\n        \"direction\": \"negative\",\n        \"feature_value\": 78.18,\n        \"explanation\": \"heart_rate has a negative contribution to the prediction.\"\n      },\n      {\n        \"feature_name\": \"feature\",\n        \"label\": \"Feature\",\n        \"impact\": 0.0,\n        \"direction\": \"positive\",\n        \"feature_value\": null,\n        \"explanation\": \"\"\n      }\n    ],\n    \"symptoms\": [\n      \"Daytime fatigue\",\n      \"Daytime cognitive slowing\"\n    ],\n    \"rag_context\": [\n      {\n        \"title\": \"Diabetes Clinical Reference\",\n        \"source\": \"diabetes.md\",\n        \"category\": \"diabetes\",\n        \"topic\": \"diabetes assessment and early management\",\n        \"disease_type\": \"diabetes\",\n        \"source_url\": \"\",\n        \"source_org\": \"ArogyaAI\",\n        \"retrieval_method\": \"sparse\",\n        \"excerpt\": \"### Diabetes Clinical Reference ## Symptoms Diabetes can present gradually, especially in type 2 diabetes, and early symptoms may be subtle. Common symptoms include increased thirst, frequent urination, increased hunger, fatigue, blurred vision, slow wound...\",\n        \"score\": 0.4897362637362637,\n        \"citation\": {\n          \"source\": \"diabetes.md\",\n          \"title\": \"Diabetes Clinical Reference\",\n          \"url\": \"\"\n        }\n      },\n      {\n        \"title\": \"Sleep Clinical Reference\",\n        \"source\": \"sleep.md\",\n        \"category\": \"sleep\",\n        \"topic\": \"sleep quality and metabolic health\",\n        \"disease_type\": \"sleep\",\n        \"source_url\": \"\",\n        \"source_org\": \"ArogyaAI\",\n        \"retrieval_method\": \"sparse\",\n        \"excerpt\": \"### Sleep Clinical Reference ## Symptoms Sleep problems may present as difficulty falling asleep, frequent awakenings, early morning waking, non-restorative sleep, daytime sleepiness, morning headache, irritability, poor concentration, low motivation, fatig...\",\n        \"score\": 0.22686813186813184,\n        \"citation\": {\n          \"source\": \"sleep.md\",\n          \"title\": \"Sleep Clinical Reference\",\n          \"url\": \"\"\n        }\n      },\n      {\n        \"title\": \"General Symptoms Clinical Reference\",\n        \"source\": \"general_symptoms.md\",\n        \"category\": \"general\",\n        \"topic\": \"general symptom triage and safety\",\n        \"disease_type\": \"general\",\n        \"source_url\": \"\",\n        \"source_org\": \"ArogyaAI\",\n        \"retrieval_method\": \"sparse\",\n        \"excerpt\": \"### General Symptoms Clinical Reference ## Symptoms General symptoms such as fever, fatigue, dizziness, headache, nausea, abdominal discomfort, body aches, weakness, appetite change, and unexplained weight change are common and nonspecific. They may reflect...\",\n        \"score\": 0.1862354728515482,\n        \"citation\": {\n          \"source\": \"general_symptoms.md\",\n          \"title\": \"General Symptoms Clinical Reference\",\n          \"url\": \"\"\n        }\n      }\n    ]\n  }\n}",
+      "output": "1. Clinical Insight\n- The current question centers on Daytime fatigue, Daytime cognitive slowing. Risk score 0.70 (HIGH) is being interpreted using retrieved medical guidance. The strongest model drivers are Diastolic blood pressure, Sleep Hours, Symptom Fatigue. The explanation is limited to evidence found in sle... Retrieved medical guidance highlights diabetes clinical reference as relevant context.\n\n2. Possible Causes\n- This could relate to type 2 diabetes risk.\n- This could relate to cardiovascular disease risk.\n- This could relate to respiratory strain.\n- Retrieved guidance on diabetes clinical reference suggests a diabetes explanation may be worth considering.\n\n3. Risk Level (from ML)\n- ML risk level: HIGH. Your latest ML risk estimate is 70.0% (HIGH). Your current health score is 45.5. Because the current symptom pattern includes a potential red flag, this should be treated more cautiously than a routine question.\n\n4. Follow-up Questions (IMPORTANT)\n- What symptoms are you noticing, when did they start, and how severe are they from 1 to 10?\n- Have you noticed any triggers, recent illness, medication changes, dehydration, or unusual exertion around the same time?\n\n5. Recommendations\n- Because the symptoms may represent a higher-risk pattern, prioritize urgent clinical evaluation rather than self-monitoring alone.\n- ### Sleep Clinical Reference ## Symptoms Sleep problems may present as difficulty falling asleep, frequent awakenings, early morning waking, non-restorative sleep, daytime sleepiness, morning headache, irritability, poor concentration, low motivation, fatigue, or reduced exerc...\n- ### Cardiovascular Clinical Reference ## Symptoms Cardiovascular symptoms include chest pressure, tightness, heaviness, burning, shortness of breath, palpitations, dizziness, fainting, swelling of the legs, reduced exercise tolerance, fatigue, and pain radiating to the jaw, sh...\n- ### Diabetes Clinical Reference ## Symptoms Diabetes can present gradually, especially in type 2 diabetes, and early symptoms may be subtle\n\n6. Safety Note\n- Seek urgent in-person medical care now if symptoms are severe, worsening, or paired with fainting, shortness of breath, new weakness, or persistent chest pressure."
+    }
+  },
+  {
+    "timestamp": "2026-05-01T04:40:24.192789+00:00",
+    "input": {
+      "query": "hi",
+      "history": [
+        {
+          "role": "assistant",
+          "content": "Hello! I'm your ArogyaAI clinical assistant. Ask about symptoms, wearable changes, labs, or your risk predictions and I'll reason with your health data plus retrieved medical guidance."
+        }
+      ]
+    },
+    "context": {
+      "conversation_history": [
+        {
+          "role": "assistant",
+          "content": "Hello! I'm your ArogyaAI clinical assistant. Ask about symptoms, wearable changes, labs, or your risk predictions and I'll reason with your health data plus retrieved medical guidance."
+        }
+      ],
+      "patient_vitals": {
+        "steps": {
+          "latest": 3790.0,
+          "unit": "count",
+          "timestamp": "2026-04-29T18:30:00+00:00",
+          "avg_24h": null,
+          "avg_7d": 4841.67,
+          "trend": "stable"
+        },
+        "heart_rate": {
+          "latest": 95.0,
+          "unit": "bpm",
+          "timestamp": "2026-04-27T20:30:00+00:00",
+          "avg_24h": null,
+          "avg_7d": 78.18,
+          "trend": "stable"
+        }
+      },
+      "vital_highlights": [],
+      "patient_profile": {
+        "age": null,
+        "gender": "male",
+        "height_cm": 178.0,
+        "weight_kg": 76.0,
+        "activity_level": null,
+        "sleep_hours": null,
+        "stress_level": null,
+        "family_history": "",
+        "allergies": "None",
+        "current_medications": "",
+        "goals": ""
+      },
+      "ml_risk_scores": {
+        "risk_level": "HIGH",
+        "ml_risk_level": "HIGH",
+        "overall_risk": 0.7,
+        "condition_risks": {
+          "diabetes": 0.74,
+          "respiratory": 0.605,
+          "cardiovascular": 0.74
+        },
+        "health_score": 45.48,
+        "prediction_id": "45e04090-e340-4594-92d3-395ba849a5e1"
+      },
+      "shap_drivers": [
+        {
+          "feature_name": "diastolic_bp",
+          "label": "Diastolic BP",
+          "impact": 2.6061,
+          "direction": "positive",
+          "feature_value": 80.0,
+          "explanation": "diastolic_bp has a positive contribution to the prediction."
+        },
+        {
+          "feature_name": "sleep_hours",
+          "label": "Sleep Hours",
+          "impact": 0.161,
+          "direction": "positive",
+          "feature_value": 0.0,
+          "explanation": "sleep_hours has a positive contribution to the prediction."
+        },
+        {
+          "feature_name": "symptom_fatigue",
+          "label": "Symptom Fatigue",
+          "impact": 0.0256,
+          "direction": "positive",
+          "feature_value": 0.0,
+          "explanation": "symptom_fatigue has a positive contribution to the prediction."
+        },
+        {
+          "feature_name": "heart_rate",
+          "label": "Heart Rate",
+          "impact": -0.0092,
+          "direction": "negative",
+          "feature_value": 78.18,
+          "explanation": "heart_rate has a negative contribution to the prediction."
+        },
+        {
+          "feature_name": "feature",
+          "label": "Feature",
+          "impact": 0.0,
+          "direction": "positive",
+          "feature_value": null,
+          "explanation": ""
+        }
+      ],
+      "symptoms": [
+        "Daytime fatigue",
+        "Daytime cognitive slowing"
+      ],
+      "rag_context": [
+        {
+          "title": "Diabetes Clinical Reference",
+          "source": "diabetes.md",
+          "category": "diabetes",
+          "topic": "diabetes assessment and early management",
+          "disease_type": "diabetes",
+          "source_url": "",
+          "source_org": "ArogyaAI",
+          "retrieval_method": "sparse",
+          "excerpt": "### Diabetes Clinical Reference ## Symptoms Diabetes can present gradually, especially in type 2 diabetes, and early symptoms may be subtle. Common symptoms include increased thirst, frequent urination, increased hunger, fatigue, blurred vision, slow wound...",
+          "score": 0.4897362637362637,
+          "citation": {
+            "source": "diabetes.md",
+            "title": "Diabetes Clinical Reference",
+            "url": ""
+          }
+        },
+        {
+          "title": "Sleep Clinical Reference",
+          "source": "sleep.md",
+          "category": "sleep",
+          "topic": "sleep quality and metabolic health",
+          "disease_type": "sleep",
+          "source_url": "",
+          "source_org": "ArogyaAI",
+          "retrieval_method": "sparse",
+          "excerpt": "### Sleep Clinical Reference ## Symptoms Sleep problems may present as difficulty falling asleep, frequent awakenings, early morning waking, non-restorative sleep, daytime sleepiness, morning headache, irritability, poor concentration, low motivation, fatig...",
+          "score": 0.22686813186813184,
+          "citation": {
+            "source": "sleep.md",
+            "title": "Sleep Clinical Reference",
+            "url": ""
+          }
+        },
+        {
+          "title": "General Symptoms Clinical Reference",
+          "source": "general_symptoms.md",
+          "category": "general",
+          "topic": "general symptom triage and safety",
+          "disease_type": "general",
+          "source_url": "",
+          "source_org": "ArogyaAI",
+          "retrieval_method": "sparse",
+          "excerpt": "### General Symptoms Clinical Reference ## Symptoms General symptoms such as fever, fatigue, dizziness, headache, nausea, abdominal discomfort, body aches, weakness, appetite change, and unexplained weight change are common and nonspecific. They may reflect...",
+          "score": 0.1862354728515482,
+          "citation": {
+            "source": "general_symptoms.md",
+            "title": "General Symptoms Clinical Reference",
+            "url": ""
+          }
+        }
+      ]
+    },
+    "output": {
+      "clinical_insight": "The current question centers on Daytime fatigue, Daytime cognitive slowing. Risk score 0.70 (HIGH) is being interpreted using retrieved medical guidance. The strongest model drivers are Diastolic blood pressure, Sleep Hours, Symptom Fatigue. The explanation is limited to evidence found in sle... Retrieved medical guidance highlights diabetes clinical reference as relevant context.",
+      "possible_causes": [
+        "This could relate to type 2 diabetes risk.",
+        "This could relate to cardiovascular disease risk.",
+        "This could relate to respiratory strain.",
+        "Retrieved guidance on diabetes clinical reference suggests a diabetes explanation may be worth considering."
+      ],
+      "risk_level_from_ml": "HIGH",
+      "clinical_risk_level": "HIGH",
+      "follow_up_questions": [
+        "What symptoms are you noticing, when did they start, and how severe are they from 1 to 10?",
+        "Have you noticed any triggers, recent illness, medication changes, dehydration, or unusual exertion around the same time?"
+      ],
+      "recommendations": [
+        "Because the symptoms may represent a higher-risk pattern, prioritize urgent clinical evaluation rather than self-monitoring alone.",
+        "### Sleep Clinical Reference ## Symptoms Sleep problems may present as difficulty falling asleep, frequent awakenings, early morning waking, non-restorative sleep, daytime sleepiness, morning headache, irritability, poor concentration, low motivation, fatigue, or reduced exerc...",
+        "### Cardiovascular Clinical Reference ## Symptoms Cardiovascular symptoms include chest pressure, tightness, heaviness, burning, shortness of breath, palpitations, dizziness, fainting, swelling of the legs, reduced exercise tolerance, fatigue, and pain radiating to the jaw, sh...",
+        "### Diabetes Clinical Reference ## Symptoms Diabetes can present gradually, especially in type 2 diabetes, and early symptoms may be subtle"
+      ],
+      "safety_note": "Seek urgent in-person medical care now if symptoms are severe, worsening, or paired with fainting, shortness of breath, new weakness, or persistent chest pressure.",
+      "formatted_response": "1. Clinical Insight\n- The current question centers on Daytime fatigue, Daytime cognitive slowing. Risk score 0.70 (HIGH) is being interpreted using retrieved medical guidance. The strongest model drivers are Diastolic blood pressure, Sleep Hours, Symptom Fatigue. The explanation is limited to evidence found in sle... Retrieved medical guidance highlights diabetes clinical reference as relevant context.\n\n2. Possible Causes\n- This could relate to type 2 diabetes risk.\n- This could relate to cardiovascular disease risk.\n- This could relate to respiratory strain.\n- Retrieved guidance on diabetes clinical reference suggests a diabetes explanation may be worth considering.\n\n3. Risk Level (from ML)\n- ML risk level: HIGH. Your latest ML risk estimate is 70.0% (HIGH). Your current health score is 45.5. Because the current symptom pattern includes a potential red flag, this should be treated more cautiously than a routine question.\n\n4. Follow-up Questions (IMPORTANT)\n- What symptoms are you noticing, when did they start, and how severe are they from 1 to 10?\n- Have you noticed any triggers, recent illness, medication changes, dehydration, or unusual exertion around the same time?\n\n5. Recommendations\n- Because the symptoms may represent a higher-risk pattern, prioritize urgent clinical evaluation rather than self-monitoring alone.\n- ### Sleep Clinical Reference ## Symptoms Sleep problems may present as difficulty falling asleep, frequent awakenings, early morning waking, non-restorative sleep, daytime sleepiness, morning headache, irritability, poor concentration, low motivation, fatigue, or reduced exerc...\n- ### Cardiovascular Clinical Reference ## Symptoms Cardiovascular symptoms include chest pressure, tightness, heaviness, burning, shortness of breath, palpitations, dizziness, fainting, swelling of the legs, reduced exercise tolerance, fatigue, and pain radiating to the jaw, sh...\n- ### Diabetes Clinical Reference ## Symptoms Diabetes can present gradually, especially in type 2 diabetes, and early symptoms may be subtle\n\n6. Safety Note\n- Seek urgent in-person medical care now if symptoms are severe, worsening, or paired with fainting, shortness of breath, new weakness, or persistent chest pressure."
+    },
+    "fine_tuning_example": {
+      "instruction": "You are a clinical assistant. Do not give final diagnosis. Ask relevant follow-up questions before concluding. Use patient vitals, ML risk scores, SHAP drivers, symptoms, and RAG context. Return the six sections: Clinical Insight, Possible Causes, Risk Level (from ML), Follow-up Questions (IMPORTANT), Recommendations, Safety Note.",
+      "input": "{\n  \"query\": \"hi\",\n  \"context\": {\n    \"conversation_history\": [\n      {\n        \"role\": \"assistant\",\n        \"content\": \"Hello! I'm your ArogyaAI clinical assistant. Ask about symptoms, wearable changes, labs, or your risk predictions and I'll reason with your health data plus retrieved medical guidance.\"\n      }\n    ],\n    \"patient_vitals\": {\n      \"steps\": {\n        \"latest\": 3790.0,\n        \"unit\": \"count\",\n        \"timestamp\": \"2026-04-29T18:30:00+00:00\",\n        \"avg_24h\": null,\n        \"avg_7d\": 4841.67,\n        \"trend\": \"stable\"\n      },\n      \"heart_rate\": {\n        \"latest\": 95.0,\n        \"unit\": \"bpm\",\n        \"timestamp\": \"2026-04-27T20:30:00+00:00\",\n        \"avg_24h\": null,\n        \"avg_7d\": 78.18,\n        \"trend\": \"stable\"\n      }\n    },\n    \"vital_highlights\": [],\n    \"patient_profile\": {\n      \"age\": null,\n      \"gender\": \"male\",\n      \"height_cm\": 178.0,\n      \"weight_kg\": 76.0,\n      \"activity_level\": null,\n      \"sleep_hours\": null,\n      \"stress_level\": null,\n      \"family_history\": \"\",\n      \"allergies\": \"None\",\n      \"current_medications\": \"\",\n      \"goals\": \"\"\n    },\n    \"ml_risk_scores\": {\n      \"risk_level\": \"HIGH\",\n      \"ml_risk_level\": \"HIGH\",\n      \"overall_risk\": 0.7,\n      \"condition_risks\": {\n        \"diabetes\": 0.74,\n        \"respiratory\": 0.605,\n        \"cardiovascular\": 0.74\n      },\n      \"health_score\": 45.48,\n      \"prediction_id\": \"45e04090-e340-4594-92d3-395ba849a5e1\"\n    },\n    \"shap_drivers\": [\n      {\n        \"feature_name\": \"diastolic_bp\",\n        \"label\": \"Diastolic BP\",\n        \"impact\": 2.6061,\n        \"direction\": \"positive\",\n        \"feature_value\": 80.0,\n        \"explanation\": \"diastolic_bp has a positive contribution to the prediction.\"\n      },\n      {\n        \"feature_name\": \"sleep_hours\",\n        \"label\": \"Sleep Hours\",\n        \"impact\": 0.161,\n        \"direction\": \"positive\",\n        \"feature_value\": 0.0,\n        \"explanation\": \"sleep_hours has a positive contribution to the prediction.\"\n      },\n      {\n        \"feature_name\": \"symptom_fatigue\",\n        \"label\": \"Symptom Fatigue\",\n        \"impact\": 0.0256,\n        \"direction\": \"positive\",\n        \"feature_value\": 0.0,\n        \"explanation\": \"symptom_fatigue has a positive contribution to the prediction.\"\n      },\n      {\n        \"feature_name\": \"heart_rate\",\n        \"label\": \"Heart Rate\",\n        \"impact\": -0.0092,\n        \"direction\": \"negative\",\n        \"feature_value\": 78.18,\n        \"explanation\": \"heart_rate has a negative contribution to the prediction.\"\n      },\n      {\n        \"feature_name\": \"feature\",\n        \"label\": \"Feature\",\n        \"impact\": 0.0,\n        \"direction\": \"positive\",\n        \"feature_value\": null,\n        \"explanation\": \"\"\n      }\n    ],\n    \"symptoms\": [\n      \"Daytime fatigue\",\n      \"Daytime cognitive slowing\"\n    ],\n    \"rag_context\": [\n      {\n        \"title\": \"Diabetes Clinical Reference\",\n        \"source\": \"diabetes.md\",\n        \"category\": \"diabetes\",\n        \"topic\": \"diabetes assessment and early management\",\n        \"disease_type\": \"diabetes\",\n        \"source_url\": \"\",\n        \"source_org\": \"ArogyaAI\",\n        \"retrieval_method\": \"sparse\",\n        \"excerpt\": \"### Diabetes Clinical Reference ## Symptoms Diabetes can present gradually, especially in type 2 diabetes, and early symptoms may be subtle. Common symptoms include increased thirst, frequent urination, increased hunger, fatigue, blurred vision, slow wound...\",\n        \"score\": 0.4897362637362637,\n        \"citation\": {\n          \"source\": \"diabetes.md\",\n          \"title\": \"Diabetes Clinical Reference\",\n          \"url\": \"\"\n        }\n      },\n      {\n        \"title\": \"Sleep Clinical Reference\",\n        \"source\": \"sleep.md\",\n        \"category\": \"sleep\",\n        \"topic\": \"sleep quality and metabolic health\",\n        \"disease_type\": \"sleep\",\n        \"source_url\": \"\",\n        \"source_org\": \"ArogyaAI\",\n        \"retrieval_method\": \"sparse\",\n        \"excerpt\": \"### Sleep Clinical Reference ## Symptoms Sleep problems may present as difficulty falling asleep, frequent awakenings, early morning waking, non-restorative sleep, daytime sleepiness, morning headache, irritability, poor concentration, low motivation, fatig...\",\n        \"score\": 0.22686813186813184,\n        \"citation\": {\n          \"source\": \"sleep.md\",\n          \"title\": \"Sleep Clinical Reference\",\n          \"url\": \"\"\n        }\n      },\n      {\n        \"title\": \"General Symptoms Clinical Reference\",\n        \"source\": \"general_symptoms.md\",\n        \"category\": \"general\",\n        \"topic\": \"general symptom triage and safety\",\n        \"disease_type\": \"general\",\n        \"source_url\": \"\",\n        \"source_org\": \"ArogyaAI\",\n        \"retrieval_method\": \"sparse\",\n        \"excerpt\": \"### General Symptoms Clinical Reference ## Symptoms General symptoms such as fever, fatigue, dizziness, headache, nausea, abdominal discomfort, body aches, weakness, appetite change, and unexplained weight change are common and nonspecific. They may reflect...\",\n        \"score\": 0.1862354728515482,\n        \"citation\": {\n          \"source\": \"general_symptoms.md\",\n          \"title\": \"General Symptoms Clinical Reference\",\n          \"url\": \"\"\n        }\n      }\n    ]\n  }\n}",
+      "output": "1. Clinical Insight\n- The current question centers on Daytime fatigue, Daytime cognitive slowing. Risk score 0.70 (HIGH) is being interpreted using retrieved medical guidance. The strongest model drivers are Diastolic blood pressure, Sleep Hours, Symptom Fatigue. The explanation is limited to evidence found in sle... Retrieved medical guidance highlights diabetes clinical reference as relevant context.\n\n2. Possible Causes\n- This could relate to type 2 diabetes risk.\n- This could relate to cardiovascular disease risk.\n- This could relate to respiratory strain.\n- Retrieved guidance on diabetes clinical reference suggests a diabetes explanation may be worth considering.\n\n3. Risk Level (from ML)\n- ML risk level: HIGH. Your latest ML risk estimate is 70.0% (HIGH). Your current health score is 45.5. Because the current symptom pattern includes a potential red flag, this should be treated more cautiously than a routine question.\n\n4. Follow-up Questions (IMPORTANT)\n- What symptoms are you noticing, when did they start, and how severe are they from 1 to 10?\n- Have you noticed any triggers, recent illness, medication changes, dehydration, or unusual exertion around the same time?\n\n5. Recommendations\n- Because the symptoms may represent a higher-risk pattern, prioritize urgent clinical evaluation rather than self-monitoring alone.\n- ### Sleep Clinical Reference ## Symptoms Sleep problems may present as difficulty falling asleep, frequent awakenings, early morning waking, non-restorative sleep, daytime sleepiness, morning headache, irritability, poor concentration, low motivation, fatigue, or reduced exerc...\n- ### Cardiovascular Clinical Reference ## Symptoms Cardiovascular symptoms include chest pressure, tightness, heaviness, burning, shortness of breath, palpitations, dizziness, fainting, swelling of the legs, reduced exercise tolerance, fatigue, and pain radiating to the jaw, sh...\n- ### Diabetes Clinical Reference ## Symptoms Diabetes can present gradually, especially in type 2 diabetes, and early symptoms may be subtle\n\n6. Safety Note\n- Seek urgent in-person medical care now if symptoms are severe, worsening, or paired with fainting, shortness of breath, new weakness, or persistent chest pressure."
+    }
+  },
+  {
+    "timestamp": "2026-05-01T11:02:59.107760+00:00",
+    "input": {
+      "query": "hi",
+      "history": [
+        {
+          "role": "assistant",
+          "content": "Hello! I'm your ArogyaAI clinical assistant. Ask about symptoms, wearable changes, labs, or your risk predictions and I'll reason with your health data plus retrieved medical guidance."
+        }
+      ]
+    },
+    "context": {
+      "conversation_history": [
+        {
+          "role": "assistant",
+          "content": "Hello! I'm your ArogyaAI clinical assistant. Ask about symptoms, wearable changes, labs, or your risk predictions and I'll reason with your health data plus retrieved medical guidance."
+        }
+      ],
+      "patient_vitals": {
+        "steps": {
+          "latest": 4299.0,
+          "unit": "count",
+          "timestamp": "2026-05-01T11:02:48.788720+00:00",
+          "avg_24h": 4299.0,
+          "avg_7d": 5360.14,
+          "trend": "down"
+        },
+        "heart_rate": {
+          "latest": 95.0,
+          "unit": "bpm",
+          "timestamp": "2026-04-27T20:02:39.626000+00:00",
+          "avg_24h": null,
+          "avg_7d": 78.18,
+          "trend": "stable"
+        }
+      },
+      "vital_highlights": [],
+      "patient_profile": {
+        "age": null,
+        "gender": "male",
+        "height_cm": 178.0,
+        "weight_kg": 76.0,
+        "activity_level": null,
+        "sleep_hours": null,
+        "stress_level": null,
+        "family_history": "",
+        "allergies": "None",
+        "current_medications": "",
+        "goals": ""
+      },
+      "ml_risk_scores": {
+        "risk_level": "HIGH",
+        "ml_risk_level": "HIGH",
+        "overall_risk": 1.0,
+        "condition_risks": {
+          "cardiovascular": 1.0,
+          "diabetes": 1.0,
+          "respiratory": 0.83
+        },
+        "health_score": 48.32,
+        "prediction_id": "f1cced7d-4845-47e8-8a81-5a49f10374e1"
+      },
+      "shap_drivers": [
+        {
+          "feature_name": "sleep_hours",
+          "label": "Sleep Hours",
+          "impact": 5.3454,
+          "direction": "positive",
+          "feature_value": 0.0,
+          "explanation": "sleep_hours has a positive contribution to the prediction."
+        },
+        {
+          "feature_name": "steps",
+          "label": "Steps",
+          "impact": -0.072,
+          "direction": "negative",
+          "feature_value": 5360.14,
+          "explanation": "steps has a negative contribution to the prediction."
+        },
+        {
+          "feature_name": "diastolic_bp",
+          "label": "Diastolic BP",
+          "impact": -0.0543,
+          "direction": "negative",
+          "feature_value": 80.0,
+          "explanation": "diastolic_bp has a negative contribution to the prediction."
+        },
+        {
+          "feature_name": "heart_rate",
+          "label": "Heart Rate",
+          "impact": -0.0276,
+          "direction": "negative",
+          "feature_value": 79.24,
+          "explanation": "heart_rate has a negative contribution to the prediction."
+        },
+        {
+          "feature_name": "bmi",
+          "label": "BMI",
+          "impact": -0.0077,
+          "direction": "negative",
+          "feature_value": 24.0,
+          "explanation": "bmi has a negative contribution to the prediction."
+        }
+      ],
+      "symptoms": [
+        "Daytime fatigue",
+        "Daytime cognitive slowing",
+        "Shortness of breath",
+        "Reduced stamina"
+      ],
+      "rag_context": [
+        {
+          "title": "Diabetes Clinical Reference",
+          "source": "Diabetes.md",
+          "category": "Diabetes",
+          "topic": "Diabetes assessment and early management",
+          "disease_type": "Diabetes",
+          "source_url": "",
+          "source_org": "ArogyaAI",
+          "retrieval_method": "sparse",
+          "excerpt": "Diabetes Clinical Reference. Diabetes Clinical Reference.Symptoms. Diabetes can present gradually, especially in type 2 diabetes, and early symptoms may be subtle.",
+          "score": 0.4851025641025641,
+          "citation": {
+            "source": "Diabetes.md",
+            "title": "Diabetes Clinical Reference",
+            "url": ""
+          }
+        },
+        {
+          "title": "Sleep Clinical Reference",
+          "source": "Sleep.md",
+          "category": "Sleep",
+          "topic": "Sleep quality and metabolic health",
+          "disease_type": "Sleep",
+          "source_url": "",
+          "source_org": "ArogyaAI",
+          "retrieval_method": "sparse",
+          "excerpt": "Sleep Clinical Reference. Sleep Clinical Reference.Symptoms. Sleep problems may present as difficulty falling asleep, frequent awakenings, early morning waking, non-restorative sleep, daytime sleepiness, morning headache, irritability, poor concentration, low.",
+          "score": 0.21974358974358976,
+          "citation": {
+            "source": "Sleep.md",
+            "title": "Sleep Clinical Reference",
+            "url": ""
+          }
+        },
+        {
+          "title": "Cardiovascular Clinical Reference",
+          "source": "Cardiovascular.md",
+          "category": "Cardiovascular",
+          "topic": "Cardiovascular risk and symptom assessment",
+          "disease_type": "Cardiovascular",
+          "source_url": "",
+          "source_org": "ArogyaAI",
+          "retrieval_method": "sparse",
+          "excerpt": "Cardiovascular Clinical Reference. Cardiovascular Clinical Reference.Symptoms. Cardiovascular symptoms include chest pressure, tightness, heaviness, burning, shortness of breath, palpitations, dizziness, fainting, swelling of the legs, reduced exercise toleran.",
+          "score": 0.09480266301627589,
+          "citation": {
+            "source": "Cardiovascular.md",
+            "title": "Cardiovascular Clinical Reference",
+            "url": ""
+          }
+        }
+      ]
+    },
+    "output": {
+      "clinical_insight": "The current question centers on Daytime fatigue, Daytime cognitive slowing, Shortness of breath. Risk score 1.00 (HIGH) is being interpreted using retrieved medical guidance. The strongest model drivers are Sleep Hours, Steps, Diastolic blood pressure.",
+      "possible_causes": [
+        "This could relate to type 2 diabetes risk.",
+        "This could relate to cardiovascular disease risk.",
+        "This could relate to respiratory strain.",
+        "Retrieved guidance on diabetes clinical reference suggests a Diabetes explanation may be worth considering."
+      ],
+      "risk_level_from_ml": "HIGH",
+      "clinical_risk_level": "HIGH",
+      "follow_up_questions": [
+        "Is the breathing difficulty present at rest, with walking, or when lying down?",
+        "Do you have an oxygen saturation reading, cough, wheezing, fever, or recent infection?",
+        "Have you noticed any triggers, recent illness, medication changes, dehydration, or unusual exertion around the same time?"
+      ],
+      "recommendations": [
+        "Because the symptoms may represent a higher-risk pattern, prioritize urgent clinical evaluation rather than self-monitoring alone.",
+        "Sleep Clinical Reference.",
+        "Cardiovascular Clinical Reference.",
+        "Diabetes Clinical Reference."
+      ],
+      "safety_note": "Seek urgent in-person medical care now if symptoms are severe, worsening, or paired with fainting, shortness of breath, new weakness, or persistent chest pressure.",
+      "formatted_response": "1. Clinical Insight\n- The current question centers on Daytime fatigue, Daytime cognitive slowing, Shortness of breath. Risk score 1.00 (HIGH) is being interpreted using retrieved medical guidance. The strongest model drivers are Sleep Hours, Steps, Diastolic blood pressure.\n\n2. Possible Causes\n- This could relate to type 2 diabetes risk.\n- This could relate to cardiovascular disease risk.\n- This could relate to respiratory strain.\n- Retrieved guidance on diabetes clinical reference suggests a Diabetes explanation may be worth considering.\n\n3. Risk Level (from ML)\n- ML risk level: HIGH. Your latest ML risk estimate is 100.0% (HIGH). Your current health score is 48.3. Because the current symptom pattern includes a potential red flag, this should be treated more cautiously than a routine question.\n\n4. Follow-up Questions (IMPORTANT)\n- Is the breathing difficulty present at rest, with walking, or when lying down?\n- Do this could indicate an oxygen saturation reading, cough, wheezing, fever, or recent infection?\n- Have you noticed any triggers, recent illness, medication changes, dehydration, or unusual exertion around the same time?\n\n5. Recommendations\n- Because the symptoms may represent a higher-risk pattern, prioritize urgent clinical evaluation rather than self-monitoring alone.\n- Sleep Clinical Reference.\n- Cardiovascular Clinical Reference.\n- Diabetes Clinical Reference.\n\n6. Safety Note\n- Seek urgent in-person medical care now if symptoms are severe, worsening, or paired with fainting, shortness of breath, new weakness, or persistent chest pressure."
+    },
+    "fine_tuning_example": {
+      "instruction": "You are a clinical AI assistant. Output must never include markdown heading markers, must use a professional medical tone, must provide structured output only, must include ICD-style naming when possible, and must include confidence and references. Do not give a final diagnosis. Use patient vitals, ML risk scores, SHAP drivers, symptoms, and RAG context. Return the six sections: Clinical Insight, Possible Causes, Risk Level (from ML), Follow-up Questions (IMPORTANT), Recommendations, Safety Note.",
+      "input": "{\n  \"query\": \"hi\",\n  \"context\": {\n    \"conversation_history\": [\n      {\n        \"role\": \"assistant\",\n        \"content\": \"Hello! I'm your ArogyaAI clinical assistant. Ask about symptoms, wearable changes, labs, or your risk predictions and I'll reason with your health data plus retrieved medical guidance.\"\n      }\n    ],\n    \"patient_vitals\": {\n      \"steps\": {\n        \"latest\": 4299.0,\n        \"unit\": \"count\",\n        \"timestamp\": \"2026-05-01T11:02:48.788720+00:00\",\n        \"avg_24h\": 4299.0,\n        \"avg_7d\": 5360.14,\n        \"trend\": \"down\"\n      },\n      \"heart_rate\": {\n        \"latest\": 95.0,\n        \"unit\": \"bpm\",\n        \"timestamp\": \"2026-04-27T20:02:39.626000+00:00\",\n        \"avg_24h\": null,\n        \"avg_7d\": 78.18,\n        \"trend\": \"stable\"\n      }\n    },\n    \"vital_highlights\": [],\n    \"patient_profile\": {\n      \"age\": null,\n      \"gender\": \"male\",\n      \"height_cm\": 178.0,\n      \"weight_kg\": 76.0,\n      \"activity_level\": null,\n      \"sleep_hours\": null,\n      \"stress_level\": null,\n      \"family_history\": \"\",\n      \"allergies\": \"None\",\n      \"current_medications\": \"\",\n      \"goals\": \"\"\n    },\n    \"ml_risk_scores\": {\n      \"risk_level\": \"HIGH\",\n      \"ml_risk_level\": \"HIGH\",\n      \"overall_risk\": 1.0,\n      \"condition_risks\": {\n        \"cardiovascular\": 1.0,\n        \"diabetes\": 1.0,\n        \"respiratory\": 0.83\n      },\n      \"health_score\": 48.32,\n      \"prediction_id\": \"f1cced7d-4845-47e8-8a81-5a49f10374e1\"\n    },\n    \"shap_drivers\": [\n      {\n        \"feature_name\": \"sleep_hours\",\n        \"label\": \"Sleep Hours\",\n        \"impact\": 5.3454,\n        \"direction\": \"positive\",\n        \"feature_value\": 0.0,\n        \"explanation\": \"sleep_hours has a positive contribution to the prediction.\"\n      },\n      {\n        \"feature_name\": \"steps\",\n        \"label\": \"Steps\",\n        \"impact\": -0.072,\n        \"direction\": \"negative\",\n        \"feature_value\": 5360.14,\n        \"explanation\": \"steps has a negative contribution to the prediction.\"\n      },\n      {\n        \"feature_name\": \"diastolic_bp\",\n        \"label\": \"Diastolic BP\",\n        \"impact\": -0.0543,\n        \"direction\": \"negative\",\n        \"feature_value\": 80.0,\n        \"explanation\": \"diastolic_bp has a negative contribution to the prediction.\"\n      },\n      {\n        \"feature_name\": \"heart_rate\",\n        \"label\": \"Heart Rate\",\n        \"impact\": -0.0276,\n        \"direction\": \"negative\",\n        \"feature_value\": 79.24,\n        \"explanation\": \"heart_rate has a negative contribution to the prediction.\"\n      },\n      {\n        \"feature_name\": \"bmi\",\n        \"label\": \"BMI\",\n        \"impact\": -0.0077,\n        \"direction\": \"negative\",\n        \"feature_value\": 24.0,\n        \"explanation\": \"bmi has a negative contribution to the prediction.\"\n      }\n    ],\n    \"symptoms\": [\n      \"Daytime fatigue\",\n      \"Daytime cognitive slowing\",\n      \"Shortness of breath\",\n      \"Reduced stamina\"\n    ],\n    \"rag_context\": [\n      {\n        \"title\": \"Diabetes Clinical Reference\",\n        \"source\": \"Diabetes.md\",\n        \"category\": \"Diabetes\",\n        \"topic\": \"Diabetes assessment and early management\",\n        \"disease_type\": \"Diabetes\",\n        \"source_url\": \"\",\n        \"source_org\": \"ArogyaAI\",\n        \"retrieval_method\": \"sparse\",\n        \"excerpt\": \"Diabetes Clinical Reference. Diabetes Clinical Reference.Symptoms. Diabetes can present gradually, especially in type 2 diabetes, and early symptoms may be subtle.\",\n        \"score\": 0.4851025641025641,\n        \"citation\": {\n          \"source\": \"Diabetes.md\",\n          \"title\": \"Diabetes Clinical Reference\",\n          \"url\": \"\"\n        }\n      },\n      {\n        \"title\": \"Sleep Clinical Reference\",\n        \"source\": \"Sleep.md\",\n        \"category\": \"Sleep\",\n        \"topic\": \"Sleep quality and metabolic health\",\n        \"disease_type\": \"Sleep\",\n        \"source_url\": \"\",\n        \"source_org\": \"ArogyaAI\",\n        \"retrieval_method\": \"sparse\",\n        \"excerpt\": \"Sleep Clinical Reference. Sleep Clinical Reference.Symptoms. Sleep problems may present as difficulty falling asleep, frequent awakenings, early morning waking, non-restorative sleep, daytime sleepiness, morning headache, irritability, poor concentration, low.\",\n        \"score\": 0.21974358974358976,\n        \"citation\": {\n          \"source\": \"Sleep.md\",\n          \"title\": \"Sleep Clinical Reference\",\n          \"url\": \"\"\n        }\n      },\n      {\n        \"title\": \"Cardiovascular Clinical Reference\",\n        \"source\": \"Cardiovascular.md\",\n        \"category\": \"Cardiovascular\",\n        \"topic\": \"Cardiovascular risk and symptom assessment\",\n        \"disease_type\": \"Cardiovascular\",\n        \"source_url\": \"\",\n        \"source_org\": \"ArogyaAI\",\n        \"retrieval_method\": \"sparse\",\n        \"excerpt\": \"Cardiovascular Clinical Reference. Cardiovascular Clinical Reference.Symptoms. Cardiovascular symptoms include chest pressure, tightness, heaviness, burning, shortness of breath, palpitations, dizziness, fainting, swelling of the legs, reduced exercise toleran.\",\n        \"score\": 0.09480266301627589,\n        \"citation\": {\n          \"source\": \"Cardiovascular.md\",\n          \"title\": \"Cardiovascular Clinical Reference\",\n          \"url\": \"\"\n        }\n      }\n    ]\n  }\n}",
+      "output": "1. Clinical Insight\n- The current question centers on Daytime fatigue, Daytime cognitive slowing, Shortness of breath. Risk score 1.00 (HIGH) is being interpreted using retrieved medical guidance. The strongest model drivers are Sleep Hours, Steps, Diastolic blood pressure.\n\n2. Possible Causes\n- This could relate to type 2 diabetes risk.\n- This could relate to cardiovascular disease risk.\n- This could relate to respiratory strain.\n- Retrieved guidance on diabetes clinical reference suggests a Diabetes explanation may be worth considering.\n\n3. Risk Level (from ML)\n- ML risk level: HIGH. Your latest ML risk estimate is 100.0% (HIGH). Your current health score is 48.3. Because the current symptom pattern includes a potential red flag, this should be treated more cautiously than a routine question.\n\n4. Follow-up Questions (IMPORTANT)\n- Is the breathing difficulty present at rest, with walking, or when lying down?\n- Do this could indicate an oxygen saturation reading, cough, wheezing, fever, or recent infection?\n- Have you noticed any triggers, recent illness, medication changes, dehydration, or unusual exertion around the same time?\n\n5. Recommendations\n- Because the symptoms may represent a higher-risk pattern, prioritize urgent clinical evaluation rather than self-monitoring alone.\n- Sleep Clinical Reference.\n- Cardiovascular Clinical Reference.\n- Diabetes Clinical Reference.\n\n6. Safety Note\n- Seek urgent in-person medical care now if symptoms are severe, worsening, or paired with fainting, shortness of breath, new weakness, or persistent chest pressure."
+    }
+  },
+  {
+    "timestamp": "2026-05-01T15:36:50.184312+00:00",
+    "input": {
+      "query": "hi",
+      "history": [
+        {
+          "role": "assistant",
+          "content": "Hello. Tell me what's going on, even if it feels vague. I'll ask the next useful question and interpret your health data cautiously."
+        }
+      ]
+    },
+    "context": {
+      "ml_prediction": {
+        "risk_score": 1.0,
+        "risk_level": "high",
+        "disease_probabilities": {
+          "cardiovascular": 1.0,
+          "diabetes": 1.0,
+          "respiratory": 0.83
+        },
+        "health_score": 48.1,
+        "drivers": [
+          {
+            "feature": "Sleep Hours",
+            "direction": "Positive",
+            "explanation": "Sleep hours has a positive contribution to the prediction."
+          },
+          {
+            "feature": "Diastolic BP",
+            "direction": "Negative",
+            "explanation": "Diastolic bp has a negative contribution to the prediction."
+          },
+          {
+            "feature": "Steps",
+            "direction": "Positive",
+            "explanation": "Steps has a positive contribution to the prediction."
+          },
+          {
+            "feature": "Heart Rate",
+            "direction": "Negative",
+            "explanation": "Heart rate has a negative contribution to the prediction."
+          },
+          {
+            "feature": "AGE",
+            "direction": "Positive",
+            "explanation": "Age has a positive contribution to the prediction."
+          }
+        ],
+        "prediction_id": "cb5c8d8f-ff9f-4a1d-b3cc-c1def941ffbb"
+      },
+      "wearables": {
+        "heart_rate": {
+          "latest": 95.0,
+          "unit": "bpm",
+          "timestamp": "2026-04-27T20:18:16.597000+00:00",
+          "avg_24h": null,
+          "avg_7d": 78.18,
+          "trend": "stable"
+        },
+        "steps": {
+          "latest": 5762.0,
+          "unit": "count",
+          "timestamp": "2026-04-30T18:30:00+00:00",
+          "avg_24h": 5762.0,
+          "avg_7d": 5569.14,
+          "trend": "stable"
+        },
+        "sleep": null,
+        "trends": {
+          "heart_rate_7d": 78.18,
+          "steps_7d": 5569.14,
+          "sleep_efficiency": 0.0,
+          "bmi": 24.0,
+          "lifestyle_score": 42.0,
+          "activity_score": 55.1,
+          "data_availability": {
+            "sleep": false,
+            "steps": true,
+            "heart_rate": true
+          }
+        },
+        "highlights": []
+      },
+      "labs": {
+        "recent": [
+          {
+            "name": "Platelets",
+            "value": 2.0,
+            "unit": "x10^3/uL",
+            "status": "low",
+            "category": "hematology",
+            "timestamp": "2026-05-01T04:36:17.562414+00:00"
+          },
+          {
+            "name": "Platelets",
+            "value": 2.0,
+            "unit": "x10^3/uL",
+            "status": "low",
+            "category": "hematology",
+            "timestamp": "2026-04-30T18:11:51.476312+00:00"
+          },
+          {
+            "name": "Platelets",
+            "value": 2.0,
+            "unit": "x10^3/uL",
+            "status": "low",
+            "category": "hematology",
+            "timestamp": "2026-04-29T19:39:13.382286+00:00"
+          },
+          {
+            "name": "Platelets",
+            "value": 2.0,
+            "unit": "x10^3/uL",
+            "status": "low",
+            "category": "hematology",
+            "timestamp": "2026-04-29T18:17:45.501401+00:00"
+          },
+          {
+            "name": "Platelets",
+            "value": 2.0,
+            "unit": "x10^3/uL",
+            "status": "low",
+            "category": "hematology",
+            "timestamp": "2026-04-20T11:01:48.265378+00:00"
+          },
+          {
+            "name": "Platelets",
+            "value": 2.0,
+            "unit": "x10^3/uL",
+            "status": "low",
+            "category": "hematology",
+            "timestamp": "2026-04-20T11:01:40.784475+00:00"
+          },
+          {
+            "name": "WBC",
+            "value": 15.0,
+            "unit": "x10^3/uL",
+            "status": "high",
+            "category": "hematology",
+            "timestamp": "2026-04-20T10:45:59.746304+00:00"
+          },
+          {
+            "name": "WBC",
+            "value": 15.0,
+            "unit": "x10^3/uL",
+            "status": "high",
+            "category": "hematology",
+            "timestamp": "2026-04-20T10:35:14.471046+00:00"
+          }
+        ],
+        "abnormal": [
+          {
+            "name": "Platelets",
+            "value": 2.0,
+            "unit": "x10^3/uL",
+            "status": "low",
+            "category": "hematology",
+            "timestamp": "2026-05-01T04:36:17.562414+00:00"
+          },
+          {
+            "name": "Platelets",
+            "value": 2.0,
+            "unit": "x10^3/uL",
+            "status": "low",
+            "category": "hematology",
+            "timestamp": "2026-04-30T18:11:51.476312+00:00"
+          },
+          {
+            "name": "Platelets",
+            "value": 2.0,
+            "unit": "x10^3/uL",
+            "status": "low",
+            "category": "hematology",
+            "timestamp": "2026-04-29T19:39:13.382286+00:00"
+          },
+          {
+            "name": "Platelets",
+            "value": 2.0,
+            "unit": "x10^3/uL",
+            "status": "low",
+            "category": "hematology",
+            "timestamp": "2026-04-29T18:17:45.501401+00:00"
+          },
+          {
+            "name": "Platelets",
+            "value": 2.0,
+            "unit": "x10^3/uL",
+            "status": "low",
+            "category": "hematology",
+            "timestamp": "2026-04-20T11:01:48.265378+00:00"
+          }
+        ]
+      },
+      "symptoms": [
+        "Daytime fatigue",
+        "Daytime cognitive slowing",
+        "Shortness of breath",
+        "Reduced stamina"
+      ],
+      "rag_context": [
+        {
+          "title": "Diabetes Clinical Reference",
+          "source": "Diabetes.md",
+          "category": "Diabetes",
+          "topic": "Diabetes assessment and early management",
+          "disease_type": "Diabetes",
+          "source_url": "",
+          "source_org": "ArogyaAI",
+          "retrieval_method": "sparse",
+          "excerpt": "Diabetes Clinical Reference. Diabetes Clinical Reference.Symptoms. Diabetes can present gradually, especially in type 2 diabetes, and early symptoms may be subtle.",
+          "score": 0.48407692307692307,
+          "citation": {
+            "source": "Diabetes.md",
+            "title": "Diabetes Clinical Reference",
+            "url": ""
+          }
+        },
+        {
+          "title": "Sleep Clinical Reference",
+          "source": "Sleep.md",
+          "category": "Sleep",
+          "topic": "Sleep quality and metabolic health",
+          "disease_type": "Sleep",
+          "source_url": "",
+          "source_org": "ArogyaAI",
+          "retrieval_method": "sparse",
+          "excerpt": "Sleep Clinical Reference. Sleep Clinical Reference.Symptoms. Sleep problems may present as difficulty falling asleep, frequent awakenings, early morning waking, non-restorative sleep, daytime sleepiness, morning headache, irritability, poor concentration, low.",
+          "score": 0.21923076923076923,
+          "citation": {
+            "source": "Sleep.md",
+            "title": "Sleep Clinical Reference",
+            "url": ""
+          }
+        },
+        {
+          "title": "Cardiovascular Clinical Reference",
+          "source": "Cardiovascular.md",
+          "category": "Cardiovascular",
+          "topic": "Cardiovascular risk and symptom assessment",
+          "disease_type": "Cardiovascular",
+          "source_url": "",
+          "source_org": "ArogyaAI",
+          "retrieval_method": "sparse",
+          "excerpt": "Cardiovascular Clinical Reference. Cardiovascular Clinical Reference.Symptoms. Cardiovascular symptoms include chest pressure, tightness, heaviness, burning, shortness of breath, palpitations, dizziness, fainting, swelling of the legs, reduced exercise toleran.",
+          "score": 0.1621899314480536,
+          "citation": {
+            "source": "Cardiovascular.md",
+            "title": "Cardiovascular Clinical Reference",
+            "url": ""
+          }
+        }
+      ],
+      "conversation_history": [
+        {
+          "role": "assistant",
+          "content": "Hello. Tell me what's going on, even if it feels vague. I'll ask the next useful question and interpret your health data cautiously."
+        }
+      ],
+      "conversation_state": {
+        "messages": [],
+        "symptoms_history": [],
+        "last_risk_score": null,
+        "follow_up_pending": false
+      },
+      "patient_profile": {
+        "age": null,
+        "gender": "male",
+        "height_cm": 178.0,
+        "weight_kg": 76.0,
+        "activity_level": null,
+        "sleep_hours": null,
+        "stress_level": null,
+        "family_history": "",
+        "allergies": "None",
+        "current_medications": "",
+        "goals": ""
+      },
+      "patient_vitals": {
+        "steps": {
+          "latest": 5762.0,
+          "unit": "count",
+          "timestamp": "2026-04-30T18:30:00+00:00",
+          "avg_24h": 5762.0,
+          "avg_7d": 5569.14,
+          "trend": "stable"
+        },
+        "heart_rate": {
+          "latest": 95.0,
+          "unit": "bpm",
+          "timestamp": "2026-04-27T20:18:16.597000+00:00",
+          "avg_24h": null,
+          "avg_7d": 78.18,
+          "trend": "stable"
+        }
+      },
+      "ml_risk_scores": {
+        "risk_level": "HIGH",
+        "overall_risk": 1.0,
+        "condition_risks": {
+          "cardiovascular": 1.0,
+          "diabetes": 1.0,
+          "respiratory": 0.83
+        },
+        "health_score": 48.1,
+        "prediction_id": "cb5c8d8f-ff9f-4a1d-b3cc-c1def941ffbb"
+      },
+      "shap_drivers": [
+        {
+          "feature": "Sleep Hours",
+          "direction": "Positive",
+          "explanation": "Sleep hours has a positive contribution to the prediction."
+        },
+        {
+          "feature": "Diastolic BP",
+          "direction": "Negative",
+          "explanation": "Diastolic bp has a negative contribution to the prediction."
+        },
+        {
+          "feature": "Steps",
+          "direction": "Positive",
+          "explanation": "Steps has a positive contribution to the prediction."
+        },
+        {
+          "feature": "Heart Rate",
+          "direction": "Negative",
+          "explanation": "Heart rate has a negative contribution to the prediction."
+        },
+        {
+          "feature": "AGE",
+          "direction": "Positive",
+          "explanation": "Age has a positive contribution to the prediction."
+        }
+      ]
+    },
+    "output": {
+      "message": "I hear your concern, and I will reason through it using the information available.\n\nThe user is asking for health interpretation, but the symptom signal is broad. The safest reasoning path is to use available risk predictions, vitals, labs, and retrieved medical context while asking for more detail. Because one or more signals are higher concern, the response should prioritize safety and timely clinical evaluation.\n\nPossible explanations include This could relate to type 2 diabetes risk; This could relate to cardiovascular disease risk.\n\nOne thing I would like to understand better is What symptoms are you noticing, when did they start, and how severe are they from 1 to 10? Also, Have you noticed triggers, recent illness, medication changes, dehydration, stress, or unusual exertion around the same time?\n\nFor now, Arrange prompt clinical evaluation rather than relying on self-monitoring alone.\n\nPlease arrange prompt clinical evaluation, especially if symptoms are new, persistent, worsening, or different from your usual pattern.",
+      "understanding": "I understand that you want help interpreting your current health concern.",
+      "clinical_interpretation": "The user is asking for health interpretation, but the symptom signal is broad. The safest reasoning path is to use available risk predictions, vitals, labs, and retrieved medical context while asking for more detail. Because one or more signals are higher concern, the response should prioritize safety and timely clinical evaluation.",
+      "clinical_insight": "The user is asking for health interpretation, but the symptom signal is broad. The safest reasoning path is to use available risk predictions, vitals, labs, and retrieved medical context while asking for more detail. Because one or more signals are higher concern, the response should prioritize safety and timely clinical evaluation.",
+      "possible_causes": [
+        "This could relate to type 2 diabetes risk.",
+        "This could relate to cardiovascular disease risk.",
+        "This could relate to respiratory strain.",
+        "Guidance on diabetes clinical reference supports considering a Diabetes explanation."
+      ],
+      "risk_level": "high",
+      "confidence_score": 0.74,
+      "follow_up_questions": [
+        "What symptoms are you noticing, when did they start, and how severe are they from 1 to 10?",
+        "Have you noticed triggers, recent illness, medication changes, dehydration, stress, or unusual exertion around the same time?"
+      ],
+      "recommendations": [
+        "Arrange prompt clinical evaluation rather than relying on self-monitoring alone.",
+        "Sleep Clinical Reference.",
+        "Cardiovascular Clinical Reference.",
+        "Diabetes Clinical Reference."
+      ],
+      "safety_note": "Please arrange prompt clinical evaluation, especially if symptoms are new, persistent, worsening, or different from your usual pattern.",
+      "formatted_response": "1. Acknowledge\n- I hear your concern, and it is reasonable to look at this carefully.\n\n2. Interpret Symptoms/Data\n- The user is asking for health interpretation, but the symptom signal is broad. The safest reasoning path is to use available risk predictions, vitals, labs, and retrieved medical context while asking for more detail.\n\n3. Combine Data and Medical Context\n- Recent prediction data suggests a higher-concern pattern that should be interpreted alongside the user's current symptoms. The strongest data patterns are recent sleep hours and diastolic bp.\n\n4. Clinical Insight\n- The user is asking for health interpretation, but the symptom signal is broad. The safest reasoning path is to use available risk predictions, vitals, labs, and retrieved medical context while asking for more detail. Because one or more signals are higher concern, the response should prioritize safety and timely clinical evaluation.\n\n5. Follow-up Questions\n- What symptoms are you noticing, when did they start, and how severe are they from 1 to 10?\n- Have you noticed triggers, recent illness, medication changes, dehydration, stress, or unusual exertion around the same time?\n\n6. Recommendations\n- Arrange prompt clinical evaluation rather than relying on self-monitoring alone.\n- Sleep Clinical Reference.\n- Cardiovascular Clinical Reference.\n- Diabetes Clinical Reference.\n\n7. Safety Note\n- Please arrange prompt clinical evaluation, especially if symptoms are new, persistent, worsening, or different from your usual pattern."
+    },
+    "fine_tuning_example": {
+      "instruction": "You are a clinical AI assistant. You behave like a careful, responsible doctor. You listen first, reason step-by-step, avoid overconfidence, ask follow-up questions, explain clearly in simple language, and prioritize patient safety. Never give a final diagnosis. Use patient vitals, risk predictions, model drivers, symptoms, labs, wearables, and RAG context. Return JSON with message, follow_up_questions, recommendations, and risk_level.",
+      "input": "{\n  \"query\": \"hi\",\n  \"context\": {\n    \"ml_prediction\": {\n      \"risk_score\": 1.0,\n      \"risk_level\": \"high\",\n      \"disease_probabilities\": {\n        \"cardiovascular\": 1.0,\n        \"diabetes\": 1.0,\n        \"respiratory\": 0.83\n      },\n      \"health_score\": 48.1,\n      \"drivers\": [\n        {\n          \"feature\": \"Sleep Hours\",\n          \"direction\": \"Positive\",\n          \"explanation\": \"Sleep hours has a positive contribution to the prediction.\"\n        },\n        {\n          \"feature\": \"Diastolic BP\",\n          \"direction\": \"Negative\",\n          \"explanation\": \"Diastolic bp has a negative contribution to the prediction.\"\n        },\n        {\n          \"feature\": \"Steps\",\n          \"direction\": \"Positive\",\n          \"explanation\": \"Steps has a positive contribution to the prediction.\"\n        },\n        {\n          \"feature\": \"Heart Rate\",\n          \"direction\": \"Negative\",\n          \"explanation\": \"Heart rate has a negative contribution to the prediction.\"\n        },\n        {\n          \"feature\": \"AGE\",\n          \"direction\": \"Positive\",\n          \"explanation\": \"Age has a positive contribution to the prediction.\"\n        }\n      ],\n      \"prediction_id\": \"cb5c8d8f-ff9f-4a1d-b3cc-c1def941ffbb\"\n    },\n    \"wearables\": {\n      \"heart_rate\": {\n        \"latest\": 95.0,\n        \"unit\": \"bpm\",\n        \"timestamp\": \"2026-04-27T20:18:16.597000+00:00\",\n        \"avg_24h\": null,\n        \"avg_7d\": 78.18,\n        \"trend\": \"stable\"\n      },\n      \"steps\": {\n        \"latest\": 5762.0,\n        \"unit\": \"count\",\n        \"timestamp\": \"2026-04-30T18:30:00+00:00\",\n        \"avg_24h\": 5762.0,\n        \"avg_7d\": 5569.14,\n        \"trend\": \"stable\"\n      },\n      \"sleep\": null,\n      \"trends\": {\n        \"heart_rate_7d\": 78.18,\n        \"steps_7d\": 5569.14,\n        \"sleep_efficiency\": 0.0,\n        \"bmi\": 24.0,\n        \"lifestyle_score\": 42.0,\n        \"activity_score\": 55.1,\n        \"data_availability\": {\n          \"sleep\": false,\n          \"steps\": true,\n          \"heart_rate\": true\n        }\n      },\n      \"highlights\": []\n    },\n    \"labs\": {\n      \"recent\": [\n        {\n          \"name\": \"Platelets\",\n          \"value\": 2.0,\n          \"unit\": \"x10^3/uL\",\n          \"status\": \"low\",\n          \"category\": \"hematology\",\n          \"timestamp\": \"2026-05-01T04:36:17.562414+00:00\"\n        },\n        {\n          \"name\": \"Platelets\",\n          \"value\": 2.0,\n          \"unit\": \"x10^3/uL\",\n          \"status\": \"low\",\n          \"category\": \"hematology\",\n          \"timestamp\": \"2026-04-30T18:11:51.476312+00:00\"\n        },\n        {\n          \"name\": \"Platelets\",\n          \"value\": 2.0,\n          \"unit\": \"x10^3/uL\",\n          \"status\": \"low\",\n          \"category\": \"hematology\",\n          \"timestamp\": \"2026-04-29T19:39:13.382286+00:00\"\n        },\n        {\n          \"name\": \"Platelets\",\n          \"value\": 2.0,\n          \"unit\": \"x10^3/uL\",\n          \"status\": \"low\",\n          \"category\": \"hematology\",\n          \"timestamp\": \"2026-04-29T18:17:45.501401+00:00\"\n        },\n        {\n          \"name\": \"Platelets\",\n          \"value\": 2.0,\n          \"unit\": \"x10^3/uL\",\n          \"status\": \"low\",\n          \"category\": \"hematology\",\n          \"timestamp\": \"2026-04-20T11:01:48.265378+00:00\"\n        },\n        {\n          \"name\": \"Platelets\",\n          \"value\": 2.0,\n          \"unit\": \"x10^3/uL\",\n          \"status\": \"low\",\n          \"category\": \"hematology\",\n          \"timestamp\": \"2026-04-20T11:01:40.784475+00:00\"\n        },\n        {\n          \"name\": \"WBC\",\n          \"value\": 15.0,\n          \"unit\": \"x10^3/uL\",\n          \"status\": \"high\",\n          \"category\": \"hematology\",\n          \"timestamp\": \"2026-04-20T10:45:59.746304+00:00\"\n        },\n        {\n          \"name\": \"WBC\",\n          \"value\": 15.0,\n          \"unit\": \"x10^3/uL\",\n          \"status\": \"high\",\n          \"category\": \"hematology\",\n          \"timestamp\": \"2026-04-20T10:35:14.471046+00:00\"\n        }\n      ],\n      \"abnormal\": [\n        {\n          \"name\": \"Platelets\",\n          \"value\": 2.0,\n          \"unit\": \"x10^3/uL\",\n          \"status\": \"low\",\n          \"category\": \"hematology\",\n          \"timestamp\": \"2026-05-01T04:36:17.562414+00:00\"\n        },\n        {\n          \"name\": \"Platelets\",\n          \"value\": 2.0,\n          \"unit\": \"x10^3/uL\",\n          \"status\": \"low\",\n          \"category\": \"hematology\",\n          \"timestamp\": \"2026-04-30T18:11:51.476312+00:00\"\n        },\n        {\n          \"name\": \"Platelets\",\n          \"value\": 2.0,\n          \"unit\": \"x10^3/uL\",\n          \"status\": \"low\",\n          \"category\": \"hematology\",\n          \"timestamp\": \"2026-04-29T19:39:13.382286+00:00\"\n        },\n        {\n          \"name\": \"Platelets\",\n          \"value\": 2.0,\n          \"unit\": \"x10^3/uL\",\n          \"status\": \"low\",\n          \"category\": \"hematology\",\n          \"timestamp\": \"2026-04-29T18:17:45.501401+00:00\"\n        },\n        {\n          \"name\": \"Platelets\",\n          \"value\": 2.0,\n          \"unit\": \"x10^3/uL\",\n          \"status\": \"low\",\n          \"category\": \"hematology\",\n          \"timestamp\": \"2026-04-20T11:01:48.265378+00:00\"\n        }\n      ]\n    },\n    \"symptoms\": [\n      \"Daytime fatigue\",\n      \"Daytime cognitive slowing\",\n      \"Shortness of breath\",\n      \"Reduced stamina\"\n    ],\n    \"rag_context\": [\n      {\n        \"title\": \"Diabetes Clinical Reference\",\n        \"source\": \"Diabetes.md\",\n        \"category\": \"Diabetes\",\n        \"topic\": \"Diabetes assessment and early management\",\n        \"disease_type\": \"Diabetes\",\n        \"source_url\": \"\",\n        \"source_org\": \"ArogyaAI\",\n        \"retrieval_method\": \"sparse\",\n        \"excerpt\": \"Diabetes Clinical Reference. Diabetes Clinical Reference.Symptoms. Diabetes can present gradually, especially in type 2 diabetes, and early symptoms may be subtle.\",\n        \"score\": 0.48407692307692307,\n        \"citation\": {\n          \"source\": \"Diabetes.md\",\n          \"title\": \"Diabetes Clinical Reference\",\n          \"url\": \"\"\n        }\n      },\n      {\n        \"title\": \"Sleep Clinical Reference\",\n        \"source\": \"Sleep.md\",\n        \"category\": \"Sleep\",\n        \"topic\": \"Sleep quality and metabolic health\",\n        \"disease_type\": \"Sleep\",\n        \"source_url\": \"\",\n        \"source_org\": \"ArogyaAI\",\n        \"retrieval_method\": \"sparse\",\n        \"excerpt\": \"Sleep Clinical Reference. Sleep Clinical Reference.Symptoms. Sleep problems may present as difficulty falling asleep, frequent awakenings, early morning waking, non-restorative sleep, daytime sleepiness, morning headache, irritability, poor concentration, low.\",\n        \"score\": 0.21923076923076923,\n        \"citation\": {\n          \"source\": \"Sleep.md\",\n          \"title\": \"Sleep Clinical Reference\",\n          \"url\": \"\"\n        }\n      },\n      {\n        \"title\": \"Cardiovascular Clinical Reference\",\n        \"source\": \"Cardiovascular.md\",\n        \"category\": \"Cardiovascular\",\n        \"topic\": \"Cardiovascular risk and symptom assessment\",\n        \"disease_type\": \"Cardiovascular\",\n        \"source_url\": \"\",\n        \"source_org\": \"ArogyaAI\",\n        \"retrieval_method\": \"sparse\",\n        \"excerpt\": \"Cardiovascular Clinical Reference. Cardiovascular Clinical Reference.Symptoms. Cardiovascular symptoms include chest pressure, tightness, heaviness, burning, shortness of breath, palpitations, dizziness, fainting, swelling of the legs, reduced exercise toleran.\",\n        \"score\": 0.1621899314480536,\n        \"citation\": {\n          \"source\": \"Cardiovascular.md\",\n          \"title\": \"Cardiovascular Clinical Reference\",\n          \"url\": \"\"\n        }\n      }\n    ],\n    \"conversation_history\": [\n      {\n        \"role\": \"assistant\",\n        \"content\": \"Hello. Tell me what's going on, even if it feels vague. I'll ask the next useful question and interpret your health data cautiously.\"\n      }\n    ],\n    \"conversation_state\": {\n      \"messages\": [],\n      \"symptoms_history\": [],\n      \"last_risk_score\": null,\n      \"follow_up_pending\": false\n    },\n    \"patient_profile\": {\n      \"age\": null,\n      \"gender\": \"male\",\n      \"height_cm\": 178.0,\n      \"weight_kg\": 76.0,\n      \"activity_level\": null,\n      \"sleep_hours\": null,\n      \"stress_level\": null,\n      \"family_history\": \"\",\n      \"allergies\": \"None\",\n      \"current_medications\": \"\",\n      \"goals\": \"\"\n    },\n    \"patient_vitals\": {\n      \"steps\": {\n        \"latest\": 5762.0,\n        \"unit\": \"count\",\n        \"timestamp\": \"2026-04-30T18:30:00+00:00\",\n        \"avg_24h\": 5762.0,\n        \"avg_7d\": 5569.14,\n        \"trend\": \"stable\"\n      },\n      \"heart_rate\": {\n        \"latest\": 95.0,\n        \"unit\": \"bpm\",\n        \"timestamp\": \"2026-04-27T20:18:16.597000+00:00\",\n        \"avg_24h\": null,\n        \"avg_7d\": 78.18,\n        \"trend\": \"stable\"\n      }\n    },\n    \"ml_risk_scores\": {\n      \"risk_level\": \"HIGH\",\n      \"overall_risk\": 1.0,\n      \"condition_risks\": {\n        \"cardiovascular\": 1.0,\n        \"diabetes\": 1.0,\n        \"respiratory\": 0.83\n      },\n      \"health_score\": 48.1,\n      \"prediction_id\": \"cb5c8d8f-ff9f-4a1d-b3cc-c1def941ffbb\"\n    },\n    \"shap_drivers\": [\n      {\n        \"feature\": \"Sleep Hours\",\n        \"direction\": \"Positive\",\n        \"explanation\": \"Sleep hours has a positive contribution to the prediction.\"\n      },\n      {\n        \"feature\": \"Diastolic BP\",\n        \"direction\": \"Negative\",\n        \"explanation\": \"Diastolic bp has a negative contribution to the prediction.\"\n      },\n      {\n        \"feature\": \"Steps\",\n        \"direction\": \"Positive\",\n        \"explanation\": \"Steps has a positive contribution to the prediction.\"\n      },\n      {\n        \"feature\": \"Heart Rate\",\n        \"direction\": \"Negative\",\n        \"explanation\": \"Heart rate has a negative contribution to the prediction.\"\n      },\n      {\n        \"feature\": \"AGE\",\n        \"direction\": \"Positive\",\n        \"explanation\": \"Age has a positive contribution to the prediction.\"\n      }\n    ]\n  }\n}",
+      "output": "{\n  \"understanding\": \"I understand that you want help interpreting your current health concern.\",\n  \"clinical_interpretation\": \"The user is asking for health interpretation, but the symptom signal is broad. The safest reasoning path is to use available risk predictions, vitals, labs, and retrieved medical context while asking for more detail. Because one or more signals are higher concern, the response should prioritize safety and timely clinical evaluation.\",\n  \"message\": \"I hear your concern, and I will reason through it using the information available.\\n\\nThe user is asking for health interpretation, but the symptom signal is broad. The safest reasoning path is to use available risk predictions, vitals, labs, and retrieved medical context while asking for more detail. Because one or more signals are higher concern, the response should prioritize safety and timely clinical evaluation.\\n\\nPossible explanations include This could relate to type 2 diabetes risk; This could relate to cardiovascular disease risk.\\n\\nOne thing I would like to understand better is What symptoms are you noticing, when did they start, and how severe are they from 1 to 10? Also, Have you noticed triggers, recent illness, medication changes, dehydration, stress, or unusual exertion around the same time?\\n\\nFor now, Arrange prompt clinical evaluation rather than relying on self-monitoring alone.\\n\\nPlease arrange prompt clinical evaluation, especially if symptoms are new, persistent, worsening, or different from your usual pattern.\",\n  \"possible_causes\": [\n    \"This could relate to type 2 diabetes risk.\",\n    \"This could relate to cardiovascular disease risk.\",\n    \"This could relate to respiratory strain.\",\n    \"Guidance on diabetes clinical reference supports considering a Diabetes explanation.\"\n  ],\n  \"follow_up_questions\": [\n    \"What symptoms are you noticing, when did they start, and how severe are they from 1 to 10?\",\n    \"Have you noticed triggers, recent illness, medication changes, dehydration, stress, or unusual exertion around the same time?\"\n  ],\n  \"recommendations\": [\n    \"Arrange prompt clinical evaluation rather than relying on self-monitoring alone.\",\n    \"Sleep Clinical Reference.\",\n    \"Cardiovascular Clinical Reference.\",\n    \"Diabetes Clinical Reference.\"\n  ],\n  \"risk_level\": \"high\",\n  \"confidence_score\": 0.74\n}"
+    }
+  }
+]

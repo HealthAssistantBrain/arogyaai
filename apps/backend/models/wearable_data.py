@@ -2,7 +2,7 @@
 WearableData model — legacy/deprecated wearable storage.
 Kept mapped during the transition so older rows can be migrated and read safely.
 """
-from sqlalchemy import Column, Integer, Numeric, DateTime, ForeignKey, func
+from sqlalchemy import Column, Integer, Numeric, DateTime, ForeignKey, Index, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -16,6 +16,15 @@ class WearableData(UUIDPrimaryKeyMixin, Base):
     device_id               = Column(UUID(as_uuid=True), ForeignKey("devices.id", ondelete="SET NULL"), nullable=True)
     recorded_at             = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
     step_count              = Column(Integer)
+    __table_args__ = (
+        Index(
+            "uq_wearable_data_user_recorded_at_steps",
+            "user_id",
+            "recorded_at",
+            unique=True,
+            postgresql_where=step_count.isnot(None),
+        ),
+    )
     calories_burned         = Column(Numeric(8, 2))
     sleep_duration_minutes  = Column(Integer)
     sleep_score             = Column(Integer)

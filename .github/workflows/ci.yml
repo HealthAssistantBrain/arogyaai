@@ -2,231 +2,560 @@ name: ArogyaAI CI
 
 on:
   push:
-    branches: [ master, develop ]
+    branches: [master, develop]
+    paths:
+      - ".github/workflows/**"
+      - ".dockerignore"
+      - "docker-compose.yml"
+      - "infra/**"
+      - "apps/frontend/**"
+      - "apps/backend/**"
+      - "pipelines/prediction-service/**"
+      - "pipelines/rag-service/**"
+      - "pipelines/wearable-service/**"
+      - "pipelines/ml_pipeline/**"
+      - "pipelines/rag_pipeline/**"
+      - "pipelines/feature_pipeline/**"
+      - "pipelines/storage_pipeline/**"
+      - "pipelines/orchestration_pipeline/**"
+      - "pipelines/schemas/**"
+      - "pipelines/*.py"
   pull_request:
-    branches: [ master, develop ]
+    branches: [master, develop]
+    paths:
+      - ".github/workflows/**"
+      - ".dockerignore"
+      - "docker-compose.yml"
+      - "infra/**"
+      - "apps/frontend/**"
+      - "apps/backend/**"
+      - "pipelines/prediction-service/**"
+      - "pipelines/rag-service/**"
+      - "pipelines/wearable-service/**"
+      - "pipelines/ml_pipeline/**"
+      - "pipelines/rag_pipeline/**"
+      - "pipelines/feature_pipeline/**"
+      - "pipelines/storage_pipeline/**"
+      - "pipelines/orchestration_pipeline/**"
+      - "pipelines/schemas/**"
+      - "pipelines/*.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  # Secrets should be configured in GitHub repository settings.
-  # Fallback values are safe dummy values for CI only.
-  POSTGRES_USER: postgres
-  POSTGRES_PASSWORD: password
-  POSTGRES_DB: arogyaai
-  SECRET_KEY: ci-secret-key-not-for-production
-  ALGORITHM: HS256
-  REDIS_URL: redis://localhost:6379/0
-  DATABASE_URL: postgresql+psycopg2://postgres:password@localhost:5432/arogyaai
-  VITE_API_URL: http://localhost:8000
+  NODE_VERSION: "20"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_NO_INPUT: "1"
+  PYTHON_VERSION: "3.11"
+  PYTHONDONTWRITEBYTECODE: "1"
+  VITE_API_URL: "http://localhost:8000"
 
 jobs:
-  # ─────────────────────────────────────────────────────────────────────────────
-  # STAGE 1 + 2 — Install & Lint/Validate (fast feedback, no Docker needed)
-  # ─────────────────────────────────────────────────────────────────────────────
-  validate:
-    name: "Stage 1+2 — Install & Validate"
+  changes:
+    name: Detect Changed Areas
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      backend_image: ${{ steps.filter.outputs.backend_image }}
+      compose: ${{ steps.filter.outputs.compose }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      ml: ${{ steps.filter.outputs.ml }}
+      prediction_service: ${{ steps.filter.outputs.prediction_service }}
+      rag_pipeline: ${{ steps.filter.outputs.rag_pipeline }}
+      rag_service: ${{ steps.filter.outputs.rag_service }}
+      wearable_service: ${{ steps.filter.outputs.wearable_service }}
+      any: ${{ steps.filter.outputs.any }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute path filters
+        id: filter
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          all=false
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            all=true
+            git ls-files > changed-files.txt
+          else
+            if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+              base="${{ github.event.pull_request.base.sha }}"
+              head="${{ github.event.pull_request.head.sha }}"
+            else
+              base="${{ github.event.before }}"
+              head="${{ github.sha }}"
+            fi
+
+            if [[ -z "${base}" || "${base}" =~ ^0+$ ]] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+              base="$(git hash-object -t tree /dev/null)"
+            fi
+
+            git diff --name-only "${base}" "${head}" > changed-files.txt
+          fi
+
+          echo "Changed files:"
+          sed 's/^/  - /' changed-files.txt || true
+
+          changed() {
+            local pattern="$1"
+            if [[ "${all}" == "true" ]] || grep -Eq "${pattern}" changed-files.txt; then
+              echo "true"
+            else
+              echo "false"
+            fi
+          }
+
+          or_bool() {
+            if [[ "$1" == "true" || "$2" == "true" ]]; then
+              echo "true"
+            else
+              echo "false"
+            fi
+          }
+
+          shared="$(changed '^(\.github/workflows/|\.dockerignore$|docker-compose\.yml$|infra/)')"
+          frontend_paths="$(changed '^(apps/frontend/)')"
+          backend_paths="$(changed '^(apps/backend/)')"
+          ml_paths="$(changed '^(pipelines/ml_pipeline/|pipelines/feature_pipeline/|apps/backend/tests/test_ml_|apps/backend/tests/test_feature_pipeline_labs\.py)')"
+          rag_pipeline_paths="$(changed '^(pipelines/rag_pipeline/|apps/backend/tests/test_(rag_pipeline_retrieval|llama_index_rag_integration)\.py)')"
+          prediction_paths="$(changed '^(pipelines/prediction-service/)')"
+          rag_service_paths="$(changed '^(pipelines/rag-service/)')"
+          wearable_paths="$(changed '^(pipelines/wearable-service/)')"
+          compose_paths="$(changed '^(docker-compose\.yml$|\.dockerignore$|infra/|apps/[^/]+/(Dockerfile|\.dockerignore)$|pipelines/[^/]+/(Dockerfile|\.dockerignore)$)')"
+
+          frontend="$(or_bool "${shared}" "${frontend_paths}")"
+          backend="$(or_bool "${shared}" "${backend_paths}")"
+          ml="$(or_bool "${shared}" "${ml_paths}")"
+          rag_pipeline="$(or_bool "${shared}" "${rag_pipeline_paths}")"
+          prediction_service="$(or_bool "${shared}" "${prediction_paths}")"
+          rag_service="$(or_bool "${shared}" "${rag_service_paths}")"
+          wearable_service="$(or_bool "${shared}" "${wearable_paths}")"
+          compose="$(or_bool "${shared}" "${compose_paths}")"
+
+          backend_image="${backend}"
+          backend_image="$(or_bool "${backend_image}" "${ml}")"
+          backend_image="$(or_bool "${backend_image}" "${rag_pipeline}")"
+
+          any=false
+          for value in "${frontend}" "${backend}" "${ml}" "${rag_pipeline}" "${prediction_service}" "${rag_service}" "${wearable_service}" "${compose}"; do
+            if [[ "${value}" == "true" ]]; then
+              any=true
+            fi
+          done
+
+          {
+            echo "frontend=${frontend}"
+            echo "backend=${backend}"
+            echo "backend_image=${backend_image}"
+            echo "ml=${ml}"
+            echo "rag_pipeline=${rag_pipeline}"
+            echo "prediction_service=${prediction_service}"
+            echo "rag_service=${rag_service}"
+            echo "wearable_service=${wearable_service}"
+            echo "compose=${compose}"
+            echo "any=${any}"
+          } >> "${GITHUB_OUTPUT}"
+
+  compose-validate:
+    name: Docker Compose Validation
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.any == 'true'
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── Python setup ────────────────────────────────────────────────────────
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: apps/backend/requirements.txt
-
-      - name: Install backend dependencies
+      - name: Show Docker versions
         run: |
-          pip install -r apps/backend/requirements.txt
+          docker version
+          docker compose version
 
-      - name: Syntax check — backend
-        run: |
-          python -m py_compile apps/backend/main.py
-          echo "✅ Backend syntax OK"
+      - name: Validate Docker Compose file
+        run: docker compose config --quiet
 
-      # ── Node setup ──────────────────────────────────────────────────────────
-      - name: Set up Node 20
+  frontend:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
           cache-dependency-path: apps/frontend/package-lock.json
 
       - name: Install frontend dependencies
-        working-directory: apps/frontend
         run: npm ci
 
-      - name: Frontend build check
-        working-directory: apps/frontend
+      - name: Build frontend
         run: npm run build
         env:
           VITE_API_URL: ${{ env.VITE_API_URL }}
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # STAGE 3 + 4 + 5 — Docker build, health check, cleanup
-  # ─────────────────────────────────────────────────────────────────────────────
-  docker:
-    name: "Stage 3-5 — Docker Build & Health Check"
+      - name: Run frontend tests when configured
+        shell: bash
+        run: |
+          set -euo pipefail
+          if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts.test ? 0 : 1)"; then
+            npm test -- --watch=false
+          else
+            echo "No frontend test script configured."
+          fi
+
+  backend:
+    name: Backend Tests And Migrations
     runs-on: ubuntu-latest
-    needs: validate # only run if validate passes
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: timescale/timescaledb:2.15.3-pg15
+        env:
+          POSTGRES_DB: arogyaai
+          POSTGRES_PASSWORD: password
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d arogyaai"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENCRYPTION_KEY: ci-only-encryption-key
+      DATABASE_URL: postgresql+psycopg2://postgres:password@localhost:5432/arogyaai
+      FRONTEND_APP_URL: http://localhost:5173
+      JWT_SECRET_KEY: ci-only-jwt-secret
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/backend
+      REDIS_URL: redis://localhost:6379/0
+      SUPABASE_BUCKET_NAME: medical-reports
+      SUPABASE_SERVICE_ROLE_KEY: ci-only-service-role-key
+      SUPABASE_URL: https://supabase.invalid
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Write a minimal .env so docker-compose can resolve variables
-      - name: Create CI .env
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: apps/backend/requirements.txt
+
+      - name: Install backend dependencies
         run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r apps/backend/requirements.txt pytest
+
+      - name: Run Alembic migrations
+        working-directory: apps/backend
+        run: alembic upgrade head
+
+      - name: Run backend pytest
+        run: python -m pytest apps/backend/tests -q
+
+  ml-pipeline:
+    name: ML Pipeline Tests
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.ml == 'true'
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: apps/backend/requirements.txt
+
+      - name: Install ML dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r apps/backend/requirements.txt pytest
+
+      - name: Run ML pytest
+        run: |
+          python -m pytest \
+            apps/backend/tests/test_ml_data_mapper.py \
+            apps/backend/tests/test_ml_multimodel.py \
+            apps/backend/tests/test_ml_notification_hook.py \
+            apps/backend/tests/test_ml_predict.py \
+            apps/backend/tests/test_feature_pipeline_labs.py \
+            -q
+
+  rag-pipeline:
+    name: RAG Pipeline Tests
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.rag_pipeline == 'true'
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: apps/backend/requirements.txt
+
+      - name: Install RAG dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r apps/backend/requirements.txt pytest
+
+      - name: Run RAG pytest
+        run: |
+          python -m pytest \
+            apps/backend/tests/test_rag_pipeline_retrieval.py \
+            apps/backend/tests/test_llama_index_rag_integration.py \
+            -q
+
+  prediction-service:
+    name: Prediction Service Smoke
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.prediction_service == 'true'
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: pipelines/prediction-service
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: pipelines/prediction-service/requirements.txt
+
+      - name: Install service dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest
+
+      - name: Compile service code
+        run: python -m compileall -q .
+
+      - name: Run service pytest when present
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -d tests ]]; then
+            python -m pytest -q
+          else
+            echo "No prediction-service pytest suite configured."
+          fi
+
+  rag-service:
+    name: RAG Service Smoke
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.rag_service == 'true'
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: pipelines/rag-service
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: pipelines/rag-service/requirements.txt
+
+      - name: Install service dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest
+
+      - name: Compile service code
+        run: python -m compileall -q .
+
+      - name: Run service pytest when present
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -d tests ]]; then
+            python -m pytest -q
+          else
+            echo "No rag-service pytest suite configured."
+          fi
+
+  wearable-service:
+    name: Wearable Service Smoke
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.wearable_service == 'true'
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: pipelines/wearable-service
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: pipelines/wearable-service/requirements.txt
+
+      - name: Install service dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest
+
+      - name: Compile service code
+        run: python -m compileall -q .
+
+      - name: Run service pytest when present
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -d tests ]]; then
+            python -m pytest -q
+          else
+            echo "No wearable-service pytest suite configured."
+          fi
+
+  docker-build:
+    name: Docker Compose Build
+    runs-on: ubuntu-latest
+    needs: [changes, compose-validate]
+    if: needs.changes.outputs.any == 'true'
+    timeout-minutes: 45
+    env:
+      COMPOSE_PARALLEL_LIMIT: "4"
+      DOCKER_BUILDKIT: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create CI env files
+        shell: bash
+        run: |
+          set -euo pipefail
           cat > .env <<'EOF'
           POSTGRES_USER=postgres
           POSTGRES_PASSWORD=password
           POSTGRES_DB=arogyaai
-          SECRET_KEY=ci-secret-key-not-for-production
-          ALGORITHM=HS256
+          PGADMIN_DEFAULT_EMAIL=admin@arogyaai.local
+          PGADMIN_DEFAULT_PASSWORD=admin
           REDIS_URL=redis://redis:6379/0
           DATABASE_URL=postgresql+psycopg2://postgres:password@postgres:5432/arogyaai
           VITE_API_URL=http://localhost:8000
-          PGADMIN_DEFAULT_EMAIL=admin@arogyaai.com
-          PGADMIN_DEFAULT_PASSWORD=admin
           EOF
 
-      - name: Create backend .env
-        run: |
-          mkdir -p apps/backend
-          cat <<EOF > apps/backend/.env
-          SUPABASE_URL=${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          SUPABASE_BUCKET_NAME=reports
-          DATABASE_URL=postgresql://postgres:password@postgres:5432/arogyaai
-          REDIS_URL=redis://redis:6379
-          SECRET_KEY=test-secret
+          cat > apps/backend/.env <<'EOF'
+          APP_ENCRYPTION_KEY=ci-only-encryption-key
+          DATABASE_URL=postgresql+psycopg2://postgres:password@postgres:5432/arogyaai
+          FRONTEND_APP_URL=http://localhost:5173
+          JWT_SECRET_KEY=ci-only-jwt-secret
+          REDIS_URL=redis://redis:6379/0
+          RUN_MIGRATIONS=true
+          SUPABASE_BUCKET_NAME=medical-reports
+          SUPABASE_SERVICE_ROLE_KEY=ci-only-service-role-key
+          SUPABASE_URL=https://supabase.invalid
           EOF
 
-      - name: Debug env
-        run: cat apps/backend/.env
-
-      # ── STAGE 3: Docker Build ───────────────────────────────────────────────
-      - name: Stage 3 — Build all services
-        run: |
-          docker compose build \
-            backend \
-            frontend \
-            prediction-service \
-            rag-service
-        # Build in parallel; fail on first error
-        env:
-          COMPOSE_PARALLEL_LIMIT: 6
-          DOCKER_BUILDKIT: 1
-
-      # ── STAGE 4: Start & Health Check ──────────────────────────────────────
-      - name: Stage 4 — Start core services
+      - name: Build changed services
+        id: build
         shell: bash
         run: |
           set -euo pipefail
 
-          wait_for_health() {
-            local service="$1"
-            local attempts="${2:-30}"
-            local delay="${3:-2}"
+          services=()
+          if [[ "${{ needs.changes.outputs.frontend }}" == "true" ]]; then
+            services+=(frontend)
+          fi
+          if [[ "${{ needs.changes.outputs.backend_image }}" == "true" ]]; then
+            services+=(backend)
+          fi
+          if [[ "${{ needs.changes.outputs.prediction_service }}" == "true" ]]; then
+            services+=(prediction-service)
+          fi
+          if [[ "${{ needs.changes.outputs.rag_service }}" == "true" ]]; then
+            services+=(rag-service)
+          fi
+          if [[ "${{ needs.changes.outputs.wearable_service }}" == "true" ]]; then
+            services+=(wearable-service)
+          fi
 
-            for i in $(seq 1 "$attempts"); do
-              local container_id
-              container_id="$(docker compose ps -q "$service" || true)"
-              if [ -n "$container_id" ]; then
-                local status
-                status="$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_id" 2>/dev/null || true)"
-                if [ "$status" = "healthy" ] || [ "$status" = "running" ]; then
-                  echo "$service is $status"
-                  return 0
-                fi
-                if [ "$status" = "unhealthy" ]; then
-                  echo "❌ $service became unhealthy"
-                  docker compose logs "$service" --tail=200 || true
-                  return 1
-                fi
-                if [ "$status" = "exited" ] || [ "$status" = "dead" ]; then
-                  echo "❌ $service stopped unexpectedly"
-                  docker compose logs "$service" --tail=200 || true
-                  return 1
-                fi
-              fi
+          if [[ "${#services[@]}" -eq 0 ]]; then
+            echo "No service images selected for build."
+            echo "services=" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
 
-              echo "Waiting for $service... ($i/$attempts)"
-              sleep "$delay"
-            done
+          printf 'Building Docker services: %s\n' "${services[*]}"
+          docker compose build "${services[@]}"
+          echo "services=${services[*]}" >> "${GITHUB_OUTPUT}"
 
-            echo "❌ Timed out waiting for $service"
-            docker compose logs "$service" --tail=200 || true
-            return 1
-          }
+      - name: Run backend health check
+        if: contains(steps.build.outputs.services, 'backend')
+        shell: bash
+        run: |
+          set -euo pipefail
 
-          # Start infrastructure first (postgres, redis)
-          docker compose up -d postgres redis
-          echo "⏳ Waiting for postgres and redis to be healthy..."
-          wait_for_health postgres 30 2
-          wait_for_health redis 30 2
+          docker compose up -d postgres redis backend
 
-          # Start backend after infra is healthy; the container entrypoint handles
-          # DB readiness, migrations, and then launches Uvicorn.
-          docker compose up -d backend
-          echo "⏳ Waiting for backend to be ready..."
-          backend_ready=false
-          for i in $(seq 1 60); do
-            backend_container_id="$(docker compose ps -q backend || true)"
-            if [ -n "$backend_container_id" ]; then
-              backend_health_status="$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$backend_container_id" 2>/dev/null || true)"
-              backend_status="$(docker inspect --format='{{.State.Status}}' "$backend_container_id" 2>/dev/null || true)"
-              if [ "$backend_health_status" = "unhealthy" ]; then
-                echo "❌ Backend container became unhealthy"
-                docker compose logs backend --tail=200 || true
-                exit 1
-              fi
-              if [ "$backend_status" = "exited" ] || [ "$backend_status" = "dead" ]; then
-                echo "❌ Backend container stopped before becoming healthy"
-                docker compose logs backend --tail=200 || true
-                exit 1
-              fi
-            fi
-
+          for attempt in {1..60}; do
             if curl -fsS http://localhost:8000/health; then
-              backend_ready=true
-              break
+              echo "Backend health check passed."
+              exit 0
             fi
-
-            echo "Waiting for backend... ($i/60)"
+            echo "Waiting for backend health endpoint (${attempt}/60)..."
             sleep 3
           done
 
-          if [ "$backend_ready" != "true" ]; then
-            echo "❌ Backend did not become ready in time"
-            docker compose logs backend --tail=200 || true
-            exit 1
-          fi
+          echo "Backend health check timed out."
+          docker compose ps || true
+          docker compose logs --tail=200 backend postgres redis || true
+          exit 1
 
-      - name: Stage 4 — Health check validation
-        shell: bash
-        run: |
-          set -euo pipefail
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health)
-          BODY=$(curl -s http://localhost:8000/health)
-          echo "Status: $RESPONSE"
-          echo "Body:   $BODY"
-          if [ "$RESPONSE" != "200" ]; then
-            echo "❌ Health check failed — HTTP $RESPONSE"
-            docker compose logs backend --tail=50
-            exit 1
-          fi
-          echo "✅ Health check passed"
-
-      - name: Dump service logs on failure
+      - name: Dump Docker logs on failure
         if: failure()
         run: |
           docker compose ps || true
-          docker compose logs --tail=200 backend postgres redis || true
+          docker compose logs --tail=200 || true
 
-      # ── STAGE 5: Cleanup ────────────────────────────────────────────────────
-      - name: Stage 5 — Cleanup
-        if: always() # run even if previous steps fail
+      - name: Clean up Docker Compose
+        if: always()
         run: docker compose down -v --remove-orphans

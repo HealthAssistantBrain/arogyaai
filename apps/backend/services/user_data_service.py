@@ -5,10 +5,12 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable, Optional
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from core.config import settings
 from core.utils import safe_input
 from models import (
     User,
@@ -31,6 +33,17 @@ RANGE_WINDOWS = {
 
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _current_local_day_bounds(timezone_name: str | None = None) -> tuple[datetime, datetime]:
+    candidate = timezone_name or settings.GOOGLE_FIT_DEFAULT_TIMEZONE or "Asia/Kolkata"
+    try:
+        tzinfo = ZoneInfo(candidate)
+    except Exception:
+        tzinfo = ZoneInfo("Asia/Kolkata")
+    now_local = datetime.now(tzinfo)
+    start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    return start_local.astimezone(timezone.utc), now_local.astimezone(timezone.utc)
 
 
 def _parse_timestamp(value: Any) -> datetime:
@@ -285,6 +298,7 @@ class UserDataService:
         range_value: str = "24h",
     ) -> dict:
         query = db.query(UserVital).filter(UserVital.user_id == user.id)
+        enum_value: UserVitalTypeEnum | None = None
 
         if vital_type:
             try:
@@ -294,10 +308,14 @@ class UserDataService:
             query = query.filter(UserVital.vital_type == enum_value)
 
         if range_value and range_value != "all":
-            window = RANGE_WINDOWS.get(range_value)
-            if window is None:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid range value")
-            query = query.filter(UserVital.timestamp >= _now_utc() - window)
+            if enum_value == UserVitalTypeEnum.STEPS and range_value == "24h":
+                start_at, end_at = _current_local_day_bounds()
+                query = query.filter(UserVital.timestamp >= start_at, UserVital.timestamp <= end_at)
+            else:
+                window = RANGE_WINDOWS.get(range_value)
+                if window is None:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid range value")
+                query = query.filter(UserVital.timestamp >= _now_utc() - window)
 
         vitals = query.order_by(UserVital.timestamp.asc()).all()
         payload = [_serialize_vital(vital) for vital in vitals]
@@ -321,8 +339,14 @@ class UserDataService:
         db: Session,
         user: User,
         records: Iterable[dict],
+        *,
+        overwrite_window: bool = False,
+        overwrite_types: Iterable[UserVitalTypeEnum | str] | None = None,
+        window_start: Any = None,
+        window_end: Any = None,
     ) -> list[UserVital]:
         saved: list[UserVital] = []
+        normalized_records: dict[tuple[UserVitalTypeEnum, datetime, UserVitalSourceEnum], dict[str, Any]] = {}
 
         for record in records:
             vital_type = record.get("type")
@@ -347,11 +371,57 @@ class UserDataService:
                 value = float(value_raw)
             except (TypeError, ValueError):
                 continue
-            if value == 0 and vital_enum != UserVitalTypeEnum.STEPS:
+            if value < 0 or (value == 0 and vital_enum != UserVitalTypeEnum.STEPS):
                 continue
             unit = str(record.get("unit") or "")
             if not unit:
                 continue
+
+            normalized_records[(vital_enum, timestamp, source_enum)] = {
+                "vital_type": vital_enum,
+                "source": source_enum,
+                "timestamp": timestamp,
+                "value": value,
+                "unit": unit,
+            }
+
+        delete_types: set[UserVitalTypeEnum] = set()
+        if overwrite_types is not None:
+            for item in overwrite_types:
+                try:
+                    delete_types.add(item if isinstance(item, UserVitalTypeEnum) else UserVitalTypeEnum(str(item).strip().lower()))
+                except ValueError:
+                    continue
+        elif overwrite_window:
+            delete_types = {item["vital_type"] for item in normalized_records.values()}
+
+        if overwrite_window and delete_types:
+            start_at = _parse_timestamp(window_start) if window_start is not None else None
+            end_at = _parse_timestamp(window_end) if window_end is not None else None
+            if start_at is None and normalized_records:
+                start_at = min(item["timestamp"] for item in normalized_records.values())
+            if end_at is None and normalized_records:
+                end_at = max(item["timestamp"] for item in normalized_records.values())
+
+            if start_at is not None and end_at is not None and start_at < end_at:
+                (
+                    db.query(UserVital)
+                    .filter(
+                        UserVital.user_id == user.id,
+                        UserVital.vital_type.in_(list(delete_types)),
+                        UserVital.source == UserVitalSourceEnum.GOOGLE_FIT,
+                        UserVital.timestamp >= start_at,
+                        UserVital.timestamp < end_at,
+                    )
+                    .delete(synchronize_session=False)
+                )
+
+        for item in normalized_records.values():
+            vital_enum = item["vital_type"]
+            source_enum = item["source"]
+            timestamp = item["timestamp"]
+            value = item["value"]
+            unit = item["unit"]
 
             existing = (
                 db.query(UserVital)
@@ -380,7 +450,7 @@ class UserDataService:
                 db.add(vital)
             saved.append(vital)
 
-        if saved:
+        if saved or (overwrite_window and delete_types):
             db.commit()
             for item in saved:
                 db.refresh(item)

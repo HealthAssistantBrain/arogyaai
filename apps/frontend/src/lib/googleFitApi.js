@@ -25,7 +25,7 @@ export async function fetchGoogleFitConnect({ timezone, redirectPath }) {
   return data;
 }
 
-export async function syncGoogleFit({ timezone, days = 30 }) {
+export async function syncGoogleFit({ timezone, days = 7 }) {
   const { data } = await apiClient.post('/google-fit/sync', {
     timezone,
     days,

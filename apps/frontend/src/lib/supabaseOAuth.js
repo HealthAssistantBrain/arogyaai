@@ -32,7 +32,21 @@ export async function startSupabaseOAuth(provider, options = {}) {
     },
   })
 
-  if (error) throw error
+  if (error) {
+    console.warn('[Supabase OAuth] signInWithOAuth failed', {
+      provider,
+      redirectTo: redirectUrl.toString(),
+      message: error.message,
+    })
+    throw error
+  }
+
+  console.debug('[Supabase OAuth] signInWithOAuth started', {
+    provider,
+    redirectTo: redirectUrl.toString(),
+    hasRedirectUrl: Boolean(data?.url),
+  })
+
   return data
 }
 
@@ -45,30 +59,39 @@ export async function startSupabaseOAuth(provider, options = {}) {
  */
 export async function completeSupabaseOAuthSession(sessionOverride = null) {
   const client = getSupabaseClient() ?? supabase
-  if (!client || typeof window === 'undefined') return null
+  if (!client) {
+    throw new Error('Supabase OAuth is not configured')
+  }
+  if (typeof window === 'undefined') return null
 
   const authStore = useAuthStore.getState()
   const callbackUrl = new URL(window.location.href)
 
   // ── 1. Resolve the active Supabase session ────────────────────────────────
   let session = sessionOverride ?? null
-
-  if (!session) {
-    try {
-      const sessionResult = await client.auth.getSession()
-      console.log('[Supabase OAuth] getSession result:', sessionResult)
-      session = sessionResult?.data?.session ?? null
-    } catch (err) {
-      console.warn('[Supabase OAuth] getSession failed, attempting code exchange:', err)
-    }
-  }
-
-  // PKCE flow: exchange the ?code= param if session is still missing
   const code = callbackUrl.searchParams.get('code')
+
   if (!session && code) {
     const { data, error } = await client.auth.exchangeCodeForSession(code)
     if (error) throw error
     session = data?.session ?? null
+
+    console.debug('[Supabase OAuth] PKCE code exchange completed', {
+      hasSession: Boolean(session?.access_token),
+    })
+  }
+
+  if (!session) {
+    try {
+      const sessionResult = await client.auth.getSession()
+      session = sessionResult?.data?.session ?? null
+      console.debug('[Supabase OAuth] getSession completed', {
+        hasSession: Boolean(session?.access_token),
+        hasUser: Boolean(session?.user?.id),
+      })
+    } catch (err) {
+      console.warn('[Supabase OAuth] getSession failed, attempting code exchange:', err)
+    }
   }
 
   if (!session?.access_token) {

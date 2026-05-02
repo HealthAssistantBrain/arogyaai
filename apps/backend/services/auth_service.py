@@ -14,6 +14,7 @@ import json
 from sqlalchemy.exc import IntegrityError
 
 from models import User, UserProfile, UserSetting, Session as DBSession
+from models.user import ROLE_DOCTOR, ROLE_PATIENT
 from schemas.api_models import OAuthLoginRequest, UserCreate, UserLogin, TokenResponse
 from core.security import verify_password, get_password_hash, create_access_token, create_refresh_token
 from core.config import settings
@@ -37,6 +38,20 @@ def _fetch_supabase_jwks(supabase_url: str, anon_key: str) -> dict:
 
 class AuthService:
     @staticmethod
+    def _trusted_role_from_app_metadata(app_metadata: dict | None) -> str:
+        """Only trusted auth app metadata may grant doctor access."""
+        metadata = app_metadata if isinstance(app_metadata, dict) else {}
+        role_raw = str(metadata.get("role") or metadata.get("user_role") or "").strip().lower()
+        roles_raw = metadata.get("roles")
+        roles = {
+            str(item).strip().lower()
+            for item in roles_raw
+            if str(item).strip()
+        } if isinstance(roles_raw, list) else set()
+
+        return ROLE_DOCTOR if role_raw == ROLE_DOCTOR or ROLE_DOCTOR in roles else ROLE_PATIENT
+
+    @staticmethod
     def _extract_supabase_identity(claims: dict) -> dict:
         supabase_user_id = claims.get("sub")
         email = str(claims.get("email") or "").strip().lower()
@@ -52,6 +67,7 @@ class AuthService:
         full_name = metadata.get("full_name") or metadata.get("name")
         avatar_url = metadata.get("avatar_url") or metadata.get("picture")
         provider = str(app_metadata.get("provider") or "").strip().lower()
+        role = AuthService._trusted_role_from_app_metadata(app_metadata)
 
         try:
             supabase_uuid = uuid.UUID(str(supabase_user_id))
@@ -67,6 +83,7 @@ class AuthService:
             "full_name": full_name,
             "avatar_url": avatar_url,
             "provider": provider,
+            "role": role,
         }
 
     @staticmethod
@@ -171,6 +188,7 @@ class AuthService:
             "is_email_verified": user.is_email_verified,
             "gmail_connected": bool(getattr(user, "gmail_connected", False)),
             "apple_connected": bool(getattr(user, "apple_connected", False)),
+            "role": getattr(user, "role", ROLE_PATIENT) or ROLE_PATIENT,
             "has_password": user.password_hash not in {"OAUTH_NO_PASSWORD", "SUPABASE_AUTH"},
         }
 
@@ -190,6 +208,7 @@ class AuthService:
         full_name = identity["full_name"]
         avatar_url = identity["avatar_url"]
         provider = identity["provider"]
+        role = identity["role"]
 
         user = AuthService._get_user_for_supabase_subject(db, supabase_uuid)
         if not user:
@@ -204,6 +223,8 @@ class AuthService:
             user.is_deleted = False
             if full_name and not user.full_name:
                 user.full_name = safe_input(full_name)
+            if role == ROLE_DOCTOR:
+                user.role = ROLE_DOCTOR
         else:
             user = User(
                 id=supabase_uuid,
@@ -211,6 +232,7 @@ class AuthService:
                 password_hash="SUPABASE_AUTH",
                 full_name=safe_input(full_name) if full_name else None,
                 is_email_verified=True,
+                role=role,
             )
             db.add(user)
 
@@ -253,6 +275,8 @@ class AuthService:
             user.is_deleted = False
             if full_name and not user.full_name:
                 user.full_name = safe_input(full_name)
+            if role == ROLE_DOCTOR:
+                user.role = ROLE_DOCTOR
 
             if provider == "google":
                 user.gmail_connected = True
@@ -358,6 +382,8 @@ class AuthService:
             )
 
         metadata = decoded.get("user_metadata") or {}
+        app_metadata = decoded.get("app_metadata") or {}
+        role = AuthService._trusted_role_from_app_metadata(app_metadata)
         full_name = (
             metadata.get("full_name")
             or metadata.get("name")
@@ -370,12 +396,15 @@ class AuthService:
             user.is_email_verified = True
             if full_name and not user.full_name:
                 user.full_name = safe_input(full_name)
+            if role == ROLE_DOCTOR:
+                user.role = ROLE_DOCTOR
         else:
             user = User(
                 email=email,
                 password_hash="OAUTH_NO_PASSWORD",
                 full_name=safe_input(full_name) if full_name else None,
                 is_email_verified=True,
+                role=role,
             )
             db.add(user)
             db.commit()
@@ -440,7 +469,8 @@ class AuthService:
         new_user = User(
             email=user_data.email,
             password_hash=hashed_pwd,
-            full_name=safe_input(user_data.full_name) if user_data.full_name else None
+            full_name=safe_input(user_data.full_name) if user_data.full_name else None,
+            role=ROLE_PATIENT,
         )
         db.add(new_user)
         db.commit()
@@ -477,7 +507,8 @@ class AuthService:
                 "user": {
                     "id": str(new_user.id),
                     "email": new_user.email,
-                    "is_onboarding_done": new_user.is_onboarding_done
+                    "is_onboarding_done": new_user.is_onboarding_done,
+                    "role": new_user.role,
                 }
             }
         }
@@ -530,7 +561,8 @@ class AuthService:
                 "user": {
                     "id": str(user.id),
                     "email": user.email,
-                    "is_onboarding_done": user.is_onboarding_done
+                    "is_onboarding_done": user.is_onboarding_done,
+                    "role": getattr(user, "role", ROLE_PATIENT) or ROLE_PATIENT,
                 }
             }
         }

@@ -21,25 +21,63 @@ from pipelines.ml_pipeline.preprocess import FEATURE_NAMES, build_feature_vector
 
 def test_build_feature_vector_matches_trained_model_order():
     snapshot = {
+        "age": 34.0,
         "bmi": 24.5,
+        "systolic_bp": 118.0,
+        "diastolic_bp": 76.0,
         "hr_mean_7d": 68.0,
         "steps_avg_7d": 7200.0,
-        "sleep_efficiency": 81.0,
-        "lifestyle_score": 76.5,
-        "activity_score": 60.0,
+        "sleep_duration": 7.2,
         "glucose": 104.0,
+        "hba1c": 5.8,
         "cholesterol": 172.0,
+        "symptom_count": 2,
+        "symptom_flags": {"chest_pain": True, "fatigue": True},
+        "family_history_flags": {"type_2_diabetes": True, "hypertension": True, "stroke": True},
     }
 
     assert FEATURE_NAMES == (
+        "age",
         "bmi",
-        "hr_mean_7d",
-        "steps_avg_7d",
-        "sleep_efficiency",
-        "lifestyle_score",
-        "activity_score",
+        "systolic_bp",
+        "diastolic_bp",
+        "glucose",
+        "hba1c",
+        "cholesterol",
+        "heart_rate",
+        "steps",
+        "sleep_hours",
+        "symptom_count",
+        "symptom_chest_pain",
+        "symptom_dizziness",
+        "symptom_fatigue",
+        "symptom_shortness_of_breath",
+        "family_history_diabetes",
+        "family_history_cardiac",
+        "family_history_hypertension",
+        "family_history_stroke",
     )
-    assert build_feature_vector(snapshot) == [24.5, 68.0, 7200.0, 81.0, 76.5, 60.0]
+    assert build_feature_vector(snapshot) == [
+        34.0,
+        24.5,
+        118.0,
+        76.0,
+        104.0,
+        5.8,
+        172.0,
+        68.0,
+        7200.0,
+        7.2,
+        2.0,
+        1.0,
+        0.0,
+        1.0,
+        0.0,
+        1.0,
+        0.0,
+        1.0,
+        1.0,
+    ]
     assert build_feature_vector(snapshot, ("bmi", "glucose", "cholesterol")) == [24.5, 104.0, 172.0]
 
 

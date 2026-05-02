@@ -1,5 +1,25 @@
+x-gpu-reservation: &gpu-reservation
+  resources:
+    reservations:
+      devices:
+        - driver: nvidia
+          count: all
+          capabilities: [gpu]
+
+x-service-build-args: &service-build-args
+  HTTP_PROXY: ${HTTP_PROXY:-}
+  HTTPS_PROXY: ${HTTPS_PROXY:-}
+  NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,backend,postgres,redis,qdrant,prediction-service,rag-service,wearable-service}
+  CUSTOM_CA_CERT_B64: ${CUSTOM_CA_CERT_B64:-}
+
+x-backend-build: &backend-build
+  context: ./
+  dockerfile: apps/backend/Dockerfile
+  args: *service-build-args
+
 services:
   frontend:
+    image: arogyaai-frontend:dev
     build: 
       context: ./apps/frontend
       dockerfile: Dockerfile
@@ -8,32 +28,27 @@ services:
     env_file:
       - path: .env
         required: false
+      - path: ./apps/frontend/.env
+        required: false
     environment:
       - VITE_API_URL=http://127.0.0.1:8000
       - VITE_GOOGLE_FIT_DEFAULT_TIMEZONE=Asia/Kolkata
-      - VITE_SUPABASE_URL=${VITE_SUPABASE_URL:-}
-      - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY:-}
     networks:
       - arogyaai_net
 
   backend:
-    build:
-      context: ./
-      dockerfile: apps/backend/Dockerfile
-      args:
-        HTTP_PROXY: ${HTTP_PROXY:-}
-        HTTPS_PROXY: ${HTTPS_PROXY:-}
-        NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,backend,postgres,redis,qdrant,prediction-service,rag-service,wearable-service}
-        CUSTOM_CA_CERT_B64: ${CUSTOM_CA_CERT_B64:-}
+    image: arogyaai-backend:dev
+    build: *backend-build
     ports:
       - "8000:8000"
     env_file:
       - path: ./apps/backend/.env
         required: false
     environment:
-      - RUN_MIGRATIONS=true
+      RUN_MIGRATIONS: "true"
+      ENABLE_GPU: ${ENABLE_GPU:-false}
     networks:
-      - arogyaai_net
+      arogyaai_net:
     volumes:
       - ./:/app
     depends_on:
@@ -48,21 +63,32 @@ services:
       retries: 12
       start_period: 60s
 
+  # Optional NVIDIA GPU backend. Start this service explicitly on GPU hosts;
+  # the default backend remains CPU-safe for machines without NVIDIA support.
+  backend-gpu:
+    extends:
+      service: backend
+    profiles:
+      - gpu
+    environment:
+      RUN_MIGRATIONS: "true"
+      ENABLE_GPU: "true"
+      NVIDIA_VISIBLE_DEVICES: all
+    networks:
+      arogyaai_net:
+        aliases:
+          - backend
+    deploy: *gpu-reservation
+
   celery-worker:
-    build:
-      context: ./
-      dockerfile: apps/backend/Dockerfile
-      args:
-        HTTP_PROXY: ${HTTP_PROXY:-}
-        HTTPS_PROXY: ${HTTPS_PROXY:-}
-        NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,backend,postgres,redis,qdrant,prediction-service,rag-service,wearable-service}
-        CUSTOM_CA_CERT_B64: ${CUSTOM_CA_CERT_B64:-}
+    image: arogyaai-backend:dev
     command: ["celery", "-A", "core.celery_app", "worker", "--loglevel=info"]
     env_file:
       - path: ./apps/backend/.env
         required: false
     environment:
-      - RUN_MIGRATIONS=false
+      RUN_MIGRATIONS: "false"
+      ENABLE_GPU: ${ENABLE_GPU:-false}
     networks:
       - arogyaai_net
     volumes:
@@ -76,13 +102,11 @@ services:
       disable: true
 
   prediction-service:
+    image: arogyaai-prediction-service:dev
     build:
       context: ./pipelines/prediction-service
-      args:
-        HTTP_PROXY: ${HTTP_PROXY:-}
-        HTTPS_PROXY: ${HTTPS_PROXY:-}
-        NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,backend,postgres,redis,qdrant,prediction-service,rag-service,wearable-service}
-        CUSTOM_CA_CERT_B64: ${CUSTOM_CA_CERT_B64:-}
+      dockerfile: Dockerfile
+      args: *service-build-args
     container_name: prediction-service
     ports:
       - "8001:8000"
@@ -93,13 +117,11 @@ services:
       - arogyaai_net
 
   rag-service:
+    image: arogyaai-rag-service:dev
     build:
       context: ./pipelines/rag-service
-      args:
-        HTTP_PROXY: ${HTTP_PROXY:-}
-        HTTPS_PROXY: ${HTTPS_PROXY:-}
-        NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,backend,postgres,redis,qdrant,prediction-service,rag-service,wearable-service}
-        CUSTOM_CA_CERT_B64: ${CUSTOM_CA_CERT_B64:-}
+      dockerfile: Dockerfile
+      args: *service-build-args
     container_name: rag-service
     ports:
       - "8002:8000"
@@ -110,13 +132,11 @@ services:
       - arogyaai_net
 
   wearable-service:
+    image: arogyaai-wearable-service:dev
     build:
       context: ./pipelines/wearable-service
-      args:
-        HTTP_PROXY: ${HTTP_PROXY:-}
-        HTTPS_PROXY: ${HTTPS_PROXY:-}
-        NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,backend,postgres,redis,qdrant,prediction-service,rag-service,wearable-service}
-        CUSTOM_CA_CERT_B64: ${CUSTOM_CA_CERT_B64:-}
+      dockerfile: Dockerfile
+      args: *service-build-args
     container_name: wearable-service
     ports:
       - "8003:8000"

@@ -54,9 +54,16 @@ export const getResolvedOnboardingState = (state = {}) => {
   }
 }
 
+export const getResolvedRole = (state = {}) =>
+  String(state?.role ?? state?.user?.role ?? state?.profile?.role ?? 'patient').toLowerCase()
+
 export const getAuthenticatedHomeRoute = (state = {}) => {
   if (!state?.isAuthenticated || !state?.user?.id) {
     return ROUTES.HOME
+  }
+
+  if (getResolvedRole(state) === 'doctor') {
+    return ROUTES.DOCTOR_DASHBOARD
   }
 
   const { onboardingDone, onboardingStep, pendingWelcome } = getResolvedOnboardingState(state)
@@ -79,6 +86,18 @@ export const getProtectedRouteRedirect = (pathname, state = {}) => {
 
   if (!state?.isEmailVerified) {
     return pathname === ROUTES.EMAIL_VERIFICATION ? null : ROUTES.EMAIL_VERIFICATION
+  }
+
+  const role = getResolvedRole(state)
+
+  if (role === 'doctor') {
+    return isWelcomeRoute(pathname) || isOnboardingRoute(pathname) || pathname === ROUTES.DASHBOARD
+      ? ROUTES.DOCTOR_DASHBOARD
+      : null
+  }
+
+  if (pathname?.startsWith('/doctor')) {
+    return ROUTES.DASHBOARD
   }
 
   const { onboardingDone, onboardingStep, pendingWelcome } = getResolvedOnboardingState(state)

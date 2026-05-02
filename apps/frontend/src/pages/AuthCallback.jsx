@@ -4,8 +4,7 @@ import { Activity, ShieldCheck, ArrowRight } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { ROUTES } from '../router/routes'
 import { getAuthenticatedHomeRoute } from '../router/authRedirects'
-import { syncUser } from '../lib/authSync'
-import { getSupabaseClient, supabase } from '../lib/supabaseClient'
+import { completeSupabaseOAuthSession } from '../lib/supabaseOAuth'
 import HeartLoader from '../components/ui/HeartLoader'
 import FullPageSkeleton from '../components/ui/FullPageSkeleton'
 
@@ -24,29 +23,7 @@ const AuthCallback = () => {
       const wantsWelcome = callbackUrl.searchParams.get('welcome') === '1' || flow === 'signup'
 
       try {
-        const client = getSupabaseClient() ?? supabase
-        if (!client) {
-          throw new Error('Supabase OAuth is not configured')
-        }
-
-        const { data, error: sessionError } = await client.auth.getSession()
-        console.log('[AuthCallback] Supabase session:', data)
-
-        if (sessionError) {
-          throw sessionError
-        }
-
-        // Pass the resolved session directly to avoid a second getSession() call
-        // (prevents PKCE race condition where the second call returns null)
-        const session = data?.session ?? null
-        if (!session?.access_token) {
-          didError = true
-          setStatus('error')
-          setError('No Supabase session found. Please sign in again.')
-          return
-        }
-
-        const result = await syncUser({ session, force: true })
+        const result = await completeSupabaseOAuthSession()
 
         if (!result?.id) {
           didError = true

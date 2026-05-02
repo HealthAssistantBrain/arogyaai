@@ -1,0 +1,321 @@
+{
+  "version": "2026-05-hybrid-seed",
+  "description": "Structured medical guidance summaries from WHO, CDC, and NIH/NHLBI/NIDDK sources for RAG retrieval. Text is paraphrased for indexing and should be cited through source metadata.",
+  "sources": [
+    {
+      "source": "WHO Diabetes fact sheet",
+      "source_org": "WHO",
+      "source_url": "https://www.who.int/news-room/fact-sheets/detail/diabetes",
+      "topic": "diabetes overview",
+      "disease_type": "diabetes",
+      "guidance": [
+        {"title": "Diabetes and blood glucose", "text": "Diabetes is a chronic condition in which blood glucose remains elevated because insulin production or insulin action is not sufficient for normal glucose handling. Persistent high glucose can damage blood vessels and organs over time, so a RAG answer should avoid diagnosing from symptoms alone and should direct users toward testing and clinician review when risk markers cluster."},
+        {"title": "Type 2 diabetes pattern", "text": "Type 2 diabetes usually develops gradually and is closely related to insulin resistance. Elevated body weight, low physical activity, age, family history, and prior prediabetes can make the pattern more likely. Retrieval should connect model drivers such as BMI, glucose, activity, blood pressure, and age to increased probability rather than to a confirmed disease label."},
+        {"title": "Symptoms can be absent", "text": "Many people with high blood glucose have few symptoms or notice symptoms only after a long period. Thirst, frequent urination, fatigue, blurred vision, slow wound healing, and unintended weight loss can occur, but absence of these symptoms does not rule out abnormal glucose. Safer answers should recommend appropriate blood tests when risk signals persist."},
+        {"title": "Complications and comorbidity", "text": "Uncontrolled diabetes is associated with cardiovascular disease, kidney disease, nerve injury, vision problems, and foot complications. The clinical message should be proportional: risk models can flag patterns that deserve attention, but laboratory confirmation and longitudinal management are needed before any user is told they have diabetes or a complication."},
+        {"title": "Lifestyle prevention", "text": "Population guidance emphasizes healthy eating, regular physical activity, weight management where appropriate, and avoidance of tobacco as ways to reduce type 2 diabetes risk. RAG recommendations should be framed as modifiable actions, especially when the retrieved context mentions inactivity, excess weight, poor diet quality, or elevated blood pressure."},
+        {"title": "Urgency boundaries", "text": "Diabetes-related education should include limits. Very high glucose symptoms, dehydration, confusion, rapid breathing, severe weakness, or acute chest pain require urgent care rather than routine coaching. For nonurgent risk explanations, the assistant should suggest testing and medical follow-up without making a definitive diagnosis."}
+      ]
+    },
+    {
+      "source": "WHO Hypertension fact sheet",
+      "source_org": "WHO",
+      "source_url": "https://www.who.int/news-room/fact-sheets/detail/hypertension",
+      "topic": "hypertension overview",
+      "disease_type": "hypertension",
+      "guidance": [
+        {"title": "Hypertension definition", "text": "Hypertension means blood pressure remains persistently above a healthy range, not that one isolated reading proves disease. Retrieved explanations should distinguish a single high value from repeated measurements and should encourage proper technique, repeat readings, and clinician assessment when systolic or diastolic values stay elevated."},
+        {"title": "Silent risk pattern", "text": "High blood pressure often has no warning symptoms. This makes objective measurement important, especially for users with age, obesity, diabetes, kidney disease, high sodium intake, stress, or inactivity. Chatbot wording should not reassure solely because the user feels well if measured readings are repeatedly high."},
+        {"title": "Organ risk", "text": "Persistently elevated blood pressure can increase strain on the heart, brain, kidneys, eyes, and blood vessels. In retrieval-augmented explanations, hypertension should be tied to cardiovascular and kidney risk while avoiding statements that damage has already occurred unless the user supplies confirmed clinical evidence."},
+        {"title": "Lifestyle measures", "text": "Public health guidance commonly highlights lower sodium intake, healthier dietary patterns, physical activity, weight management, limiting alcohol, stopping tobacco, and stress management. Recommendations should be concrete and achievable, while acknowledging that some people also need prescribed medicines."},
+        {"title": "Medication and follow-up", "text": "Hypertension management can include medicine along with lifestyle changes, and treatment choices depend on repeated readings, overall cardiovascular risk, kidney status, diabetes, pregnancy, and medication tolerance. A RAG system should suggest discussing persistent elevations with a clinician rather than implying the app can set treatment."},
+        {"title": "Urgent blood pressure symptoms", "text": "Severe headache, chest pain, severe shortness of breath, neurologic weakness, confusion, fainting, or very high readings with symptoms should be escalated for urgent care. For routine high readings without red flags, the safer response is repeat measurement, tracking, and timely medical review."}
+      ]
+    },
+    {
+      "source": "WHO Physical activity fact sheet",
+      "source_org": "WHO",
+      "source_url": "https://www.who.int/news-room/fact-sheets/detail/physical-activity",
+      "topic": "physical activity",
+      "disease_type": "lifestyle",
+      "guidance": [
+        {"title": "Activity definition", "text": "Physical activity includes movement during leisure, transport, work, chores, and structured exercise. RAG responses should not reduce activity to gym workouts only. For users with low steps or low activity scores, practical advice can include walking, cycling, household movement, and gradual strengthening when appropriate."},
+        {"title": "Activity and chronic disease", "text": "Regular activity supports prevention and management of noncommunicable diseases including cardiovascular disease, type 2 diabetes, and some cancers. When model drivers include inactivity, retrieved context should explain that lower movement can worsen glucose handling, blood pressure, body weight, conditioning, and overall cardiometabolic resilience."},
+        {"title": "Sedentary behavior", "text": "Sedentary time is a separate risk pattern from lack of planned exercise. Long periods sitting or reclining while awake can be associated with poorer cardiometabolic health. Recommendations can include breaking up sitting, increasing total daily movement, and building repeatable routines rather than prescribing extreme exercise."},
+        {"title": "Any activity helps", "text": "WHO guidance emphasizes that some physical activity is better than none and that all movement counts. This is useful for chatbot tone: a low baseline should trigger progressive goals and encouragement, not shame. Small increases are especially relevant when users have fatigue, poor sleep, obesity, or deconditioning."},
+        {"title": "Strength and balance", "text": "Muscle strengthening is part of broad activity guidance, and older adults may also benefit from balance-focused movement. In RAG answers, strengthening can be framed as supporting glucose use, function, and injury prevention, while reminding users with symptoms or chronic conditions to choose safe activities."},
+        {"title": "When to be cautious", "text": "Activity advice should pause for red flags. Chest pain, fainting, severe breathlessness, new neurologic symptoms, or palpitations with dizziness require medical assessment before exercise escalation. Without red flags, gradual increases in walking time, step count, and strength work can be reasonable."}
+      ]
+    },
+    {
+      "source": "WHO Cardiovascular diseases fact sheet",
+      "source_org": "WHO",
+      "source_url": "https://www.who.int/en/news-room/fact-sheets/detail/cardiovascular-diseases-%28cvds%29",
+      "topic": "cardiovascular risk",
+      "disease_type": "cardiovascular",
+      "guidance": [
+        {"title": "CVD overview", "text": "Cardiovascular diseases include conditions affecting the heart and blood vessels, such as coronary heart disease, stroke, peripheral arterial disease, and heart failure syndromes. A retrieval answer should use CVD as an umbrella term and should avoid asserting a specific condition without symptoms, testing, or clinician diagnosis."},
+        {"title": "Shared risk factors", "text": "Many cardiovascular diseases are influenced by tobacco use, unhealthy diet patterns, excess sodium, obesity, physical inactivity, harmful alcohol use, diabetes, high blood pressure, high blood lipids, and air pollution. RAG should connect user risk drivers to these shared risk factors rather than inventing unsupported mechanisms."},
+        {"title": "Heart attack symptoms", "text": "Possible heart attack symptoms can include chest discomfort, discomfort spreading to the arm, shoulder, jaw, or back, shortness of breath, nausea, sweating, light-headedness, or faintness. The chatbot should treat new or severe combinations as urgent and should not spend time on routine lifestyle coaching first."},
+        {"title": "Stroke symptoms", "text": "Stroke can involve sudden weakness, face droop, speech trouble, vision changes, severe dizziness, or loss of coordination. If a query contains acute neurologic symptoms, retrieval-supported output should recommend emergency care and avoid probabilistic reassurance from wearable or model data."},
+        {"title": "Early detection", "text": "WHO emphasizes early detection and management of cardiovascular risk factors. For ArogyaAI explanations, this supports tracking blood pressure, glucose, cholesterol, body weight trends, activity, and symptoms over time while recommending clinical review when multiple risk signals cluster."},
+        {"title": "Medicines and clinical care", "text": "People with hypertension, diabetes, and high blood lipids may need counseling and medicines to reduce cardiovascular risk. A RAG answer can explain why these risk factors matter, but medication choices and diagnosis should be left to licensed clinicians using confirmed measurements."}
+      ]
+    },
+    {
+      "source": "WHO Obesity and overweight fact sheet",
+      "source_org": "WHO",
+      "source_url": "https://www.who.int/news-room/fact-sheets/detail/obesity-and-overweight",
+      "topic": "body weight and obesity",
+      "disease_type": "obesity",
+      "guidance": [
+        {"title": "BMI as a screening signal", "text": "Overweight and obesity are commonly screened using body mass index, but BMI is an indirect marker and does not fully describe body composition or fat distribution. Retrieval should treat BMI as one input among blood pressure, glucose, lipids, activity, sleep, waist size, and clinical history."},
+        {"title": "Obesity complexity", "text": "Obesity reflects interactions among biology, behavior, environment, food systems, medication effects, sleep, stress, and social context. A safe assistant should not blame the user or suggest that willpower alone explains weight. Recommendations should focus on practical, sustainable changes and medical support when needed."},
+        {"title": "Obesity and NCDs", "text": "Excess adiposity is associated with higher risk of type 2 diabetes, high blood pressure, dyslipidemia, cardiovascular disease, sleep apnea, and other noncommunicable diseases. RAG should connect elevated BMI or weight trends to cardiometabolic strain without claiming that a complication is already present."},
+        {"title": "Prevention and management", "text": "WHO prevention messages include healthier dietary patterns, regular physical activity, good sleep, avoiding tobacco, limiting alcohol, and supportive environments. For app recommendations, the best tone is steady and realistic: small sustained changes are more useful than short extreme plans."},
+        {"title": "Children and life course", "text": "Weight-related risk develops across the life course and is influenced by early habits, sleep, food environments, and opportunities for activity. Adult-focused advice should still avoid crash dieting language and should encourage professional input for pregnancy, eating disorder history, severe obesity, or rapid weight change."},
+        {"title": "Clinical context", "text": "Weight management may require evaluation for comorbidities, medicines, mental health, sleep apnea, and metabolic markers. A RAG system should recommend clinician follow-up when obesity appears with high glucose, high blood pressure, dyslipidemia, breathlessness, or symptoms that limit activity."}
+      ]
+    },
+    {
+      "source": "WHO Healthy diet fact sheet",
+      "source_org": "WHO",
+      "source_url": "https://www.who.int/en/news-room/fact-sheets/detail/healthy-diet",
+      "topic": "healthy diet",
+      "disease_type": "nutrition",
+      "guidance": [
+        {"title": "Diet and NCD prevention", "text": "Healthy dietary patterns help protect against malnutrition and noncommunicable diseases such as diabetes, heart disease, stroke, and some cancers. RAG answers should describe diet quality as a risk modifier, especially when glucose, blood pressure, cholesterol, weight, or triglyceride markers are elevated."},
+        {"title": "Core diet principles", "text": "WHO describes healthy diets through adequacy, balance, moderation, and diversity. This supports advice that includes whole grains, vegetables, fruits, legumes, nuts, and lean or minimally processed protein sources while limiting excess sodium, free sugars, saturated fat, trans fat, and highly processed foods."},
+        {"title": "Carbohydrate quality", "text": "Carbohydrate guidance favors unrefined sources such as whole grains, vegetables, fruits, and pulses. For diabetes risk explanations, the assistant should avoid simplistic messages that all carbohydrates are harmful and instead emphasize quality, fiber, portions, and glucose testing when clinically relevant."},
+        {"title": "Salt and blood pressure", "text": "Excess sodium intake is linked with higher blood pressure risk, while diets rich in potassium-containing foods can support healthier patterns for many people. Retrieval should mention sodium reduction cautiously for users with hypertension risk, while noting that kidney disease or medications can change potassium advice."},
+        {"title": "Fat quality", "text": "Dietary fat quality matters. Saturated and trans fats are less favorable for blood lipids and cardiovascular risk, while unsaturated fats from foods such as nuts, seeds, fish, and plant oils are generally preferred. RAG should connect this to cholesterol drivers when retrieved evidence supports it."},
+        {"title": "Practical diet framing", "text": "Diet advice should be culturally adaptable and specific enough to act on. Useful recommendations include adding vegetables or legumes, choosing less processed foods, replacing sugary drinks, reducing salty packaged foods, and planning portions. The chatbot should avoid rigid diets unless a clinician has prescribed them."}
+      ]
+    },
+    {
+      "source": "CDC Diabetes Basics",
+      "source_org": "CDC",
+      "source_url": "https://www.cdc.gov/diabetes/about/index.html",
+      "topic": "diabetes basics",
+      "disease_type": "diabetes",
+      "guidance": [
+        {"title": "Insulin and energy", "text": "CDC explains diabetes through the body's handling of food energy: glucose enters the bloodstream, insulin helps move it into cells, and problems with insulin can leave too much glucose in blood. RAG should use this mechanism to explain elevated glucose or HbA1c drivers in plain language."},
+        {"title": "Main diabetes types", "text": "The main diabetes categories include type 1, type 2, and gestational diabetes. An assistant should not infer the type from a risk score alone. If a user asks about diagnosis, the safer response is that blood testing and clinical history determine the category."},
+        {"title": "Prediabetes risk", "text": "Prediabetes means blood glucose is higher than normal but not yet in the diabetes range, and it increases risk for type 2 diabetes, heart disease, and stroke. RAG output should recommend confirmation with blood tests if the user has high risk or abnormal measurements."},
+        {"title": "Complication prevention", "text": "Diabetes can contribute to serious health problems over time, including heart, kidney, eye, and nerve disease. The assistant should frame prevention around blood glucose control, blood pressure and cholesterol management, physical activity, healthy eating, and regular medical care."},
+        {"title": "Lifestyle role", "text": "CDC diabetes basics highlight weight management where appropriate, healthy food choices, and regular activity as helpful steps for type 2 diabetes prevention and management. Recommendations should be matched to the user's data and should not imply that lifestyle change is the only treatment needed."},
+        {"title": "Testing importance", "text": "Because some people do not notice symptoms, testing matters when risk factors are present. A RAG response should encourage users with elevated glucose, high BMI, family history, prior gestational diabetes, or prediabetes concerns to discuss screening with a clinician."}
+      ]
+    },
+    {
+      "source": "CDC Type 2 Diabetes",
+      "source_org": "CDC",
+      "source_url": "https://www.cdc.gov/diabetes/about/about-type-2-diabetes.html",
+      "topic": "type 2 diabetes",
+      "disease_type": "diabetes",
+      "guidance": [
+        {"title": "Type 2 development", "text": "Type 2 diabetes often develops slowly and is more common with age, overweight, family history, prediabetes, prior gestational diabetes, and low physical activity. When retrieved for a risk explanation, this should become cautious wording about increased likelihood rather than a diagnostic statement."},
+        {"title": "Insulin resistance", "text": "CDC describes type 2 diabetes as a process where cells do not respond normally to insulin, so the pancreas compensates until glucose rises. This mechanism can help explain why BMI, inactivity, sleep disruption, and glucose trends often appear together in model outputs."},
+        {"title": "Symptoms may be mild", "text": "Type 2 diabetes symptoms can be slow or subtle, and some people have no noticeable symptoms. The assistant should not dismiss risk because symptoms are absent. If risk factors or readings are present, blood glucose or HbA1c testing is the grounded next step."},
+        {"title": "Complications", "text": "High blood sugar can damage the body over time and is linked with heart disease, vision loss, and kidney disease. RAG answers should avoid saying damage exists unless confirmed, but can explain why prevention and early management are clinically important."},
+        {"title": "Management basics", "text": "Type 2 diabetes management may include healthy eating, activity, medicines, insulin for some people, blood glucose targets, and regular care team visits. A RAG response can summarize these domains while telling users that individual targets and medications belong with their clinician."},
+        {"title": "Stress and sleep", "text": "Stress can make diabetes management harder, and sleep, activity, and relaxation strategies may help. When user context includes poor sleep, elevated heart rate, or stress language, retrieval should connect these factors to self-management support without overclaiming causality."}
+      ]
+    },
+    {
+      "source": "CDC Diabetes Risk Factors",
+      "source_org": "CDC",
+      "source_url": "https://www.cdc.gov/diabetes/risk-factors/index.html",
+      "topic": "diabetes risk factors",
+      "disease_type": "diabetes",
+      "guidance": [
+        {"title": "Modifiable and nonmodifiable risk", "text": "CDC separates diabetes risk factors into those that can be changed and those that cannot. Age, family history, and some background risks cannot be modified, while physical activity, weight status, diet quality, and follow-up testing can often be acted on."},
+        {"title": "Prediabetes and type 2 overlap", "text": "Prediabetes and type 2 diabetes share many risk factors, including overweight or obesity, older age, family history, low physical activity, and prior gestational diabetes. RAG should retrieve this when a query includes BMI, glucose, activity, or age together."},
+        {"title": "Physical inactivity", "text": "Being physically active less often is a diabetes risk factor. In explanations, low steps or activity scores should be described as modifiable signals that may influence insulin sensitivity, weight trends, blood pressure, and cardiovascular conditioning."},
+        {"title": "Gestational diabetes history", "text": "A history of gestational diabetes increases future type 2 diabetes risk. If user profile or clinical history includes pregnancy-related diabetes, the assistant should mention follow-up screening and prevention, while avoiding assumptions for users without that history."},
+        {"title": "Risk reduction", "text": "CDC risk guidance emphasizes increasing physical activity, eating a healthy diet, and losing weight if the person has overweight or obesity. The chatbot should frame these as risk-lowering steps and suggest clinical screening when multiple risk factors appear."},
+        {"title": "Demographic risk caution", "text": "Some populations have higher diabetes risk, but demographic factors should be handled carefully and respectfully. RAG responses should avoid stereotyping and instead use this information to support screening discussions and individualized prevention."}
+      ]
+    },
+    {
+      "source": "CDC Preventing Type 2 Diabetes",
+      "source_org": "CDC",
+      "source_url": "https://www.cdc.gov/diabetes/prevention-type-2/index.html",
+      "topic": "diabetes prevention",
+      "disease_type": "diabetes",
+      "guidance": [
+        {"title": "Prediabetes action", "text": "CDC describes prediabetes as serious but actionable. Early lifestyle changes can prevent or delay type 2 diabetes for many people. RAG answers should encourage users at risk to confirm their status with a blood test and discuss prevention support."},
+        {"title": "Weight and movement", "text": "For people with overweight or obesity and prediabetes risk, modest weight loss and regular physical activity are common prevention goals. The assistant should avoid aggressive targets and should encourage sustainable habits, especially when the user's sleep or stress data suggests low recovery."},
+        {"title": "Lifestyle change programs", "text": "CDC-recognized lifestyle change programs provide coaching around healthy eating, physical activity, stress management, motivation, and problem solving. A chatbot can suggest structured support when a user needs help turning general advice into a plan."},
+        {"title": "Silent prediabetes", "text": "Prediabetes often has no symptoms, so screening is important for people with risk factors. RAG output should avoid symptom-only reasoning and should recommend testing when risk factors include age, family history, high blood pressure, overweight, or prior gestational diabetes."},
+        {"title": "Reversal language", "text": "CDC prevention material notes that prediabetes can often be reversed or progression delayed. The assistant should use that as hopeful but not guaranteed language, emphasizing follow-up testing and long-term habits rather than promising a specific outcome."},
+        {"title": "Small steps", "text": "Prevention guidance works best when actions are manageable. Useful goals include replacing sugary drinks, increasing walking, planning balanced meals, tracking weight or waist trends when appropriate, and building support. A RAG answer should prioritize one or two next steps."}
+      ]
+    },
+    {
+      "source": "CDC About High Blood Pressure",
+      "source_org": "CDC",
+      "source_url": "https://www.cdc.gov/high-blood-pressure/about/index.html",
+      "topic": "blood pressure basics",
+      "disease_type": "hypertension",
+      "guidance": [
+        {"title": "Blood pressure threshold context", "text": "CDC describes high blood pressure as readings consistently at or above guideline thresholds, with normal blood pressure below 120/80 mm Hg. The assistant should explain that diagnosis depends on repeated, properly measured readings and clinician interpretation, not one app entry."},
+        {"title": "No warning signs", "text": "High blood pressure usually has no signs or symptoms. RAG output should make objective measurement central and should not reassure a user solely because they feel well. Repeated high readings deserve follow-up even without symptoms."},
+        {"title": "Problems caused by hypertension", "text": "High blood pressure can harm the heart, brain, kidneys, eyes, and blood vessels. Chatbot output should communicate risk without claiming existing organ damage unless the user's record includes confirmed diagnoses or lab findings."},
+        {"title": "Lifestyle prevention", "text": "CDC prevention steps include physical activity, not smoking, eating a healthy diet, limiting sodium and alcohol, keeping a healthy weight, and managing stress. These map well to user features such as steps, sleep, BMI, heart rate, and diet notes."},
+        {"title": "Medication may be needed", "text": "Lifestyle change can help many people, but some also need blood pressure medicines. RAG recommendations should not tell a user to start, stop, or change medication; they should encourage discussion with a care team when readings remain high."},
+        {"title": "Heart disease and stroke link", "text": "High blood pressure raises risk for heart disease and stroke. In chatbot answers about chest pain, neurologic symptoms, severe shortness of breath, or fainting, this context should support urgent escalation rather than routine monitoring advice."}
+      ]
+    },
+    {
+      "source": "CDC High Blood Pressure Risk Factors",
+      "source_org": "CDC",
+      "source_url": "https://www.cdc.gov/high-blood-pressure/risk-factors/",
+      "topic": "blood pressure risk factors",
+      "disease_type": "hypertension",
+      "guidance": [
+        {"title": "Conditions raising blood pressure risk", "text": "CDC lists elevated blood pressure, diabetes, obesity, and pregnancy-related factors among conditions that can increase hypertension risk. Retrieval should connect high blood pressure to metabolic risk when diabetes, BMI, or kidney concerns are present in the user's context."},
+        {"title": "Dietary sodium and potassium", "text": "A diet too high in sodium and too low in potassium can raise blood pressure risk for many people. RAG advice can include reducing salty processed foods and eating potassium-rich whole foods, while cautioning that kidney disease or certain medicines require clinician guidance."},
+        {"title": "Physical inactivity and blood pressure", "text": "Regular physical activity helps keep the heart and blood vessels healthy and may lower blood pressure. Low activity or step count should be treated as a modifiable factor, with gradual movement goals if no red-flag symptoms are present."},
+        {"title": "Alcohol and tobacco", "text": "Too much alcohol can raise blood pressure, and tobacco damages the heart and blood vessels while nicotine can raise blood pressure. If user history includes smoking or high alcohol intake, retrieval should surface these as cardiovascular risk modifiers."},
+        {"title": "Family history and age", "text": "Family history, genetics, age, and race or ethnicity can affect blood pressure risk. The assistant should frame nonmodifiable factors as reasons for screening and follow-up, not as deterministic outcomes."},
+        {"title": "Stress and mental health", "text": "Long-term stress, anxiety, depression, or post-traumatic stress may be linked with heart rate and blood pressure changes. RAG should avoid simplistic claims but can recommend stress management and clinician review when symptoms or readings persist."}
+      ]
+    },
+    {
+      "source": "CDC Heart Disease Risk Factors",
+      "source_org": "CDC",
+      "source_url": "https://www.cdc.gov/heart-disease/risk-factors/index.html",
+      "topic": "heart disease risk factors",
+      "disease_type": "cardiovascular",
+      "guidance": [
+        {"title": "Major heart disease risks", "text": "CDC identifies high blood pressure, high cholesterol, and smoking as key heart disease risk factors. Diabetes, obesity, unhealthy diet, physical inactivity, excessive alcohol, age, and family history also matter. Retrieval should combine these signals rather than overfocusing on one feature."},
+        {"title": "High cholesterol", "text": "High cholesterol often has no symptoms and is found through blood testing. If a user has LDL, HDL, triglyceride, or cholesterol proxy drivers, the assistant should explain that lab follow-up and cardiovascular risk review are more reliable than symptoms."},
+        {"title": "Diabetes and heart disease", "text": "Diabetes increases risk for heart disease because abnormal glucose and related metabolic factors affect blood vessels over time. RAG should use this for cardiometabolic explanations where glucose, blood pressure, body weight, and lipids appear together."},
+        {"title": "Dietary heart risks", "text": "Diet high in saturated fat, trans fat, cholesterol, and sodium can contribute to heart disease and related conditions. Practical RAG recommendations can include reducing salty and highly processed foods, replacing saturated fats, and increasing fiber-rich foods."},
+        {"title": "Physical inactivity", "text": "Not getting enough physical activity can increase risk of heart disease and related conditions such as obesity, high blood pressure, high cholesterol, and diabetes. Low activity drivers should therefore retrieve both cardiovascular and diabetes prevention content."},
+        {"title": "Tobacco and oxygen delivery", "text": "Tobacco smoke damages the heart and blood vessels; nicotine can raise blood pressure and carbon monoxide reduces blood oxygen carrying capacity. RAG output should encourage quitting support when smoking appears, without moralizing."}
+      ]
+    },
+    {
+      "source": "CDC About Sleep",
+      "source_org": "CDC",
+      "source_url": "https://www.cdc.gov/sleep/about/index.html",
+      "topic": "sleep health",
+      "disease_type": "sleep",
+      "guidance": [
+        {"title": "Sleep and health", "text": "CDC describes good sleep as important for health, emotional well-being, metabolism, and heart health. For users with short sleep or low sleep efficiency, RAG should explain that sleep can affect risk patterns while acknowledging that wearable sleep estimates may be imperfect."},
+        {"title": "Adult sleep duration", "text": "Adults generally need seven or more hours of sleep per night, with older adults often needing seven to nine or seven to eight hours depending on age. The assistant should use duration as context, not as a standalone diagnosis of sleep disorder."},
+        {"title": "Sleep and chronic disease", "text": "Getting enough sleep may lower risk of chronic conditions such as type 2 diabetes, heart disease, high blood pressure, and stroke. When sleep and metabolic drivers appear together, RAG should retrieve sleep guidance to reduce generic lifestyle answers."},
+        {"title": "Sleep habits", "text": "Better sleep habits include consistent bed and wake times, a quiet and cool room, limiting screens before bedtime, avoiding large meals and alcohol close to bed, avoiding late caffeine, exercising regularly, and maintaining a healthy diet."},
+        {"title": "Sleep quality", "text": "Quality sleep is uninterrupted and refreshing. A low sleep score may reflect short duration, fragmentation, schedule irregularity, stress, alcohol, caffeine, or sleep-disordered breathing. RAG output should ask focused follow-up questions instead of assuming one cause."},
+        {"title": "When to seek help", "text": "Users should talk with a healthcare provider if sleep problems persist, impair daytime function, or include loud snoring, witnessed pauses in breathing, severe insomnia, or dangerous sleepiness. This is especially important with high blood pressure or cardiometabolic risk."}
+      ]
+    },
+    {
+      "source": "CDC About Body Mass Index",
+      "source_org": "CDC",
+      "source_url": "https://www.cdc.gov/bmi/about/index.html",
+      "topic": "BMI screening",
+      "disease_type": "obesity",
+      "guidance": [
+        {"title": "BMI calculation", "text": "BMI is a measure of weight relative to height and is calculated from kilograms divided by meters squared. It is quick and low cost, which makes it useful for screening, but it does not directly measure body fat or body composition."},
+        {"title": "BMI limitations", "text": "BMI does not distinguish fat, muscle, bone mass, or fat distribution. RAG explanations should not treat BMI as a verdict. The better framing is that BMI can be considered with blood pressure, cholesterol, glucose, medical history, activity, sleep, and physical examination."},
+        {"title": "BMI and chronic disease risk", "text": "BMI categories are associated with health risks at a population level, including high blood pressure, high cholesterol, and other chronic conditions. In individual answers, BMI should be one risk signal among multiple measurements and user-specific context."},
+        {"title": "Tracking trends", "text": "Tracking BMI or weight over time can help detect weight change and monitor risk. A RAG response should emphasize trends and context rather than reacting strongly to one value, especially if data quality or height input is uncertain."},
+        {"title": "Individual health context", "text": "For individual health, CDC recommends considering BMI with medical history, family history, health behaviors, physical examination, blood pressure, muscle mass, and lab findings such as glucose and cholesterol. This supports hybrid retrieval for multi-feature model explanations."},
+        {"title": "Professional discussion", "text": "Users with concerns about BMI should discuss their full health picture with a healthcare provider. The assistant can suggest questions to ask and practical next steps, but should not diagnose obesity-related disease from BMI alone."}
+      ]
+    },
+    {
+      "source": "NIH NIDDK Risk Factors for Type 2 Diabetes",
+      "source_org": "NIH",
+      "source_url": "https://www.niddk.nih.gov/health-information/diabetes/overview/risk-factors-type-2-diabetes",
+      "topic": "type 2 diabetes risk factors",
+      "disease_type": "diabetes",
+      "guidance": [
+        {"title": "Risk is multifactorial", "text": "NIDDK describes type 2 diabetes risk as a combination of factors. Some can be changed, such as weight status and physical activity, while age, family history, and some background risks cannot. Retrieval should use this nuance for risk score explanations."},
+        {"title": "Age and family history", "text": "Risk rises with age and family history, but type 2 diabetes can occur earlier as well. A RAG answer should avoid fatalistic language: nonmodifiable factors increase the value of screening and prevention rather than guaranteeing disease."},
+        {"title": "Weight and waist context", "text": "NIDDK highlights BMI and waist circumference as ways to estimate risk. Waist size can add context because abdominal fat is associated with diabetes and heart disease risk. The assistant should recommend clinician interpretation rather than asking users to self-diagnose."},
+        {"title": "Physical inactivity", "text": "A sedentary lifestyle and jobs involving long sitting can raise type 2 diabetes risk. If a user's step count is low, BM25 retrieval should surface this source alongside WHO activity guidance and CDC prevention guidance."},
+        {"title": "Prediabetes and gestational diabetes", "text": "Prediabetes and a history of gestational diabetes increase future type 2 diabetes risk. RAG should suggest screening and prevention discussions when these appear in clinical history, and should avoid bringing them up as assumptions otherwise."},
+        {"title": "Health condition management", "text": "Managing related health conditions and reviewing medicines that may affect glucose risk can reduce overall diabetes probability. A cautious assistant can recommend discussing medical history, medications, and testing with a clinician when multiple risk factors cluster."}
+      ]
+    },
+    {
+      "source": "NIH NIDDK Preventing Type 2 Diabetes",
+      "source_org": "NIH",
+      "source_url": "https://www.niddk.nih.gov/health-information/diabetes/overview/preventing-type-2-diabetes",
+      "topic": "type 2 diabetes prevention",
+      "disease_type": "diabetes",
+      "guidance": [
+        {"title": "Delay or prevent type 2", "text": "NIDDK states that type 2 diabetes can often be delayed or prevented in high-risk people. The assistant should present prevention as meaningful and evidence-informed, while avoiding guarantees and encouraging follow-up testing."},
+        {"title": "Modest weight loss", "text": "For people with overweight, modest sustained weight loss can reduce type 2 diabetes risk. RAG responses should frame this as a health target to discuss with a clinician or coach, not as pressure or a diagnosis."},
+        {"title": "Move most days", "text": "NIDDK prevention guidance encourages physical activity on most days of the week and starting slowly when inactive. This supports practical recommendations such as walking, gradual step increases, and choosing safe activities matched to symptoms and fitness level."},
+        {"title": "Healthy eating", "text": "Prevention advice includes reduced-calorie eating plans when weight loss is appropriate, smaller portions, healthier food choices, less fat where needed, and water instead of sweetened drinks. RAG should translate this into user-friendly options rather than generic diet lectures."},
+        {"title": "Prediabetes follow-up", "text": "If a clinician has identified prediabetes, the user can lower risk by becoming more active, losing weight if needed, and following a reduced-calorie eating plan. RAG output should encourage regular monitoring and clinician-guided targets."},
+        {"title": "Medication discussion", "text": "Some high-risk people may be advised to consider metformin to prevent or delay type 2 diabetes. The chatbot should not recommend starting medication but can suggest asking a clinician whether medication prevention is relevant."}
+      ]
+    },
+    {
+      "source": "NIH NHLBI High Blood Pressure Causes and Risk Factors",
+      "source_org": "NIH",
+      "source_url": "https://www.nhlbi.nih.gov/health/high-blood-pressure/causes",
+      "topic": "hypertension causes and prevention",
+      "disease_type": "hypertension",
+      "guidance": [
+        {"title": "Lifestyle and blood pressure", "text": "NHLBI lists unhealthy diet patterns, high salt intake, low potassium intake, inactivity, poor sleep quality, stress, alcohol or caffeine excess, and stimulant substances among factors that can raise blood pressure risk. Retrieval should surface this for blood pressure and heart rate queries."},
+        {"title": "Age and vascular stiffness", "text": "Blood pressure tends to rise with age as blood vessels stiffen. This should be framed as a risk context, not an excuse to ignore high readings. Older users with persistent elevations should be encouraged to discuss targets and treatment with clinicians."},
+        {"title": "Salt sensitivity", "text": "Some people are more sensitive to salt, including people with chronic kidney disease, diabetes, metabolic syndrome, older age, or some ancestry-related risk patterns. A RAG answer should mention sodium reduction but avoid potassium advice when kidney disease is possible."},
+        {"title": "Sleep apnea and hypertension", "text": "Sleep apnea is one medical condition that can contribute to high blood pressure. If the user reports loud snoring, witnessed pauses, morning headaches, or daytime sleepiness with high blood pressure, the assistant should suggest clinical evaluation."},
+        {"title": "Medication contributors", "text": "Some medicines can make blood pressure harder to control, including certain decongestants, hormonal birth control, antidepressants, and nonsteroidal anti-inflammatory drugs. RAG should suggest medication review with a clinician rather than telling users to stop medicines."},
+        {"title": "Heart healthy prevention", "text": "NHLBI prevention advice includes heart-healthy foods lower in sodium, regular physical activity, healthy weight, quitting smoking, cholesterol and blood sugar control, stress management, and good-quality sleep. This maps directly to hybrid retrieval across vitals, labs, and wearables."}
+      ]
+    },
+    {
+      "source": "NIH NHLBI Sleep Deprivation and Deficiency",
+      "source_org": "NIH",
+      "source_url": "https://www.nhlbi.nih.gov/health/sleep-deprivation/health-effects",
+      "topic": "sleep deficiency health effects",
+      "disease_type": "sleep",
+      "guidance": [
+        {"title": "Sleep supports physical health", "text": "NHLBI describes sleep as important for brain function, physical health, growth and repair, immune function, and safety. For RAG, this helps avoid treating sleep as a soft lifestyle detail when it appears as a strong model driver."},
+        {"title": "Sleep and insulin", "text": "Sleep deficiency can affect how the body responds to insulin and may contribute to higher blood glucose. When user data includes short sleep plus glucose or diabetes risk drivers, retrieval should connect these mechanisms cautiously and recommend improving sleep alongside testing."},
+        {"title": "Sleep and appetite hormones", "text": "Not getting enough sleep can alter hunger and fullness signals, which may make weight management harder. A RAG response can explain this as one pathway linking poor sleep, BMI, and diabetes risk without blaming the user."},
+        {"title": "Sleep and cardiovascular health", "text": "Good-quality sleep helps repair the heart and blood vessels, while ongoing sleep deficiency is linked with higher risk of heart disease, high blood pressure, obesity, and stroke. This should surface for sleep plus blood pressure or heart rate queries."},
+        {"title": "Daytime safety", "text": "Sleep deficiency can impair attention, decision-making, reaction time, driving safety, mood, and work or school function. If the user reports severe sleepiness, near-misses, or falling asleep unintentionally, the assistant should escalate toward medical evaluation and safety precautions."},
+        {"title": "Sleep disorder clues", "text": "Untreated sleep disorders can raise cardiovascular and pregnancy-related risks. RAG should ask about snoring, breathing pauses, insomnia duration, restless legs, shift work, and daytime sleepiness when sleep metrics remain poor or blood pressure is elevated."}
+      ]
+    },
+    {
+      "source": "NIH NHLBI Blood Cholesterol Causes and Risk Factors",
+      "source_org": "NIH",
+      "source_url": "https://www.nhlbi.nih.gov/health/blood-cholesterol/causes",
+      "topic": "cholesterol risk factors",
+      "disease_type": "cardiovascular",
+      "guidance": [
+        {"title": "LDL and HDL patterns", "text": "NHLBI explains that unhealthy lifestyle habits, genes, medical conditions, and some medicines can raise LDL cholesterol or lower HDL cholesterol. If a model driver uses cholesterol proxy, LDL, HDL, or triglycerides, retrieval should cite lipid-specific context."},
+        {"title": "Saturated fat and LDL", "text": "Eating many foods high in saturated fats can raise LDL cholesterol. RAG advice can recommend replacing some saturated fat sources with unsaturated fats and fiber-rich foods, while avoiding absolute claims that one food alone determines cholesterol."},
+        {"title": "Physical activity and cholesterol", "text": "Lack of physical activity is linked with unhealthy cholesterol levels. This connects activity features to lipid and heart risk, making hybrid retrieval useful when low steps, high BMI, and cholesterol proxy appear together."},
+        {"title": "Smoking and HDL", "text": "Smoking can lower HDL cholesterol and raise cardiovascular risk. If tobacco history appears, the assistant should recommend quitting support and clinician discussion, not simply list smoking as a moral failure."},
+        {"title": "Sleep and cardiovascular health", "text": "Low-quality sleep has been linked to lower cardiovascular health. In lipid explanations, sleep should not be overemphasized, but it can be mentioned as part of a broader heart-healthy pattern when retrieved with other risk factors."},
+        {"title": "Medical conditions and medicines", "text": "Chronic kidney disease, diabetes, hypothyroidism, lupus, HIV, overweight, obesity, PCOS, sleep apnea, and some medicines can affect cholesterol. RAG should suggest clinician review for unexplained abnormal lipids instead of assuming diet is the only cause."}
+      ]
+    },
+    {
+      "source": "NIH NHLBI High Blood Triglycerides",
+      "source_org": "NIH",
+      "source_url": "https://www.nhlbi.nih.gov/health/high-blood-triglycerides",
+      "topic": "triglycerides",
+      "disease_type": "cardiovascular",
+      "guidance": [
+        {"title": "Triglyceride testing", "text": "Triglycerides are blood fats measured with lipid blood tests. Adults generally aim for fasting triglycerides below common healthy thresholds, while higher levels require clinician interpretation. A RAG response should encourage lab follow-up rather than relying on symptoms."},
+        {"title": "Triglyceride risk factors", "text": "High triglycerides can be influenced by kidney disease, diabetes, liver disease, overweight, obesity, thyroid disease, genes, medicines, diet, alcohol, and physical inactivity. This source should retrieve when queries mention triglycerides, metabolic syndrome, diabetes, or cholesterol proxy."},
+        {"title": "Diet and triglycerides", "text": "Foods high in fat and sugar and excess alcohol can raise triglycerides for some people. Recommendations should focus on healthier dietary patterns, reducing sugary drinks, limiting alcohol, and clinician review when levels are high or very high."},
+        {"title": "Activity and triglycerides", "text": "Not getting enough exercise can contribute to high triglycerides. When low activity and lipid concerns appear together, the assistant can suggest gradual physical activity as one part of risk reduction if symptoms do not require urgent care."},
+        {"title": "Symptoms and severe levels", "text": "High triglycerides often require blood testing for detection, but very high levels can be clinically important and need medical management. The chatbot should not diagnose pancreatitis or lipid disorders from app data, but should recommend prompt clinician follow-up for markedly abnormal labs."},
+        {"title": "Medication and secondary causes", "text": "Some medicines and health conditions can raise triglycerides. RAG output should encourage users with unexpected or persistent elevations to review medications, alcohol intake, diabetes control, thyroid status, and kidney or liver issues with a clinician."}
+      ]
+    }
+  ]
+}

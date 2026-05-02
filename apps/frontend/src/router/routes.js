@@ -18,6 +18,7 @@ export const ROUTES = {
   ONBOARDING_COMPLETION: '/onboarding/completion',
   DASHBOARD: '/dashboard',
   DASHBOARD_ALT: '/dashboard/alt',
+  DOCTOR_DASHBOARD: '/doctor/dashboard',
   INSIGHTS: '/insights',
   INSIGHTS_DESKTOP: '/insights/desktop',
   SIMULATOR: '/simulator',

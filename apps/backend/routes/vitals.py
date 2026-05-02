@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from database.session import get_db
@@ -8,6 +9,11 @@ from services.google_fit_service import GoogleFitService
 from services.user_data_service import UserDataService
 
 router = APIRouter(prefix="/api/v1/vitals", tags=["Vitals"])
+NO_CACHE_HEADERS = {
+    "Cache-Control": "no-cache, no-store, max-age=0, must-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
 
 
 def _serialize_vitals_response(payload: dict, vital_type: str | None, range_value: str) -> dict:
@@ -40,7 +46,11 @@ def get_vitals(
     db: Session = Depends(get_db),
 ):
     payload = UserDataService.list_vitals(db, current_user, vital_type=type, range_value=range)
-    return _serialize_vitals_response(payload, type, range)
+    return JSONResponse(
+        status_code=200,
+        content=_serialize_vitals_response(payload, type, range),
+        headers=NO_CACHE_HEADERS,
+    )
 
 
 @router.get("/heart-rate")
@@ -49,10 +59,14 @@ def get_heart_rate(
     db: Session = Depends(get_db),
 ):
     payload = UserDataService.list_vitals(db, current_user, vital_type="heart_rate", range_value="24h")
-    return {
-        "success": True,
-        "status": "ready",
-        "message": None if payload["data"]["vitals"] else "No heart rate data available",
-        "connected": bool(GoogleFitService.get_status(db, current_user).get("connected")),
-        "data": _serialize_vitals_response(payload, "heart_rate", "24h")["data"],
-    }
+    return JSONResponse(
+        status_code=200,
+        content={
+            "success": True,
+            "status": "ready",
+            "message": None if payload["data"]["vitals"] else "No heart rate data available",
+            "connected": bool(GoogleFitService.get_status(db, current_user).get("connected")),
+            "data": _serialize_vitals_response(payload, "heart_rate", "24h")["data"],
+        },
+        headers=NO_CACHE_HEADERS,
+    )

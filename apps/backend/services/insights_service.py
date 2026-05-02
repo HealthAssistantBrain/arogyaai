@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from models import User
 from pipelines.storage_pipeline.service import StoragePipelineService
+from services.insight_formatter import sanitize_ai_insight_payload
 
 
 class InsightsService:
@@ -42,7 +43,7 @@ class InsightsService:
                 "risks": stored.get("risk", {}) if isinstance(stored.get("risk"), dict) else {},
                 "drivers": stored.get("drivers", []) if isinstance(stored.get("drivers"), list) else [],
                 "analysis": stored.get("analysis") or "",
-                "explanation": stored.get("explanation") if isinstance(stored.get("explanation"), dict) else None,
+                "explanation": sanitize_ai_insight_payload(stored.get("explanation")),
                 "recommendations": stored.get("recommendations", []) if isinstance(stored.get("recommendations"), list) else [],
                 "confidence": stored.get("confidence") or 0,
                 "data_points": stored.get("data_points") or 0,

@@ -25,14 +25,35 @@ class NotificationSeverityEnum(str, enum.Enum):
     CRITICAL = "critical"
 
 
+def _enum_member_names(enum_cls):
+    return [member.name for member in enum_cls]
+
+
 class Notification(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "notifications"
 
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    notification_type = Column("type", Enum(NotificationTypeEnum, name="notification_type_enum"), nullable=False, index=True)
+    notification_type = Column(
+        "type",
+        Enum(
+            NotificationTypeEnum,
+            name="notification_type_enum",
+            values_callable=_enum_member_names,
+        ),
+        nullable=False,
+        index=True,
+    )
     title = Column(String(200), nullable=False)
     description = Column(Text, nullable=False)
-    severity = Column(Enum(NotificationSeverityEnum, name="notification_severity_enum"), nullable=False, index=True)
+    severity = Column(
+        Enum(
+            NotificationSeverityEnum,
+            name="notification_severity_enum",
+            values_callable=_enum_member_names,
+        ),
+        nullable=False,
+        index=True,
+    )
     event_metadata = Column("metadata", JSONB, nullable=True, default=dict)
     is_read = Column(Boolean, default=False, nullable=False, index=True)
     delivery_status = Column(String(32), nullable=False, default="pending", server_default="pending", index=True)

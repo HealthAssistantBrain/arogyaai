@@ -11,7 +11,7 @@ from sqlalchemy.orm import joinedload
 
 from database.session import SessionLocal
 from models import GoogleFitConnection, User
-from services.google_fit_service import GoogleFitService
+from services.google_fit_service import GOOGLE_FIT_DEFAULT_FETCH_WINDOW_DAYS, GoogleFitService
 
 logger = logging.getLogger("google_fit_worker")
 
@@ -25,12 +25,11 @@ _MAX_INTERVAL_SECONDS = 300
 
 async def _sync_connected_user(db, user: User, connection: GoogleFitConnection | None) -> dict[str, Any]:
     timezone_name = connection.default_timezone if connection else None
-    return await GoogleFitService.sync_steps(
+    return await GoogleFitService.sync_steps_paginated(
         db,
         user,
         timezone_name=timezone_name,
-        days=30,
-        silent=True,
+        days=GOOGLE_FIT_DEFAULT_FETCH_WINDOW_DAYS,
     )
 
 

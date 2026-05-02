@@ -11,7 +11,8 @@ import {
     Bell,
     Settings,
     HelpCircle,
-    Wind
+    Wind,
+    Stethoscope
 } from 'lucide-react';
 import { ROUTES } from '../router/routes';
 
@@ -19,6 +20,7 @@ export type NavItem = {
     label: string;
     icon?: any;
     path: string;
+    roles?: string[];
     children?: NavItem[];
 };
 
@@ -32,6 +34,7 @@ export const navConfig: NavSection[] = [
         section: '',
         items: [
             { label: 'Dashboard', icon: LayoutDashboard, path: ROUTES.DASHBOARD },
+            { label: 'Doctor Monitor', icon: Stethoscope, path: ROUTES.DOCTOR_DASHBOARD, roles: ['doctor'] },
             { label: 'AI Insights', icon: Brain, path: ROUTES.INSIGHTS },
             { label: 'AI Risk Prediction', icon: Brain, path: ROUTES.RISK_PREDICTION },
             { label: 'Disease Simulator', icon: FlaskConical, path: ROUTES.SIMULATOR },

@@ -14,7 +14,9 @@ from .pipeline import (
     ShapFactor,
     build_feature_vector,
     build_ml_pipeline_context,
+    predict_all,
     predict_risk,
+    predict_risks,
 )
 
 __all__ = [
@@ -31,5 +33,7 @@ __all__ = [
     "ShapFactor",
     "build_feature_vector",
     "build_ml_pipeline_context",
+    "predict_all",
     "predict_risk",
+    "predict_risks",
 ]

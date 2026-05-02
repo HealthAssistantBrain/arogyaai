@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Activity,
@@ -24,6 +24,17 @@ import { safeArray, safeText } from '../utils/safeData';
 const API_BASE_URL = getApiUrl(
   import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 );
+
+const TIMELINE_CARD_CLASS =
+  'rounded-xl border border-gray-200 bg-white/80 p-5 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-950/35';
+
+const TIMELINE_CONTAINER_CLASS =
+  'rounded-xl border border-gray-200 bg-white/80 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-[#110d21]/80';
+
+const TIMELINE_YEAR_CLASS =
+  'shrink-0 snap-center rounded-xl border border-gray-200 bg-white/80 p-5 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-950/35';
+
+const MotionDiv = motion.div;
 
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -170,7 +181,7 @@ function TimelineDetailCard({ event }) {
   const detailTone = getSeverityTone(event.severity);
 
   return (
-    <motion.div
+    <MotionDiv
       initial={{ opacity: 0, y: 22, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 18, scale: 0.98 }}
@@ -307,7 +318,7 @@ function TimelineDetailCard({ event }) {
                       </div>
                     </div>
                     <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                      <motion.div
+                      <MotionDiv
                         initial={{ width: 0 }}
                         animate={{ width: `${lab.progress ?? 50}%` }}
                         transition={{ duration: 0.9, ease: 'easeOut' }}
@@ -321,7 +332,7 @@ function TimelineDetailCard({ event }) {
           ) : null}
         </div>
       </div>
-    </motion.div>
+    </MotionDiv>
   );
 }
 
@@ -336,6 +347,7 @@ const Timeline = () => {
   const [error, setError] = useState(null);
   const { acquireLock, releaseLock } = useFetchLock();
   const timelineScrollRef = useRef(null);
+  const timelineScrollLeftRef = useRef(0);
   const eventRefs = useRef({});
 
   const fetchTimeline = useCallback(async () => {
@@ -481,12 +493,22 @@ const Timeline = () => {
     });
   };
 
+  useLayoutEffect(() => {
+    if (viewMode !== 'timeline') return;
+
+    const node = timelineScrollRef.current;
+    if (!node) return;
+
+    const maxScrollLeft = Math.max(0, node.scrollWidth - node.clientWidth);
+    node.scrollLeft = Math.min(timelineScrollLeftRef.current, maxScrollLeft);
+  }, [activeFilter, searchQuery, visibleEvents.length, viewMode]);
+
   if (profileLoading || loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f6f5f8] text-sm font-bold text-slate-500 dark:bg-[#131022]">
-        <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}>
+        <MotionDiv animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}>
           <Activity className="mx-auto mb-4 size-8 text-[#6143f4]" />
-        </motion.div>
+        </MotionDiv>
         <span className="ml-3">Loading Timeline...</span>
       </div>
     );
@@ -581,168 +603,160 @@ const Timeline = () => {
                   </div>
                 ) : null}
 
-                {visibleEvents.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center rounded-[1.8rem] border border-dashed border-slate-200 bg-slate-50/70 py-20 text-slate-400 dark:border-slate-800 dark:bg-slate-900/35">
-                    <History size={48} className="mb-4 opacity-20" />
-                    <p className="text-lg font-semibold">
-                      {cleanedData.length > 0 && searchQuery ? 'No matching results found' : 'No recent health events'}
-                    </p>
-                    <p className="mt-2 text-sm">
-                      {cleanedData.length > 0 && searchQuery
-                        ? 'Try a different search term or clear the filter.'
-                        : 'Switch to Add Medical History to begin building a longitudinal record.'}
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+                  <div className={TIMELINE_CARD_CLASS}>
+                    <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Timeline Window</p>
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <p className="text-xl font-black text-slate-950 dark:text-white">
+                        {visibleEvents.length} event{visibleEvents.length === 1 ? '' : 's'}
+                      </p>
+                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
+                        {firstVisibleEvent && lastVisibleEvent
+                          ? `${firstVisibleEvent.date} to ${lastVisibleEvent.date}`
+                          : 'No matching date range'}
+                      </span>
+                    </div>
+                    <p className="mt-3 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                      {visibleEvents.length > 0
+                        ? 'Scroll across the rail to move year by year through reports, alerts, labs, and structured symptom history.'
+                        : cleanedData.length > 0 && searchQuery
+                          ? 'Try a different search term or clear the filter.'
+                          : 'Switch to Add Medical History to begin building a longitudinal record.'}
                     </p>
                   </div>
-                ) : (
-                  <>
-                    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
-                      <div className="rounded-[1.7rem] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(244,247,252,0.92))] p-5 dark:border-slate-800 dark:bg-[linear-gradient(180deg,rgba(17,13,33,0.92),rgba(11,17,30,0.88))]">
-                        <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Timeline Window</p>
-                        <div className="mt-3 flex flex-wrap items-center gap-3">
-                          <p className="text-xl font-black text-slate-950 dark:text-white">
-                            {visibleEvents.length} event{visibleEvents.length === 1 ? '' : 's'}
-                          </p>
-                          <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
-                            {firstVisibleEvent?.date} to {lastVisibleEvent?.date}
-                          </span>
-                        </div>
-                        <p className="mt-3 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                          Scroll across the rail to move year by year through reports, alerts, labs, and structured symptom history.
-                        </p>
-                      </div>
 
-                      <div className="rounded-[1.7rem] border border-[#6143f4]/10 bg-[linear-gradient(180deg,rgba(97,67,244,0.08),rgba(0,156,222,0.05))] p-5 dark:border-[#6143f4]/20 dark:bg-[linear-gradient(180deg,rgba(97,67,244,0.12),rgba(15,23,42,0.12))]">
-                        <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#6143f4]">Current Year</p>
-                        <p className="mt-3 text-3xl font-black tracking-tight text-slate-950 dark:text-white">{currentYear}</p>
-                        <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-                          The current year block is highlighted so the most recent clinical context stays easy to spot.
-                        </p>
-                      </div>
+                  <div className={TIMELINE_CARD_CLASS}>
+                    <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Current Year</p>
+                    <p className="mt-3 text-3xl font-black tracking-tight text-slate-950 dark:text-white">{currentYear}</p>
+                    <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                      The current year marker stays neutral while filtered timeline content updates inside the rail.
+                    </p>
+                  </div>
+                </div>
+
+                <div className={`timeline-container mt-6 p-4 ${TIMELINE_CONTAINER_CLASS}`}>
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3 px-2">
+                    <div>
+                      <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Horizontal Timeline</p>
+                      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                        Events are grouped by year and ordered by their real clinical date.
+                      </p>
                     </div>
+                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
+                      Snap scroll enabled
+                    </span>
+                  </div>
 
-                    <div className="mt-6 rounded-[2rem] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,255,0.95),rgba(239,244,252,0.92))] p-4 dark:border-slate-800 dark:bg-[linear-gradient(180deg,rgba(16,13,28,0.92),rgba(10,16,28,0.88))]">
-                      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 px-2">
-                        <div>
-                          <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Horizontal Timeline</p>
-                          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                            Events are grouped by year and ordered by their real clinical date.
-                          </p>
-                        </div>
-                        <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
-                          Snap scroll enabled
-                        </span>
+                  <div
+                    ref={timelineScrollRef}
+                    onScroll={(event) => {
+                      timelineScrollLeftRef.current = event.currentTarget.scrollLeft;
+                    }}
+                    className="snap-x snap-mandatory overflow-x-auto pb-4"
+                    style={{ scrollBehavior: 'smooth', scrollSnapType: 'x mandatory', scrollbarWidth: 'thin' }}
+                  >
+                    {visibleEvents.length === 0 ? (
+                      <div className="flex min-h-[280px] min-w-full flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 bg-white/60 px-6 py-12 text-center text-slate-400 dark:border-slate-800 dark:bg-slate-950/35">
+                        <History size={48} className="mb-4 opacity-20" />
+                        <p className="text-lg font-semibold">
+                          {cleanedData.length > 0 && searchQuery ? 'No matching results found' : 'No recent health events'}
+                        </p>
+                        <p className="mt-2 text-sm">
+                          {cleanedData.length > 0 && searchQuery
+                            ? 'Try a different search term or clear the filter.'
+                            : 'Switch to Add Medical History to begin building a longitudinal record.'}
+                        </p>
                       </div>
+                    ) : (
+                      <div className="relative flex min-w-max items-end gap-8 px-3 pb-10 pt-6">
+                        <div className="pointer-events-none absolute bottom-4 left-3 right-3 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent dark:via-slate-600" />
 
-                      <div
-                        ref={timelineScrollRef}
-                        className="overflow-x-auto pb-4"
-                        style={{ scrollBehavior: 'smooth', scrollSnapType: 'x mandatory', scrollbarWidth: 'thin' }}
-                      >
-                        <div className="relative flex min-w-max items-end gap-8 px-3 pb-10 pt-6">
-                          <div className="pointer-events-none absolute bottom-4 left-3 right-3 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent dark:via-slate-600" />
+                        {groupedEvents.map(({ year, events }) => {
+                          const isCurrentYear = year === currentYear;
 
-                          {groupedEvents.map(({ year, events }) => {
-                            const isCurrentYear = year === currentYear;
-
-                            return (
-                              <motion.section
-                                key={year}
-                                initial={{ opacity: 0.45, scale: 0.96, y: 18 }}
-                                whileInView={{ opacity: 1, scale: 1, y: 0 }}
-                                viewport={{ root: timelineScrollRef, amount: 0.35 }}
-                                transition={{ duration: 0.45, ease: 'easeOut' }}
-                                className={`shrink-0 rounded-[1.8rem] border p-5 ${
-                                  isCurrentYear
-                                    ? 'border-[#6143f4]/20 bg-[linear-gradient(180deg,rgba(97,67,244,0.1),rgba(255,255,255,0.82))] dark:bg-[linear-gradient(180deg,rgba(97,67,244,0.16),rgba(13,18,31,0.86))]'
-                                    : 'border-slate-200/80 bg-white/78 dark:border-slate-800 dark:bg-slate-950/28'
-                                }`}
-                                style={{
-                                  minWidth: `${Math.max(320, events.length * 230)}px`,
-                                  scrollSnapAlign: 'center',
-                                }}
-                              >
-                                <div className="flex items-center justify-between gap-3">
-                                  <div>
-                                    <p className={`text-[11px] font-black uppercase tracking-[0.24em] ${isCurrentYear ? 'text-[#6143f4]' : 'text-slate-400'}`}>
-                                      {isCurrentYear ? 'Current Year' : 'Timeline Year'}
-                                    </p>
-                                    <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950 dark:text-white">{year}</h2>
-                                  </div>
-
-                                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
-                                    {events.length} event{events.length === 1 ? '' : 's'}
-                                  </span>
+                          return (
+                            <section
+                              key={year}
+                              className={TIMELINE_YEAR_CLASS}
+                              style={{ minWidth: `${Math.max(320, events.length * 230)}px` }}
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <div>
+                                  <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">
+                                    {isCurrentYear ? 'Current Year' : 'Timeline Year'}
+                                  </p>
+                                  <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950 dark:text-white">{year}</h2>
                                 </div>
 
-                                <div className="mt-8 flex items-end gap-6">
-                                  {events.map((event) => {
-                                    const isSelected = selectedEvent?.id === event.id;
+                                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
+                                  {events.length} event{events.length === 1 ? '' : 's'}
+                                </span>
+                              </div>
 
-                                    return (
-                                      <motion.button
-                                        key={event.id}
-                                        ref={(node) => {
-                                          if (node) {
-                                            eventRefs.current[event.id] = node;
-                                          } else {
-                                            delete eventRefs.current[event.id];
-                                          }
-                                        }}
-                                        type="button"
-                                        onClick={() => handleSelectEvent(event.id)}
-                                        initial={{ opacity: 0.55, scale: 0.95 }}
-                                        whileInView={{ opacity: 1, scale: 1 }}
-                                        viewport={{ root: timelineScrollRef, amount: 0.5 }}
-                                        transition={{ duration: 0.35, ease: 'easeOut' }}
-                                        className="relative flex w-[210px] shrink-0 flex-col items-center pb-10 text-left"
+                              <div className="mt-8 flex items-end gap-6">
+                                {events.map((event) => {
+                                  const isSelected = selectedEvent?.id === event.id;
+
+                                  return (
+                                    <button
+                                      key={event.id}
+                                      ref={(node) => {
+                                        if (node) {
+                                          eventRefs.current[event.id] = node;
+                                        } else {
+                                          delete eventRefs.current[event.id];
+                                        }
+                                      }}
+                                      type="button"
+                                      onClick={() => handleSelectEvent(event.id)}
+                                      className="relative flex w-[210px] shrink-0 flex-col items-center pb-10 text-left"
+                                    >
+                                      <div
+                                        className={`w-full rounded-[1.4rem] border p-4 transition-all duration-300 ${
+                                          isSelected
+                                            ? 'border-[#6143f4]/20 bg-white shadow-[0_22px_44px_-24px_rgba(97,67,244,0.6)] dark:bg-[#15102a]'
+                                            : 'border-slate-200 bg-white/85 hover:-translate-y-1 hover:border-[#6143f4]/20 hover:shadow-[0_18px_36px_-26px_rgba(15,23,42,0.45)] dark:border-slate-800 dark:bg-slate-950/55'
+                                        }`}
                                       >
-                                        <div
-                                          className={`w-full rounded-[1.4rem] border p-4 transition-all duration-300 ${
-                                            isSelected
-                                              ? 'border-[#6143f4]/20 bg-white shadow-[0_22px_44px_-24px_rgba(97,67,244,0.6)] dark:bg-[#15102a]'
-                                              : 'border-slate-200 bg-white/85 hover:-translate-y-1 hover:border-[#6143f4]/20 hover:shadow-[0_18px_36px_-26px_rgba(15,23,42,0.45)] dark:border-slate-800 dark:bg-slate-950/55'
-                                          }`}
-                                        >
-                                          <div className="flex items-start gap-3">
-                                            <div className={`flex size-10 items-center justify-center rounded-[1rem] shadow-inner ${event.iconColor}`}>
-                                              <event.icon size={18} />
-                                            </div>
-                                            <div className="min-w-0">
-                                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">{event.type}</p>
-                                              <h3 className="mt-1 line-clamp-2 text-sm font-black leading-tight text-slate-900 dark:text-white">
-                                                {event.title}
-                                              </h3>
-                                            </div>
+                                        <div className="flex items-start gap-3">
+                                          <div className={`flex size-10 items-center justify-center rounded-[1rem] shadow-inner ${event.iconColor}`}>
+                                            <event.icon size={18} />
                                           </div>
-
-                                          <p className="mt-3 text-xs font-semibold text-slate-500 dark:text-slate-400">{event.compactDate}</p>
-                                          <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-                                            {event.description}
-                                          </p>
+                                          <div className="min-w-0">
+                                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">{event.type}</p>
+                                            <h3 className="mt-1 line-clamp-2 text-sm font-black leading-tight text-slate-900 dark:text-white">
+                                              {event.title}
+                                            </h3>
+                                          </div>
                                         </div>
 
-                                        <div className="pointer-events-none absolute bottom-4 left-1/2 h-6 w-px -translate-x-1/2 bg-slate-300 dark:bg-slate-600" />
-                                        <span
-                                          className={`pointer-events-none absolute bottom-0 left-1/2 size-5 -translate-x-1/2 rounded-full border-4 border-white ${event.dotColor} transition-all dark:border-[#110d21] ${
-                                            isSelected ? 'scale-125 shadow-[0_0_0_8px_rgba(97,67,244,0.14)]' : ''
-                                          }`}
-                                        />
-                                      </motion.button>
-                                    );
-                                  })}
-                                </div>
-                              </motion.section>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
+                                        <p className="mt-3 text-xs font-semibold text-slate-500 dark:text-slate-400">{event.compactDate}</p>
+                                        <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                                          {event.description}
+                                        </p>
+                                      </div>
 
-                    <AnimatePresence mode="wait">
-                      {selectedEvent ? <TimelineDetailCard key={selectedEvent.id} event={selectedEvent} /> : null}
-                    </AnimatePresence>
-                  </>
-                )}
+                                      <div className="pointer-events-none absolute bottom-4 left-1/2 h-6 w-px -translate-x-1/2 bg-slate-300 dark:bg-slate-600" />
+                                      <span
+                                        className={`pointer-events-none absolute bottom-0 left-1/2 size-5 -translate-x-1/2 rounded-full border-4 border-white ${event.dotColor} transition-all dark:border-[#110d21] ${
+                                          isSelected ? 'scale-125 shadow-[0_0_0_8px_rgba(97,67,244,0.14)]' : ''
+                                        }`}
+                                      />
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </section>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <AnimatePresence mode="wait">
+                  {selectedEvent ? <TimelineDetailCard key={selectedEvent.id} event={selectedEvent} /> : null}
+                </AnimatePresence>
               </>
             ) : (
               <div className="mx-auto max-w-[880px]">

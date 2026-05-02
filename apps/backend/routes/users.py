@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from database.session import get_db
 from models import MedicalHistory, User, UserProfile
+from models.user import ROLE_DOCTOR
 from core.session_cookies import clear_session_cookies
 from services.user_service import UserService
 from services.clinical_history_service import ClinicalHistoryService
@@ -47,6 +48,17 @@ def get_current_user_from_header(
     db: Session = Depends(get_db),
 ) -> User:
     return AuthService.get_or_create_user_from_supabase_claims(db, claims)
+
+
+def get_current_doctor_from_header(
+    current_user: User = Depends(get_current_user_from_header),
+) -> User:
+    if (getattr(current_user, "role", "") or "").lower() != ROLE_DOCTOR:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Doctor role required",
+        )
+    return current_user
 
 
 def get_existing_user_from_header(

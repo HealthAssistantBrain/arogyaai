@@ -15,10 +15,13 @@ from sqlalchemy.orm import Session
 
 from database.session import SessionLocal
 from models import (
+    Alert,
+    AlertTypeEnum,
     Notification,
     NotificationDevice,
     NotificationSeverityEnum,
     NotificationTypeEnum,
+    SeverityEnum,
     User,
 )
 from services.notification_delivery_service import NotificationDeliveryService
@@ -105,6 +108,19 @@ def _serialize_notification(notification: Notification) -> dict[str, Any]:
     }
 
 
+def _serialize_dashboard_alert(alert: Alert) -> dict[str, Any]:
+    return {
+        "id": str(alert.id),
+        "user_id": str(alert.user_id),
+        "alert_type": alert.alert_type.value if hasattr(alert.alert_type, "value") else str(alert.alert_type),
+        "severity": alert.severity.value if hasattr(alert.severity, "value") else str(alert.severity),
+        "title": alert.title,
+        "message": alert.message,
+        "is_read": bool(alert.is_read),
+        "created_at": alert.created_at.isoformat() if alert.created_at else None,
+    }
+
+
 def _notification_counts(db: Session, user: User) -> dict[str, int]:
     base = db.query(Notification).filter(Notification.user_id == user.id)
     return {
@@ -152,6 +168,60 @@ def _resolve_channel_status(
     if channel_permitted and not is_available:
         return unavailable_status
     return "disabled"
+
+
+def _store_dashboard_alert(
+    *,
+    user_id: uuid.UUID,
+    title: str,
+    message: str,
+    severity: SeverityEnum,
+    dedupe_minutes: int = 15,
+) -> dict[str, Any]:
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == user_id, User.is_deleted == False).first()
+        if user is None:
+            return {"created": False, "deduped": False, "reason": "missing_user"}
+
+        threshold = _utc_now() - timedelta(minutes=dedupe_minutes)
+        duplicate = (
+            db.query(Alert)
+            .filter(
+                Alert.user_id == user_id,
+                Alert.alert_type == AlertTypeEnum.VITAL_ANOMALY,
+                Alert.severity == severity,
+                Alert.title == title,
+                Alert.created_at >= threshold,
+            )
+            .order_by(Alert.created_at.desc())
+            .first()
+        )
+        if duplicate is not None:
+            return {
+                "created": False,
+                "deduped": True,
+                "alert": _serialize_dashboard_alert(duplicate),
+            }
+
+        alert = Alert(
+            user_id=user_id,
+            alert_type=AlertTypeEnum.VITAL_ANOMALY,
+            severity=severity,
+            title=title,
+            message=message,
+            is_read=False,
+        )
+        db.add(alert)
+        db.commit()
+        db.refresh(alert)
+        return {
+            "created": True,
+            "deduped": False,
+            "alert": _serialize_dashboard_alert(alert),
+        }
+    finally:
+        db.close()
 
 
 class NotificationService:
@@ -515,6 +585,108 @@ def _trigger_notification(
         }
     finally:
         db.close()
+
+
+def send_alert(
+    user_id: str,
+    alert: dict[str, Any],
+    *,
+    channels: tuple[str, ...] | list[str] | None = None,
+    metadata: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    """
+    Send an urgent health alert through the notification pipeline.
+
+    Push and email delivery are queued through NotificationDeliveryService;
+    the dashboard channel is persisted immediately as an Alert row.
+    """
+    user_uuid = _coerce_user_uuid(user_id)
+    requested_channels = tuple(channels or ("push", "email", "dashboard"))
+    channel_set = {str(channel).strip().lower() for channel in requested_channels if str(channel).strip()}
+
+    alert_payload = dict(alert or {})
+    level = str(alert_payload.get("level") or "CRITICAL").strip().upper()
+    event = str(alert_payload.get("event") or "Emergency health event").strip()
+    action = str(alert_payload.get("action") or "Seek immediate care").strip()
+    confidence = alert_payload.get("confidence")
+
+    severity = NotificationSeverityEnum.CRITICAL if level == "CRITICAL" else NotificationSeverityEnum.WARNING
+    dashboard_severity = SeverityEnum.CRITICAL if severity == NotificationSeverityEnum.CRITICAL else SeverityEnum.WARNING
+    title_prefix = "Emergency" if severity == NotificationSeverityEnum.CRITICAL else "Health alert"
+    title = f"{title_prefix}: {event}"
+    message = f"{event}. {action}."
+
+    payload = {
+        **(metadata or {}),
+        "emergency": severity == NotificationSeverityEnum.CRITICAL,
+        "system_alert": True,
+        "level": level,
+        "event": event,
+        "confidence": confidence,
+        "action": action,
+        "channels": sorted(channel_set),
+        "severity": severity.value,
+        "url": "/dashboard",
+    }
+
+    notification_result = None
+    if channel_set.intersection({"push", "email"}):
+        notification_result = _trigger_notification(
+            user_id=str(user_uuid),
+            event_type=NotificationTypeEnum.HEALTH_ALERT.value,
+            title=title,
+            message=message,
+            data=payload,
+        )
+
+    dashboard_result = None
+    if "dashboard" in channel_set:
+        dashboard_result = _store_dashboard_alert(
+            user_id=user_uuid,
+            title=title,
+            message=message,
+            severity=dashboard_severity,
+            dedupe_minutes=int(payload.get("rate_limit_minutes") or 15),
+        )
+
+    logger.info(
+        "[Notifications] Emergency alert requested user=%s level=%s channels=%s notification=%s dashboard=%s",
+        user_uuid,
+        level,
+        sorted(channel_set),
+        bool(notification_result),
+        bool(dashboard_result),
+    )
+
+    return {
+        "success": True,
+        "status": "ready",
+        "source": "notification_service",
+        "error": None,
+        "data": {
+            "alert": alert_payload,
+            "channels": sorted(channel_set),
+            "notification": notification_result,
+            "dashboard_alert": dashboard_result,
+        },
+        "last_updated": _utc_now().isoformat(),
+    }
+
+
+async def send_alert_async(
+    user_id: str,
+    alert: dict[str, Any],
+    *,
+    channels: tuple[str, ...] | list[str] | None = None,
+    metadata: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    return await asyncio.to_thread(
+        send_alert,
+        user_id,
+        alert,
+        channels=channels,
+        metadata=metadata,
+    )
 
 
 def trigger_notification_sync(

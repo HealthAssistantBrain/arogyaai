@@ -311,7 +311,7 @@ const DeviceManagement = () => {
         try {
           await syncGoogleFit({
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            days: 30,
+            days: 7,
           });
           await refreshAfterGoogleFitSync();
         } catch (apiError) {
@@ -395,7 +395,7 @@ const DeviceManagement = () => {
     try {
       await syncGoogleFit({
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        days: 30,
+        days: 7,
       });
       await refreshAfterGoogleFitSync();
       await loadDevices({ silent: true });

@@ -3,17 +3,19 @@ import { Waves } from 'lucide-react';
 import { navConfig } from '../../config/navConfig';
 import { ROUTES } from '../../router/routes';
 import useNotificationStore from '../../store/notificationStore';
+import { useAuthStore } from '../../store/authStore';
 
 export default function Sidebar() {
     const navigate = useNavigate();
     const unreadCount = useNotificationStore((state) => state.unreadCount);
+    const role = useAuthStore((state: any) => String(state.role ?? state.user?.role ?? state.profile?.role ?? 'patient').toLowerCase());
 
     return (
         <aside className="w-[260px] bg-white dark:bg-[#131022] border-r border-slate-100 dark:border-white/5 flex flex-col h-screen sticky top-0 z-30 shrink-0 hidden lg:flex">
             {/* Logo / Brand */}
             <div
                 className="px-6 py-6 flex items-center gap-3 cursor-pointer group"
-                onClick={() => navigate(ROUTES.DASHBOARD)}
+                onClick={() => navigate(role === 'doctor' ? ROUTES.DOCTOR_DASHBOARD : ROUTES.DASHBOARD)}
             >
                 <div className="w-10 h-10 bg-[#6143f4] rounded-xl flex items-center justify-center text-white shadow-md shadow-[#6143f4]/20 group-hover:scale-105 transition-transform">
                     <Waves size={22} strokeWidth={2.5} />
@@ -36,7 +38,7 @@ export default function Sidebar() {
                             </div>
                         )}
                         <div className="space-y-1">
-                            {group.items.map((link) => {
+                            {group.items.filter((link) => !link.roles || link.roles.includes(role)).map((link) => {
                                 const Icon = link.icon;
                                 return (
                                     <NavLink

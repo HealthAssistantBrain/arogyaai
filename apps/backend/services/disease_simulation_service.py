@@ -467,7 +467,7 @@ class DiseaseSimulationService:
             "focus_options": focus_options,
             "assumptions": [
                 "Scenario scoring uses the latest stored feature snapshot as the physiological baseline.",
-                "RandomForest probability is used when the model artifact is available; otherwise an explainable weighted fallback score is used.",
+                "Calibrated XGBoost probability is used when the model artifact is available; otherwise an explainable weighted fallback score is used.",
                 "Respiratory, cardiovascular, and diabetes outputs combine the shared ML signal with condition-specific rule adjustments.",
             ],
         }

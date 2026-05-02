@@ -27,7 +27,7 @@ def test_ml_prediction_triggers_notification_after_successful_prediction():
         feature_payload={"data_points": {"sleep": 7.2}},
     )
     loaded_model = SimpleNamespace(feature_names=["sleep"])
-    inference_result = SimpleNamespace(score=0.61, confidence=0.89, model_version="rf-v1")
+    inference_result = SimpleNamespace(score=0.61, confidence=0.89, model_version="lgbm-v1")
     risk_score_record = SimpleNamespace(id=uuid4())
     health_score_record = SimpleNamespace(
         score=84.2,
@@ -46,7 +46,7 @@ def test_ml_prediction_triggers_notification_after_successful_prediction():
         }
     }
 
-    with patch("pipelines.ml_pipeline.service.ModelLoader.load", return_value=loaded_model), patch(
+    with patch("pipelines.ml_pipeline.service.ModelLoader.load_all", return_value={"sleep": loaded_model}), patch(
         "pipelines.ml_pipeline.service.MLPipelineInference.predict",
         return_value=inference_result,
     ), patch(

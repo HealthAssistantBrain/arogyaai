@@ -10,7 +10,7 @@ Usage:
 
 from .base import Base
 
-from .user            import User
+from .user            import ROLE_DOCTOR, ROLE_PATIENT, User
 from .user_profile    import UserProfile
 from .device          import Device, DeviceTypeEnum
 from .vitals_data     import VitalsData
@@ -38,6 +38,7 @@ from .user_device     import (
 from .user_vital      import UserVital, UserVitalTypeEnum, UserVitalSourceEnum
 from .user_setting    import UserSetting
 from .session         import Session
+from .chat_session    import ChatSession
 from .log             import Log
 from .google_fit_connection import GoogleFitConnection
 from .lab_result          import LabResult
@@ -47,6 +48,8 @@ __all__ = [
     "Base",
     # Domain Models
     "User",
+    "ROLE_DOCTOR",
+    "ROLE_PATIENT",
     "UserProfile",
     "Device",
     "VitalsData",
@@ -68,6 +71,7 @@ __all__ = [
     "UserVital",
     "UserSetting",
     "Session",
+    "ChatSession",
     "Log",
     "GoogleFitConnection",
     "LabResult",

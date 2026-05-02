@@ -14,13 +14,16 @@ from fastapi.responses import JSONResponse
 from starlette.requests import Request
 
 # Import modular routers
-from routes import aqi, auth, intelligence, users, prediction, dashboard, google_fit, vitals, notifications, user_data, reports, sleep, insights, lab_results, timeline, dashboard_ws, clinical_history, settings as settings_routes, devices as devices_routes, chat
+from routes import aqi, auth, intelligence, users, prediction, dashboard, google_fit, vitals, notifications, user_data, reports, sleep, insights, lab_results, timeline, dashboard_ws, clinical_history, settings as settings_routes, devices as devices_routes, chat, rag
+from api.v1 import doctor as doctor_routes
+from api.v1 import emergency as emergency_routes
 
 from database.session import engine
 from core.config import settings
 from core.pipeline_logger import log_pipeline, log_pipeline_section
 from services.dashboard_realtime import start_dashboard_realtime_listener, stop_dashboard_realtime_listener
 from services.health_service import get_system_readiness
+from workers.emergency_worker import start_emergency_worker, stop_emergency_worker
 from workers.google_fit_worker import start_google_fit_worker, stop_google_fit_worker
 
 # Critical: import all models so they register on Base.metadata
@@ -208,6 +211,9 @@ app.include_router(insights.router)
 app.include_router(timeline.router)
 app.include_router(clinical_history.router)
 app.include_router(chat.router)
+app.include_router(rag.router)
+app.include_router(doctor_routes.router)
+app.include_router(emergency_routes.router)
 
 
 @app.on_event("startup")
@@ -245,6 +251,14 @@ async def _startup_scheduler():
         logger.exception("Dashboard realtime listener failed to start: %s", exc)
         log_pipeline("realtime", step="dashboard_listener", status="unhealthy", data="failed")
 
+    try:
+        start_emergency_worker()
+        logger.info("Emergency detection worker started")
+        log_pipeline("realtime", step="emergency_worker", status="healthy", data="started")
+    except Exception as exc:
+        logger.exception("Emergency worker failed to start: %s", exc)
+        log_pipeline("realtime", step="emergency_worker", status="unhealthy", data="failed")
+
     log_pipeline("system", step="all_pipelines_initialized", status="healthy", data="ready")
     logger.info("App Ready")
 
@@ -253,3 +267,4 @@ async def _startup_scheduler():
 def _shutdown_scheduler():
     stop_google_fit_worker()
     stop_dashboard_realtime_listener()
+    stop_emergency_worker()

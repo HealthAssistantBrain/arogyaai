@@ -13,7 +13,7 @@ console.log('[ArogyaAI] API Base URL configured:', API_URL);
 const api = axios.create({
   baseURL: API_URL,
   withCredentials: true,
-  timeout: 10000,
+  timeout: 60000,
   headers: { 'Content-Type': 'application/json' },
 });
 

@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     GOOGLE_FIT_CLIENT_SECRET: str = os.getenv("GOOGLE_FIT_CLIENT_SECRET", "")
     GOOGLE_FIT_REDIRECT_URI: str = os.getenv("GOOGLE_FIT_REDIRECT_URI", "")
     GOOGLE_FIT_DEFAULT_TIMEZONE: str = os.getenv("GOOGLE_FIT_DEFAULT_TIMEZONE", "Asia/Kolkata")
+    GOOGLE_FIT_CA_BUNDLE: str = os.getenv("GOOGLE_FIT_CA_BUNDLE", "")
+    GOOGLE_FIT_SSL_VERIFY: bool = os.getenv("GOOGLE_FIT_SSL_VERIFY", "true").strip().lower() not in {"0", "false", "no", "off"}
     APP_ENCRYPTION_KEY: str = os.getenv("APP_ENCRYPTION_KEY", "")
     SMTP_HOST: str = os.getenv("SMTP_HOST", "")
     SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))

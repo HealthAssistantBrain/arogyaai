@@ -1,10 +1,34 @@
 import { motion } from 'framer-motion';
+import { useEffect, useRef } from 'react';
 import { Bot, ChevronDown } from 'lucide-react';
 import Chatbot from '../Chatbot';
 
+const MotionDiv = motion.div;
+const MotionAside = motion.aside;
+
 const AssistantOverlay = ({ onClose }) => {
+  const panelRef = useRef(null);
+
+  useEffect(() => {
+    const handleOutsidePress = (event) => {
+      if (!panelRef.current || panelRef.current.contains(event.target)) {
+        return;
+      }
+
+      onClose?.();
+    };
+
+    document.addEventListener('mousedown', handleOutsidePress);
+    document.addEventListener('touchstart', handleOutsidePress);
+
+    return () => {
+      document.removeEventListener('mousedown', handleOutsidePress);
+      document.removeEventListener('touchstart', handleOutsidePress);
+    };
+  }, [onClose]);
+
   return (
-    <motion.div
+    <MotionDiv
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -29,7 +53,8 @@ const AssistantOverlay = ({ onClose }) => {
           </div>
         </div>
 
-        <motion.aside
+        <MotionAside
+          ref={panelRef}
           initial={{ x: 28, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: 28, opacity: 0 }}
@@ -66,9 +91,9 @@ const AssistantOverlay = ({ onClose }) => {
           </header>
 
           <Chatbot />
-        </motion.aside>
+        </MotionAside>
       </div>
-    </motion.div>
+    </MotionDiv>
   );
 };
 

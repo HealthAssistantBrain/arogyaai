@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, devtools } from 'zustand/middleware';
 import api from '../lib/axios';
+import { normalizeClinicalCards } from '../lib/clinicalCards';
 import useDashboardStore from './dashboardStore';
 import useSleepStore from './sleepStore';
 import { buildHealthMetricsSnapshot } from '../lib/healthMetrics';
@@ -93,18 +94,36 @@ const normalizeExplanationPayload = (payload) => {
   const data = safeObject(payload.data ?? payload);
   const recommendations = safeArray(data.recommendations).map(normalizeExplanationRecommendation);
   const factors = safeArray(data.factors).map(normalizeExplanationFactor);
+  const clinicalReport = safeObject(data.clinical_report ?? data.clinicalReport);
+  const clinicalCards = normalizeClinicalCards(data, {
+    condition: clinicalReport.condition ?? data.condition,
+    icd_code: clinicalReport.icd_code ?? data.icd_code,
+    confidence: clinicalReport.confidence ?? data.confidence ?? data.risk_score,
+    risk_level: clinicalReport.risk_level ?? data.risk_level,
+    clinicalInsight: clinicalReport.clinical_insight ?? data.clinical_insight ?? data.summary,
+    symptoms: clinicalReport.symptoms ?? data.symptoms,
+    recommendations: clinicalReport.recommendations ?? data.structured_recommendations ?? recommendations,
+    references: clinicalReport.references ?? data.references,
+    sources: data.sources,
+  });
 
   return {
     predictionId: safeText(data.prediction_id ?? data.predictionId),
     riskScore: toFiniteNumber(data.risk_score ?? data.riskScore),
     riskPercent: toFiniteNumber(data.risk_percent ?? data.riskPercent),
     riskLevel: safeText(data.risk_level ?? data.riskLevel),
+    condition: safeText(data.condition ?? clinicalReport.condition),
+    icdCode: safeText(data.icd_code ?? data.icdCode ?? clinicalReport.icd_code),
+    confidence: toFiniteNumber(data.confidence ?? clinicalReport.confidence ?? data.risk_score),
     summary: safeText(data.summary),
+    clinicalReport,
+    clinicalCards,
     factors,
     recommendations,
     sources: safeArray(data.sources),
     retrieval: safeObject(data.retrieval),
     topFeatures: safeArray(data.top_features ?? data.topFeatures),
+    top_features: safeArray(data.top_features ?? data.topFeatures),
   };
 };
 

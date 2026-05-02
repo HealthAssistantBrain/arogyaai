@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, devtools, persist } from 'zustand/middleware';
 import api from '../lib/axios';
+import { normalizeClinicalCards } from '../lib/clinicalCards';
 import { safeArray, safeObject, safeText } from '../utils/safeData';
 import { useAuthStore } from './authStore';
 
@@ -115,6 +116,94 @@ const safeDate = (value) => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+const trimTrailingFragment = (value) => {
+  const text = String(value || '').trim();
+  if (!text || /[.!?]$/.test(text)) {
+    return text;
+  }
+
+  const lastBoundary = Math.max(text.lastIndexOf('.'), text.lastIndexOf('!'), text.lastIndexOf('?'));
+  if (lastBoundary >= 0) {
+    const tailWords = text
+      .slice(lastBoundary + 1)
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    if (tailWords.length > 0 && tailWords.length <= 10) {
+      return text.slice(0, lastBoundary + 1).trim();
+    }
+  }
+
+  return text.replace(/[\s,;:-]+$/g, '');
+};
+
+const cleanText = (value, fallback = '', { limit = 360, ensureSentence = true } = {}) => {
+  let text = safeText(value, fallback);
+  if (!text) {
+    return fallback;
+  }
+
+  text = text
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/^\s{0,3}#{1,6}\s*(.*?)\s*#*\s*$/gm, '$1.')
+    .replace(/(^|\s)#{1,6}\s?/g, '. ')
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/^\s*>\s?/gm, '')
+    .replace(/[*`]+/g, '')
+    .replace(/_/g, ' ')
+    .replace(/\s*\n+\s*/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([,.;:!?])/g, '$1')
+    .replace(/([.!?]){2,}/g, '$1')
+    .trim()
+    .replace(/^[.\s:-]+|[\s:-]+$/g, '');
+
+  text = trimTrailingFragment(text);
+
+  if (limit && text.length > limit) {
+    const clipped = text.slice(0, limit).trim().replace(/[\s,;:-]+$/g, '');
+    const lastBoundary = Math.max(clipped.lastIndexOf('.'), clipped.lastIndexOf('!'), clipped.lastIndexOf('?'));
+    text = lastBoundary >= Math.max(48, Math.floor(limit / 3))
+      ? clipped.slice(0, lastBoundary + 1).trim()
+      : clipped;
+  }
+
+  text = trimTrailingFragment(text)
+    .replace(/(^|[.!?]\s+)([a-z])/g, (_, prefix, letter) => `${prefix}${letter.toUpperCase()}`);
+
+  if (ensureSentence && text && !/[.!?]$/.test(text)) {
+    text = `${text}.`;
+  }
+
+  return text || fallback;
+};
+
+const cleanLabel = (value, fallback = '', limit = 120) =>
+  cleanText(value, fallback, { limit, ensureSentence: false }).replace(/[.!?]+$/g, '');
+
+const cleanTextList = (value, { limit = 6, itemLimit = 120, ensureSentence = false } = {}) => {
+  const items = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.split(/(?<=[.!?])\s+|,\s+/)
+      : [];
+  const seen = new Set();
+  const cleaned = [];
+
+  items.forEach((item) => {
+    const text = cleanText(item, '', { limit: itemLimit, ensureSentence });
+    const key = text.toLowerCase();
+    if (!text || seen.has(key) || cleaned.length >= limit) {
+      return;
+    }
+    seen.add(key);
+    cleaned.push(text);
+  });
+
+  return cleaned;
+};
+
 const latestTimestamp = (...values) => {
   const latest = values
     .flat()
@@ -137,9 +226,9 @@ const getExplanationPayload = (explanationResponse = {}) => safeObject(explanati
 
 const normalizeSource = (item, index) => {
   const payload = safeObject(item);
-  const source = safeText(payload.source, `Source ${index + 1}`);
-  const title = safeText(payload.title);
-  const snippet = safeText(payload.snippet ?? payload.quote ?? payload.excerpt);
+  const source = cleanLabel(payload.source, `Source ${index + 1}`);
+  const title = cleanLabel(payload.title);
+  const snippet = cleanText(payload.snippet ?? payload.quote ?? payload.excerpt ?? payload.text, '', { limit: 260 });
   const chunkId = safeText(payload.chunk_id ?? payload.chunkId);
 
   return {
@@ -152,8 +241,8 @@ const normalizeSource = (item, index) => {
 
 const normalizeRecommendation = (item, index) => {
   const payload = typeof item === 'string' ? { title: item, description: item } : safeObject(item);
-  const title = safeText(payload.title, `Recommendation ${index + 1}`);
-  const description = safeText(payload.description ?? payload.detail ?? payload.text);
+  const title = cleanLabel(payload.title, `Recommendation ${index + 1}`);
+  const description = cleanText(payload.description ?? payload.detail ?? payload.text ?? payload.title, title, { limit: 320 });
 
   if (!title && !description) {
     return null;
@@ -197,18 +286,18 @@ const normalizeFactor = (item, index) => {
   return {
     id: `${featureName}-${index}`,
     featureName,
-    title,
+    title: cleanLabel(title, titleCase(featureName)),
     impact: signedImpact,
     impactPercent,
     direction,
-    description: safeText(payload.description ?? payload.explanation),
-    summary: `${title} ${direction === 'increase' ? 'increased' : 'decreased'} risk by ${impactPercent}%`,
+    description: cleanText(payload.description ?? payload.explanation, '', { limit: 320 }),
+    summary: cleanText(`${title} ${direction === 'increase' ? 'increased' : 'decreased'} risk by ${impactPercent}%`, '', { limit: 180 }),
   };
 };
 
 const normalizeRiskCard = (item, index, fallbackSummary = '') => {
   const payload = safeObject(item);
-  const title = safeText(payload.title ?? payload.label, `Condition ${index + 1}`);
+  const title = cleanLabel(payload.title ?? payload.label, `Condition ${index + 1}`);
   const rawScore =
     payload.score ??
     payload.value ??
@@ -229,13 +318,13 @@ const normalizeRiskCard = (item, index, fallbackSummary = '') => {
     percent: toPercent(score),
     label: getRiskLabel(score),
     tone: getRiskTone(score),
-    summary: safeText(payload.summary, fallbackSummary),
+    summary: cleanText(payload.summary, fallbackSummary, { limit: 260 }),
   };
 };
 
 const buildRiskCards = (explanationPayload, dashboardBundle) => {
   const prediction = safeObject(safeObject(dashboardBundle.prediction).data);
-  const fallbackSummary = safeText(prediction.analysis ?? explanationPayload.summary);
+  const fallbackSummary = cleanText(prediction.analysis ?? explanationPayload.summary, '', { limit: 260 });
 
   const arrayCandidates = [
     prediction.cards,
@@ -580,15 +669,52 @@ const normalizeInsightsPayload = ({ explanationResponse, dashboardResponse, metr
     return acc;
   }, {});
 
-  const summary = safeText(explanationPayload.summary ?? prediction.analysis);
+  const summary = cleanText(explanationPayload.summary ?? prediction.analysis, '', { limit: 360 });
   const outcome = safeObject(explanationPayload.outcome);
   const possibleConditions = safeArray(explanationPayload.possible_conditions)
-    .map((item) => safeText(item))
+    .map((item) => cleanLabel(item, '', 120))
     .filter(Boolean);
   const symptoms = safeArray(explanationPayload.symptoms)
-    .map((item) => safeText(item))
+    .map((item) => cleanLabel(item, '', 80))
     .filter(Boolean);
+  const clinicalReportPayload = safeObject(explanationPayload.clinical_report);
+  const clinicalReportSymptoms = cleanTextList(
+    clinicalReportPayload.symptoms?.length ? clinicalReportPayload.symptoms : symptoms,
+    { limit: 6, itemLimit: 80 }
+  );
   const riskScore = normalizeProbability(explanationPayload.risk_score ?? prediction.risk_score);
+  const clinicalReport = {
+    condition: cleanLabel(clinicalReportPayload.condition ?? explanationPayload.condition),
+    icdCode: cleanLabel(clinicalReportPayload.icd_code ?? clinicalReportPayload.icdCode ?? explanationPayload.icd_code, '', 24),
+    confidence: normalizeProbability(clinicalReportPayload.confidence ?? explanationPayload.confidence ?? riskScore),
+    riskLevel: cleanLabel(clinicalReportPayload.risk_level ?? explanationPayload.risk_level),
+    summary: cleanText(
+      clinicalReportPayload.summary ?? explanationPayload.summary ?? prediction.analysis,
+      summary,
+      { limit: 320 }
+    ),
+    clinicalInsight: cleanText(
+      clinicalReportPayload.clinical_insight ?? explanationPayload.clinical_insight ?? safeObject(explanationPayload.clinical_context).summary ?? summary,
+      summary,
+      { limit: 420 }
+    ),
+    symptoms: clinicalReportSymptoms.length > 0 ? clinicalReportSymptoms : symptoms,
+    recommendation: cleanText(
+      clinicalReportPayload.recommendation ?? explanationPayload.recommendation ?? recommendations[0]?.description,
+      recommendations[0]?.description || '',
+      { limit: 280 }
+    ),
+    recommendations: cleanTextList(
+      clinicalReportPayload.recommendations?.length
+        ? clinicalReportPayload.recommendations
+        : safeArray(explanationPayload.structured_recommendations),
+      { limit: 5, itemLimit: 260, ensureSentence: true }
+    ),
+    references: cleanTextList(
+      clinicalReportPayload.references?.length ? clinicalReportPayload.references : safeArray(explanationPayload.references),
+      { limit: 4, itemLimit: 160 }
+    ),
+  };
   const percentFromPayload = toFiniteNumber(explanationPayload.risk_percent);
   const riskPercent = percentFromPayload !== null
     ? (percentFromPayload > 1 ? percentFromPayload : percentFromPayload * 100)
@@ -602,10 +728,22 @@ const normalizeInsightsPayload = ({ explanationResponse, dashboardResponse, metr
     prediction.last_updated,
     ...metricInsights.map((item) => item.lastUpdated),
   );
+  const clinicalCards = normalizeClinicalCards(explanationPayload, {
+    ...clinicalReport,
+    summary,
+    clinicalInsight: clinicalReport.clinicalInsight,
+    riskScore,
+    recommendations,
+    symptoms,
+    sources,
+  });
 
   const hasAnyData = Boolean(
     riskCards.length ||
     summary ||
+    clinicalReport.clinicalInsight ||
+    clinicalCards.length ||
+    clinicalReport.recommendation ||
     factors.length ||
     recommendations.length ||
     metricInsights.some((item) => item.value !== null) ||
@@ -622,11 +760,13 @@ const normalizeInsightsPayload = ({ explanationResponse, dashboardResponse, metr
     summary,
     factors,
     outcome: {
-      severity: safeText(outcome.severity),
-      headline: safeText(outcome.headline),
-      summary: safeText(outcome.summary ?? summary),
+      severity: cleanLabel(outcome.severity),
+      headline: cleanText(outcome.headline, '', { limit: 220 }),
+      summary: cleanText(outcome.summary ?? summary, summary, { limit: 320 }),
       riskScore: normalizeProbability(outcome.risk_score),
     },
+    clinicalReport,
+    clinicalCards,
     possibleConditions,
     symptoms,
     recommendations,

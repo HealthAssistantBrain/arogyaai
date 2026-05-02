@@ -1,6 +1,6 @@
 """Entry point for the ML pipeline."""
 
-from .inference import InferenceResult, MLPipelineInference
+from .inference import InferenceResult, MLPipelineInference, predict_all, predict_risks
 from .model_loader import LoadedModel, ModelLoader
 from .predict import predict_risk
 from .preprocess import FEATURE_NAMES, build_feature_vector
@@ -24,5 +24,7 @@ __all__ = [
     "ShapFactor",
     "build_feature_vector",
     "build_ml_pipeline_context",
+    "predict_all",
     "predict_risk",
+    "predict_risks",
 ]

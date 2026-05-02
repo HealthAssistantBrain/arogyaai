@@ -82,7 +82,11 @@ def _dashboard_last_updated(payload: dict[str, Any]) -> str | None:
         _slice_last_updated(payload.get("prediction")),
         _slice_last_updated(payload.get("profile")),
         _slice_last_updated(payload.get("alerts")),
+        _slice_last_updated(payload.get("recommendedTests")),
         _slice_last_updated(payload.get("googleFit")),
+        _slice_last_updated(payload.get("heart_rate")),
+        _slice_last_updated(payload.get("steps")),
+        _slice_last_updated(payload.get("sleep")),
     ]
 
     vitals = payload.get("vitals")
@@ -121,6 +125,14 @@ def _extract_latest_steps(bundle: dict[str, Any]) -> int:
         except (TypeError, ValueError):
             continue
 
+    top_steps_slice = _safe_dict(bundle.get("steps"))
+    top_steps_data = _safe_list(top_steps_slice.get("data"))
+    for item in reversed(top_steps_data):
+        try:
+            return max(0, int(round(float(_safe_dict(item).get("value")))))
+        except (TypeError, ValueError):
+            continue
+
     return 0
 
 
@@ -128,19 +140,26 @@ def _dashboard_flat_contract(bundle: dict[str, Any]) -> dict[str, Any]:
     history_data = _safe_dict(_safe_dict(bundle.get("history")).get("data"))
     prediction_data = _safe_dict(_safe_dict(bundle.get("prediction")).get("data"))
     health_score_data = _safe_dict(_safe_dict(bundle.get("healthScore")).get("data"))
+    recommended_tests = _safe_list(_safe_dict(bundle.get("recommendedTests")).get("data"))
 
     sleep_records = _safe_list(history_data.get("sleep"))
     insights = _safe_list(prediction_data.get("recommendations"))
     vitals = _safe_dict(bundle.get("vitals"))
 
-    return {
-        **bundle,
-        "health_score": float(health_score_data.get("score") or 0),
-        "steps": _extract_latest_steps(bundle),
-        "sleep": sleep_records,
-        "insights": insights,
-        "vitals": vitals,
-    }
+    flat = {**bundle}
+    if bundle.get("healthScore") is not None:
+        flat["health_score"] = float(health_score_data.get("score") or 0)
+    if bundle.get("steps") is None and (bundle.get("googleFit") is not None or bundle.get("vitals") is not None):
+        flat["steps"] = _extract_latest_steps(bundle)
+    if bundle.get("history") is not None:
+        flat["sleep"] = sleep_records
+    if bundle.get("prediction") is not None:
+        flat["insights"] = insights
+    if bundle.get("recommendedTests") is not None:
+        flat["recommended_tests"] = recommended_tests
+    if bundle.get("vitals") is not None:
+        flat["vitals"] = vitals
+    return flat
 
 
 def _serialize_vitals_slice(db: Session, current_user: User, vital_type: str, range_value: str = "24h") -> dict[str, Any]:
@@ -183,6 +202,7 @@ async def build_dashboard_bundle(db: Session, current_user: User) -> dict[str, A
     prediction = await _safe_call(dashboard_svc.get_latest_prediction(current_user, db))
     profile = await _safe_call(dashboard_svc.get_user_profile(current_user, db))
     alerts = await _safe_call(dashboard_svc.get_alerts(current_user, db))
+    recommended_tests = await _safe_call(dashboard_svc.get_recommended_tests(current_user, db), fallback_data=[])
     google_fit = {
         "success": True,
         "status": "ready",
@@ -197,6 +217,7 @@ async def build_dashboard_bundle(db: Session, current_user: User) -> dict[str, A
         "prediction": prediction,
         "profile": profile,
         "alerts": alerts,
+        "recommendedTests": recommended_tests,
         "googleFit": google_fit,
         "vitals": {
             "heart_rate:24h": _serialize_vitals_slice(db, current_user, "heart_rate", "24h"),
@@ -211,6 +232,7 @@ async def build_dashboard_bundle(db: Session, current_user: User) -> dict[str, A
 async def build_realtime_payload(db: Session, current_user: User) -> dict[str, Any]:
     heart_rate = _serialize_vitals_slice(db, current_user, "heart_rate", "24h")
     steps = _serialize_vitals_slice(db, current_user, "steps", "24h")
+    recommended_tests = await _safe_call(dashboard_svc.get_recommended_tests(current_user, db), fallback_data=[])
     google_fit_status = GoogleFitService.get_status(db, current_user)
     google_fit = {
         "success": True,
@@ -224,6 +246,7 @@ async def build_realtime_payload(db: Session, current_user: User) -> dict[str, A
         "steps": steps,
         "heart_rate": heart_rate,
         "googleFit": google_fit,
+        "recommendedTests": recommended_tests,
     }
     payload["last_updated"] = _dashboard_last_updated(payload)
     return _dashboard_flat_contract(payload)

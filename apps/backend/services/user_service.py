@@ -7,6 +7,7 @@ from fastapi import HTTPException, status
 
 from core.utils import safe_input
 from models import User, UserDeviceProviderEnum, UserProfile, Session as DBSession
+from models.user import ROLE_PATIENT
 
 
 def _to_float(value: Any) -> Optional[float]:
@@ -288,7 +289,7 @@ def _serialize_profile(user: User, profile: Optional[UserProfile]) -> dict:
         "gmail_connected": bool(getattr(user, "gmail_connected", False)),
         "apple_connected": bool(getattr(user, "apple_connected", False)),
         "has_password": user.password_hash not in {"OAUTH_NO_PASSWORD", "SUPABASE_AUTH"},
-        "role": "user",
+        "role": getattr(user, "role", ROLE_PATIENT) or ROLE_PATIENT,
         "created_at": profile.created_at.isoformat() if profile and profile.created_at else user.created_at.isoformat() if user.created_at else None,
         "updated_at": (
             profile.updated_at.isoformat() if profile and profile.updated_at else user.updated_at.isoformat() if user.updated_at else None

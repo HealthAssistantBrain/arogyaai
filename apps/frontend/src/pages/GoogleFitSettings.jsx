@@ -25,7 +25,7 @@ import { refreshAfterGoogleFitSync } from '../lib/googleFitRefresh';
 import { setGoogleFitConnectionState } from '../lib/googleFitConnectionState';
 
 const DEFAULT_TIMEZONE = import.meta.env.VITE_GOOGLE_FIT_DEFAULT_TIMEZONE || 'Asia/Kolkata';
-const DEFAULT_WINDOW_DAYS = 30;
+const DEFAULT_WINDOW_DAYS = 7;
 
 function formatNumber(value) {
   if (value === null || value === undefined || value === '') {
@@ -55,6 +55,18 @@ function formatLocalDay(value) {
 
 function extractApiError(error, fallback) {
   return error?.response?.data?.error || error?.response?.data?.detail || error?.message || fallback;
+}
+
+function isTimeoutError(error) {
+  return error?.code === 'ECONNABORTED' || String(error?.message || '').toLowerCase().includes('timeout');
+}
+
+function extractSyncError(error) {
+  if (isTimeoutError(error)) {
+    return 'Sync is taking longer than expected. Please wait or retry.';
+  }
+
+  return extractApiError(error, 'Google Fit sync failed.');
 }
 
 function availabilityText(isAvailable, isMissingScope) {
@@ -121,6 +133,8 @@ const GoogleFitSettings = () => {
 
   async function handleSync(showSuccessMessage = true) {
     setIsSyncing(true);
+    setIsLoading(true);
+    setNotice('');
     setError('');
 
     try {
@@ -136,9 +150,10 @@ const GoogleFitSettings = () => {
         setNotice((response?.message || `Google Fit steps synced for the last ${DEFAULT_WINDOW_DAYS} local days.`) + missingMessage);
       }
     } catch (apiError) {
-      setError(extractApiError(apiError, 'Google Fit sync failed.'));
+      setError(extractSyncError(apiError));
     } finally {
       setIsSyncing(false);
+      setIsLoading(false);
     }
   }
 
@@ -213,7 +228,7 @@ const GoogleFitSettings = () => {
           await handleSync(false);
           navigate(ROUTES.DEVICES, { replace: true });
         } catch (syncError) {
-          setError(extractApiError(syncError, 'Google Fit sync failed after connection.'));
+          setError(extractSyncError(syncError));
         }
       })();
     } else if (oauthState === 'error') {
@@ -270,19 +285,19 @@ const GoogleFitSettings = () => {
               <div className="flex flex-wrap gap-3">
                 <button
                   onClick={handleConnect}
-                  disabled={isConnecting}
+                  disabled={isConnecting || isSyncing}
                   className="inline-flex items-center gap-2 rounded-2xl bg-[#6143f4] px-5 py-3 text-[12px] font-black uppercase tracking-[0.16em] text-white transition hover:bg-[#5235dc] disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   <Link2 size={16} />
-                  {data?.connected ? 'Reconnect Google' : isConnecting ? 'Opening Google...' : 'Connect Google'}
+                  {isConnecting ? 'Opening Google...' : data?.connected ? 'Reconnect Google' : 'Connect Google'}
                 </button>
                 <button
                   onClick={() => handleSync(true)}
-                  disabled={!data?.connected || isSyncing}
+                  disabled={!data?.connected || isSyncing || isConnecting}
                   className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-3 text-[12px] font-black uppercase tracking-[0.16em] text-[#13082a] transition hover:border-[#6143f4]/30 hover:text-[#6143f4] disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/5 dark:text-white"
                 >
                   <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
-                  {isSyncing ? 'Syncing Steps...' : 'Sync 30 Days'}
+                  {isSyncing ? 'Syncing Steps...' : 'Sync Latest 7 Days'}
                 </button>
                 <button
                   onClick={handleDisconnect}
@@ -294,6 +309,17 @@ const GoogleFitSettings = () => {
                 </button>
               </div>
             </div>
+
+            {isSyncing && (
+              <div
+                role="status"
+                aria-live="polite"
+                className="mt-4 flex items-center gap-3 rounded-2xl border border-[#6143f4]/20 bg-[#6143f4]/10 px-4 py-3 text-[13px] font-semibold text-[#6143f4] dark:border-[#8b7cf6]/30 dark:bg-[#6143f4]/15 dark:text-[#c7c0ff]"
+              >
+                <RefreshCw size={16} className="shrink-0 animate-spin" />
+                <span>Syncing Google Fit data… this may take up to 30 seconds</span>
+              </div>
+            )}
 
             <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <StatCard

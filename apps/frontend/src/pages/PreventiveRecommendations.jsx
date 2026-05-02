@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import useHealthStore from '../store/healthStore';
 import useDashboardStore from '../store/dashboardStore';
+import ClinicalInsightCard from '../components/clinical/ClinicalInsightCard';
 import SmartLoadingOverlay from '../components/ui/SmartLoadingOverlay';
 import useSmartFetchOverlay from '../hooks/useSmartFetchOverlay';
 
@@ -216,6 +217,7 @@ const PreventiveRecommendations = () => {
 
     const metricCards = useMemo(() => metrics?.cards ?? [], [metrics]);
     const factors = useMemo(() => explanation?.factors ?? [], [explanation]);
+    const clinicalCards = useMemo(() => explanation?.clinicalCards ?? [], [explanation]);
     const strongestFactorMagnitude = useMemo(
         () => Math.max(...factors.map((factor) => Math.abs(Number(factor.impact) || 0)), 0.001),
         [factors]
@@ -323,6 +325,22 @@ const PreventiveRecommendations = () => {
                                 Retry
                             </button>
                         </div>
+                    ) : null}
+
+                    {clinicalCards.length > 0 ? (
+                        <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+                            {clinicalCards.slice(0, 4).map((card, index) => (
+                                <ClinicalInsightCard
+                                    key={`${card.condition}-${card.icdCode}-${index}`}
+                                    card={card}
+                                    fallback={{
+                                        summary: explanation?.summary,
+                                        recommendations,
+                                        sources: explanation?.sources,
+                                    }}
+                                />
+                            ))}
+                        </section>
                     ) : null}
 
                     <section className="grid grid-cols-1 gap-4 md:grid-cols-3">

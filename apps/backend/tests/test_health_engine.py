@@ -159,7 +159,8 @@ def test_insights_service_surfaces_cached_explanation():
         payload = InsightsService.get_insights(MagicMock(), SimpleNamespace(id="user-1"))
 
     assert payload["success"] is True
-    assert payload["data"]["explanation"] == {"summary": "Stored explanation"}
+    assert payload["data"]["explanation"]["summary"] == "Stored explanation."
+    assert payload["data"]["explanation"]["clinical_report"]["summary"] == "Stored explanation."
 
 
 def test_health_insights_service_returns_safe_empty_contract_when_missing():

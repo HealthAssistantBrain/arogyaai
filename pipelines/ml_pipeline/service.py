@@ -2,9 +2,18 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import logging
+from pathlib import Path
+import sys
 from typing import Any
 
 from sqlalchemy.orm import Session
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+BACKEND_ROOT = REPO_ROOT / "apps" / "backend"
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
 
 from models import FeatureSnapshotRecord
 from models import User
@@ -24,13 +33,38 @@ def _clamp(value: float, minimum: float, maximum: float) -> float:
 
 
 def _risk_level(score: float) -> str:
-    if score >= 0.75:
-        return "CRITICAL"
-    if score >= 0.50:
+    normalized = score / 100.0 if score > 1 else score
+    if normalized > 0.80:
         return "HIGH"
-    if score >= 0.25:
+    if normalized >= 0.50:
         return "MODERATE"
     return "LOW"
+
+
+def _risk_key(model_type: str) -> str:
+    if model_type == "cardio":
+        return "cardiovascular"
+    return model_type
+
+
+def _risk_label(model_type: str) -> str:
+    labels = {
+        "diabetes": "Diabetes",
+        "cardio": "Cardiovascular",
+        "sleep": "Sleep",
+    }
+    return labels.get(model_type, model_type.title())
+
+
+def _condition_risk_key(model_type: str) -> str:
+    return f"{model_type}_risk"
+
+
+def _risk_value(risks: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in risks:
+            return risks[key]
+    return None
 
 
 class MLPipelineService:
@@ -56,6 +90,14 @@ class MLPipelineService:
             "sex",
             "stress",
             "cholesterol_proxy",
+            "cholesterol",
+            "glucose",
+            "hba1c",
+            "heart_rate",
+            "steps",
+            "sleep_hours",
+            "height",
+            "weight",
             "hr_mean_7d",
             "steps_avg_7d",
             "sleep_efficiency",
@@ -140,10 +182,13 @@ class MLPipelineService:
             "risk_score": round(overall_score, 6),
             "risk_level": risk_level,
             "model_version": model_version,
+            "model_versions": risk_payload.get("model_versions") or {},
+            "top_model_type": risk_payload.get("top_model_type"),
             "source": source,
             "analysis": risk_payload.get("analysis"),
             "drivers": factors,
             "factors": factors,
+            "cards": risk_payload.get("cards") or [],
             "recommendations": risk_payload.get("recommendations") or [],
             "risks": risk_payload.get("risks") or {},
             "feature_snapshot": feature_payload,
@@ -159,6 +204,10 @@ class MLPipelineService:
             "data_points": risk_payload.get("data_points"),
             "last_updated": health_score_record.calculated_at.isoformat() if health_score_record.calculated_at else datetime.now(timezone.utc).isoformat(),
         }
+        risks = data["risks"] if isinstance(data["risks"], dict) else {}
+        data["diabetes_risk"] = _risk_value(risks, "diabetes_risk", "diabetes")
+        data["cardio_risk"] = _risk_value(risks, "cardio_risk", "cardiovascular")
+        data["sleep_risk"] = _risk_value(risks, "sleep_risk", "sleep")
         return {
             "success": True,
             "status": "ready",
@@ -176,6 +225,9 @@ class MLPipelineService:
                 payload.setdefault("hr_mean_7d", float(feature_snapshot.hr_mean_7d) if feature_snapshot.hr_mean_7d is not None else 0.0)
                 payload.setdefault("steps_avg_7d", float(feature_snapshot.steps_avg_7d) if feature_snapshot.steps_avg_7d is not None else 0.0)
                 payload.setdefault("sleep_efficiency", float(feature_snapshot.sleep_efficiency) if feature_snapshot.sleep_efficiency is not None else 0.0)
+                payload.setdefault("heart_rate", payload.get("hr_mean_7d"))
+                payload.setdefault("steps", payload.get("steps_avg_7d"))
+                payload.setdefault("sleep_hours", payload.get("sleep_duration") or payload.get("sleep"))
                 if not isinstance(payload.get("data_availability"), dict):
                     payload["data_availability"] = {"steps": False, "heart_rate": False, "sleep": False}
                 return payload
@@ -185,6 +237,9 @@ class MLPipelineService:
                 "hr_mean_7d": float(feature_snapshot.hr_mean_7d) if feature_snapshot.hr_mean_7d is not None else 0.0,
                 "steps_avg_7d": float(feature_snapshot.steps_avg_7d) if feature_snapshot.steps_avg_7d is not None else 0.0,
                 "sleep_efficiency": float(feature_snapshot.sleep_efficiency) if feature_snapshot.sleep_efficiency is not None else 0.0,
+                "heart_rate": float(feature_snapshot.hr_mean_7d) if feature_snapshot.hr_mean_7d is not None else 0.0,
+                "steps": float(feature_snapshot.steps_avg_7d) if feature_snapshot.steps_avg_7d is not None else 0.0,
+                "sleep_hours": 0.0,
                 "lifestyle_score": float(feature_snapshot.lifestyle_score) if feature_snapshot.lifestyle_score is not None else None,
                 "activity_score": float(feature_snapshot.activity_score) if feature_snapshot.activity_score is not None else None,
                 "confidence": float(feature_snapshot.confidence) if feature_snapshot.confidence is not None else None,
@@ -226,24 +281,52 @@ class MLPipelineService:
         confidence: float,
         model_version: str | None,
         feature_snapshot_record: FeatureSnapshotRecord,
+        condition_scores: dict[str, float] | None = None,
+        model_versions: dict[str, str | None] | None = None,
+        top_model_type: str = "diabetes",
     ) -> dict[str, Any]:
         risk_level = _risk_level(prediction_probability)
         feature_snapshot_payload = MLPipelineService._feature_snapshot_payload(feature_snapshot_record)
+        normalized_condition_scores = condition_scores or {"diabetes": float(prediction_probability)}
+        risk_scores = {
+            _risk_key(model_type): float(score)
+            for model_type, score in normalized_condition_scores.items()
+        }
+        risk_scores.update(
+            {
+                _condition_risk_key(model_type): float(score)
+                for model_type, score in normalized_condition_scores.items()
+            }
+        )
+        risk_scores["overall_risk_score"] = float(prediction_probability)
+        risk_scores["risk_level"] = risk_level
+        cards = [
+            {
+                "key": _risk_key(model_type),
+                "label": _risk_label(model_type),
+                "score": round(float(score) * 100.0, 2),
+                "risk_level": _risk_level(float(score)),
+                "model_version": (model_versions or {}).get(model_type),
+            }
+            for model_type, score in normalized_condition_scores.items()
+        ]
+        cards.sort(key=lambda item: float(item["score"]), reverse=True)
         return {
             "overall_score": float(prediction_probability),
             "risk_score": float(prediction_probability),
             "risk_level": risk_level,
-            "confidence": float(confidence),
+            "confidence": float(prediction_probability),
+            "confidence_label": _risk_level(float(prediction_probability)),
             "model_version": model_version,
-            "analysis": "RandomForestClassifier inference completed successfully.",
+            "model_versions": model_versions or {},
+            "top_model_type": _risk_key(top_model_type),
+            "analysis": "Calibrated XGBoost disease-specific inference completed successfully.",
             "recommendations": [],
             "drivers": [],
+            "cards": cards,
             "feature_snapshot": feature_snapshot_payload,
             "feature_snapshot_id": str(feature_snapshot_record.id),
-            "risks": {
-                "overall_risk_score": float(prediction_probability),
-                "risk_level": risk_level,
-            },
+            "risks": risk_scores,
         }
 
     @staticmethod
@@ -380,22 +463,43 @@ class MLPipelineService:
         payload: dict[str, Any] | None = None,
         report_id: str | None = None,
     ) -> dict[str, Any]:
-        loader = ModelLoader()
-        loaded_model = loader.load()
-        if loaded_model is None:
-            raise RuntimeError("ML model could not be loaded.")
+        loaded_models = ModelLoader.load_all(strict=True)
+        if not loaded_models:
+            raise RuntimeError("ML models could not be loaded.")
 
-        inference = MLPipelineInference(loaded_model)
-        inference_result = inference.predict(MLPipelineService._feature_snapshot_payload(feature_snapshot_record))
-        if inference_result is None:
+        feature_payload = MLPipelineService._feature_snapshot_payload(feature_snapshot_record)
+        inference_results: dict[str, Any] = {}
+        condition_scores: dict[str, float] = {}
+        for model_type, loaded_model in loaded_models.items():
+            inference = MLPipelineInference(loaded_model)
+            result = inference.predict(feature_payload)
+            if result is None:
+                logger.warning("ML inference failed for model_type=%s user=%s", model_type, user.id)
+                continue
+            inference_results[model_type] = result
+            condition_scores[model_type] = float(result.score)
+
+        if not condition_scores:
             raise RuntimeError("ML inference failed for the latest feature snapshot.")
 
-        features = build_feature_vector(feature_snapshot_record, loaded_model.feature_names)
+        top_model_type = max(condition_scores, key=condition_scores.get)
+        loaded_model = loaded_models[top_model_type]
+        inference_result = inference_results[top_model_type]
+
+        confidence = float(inference_result.score)
+        features = build_feature_vector(feature_payload, loaded_model.feature_names)
+        model_versions = {
+            model_type: inference_results[model_type].model_version
+            for model_type in inference_results
+        }
         risk_payload = MLPipelineService._build_risk_payload(
             prediction_probability=inference_result.score,
-            confidence=inference_result.confidence or inference_result.score,
+            confidence=confidence,
             model_version=inference_result.model_version,
             feature_snapshot_record=feature_snapshot_record,
+            condition_scores=condition_scores,
+            model_versions=model_versions,
+            top_model_type=top_model_type,
         )
         risk_payload["data_points"] = feature_snapshot_record.feature_payload.get("data_points") if isinstance(feature_snapshot_record.feature_payload, dict) else None
 

@@ -29,6 +29,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from models import User
+from services.recommendation_service import generate_test_recommendations
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -248,6 +249,12 @@ async def get_alerts(user: User, db: Session) -> dict:
     Returns dynamic alerts list via alert_service.
     """
     return await get_active_alerts(user, db)
+
+
+async def get_recommended_tests(user: User, db: Session) -> dict:
+    recommendations = generate_test_recommendations(user.id, db=db)
+    status = "ready" if recommendations else "fallback"
+    return _envelope(recommendations, status=status, source="clinical_recommendation_engine")
 
 
 async def get_health_metrics(user: User, db: Session) -> dict:

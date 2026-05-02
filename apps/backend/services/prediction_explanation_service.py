@@ -12,6 +12,7 @@ from pipelines.rag_pipeline import RagExplanationPipeline
 from pipelines.storage_pipeline.service import StoragePipelineService
 from services.clinical_insight_service import ClinicalInsightService
 from services.clinical_history_service import ClinicalHistoryService
+from services.insight_formatter import sanitize_ai_insight_payload
 
 
 class PredictionExplanationService:
@@ -504,7 +505,8 @@ class PredictionExplanationService:
             return None
         if explanation.get("cache_key") != cache_key:
             return None
-        return explanation.get("payload") if isinstance(explanation.get("payload"), dict) else None
+        payload = explanation.get("payload") if isinstance(explanation.get("payload"), dict) else None
+        return sanitize_ai_insight_payload(payload)
 
     @staticmethod
     def _feature_snapshot_payload(risk_score: RiskScore) -> dict[str, Any]:
@@ -712,20 +714,28 @@ class PredictionExplanationService:
             else PredictionExplanationService._fallback_shap_payload(risk_score)
         )
         if not shap_values:
+            risk_probability = PredictionExplanationService._safe_float(risk_score.overall_score)
+            fallback_payload = sanitize_ai_insight_payload(
+                {
+                    "prediction_id": str(risk_score.id),
+                    "risk_score": risk_probability,
+                    "confidence": risk_probability,
+                    "risk_level": risk_score.risk_level.value if hasattr(risk_score.risk_level, "value") else str(risk_score.risk_level),
+                    "summary": "No SHAP values were found for the selected prediction.",
+                    "clinical_insight": "The model generated a risk estimate, but feature-level explanation data is not available for this run.",
+                    "symptoms": [],
+                    "recommendations": [
+                        "Review the risk score with a clinician and rerun prediction after more complete health data is available."
+                    ],
+                    "sources": [],
+                }
+            )
             return {
                 "success": False,
                 "status": "fallback",
                 "source": "db",
                 "error": "No SHAP values were found for the selected prediction.",
-                "data": {
-                    "prediction_id": str(risk_score.id),
-                    "risk_score": float(risk_score.overall_score) if risk_score.overall_score is not None else None,
-                    "risk_level": risk_score.risk_level.value if hasattr(risk_score.risk_level, "value") else str(risk_score.risk_level),
-                    "summary": "",
-                    "factors": [],
-                    "recommendations": [],
-                    "sources": [],
-                },
+                "data": fallback_payload,
             }
 
         feature_payload = PredictionExplanationService._feature_snapshot_payload(risk_score)
@@ -758,28 +768,39 @@ class PredictionExplanationService:
                 shap_values=shap_values,
             )
         except Exception as exc:
+            risk_probability = PredictionExplanationService._safe_float(risk_score.overall_score)
+            fallback_payload = sanitize_ai_insight_payload(
+                {
+                    "prediction_id": str(risk_score.id),
+                    "risk_score": risk_probability,
+                    "confidence": risk_probability,
+                    "risk_level": risk_score.risk_level.value if hasattr(risk_score.risk_level, "value") else str(risk_score.risk_level),
+                    "summary": "Retrieved medical explanation is temporarily unavailable.",
+                    "clinical_insight": "The calibrated ML risk score is available, but the RAG explanation pipeline could not produce a validated evidence summary for this request.",
+                    "symptoms": [],
+                    "recommendations": [
+                        "Use the risk score as a screening signal and review the result with a qualified clinician."
+                    ],
+                    "sources": [],
+                }
+            )
             return {
                 "success": False,
                 "status": "fallback",
                 "source": "rag_pipeline",
                 "error": str(exc),
-                "data": {
-                    "prediction_id": str(risk_score.id),
-                    "risk_score": float(risk_score.overall_score) if risk_score.overall_score is not None else None,
-                    "risk_level": risk_score.risk_level.value if hasattr(risk_score.risk_level, "value") else str(risk_score.risk_level),
-                    "summary": "",
-                    "factors": [],
-                    "recommendations": [],
-                    "sources": [],
-                },
+                "data": fallback_payload,
             }
 
         explanation = {
             "prediction_id": str(risk_score.id),
             "risk_score": float(risk_score.overall_score) if risk_score.overall_score is not None else None,
             "risk_percent": round((float(risk_score.overall_score) if risk_score.overall_score is not None else 0.0) * 100, 2),
+            "confidence": float(risk_score.overall_score) if risk_score.overall_score is not None else None,
             "risk_level": risk_score.risk_level.value if hasattr(risk_score.risk_level, "value") else str(risk_score.risk_level),
             "summary": generated.get("summary") or "",
+            "clinical_insight": generated.get("clinical_insight") or generated.get("summary") or "",
+            "recommendation": generated.get("recommendation") or "",
             "factors": PredictionExplanationService._normalize_factor_payload(
                 generated.get("factors") or [],
                 shap_values,
@@ -835,6 +856,7 @@ class PredictionExplanationService:
         explanation["clinical_history"] = latest_clinical_history
         explanation["clinical_features"] = history_analysis.get("ml_features", {}) if isinstance(history_analysis, dict) else {}
         explanation["clinical_context"] = history_analysis.get("rag_context") if isinstance(history_analysis, dict) else None
+        explanation = sanitize_ai_insight_payload(explanation) or explanation
         PredictionExplanationService._store_cache(db, risk_score, cache_key, explanation)
         return {
             "success": True,

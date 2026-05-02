@@ -57,7 +57,7 @@ class GoogleFitConnectRequest(BaseModel):
 
 class GoogleFitSyncRequest(BaseModel):
     timezone: Optional[str] = None
-    days: int = 30
+    days: int = 7
 
 
 class UserProfileUpdate(BaseModel):

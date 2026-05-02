@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from threading import Lock
 from typing import Any
+import warnings
 
 import numpy as np
 import shap
@@ -17,11 +18,11 @@ class ShapExplainer:
 
     @classmethod
     def _get_explainer(cls, loaded_model: LoadedModel) -> shap.TreeExplainer:
-        cache_key = loaded_model.path
+        cache_key = f"{loaded_model.path}:{loaded_model.model_type}"
         with cls._lock:
             explainer = cls._explainer_cache.get(cache_key)
             if explainer is None:
-                explainer = shap.TreeExplainer(loaded_model.model)
+                explainer = shap.TreeExplainer(loaded_model.shap_model or loaded_model.model)
                 cls._explainer_cache[cache_key] = explainer
         return explainer
 
@@ -54,8 +55,15 @@ class ShapExplainer:
         feature_names = effective_model.feature_names or FEATURE_NAMES
         feature_vector = list(features) if features is not None else build_feature_vector(snapshot, feature_names)
         feature_map = build_feature_map(snapshot, feature_names)
+        shap_vector = feature_vector
+        transformer = getattr(effective_model, "shap_transformer", None)
+        if transformer is not None and hasattr(transformer, "transform"):
+            shap_vector = transformer.transform(np.asarray([feature_vector], dtype=float))[0].tolist()
         explainer = cls._get_explainer(effective_model)
-        raw_values = explainer.shap_values(np.asarray([feature_vector], dtype=float), check_additivity=False)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="LightGBM binary classifier with TreeExplainer shap values output.*")
+            warnings.filterwarnings("ignore", message="X does not have valid feature names.*")
+            raw_values = explainer.shap_values(np.asarray([shap_vector], dtype=float), check_additivity=False)
         normalized = cls._normalize_values(raw_values, effective_model.positive_class_index)
 
         factors: list[dict[str, Any]] = []

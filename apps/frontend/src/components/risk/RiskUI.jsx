@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion } from 'framer-motion';
+import { motion as Motion } from 'framer-motion';
 import {
     Activity,
     TrendingUp,
@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../router/routes';
+import ClinicalInsightCard from '../clinical/ClinicalInsightCard';
+import { normalizeClinicalCards } from '../../lib/clinicalCards';
 
 const RiskUI = ({ riskData, explanation, loading, onSimulatorClick }) => {
     const navigate = useNavigate();
@@ -56,6 +58,16 @@ const RiskUI = ({ riskData, explanation, loading, onSimulatorClick }) => {
         }))
         : drivers;
     const displayedRecommendations = explanationRecommendations.length > 0 ? explanationRecommendations : recommendations;
+    const clinicalCards = normalizeClinicalCards(explanation || {}, {
+        condition: explanation?.condition,
+        icd_code: explanation?.icd_code,
+        confidence: explanation?.confidence ?? risk_score,
+        risk_level,
+        clinicalInsight: explanation?.clinical_insight ?? explanationSummary ?? analysis,
+        symptoms: explanation?.symptoms,
+        recommendations: displayedRecommendations,
+        sources: explanationSources,
+    });
 
     const getRiskColor = (level) => {
         const l = level?.toLowerCase();
@@ -114,7 +126,7 @@ const RiskUI = ({ riskData, explanation, loading, onSimulatorClick }) => {
                     <div className="relative size-48">
                         <svg className="size-full transform -rotate-90" viewBox="0 0 100 100">
                             <circle className="text-slate-100 dark:text-slate-800" cx="50" cy="50" fill="transparent" r="45" stroke="currentColor" strokeWidth="8"></circle>
-                            <motion.circle
+                            <Motion.circle
                                 initial={{ strokeDashoffset: 282.7 }}
                                 animate={{ strokeDashoffset: 282.7 - (282.7 * normalizedRiskScore / 100) }}
                                 transition={{ duration: 1.5, ease: "easeOut" }}
@@ -127,7 +139,7 @@ const RiskUI = ({ riskData, explanation, loading, onSimulatorClick }) => {
                                 strokeDasharray="282.7"
                                 strokeLinecap="round"
                                 strokeWidth="8"
-                            ></motion.circle>
+                            ></Motion.circle>
                         </svg>
                         <div className="absolute inset-0 flex flex-col items-center justify-center">
                             <span className="text-5xl font-black text-[#13082a] dark:text-white leading-none">{Math.round(normalizedRiskScore)}%</span>
@@ -160,11 +172,19 @@ const RiskUI = ({ riskData, explanation, loading, onSimulatorClick }) => {
                         )}
                     </div>
                     <div className="space-y-6">
-                        <p className="text-slate-600 dark:text-slate-300 leading-relaxed text-lg font-medium">
-                            {explanationSummary || (
-                                <>The <span className="font-bold text-[#13082a] dark:text-white border-b-2 border-[#6143f4]/30">ArogyaAI Engine</span> has analyzed your health trajectory.</>
-                            )}
-                        </p>
+                        <div className="grid grid-cols-1 gap-4">
+                            {clinicalCards.slice(0, 2).map((card, index) => (
+                                <ClinicalInsightCard
+                                    key={`${card.condition || 'risk-card'}-${card.icdCode || card.icd_code || index}`}
+                                    card={card}
+                                    fallback={{
+                                        clinicalInsight: explanationSummary || analysis,
+                                        recommendations: displayedRecommendations,
+                                        sources: explanationSources,
+                                    }}
+                                />
+                            ))}
+                        </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 pt-2">
                             <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/30 border border-slate-100 dark:border-white/5 transition-colors hover:bg-[#6143f4]/5">
                                 <p className="text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest leading-none">Biological Age</p>
@@ -220,12 +240,12 @@ const RiskUI = ({ riskData, explanation, loading, onSimulatorClick }) => {
                                     </span>
                                 </div>
                                 <div className={`h-3 w-full bg-slate-100 dark:bg-slate-800/50 rounded-full overflow-hidden flex ${driver.direction === 'decreasing' ? 'flex-row-reverse' : ''} shadow-inner`}>
-                                    <motion.div
+                                    <Motion.div
                                         initial={{ width: 0 }}
                                         animate={{ width: `${Math.min(100, Math.abs(driver.contribution) * 2)}%` }}
                                         transition={{ duration: 1.2, ease: "easeOut" }}
                                         className={`h-full ${driver.direction === 'decreasing' ? 'bg-[#009cde]' : 'bg-[#6143f4]'} rounded-full shadow-sm`}
-                                    ></motion.div>
+                                    ></Motion.div>
                                 </div>
                             </div>
                         )) : (

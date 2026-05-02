@@ -1,12 +1,13 @@
 """
 User model — maps to the `users` table.
 """
-import enum
-
-from sqlalchemy import Column, String, Boolean, Enum, Integer, Numeric
+from sqlalchemy import Column, String, Boolean, Integer, Numeric
 from sqlalchemy.orm import relationship
 
 from .base import Base, UUIDPrimaryKeyMixin, TimestampMixin
+
+ROLE_PATIENT = "patient"
+ROLE_DOCTOR = "doctor"
 
 
 class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -16,6 +17,7 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     email          = Column(String(255), unique=True, nullable=False, index=True)
     password_hash  = Column(String(255), nullable=False)
     full_name      = Column(String(150))
+    role           = Column(String(32), default=ROLE_PATIENT, nullable=False, index=True)
     is_email_verified  = Column(Boolean, default=False, nullable=False)
     is_onboarding_done = Column(Boolean, default=False, nullable=False)
     onboarding_step    = Column(Integer, default=1, nullable=False)
@@ -44,6 +46,7 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     user_vitals     = relationship("UserVital", back_populates="user")
     user_settings   = relationship("UserSetting", back_populates="user", uselist=False)
     sessions        = relationship("Session", back_populates="user")
+    chat_sessions   = relationship("ChatSession", back_populates="user", cascade="all, delete-orphan")
     logs            = relationship("Log", back_populates="user")
     google_fit_connection = relationship("GoogleFitConnection", back_populates="user", uselist=False)
     lab_results          = relationship("LabResult", back_populates="user")

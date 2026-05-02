@@ -7,6 +7,9 @@ import { setGoogleFitConnectionState } from './googleFitConnectionState';
 
 export async function refreshAfterGoogleFitSync() {
   const dashboardStore = useDashboardStore.getState();
+  const cacheBust = `${Date.now()}-google-fit-sync`;
+
+  dashboardStore.invalidateWearableCache?.(['heart_rate', 'steps', 'sleep']);
 
   await Promise.all([
     fetchConnectedDeviceSummaries().then((summaries) => {
@@ -18,12 +21,13 @@ export async function refreshAfterGoogleFitSync() {
       );
       return summaries;
     }),
-    dashboardStore.fetchDashboardData({ force: true, silent: true }),
     useHealthStore.getState().fetchHealthMetrics({ force: true, silent: true }),
     Promise.all([
-      dashboardStore.fetchVitals('heart_rate', '24h', { force: true, silent: true }),
-      dashboardStore.fetchVitals('steps', '24h', { force: true, silent: true }),
-      dashboardStore.fetchVitals('sleep', '24h', { force: true, silent: true }),
+      dashboardStore.fetchVitals('heart_rate', '24h', { force: true, silent: true, cacheBust: `${cacheBust}-heart_rate` }),
+      dashboardStore.fetchVitals('steps', '24h', { force: true, silent: true, cacheBust: `${cacheBust}-steps` }),
+      dashboardStore.fetchVitals('sleep', '24h', { force: true, silent: true, cacheBust: `${cacheBust}-sleep` }),
     ]),
   ]);
+
+  await dashboardStore.fetchDashboardData({ force: true, silent: true });
 }

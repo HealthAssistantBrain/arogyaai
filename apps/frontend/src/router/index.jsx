@@ -30,6 +30,7 @@ const OnboardingSummary = lazy(() => import('../pages/OnboardingSummary'))
 const OnboardingCompletion = lazy(() => import('../pages/OnboardingCompletion'))
 const MainDashboard = lazy(() => import('../pages/Dashboard'))
 const DashboardAltView = lazy(() => import('../pages/DashboardAlternate'))
+const DoctorDashboard = lazy(() => import('../pages/doctor_dashboard/DoctorDashboard'))
 const AIHealthInsights = lazy(() => import('../pages/AIInsights'))
 const AIInsightsDesktop = lazy(() => import('../pages/AIInsightsDesktop'))
 const DiseaseSimulator = lazy(() => import('../pages/Simulate'))
@@ -132,6 +133,7 @@ export default function AppRouter() {
             <Route element={<MainLayout />}>
               <Route path={ROUTES.DASHBOARD} element={<MainDashboard />} />
               <Route path={ROUTES.DASHBOARD_ALT} element={<DashboardAltView />} />
+              <Route path={ROUTES.DOCTOR_DASHBOARD} element={<DoctorDashboard />} />
               <Route path={`${ROUTES.INSIGHTS}/*`} element={<AIHealthInsights />} />
               <Route path={`${ROUTES.INSIGHTS_DESKTOP}/*`} element={<AIInsightsDesktop />} />
               <Route path={ROUTES.RISK_PREDICTION} element={<RiskExplanation />} />

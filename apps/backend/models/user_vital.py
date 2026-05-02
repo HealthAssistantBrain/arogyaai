@@ -3,7 +3,7 @@ UserVital model — canonical storage for time-series vitals pulled from wearabl
 """
 import enum
 
-from sqlalchemy import Column, DateTime, Float, String, Enum, ForeignKey, func
+from sqlalchemy import Column, DateTime, Float, String, Enum, ForeignKey, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -27,6 +27,9 @@ class UserVitalSourceEnum(str, enum.Enum):
 
 class UserVital(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "user_vitals"
+    __table_args__ = (
+        UniqueConstraint("user_id", "type", "timestamp", "source", name="uq_user_vitals_user_type_timestamp_source"),
+    )
 
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     vital_type = Column("type", Enum(UserVitalTypeEnum, name="user_vital_type_enum"), nullable=False, index=True)

@@ -320,7 +320,7 @@ export const useAuthStore = create(
       onboardingStep: 1,
       onboardingDone: false,
       pendingWelcome: false,
-      role: 'user',
+      role: 'patient',
       isHydrated: false,
       isHydratingAuth: false,
 
@@ -380,7 +380,7 @@ export const useAuthStore = create(
           onboardingDone,
           onboardingStep,
           pendingWelcome: onboardingDone || onboardingStep > 1 ? false : get().pendingWelcome,
-          role: dbUser.role ?? get().role ?? 'user',
+          role: dbUser.role ?? get().role ?? 'patient',
           profileError: null,
         }, false, 'applyBackendUser')
       },
@@ -403,7 +403,7 @@ export const useAuthStore = create(
           onboardingDone,
           onboardingStep,
           pendingWelcome: shouldClearPendingWelcome ? false : !!(data?.pendingWelcome ?? get().pendingWelcome),
-          role: data?.role ?? 'user',
+          role: data?.role ?? user?.role ?? 'patient',
         }, false, 'setAuth')
       },
 
@@ -423,7 +423,7 @@ export const useAuthStore = create(
           onboardingDone: false,
           onboardingStep: 1,
           pendingWelcome: false,
-          role: 'user',
+          role: 'patient',
           isHydratingAuth: false,
         }, false, 'reset')
         clearLegacyAuthStorage()

@@ -143,7 +143,7 @@ const DeviceSettings = () => {
         setGoogleFitConnectionState(true);
         setNotice('Google Fit connected. Pulling the latest data now.');
         try {
-          await syncGoogleFit({ timezone, days: 30 });
+          await syncGoogleFit({ timezone, days: 7 });
           await refreshAfterGoogleFitSync();
         } catch (apiError) {
           setError(extractErrorMessage(apiError, 'Google Fit connected, but sync failed.'));
@@ -192,7 +192,7 @@ const DeviceSettings = () => {
     setError('');
 
     try {
-      const response = await syncGoogleFit({ timezone, days: 30 });
+      const response = await syncGoogleFit({ timezone, days: 7 });
       await Promise.all([
         loadStatus({ silent: true }),
         refreshAfterGoogleFitSync(),
@@ -327,7 +327,7 @@ const DeviceSettings = () => {
                           className="inline-flex items-center gap-2 rounded-2xl bg-[#6143f4] px-5 py-3 text-[12px] font-black uppercase tracking-[0.16em] text-white transition hover:bg-[#5235dc] disabled:cursor-not-allowed disabled:opacity-70"
                         >
                           <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
-                          {isSyncing ? 'Syncing...' : 'Sync 30 Days'}
+                          {isSyncing ? 'Syncing...' : 'Sync Latest 7 Days'}
                         </button>
                         <button
                           type="button"

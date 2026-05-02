@@ -46,6 +46,11 @@ _FEATURE_MAP: dict[str, dict[str, str]] = {
         "category": "lifestyle",
         "hint": "high resting heart rate deconditioning stress cardiovascular fitness",
     },
+    "heart_rate": {
+        "display_name": "Heart rate",
+        "category": "cardiovascular",
+        "hint": "elevated heart rate cardiovascular symptoms palpitations blood pressure sleep stress",
+    },
     "hr_mean_7d": {
         "display_name": "Average heart rate",
         "category": "lifestyle",
@@ -58,18 +63,48 @@ _FEATURE_MAP: dict[str, dict[str, str]] = {
     },
     "systolic_bp": {
         "display_name": "Systolic blood pressure",
-        "category": "lifestyle",
+        "category": "hypertension",
         "hint": "high blood pressure hypertension cardiovascular risk metabolic syndrome",
     },
     "diastolic_bp": {
         "display_name": "Diastolic blood pressure",
-        "category": "lifestyle",
+        "category": "hypertension",
         "hint": "high blood pressure hypertension vascular risk",
+    },
+    "blood_pressure": {
+        "display_name": "Blood pressure",
+        "category": "hypertension",
+        "hint": "high blood pressure hypertension cardiovascular risk sodium sleep physical activity",
     },
     "cholesterol_proxy": {
         "display_name": "Cholesterol proxy",
-        "category": "diabetes",
+        "category": "cardiovascular",
         "hint": "cholesterol dyslipidemia cardiometabolic risk insulin resistance",
+    },
+    "ldl_cholesterol": {
+        "display_name": "LDL cholesterol",
+        "category": "cardiovascular",
+        "hint": "high LDL cholesterol heart disease atherosclerosis saturated fat physical activity",
+    },
+    "hdl_cholesterol": {
+        "display_name": "HDL cholesterol",
+        "category": "cardiovascular",
+        "hint": "low HDL cholesterol cardiovascular risk physical activity smoking metabolic health",
+    },
+    "triglycerides": {
+        "display_name": "Triglycerides",
+        "category": "cardiovascular",
+        "hint": "high triglycerides dyslipidemia diabetes metabolic syndrome weight activity",
+    },
+    "glucose": {
+        "display_name": "Glucose",
+        "category": "diabetes",
+        "hint": "high blood glucose diabetes insulin resistance prediabetes lifestyle physical activity",
+    },
+    "hba1c": {
+        "display_name": "HbA1c",
+        "category": "diabetes",
+        "hint": "elevated HbA1c diabetes prediabetes blood glucose long term glycemic control",
     },
     "age": {
         "display_name": "Age",

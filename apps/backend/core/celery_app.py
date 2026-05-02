@@ -41,7 +41,7 @@ class _FallbackTask:
         self._bind = bind
 
     def delay(self, *args, **kwargs):
-        task_id = str(uuid4())
+        task_id = str(kwargs.pop("_fallback_task_id", None) or uuid4())
         call_args = args
         if self._bind:
             call_args = (SimpleNamespace(request=None), *args)
@@ -55,8 +55,11 @@ class _FallbackTask:
         self._app.results[task_id] = payload
         return payload
 
-    def apply_async(self, args=None, kwargs=None):
-        return self.delay(*(args or ()), **(kwargs or {}))
+    def apply_async(self, args=None, kwargs=None, **options):
+        task_kwargs = dict(kwargs or {})
+        if options.get("task_id"):
+            task_kwargs["_fallback_task_id"] = options["task_id"]
+        return self.delay(*(args or ()), **task_kwargs)
 
     def __call__(self, *args, **kwargs):
         return self._func(*args, **kwargs)
@@ -84,7 +87,13 @@ if CELERY_AVAILABLE:
         "arogyaai",
         broker=CELERY_BROKER_URL,
         backend=CELERY_RESULT_BACKEND,
-        include=["pipelines.tasks", "pipelines.orchestration_pipeline.tasks", "workers.notification_tasks"],
+        include=[
+            "pipelines.tasks",
+            "pipelines.orchestration_pipeline.tasks",
+            "workers.notification_tasks",
+            "workers.google_fit_tasks",
+            "workers.emergency_tasks",
+        ],
     )
 else:  # pragma: no cover - local test fallback
     celery_app = _FallbackCeleryApp()
