@@ -55,14 +55,14 @@ const HeartRateTooltip = ({ active, payload, label }) => {
     const statusClass = status === 'Normal'
         ? 'text-green-600'
         : status === 'No reading'
-            ? 'text-slate-400'
+            ? 'text-text-muted'
             : 'text-red-500';
 
     return (
-        <div className="rounded-xl border border-slate-100 bg-white px-4 py-3 text-xs shadow-lg dark:border-white/10 dark:bg-[#131022]">
-            <p className="font-black text-[#13082a] dark:text-white">{formatHourLabel(label)}</p>
-            <p className="mt-2 font-semibold text-slate-500 dark:text-slate-400">
-                Value: <span className="text-[#13082a] dark:text-white">{hasValue ? `${value} bpm` : 'No reading'}</span>
+        <div className="rounded-xl border border-slate-100 bg-white px-4 py-3 text-xs shadow-lg dark:border-stroke dark:bg-card">
+            <p className="font-black text-text-primary dark:text-text-primary">{formatHourLabel(label)}</p>
+            <p className="mt-2 font-semibold text-slate-500 dark:text-text-muted">
+                Value: <span className="text-text-primary dark:text-text-primary">{hasValue ? `${value} bpm` : 'No reading'}</span>
             </p>
             <p className={`mt-1 font-black uppercase tracking-[0.16em] ${statusClass}`}>
                 {status}
@@ -118,3 +118,4 @@ const HeartRateChart = ({ data, height = 200 }) => {
 };
 
 export default HeartRateChart;
+

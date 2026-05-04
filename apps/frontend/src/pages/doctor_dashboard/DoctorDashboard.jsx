@@ -43,13 +43,13 @@ const triageTone = {
   HIGH: 'border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-500/20 dark:bg-orange-500/10 dark:text-orange-200',
   MODERATE: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200',
   LOW: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200',
-  UNKNOWN: 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300',
+  UNKNOWN: 'border-slate-200 bg-slate-50 text-slate-600 dark:border-stroke dark:bg-background/60 dark:text-text-secondary',
 };
 
 const alertTone = {
   critical: 'border-red-200 bg-red-50 text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-200',
   warning: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200',
-  info: 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300',
+  info: 'border-slate-200 bg-slate-50 text-slate-600 dark:border-stroke dark:bg-background/60 dark:text-text-secondary',
 };
 
 const safeArray = (value) => (Array.isArray(value) ? value : []);
@@ -93,25 +93,25 @@ const normalizeTriage = (value) => String(value || 'UNKNOWN').toUpperCase();
 
 function Panel({ children, className = '' }) {
   return (
-    <section className={`rounded-xl border border-slate-200/80 bg-white/90 shadow-sm backdrop-blur dark:border-white/10 dark:bg-[#121025]/88 ${className}`}>
+    <section className={`rounded-xl border border-slate-200/80 bg-white/90 shadow-sm backdrop-blur dark:border-stroke dark:bg-[#121025]/88 ${className}`}>
       {children}
     </section>
   );
 }
 
-function MetricTile({ icon: Icon, label, value, meta, tone = 'text-slate-900 dark:text-white' }) {
+function MetricTile({ icon: Icon, label, value, meta, tone = 'text-slate-900 dark:text-text-primary' }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-slate-950/35">
+    <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-stroke dark:bg-background/35">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">{label}</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-text-muted">{label}</p>
           <p className={`mt-2 text-2xl font-black tracking-tight ${tone}`}>{value}</p>
         </div>
-        <div className="flex size-11 items-center justify-center rounded-xl bg-white text-slate-500 shadow-sm dark:bg-white/5 dark:text-slate-300">
+        <div className="flex size-11 items-center justify-center rounded-xl bg-white text-slate-500 shadow-sm dark:bg-white/5 dark:text-text-secondary">
           <Icon size={20} />
         </div>
       </div>
-      <p className="mt-3 text-xs font-semibold text-slate-500 dark:text-slate-400">{meta}</p>
+      <p className="mt-3 text-xs font-semibold text-slate-500 dark:text-text-muted">{meta}</p>
     </div>
   );
 }
@@ -124,7 +124,7 @@ function MiniLine({ data, color = '#0f766e' }) {
 
   if (chartData.length < 2) {
     return (
-      <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-slate-200 text-xs font-bold text-slate-400 dark:border-white/10 dark:text-slate-500">
+      <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-slate-200 text-xs font-bold text-text-muted dark:border-stroke dark:text-slate-500">
         No trend yet
       </div>
     );
@@ -148,30 +148,30 @@ function MiniLine({ data, color = '#0f766e' }) {
 function PatientList({ patients, selectedPatientId, onSelect, query, onQueryChange }) {
   return (
     <Panel className="min-h-[720px] overflow-hidden">
-      <div className="border-b border-slate-200/80 p-5 dark:border-white/10">
+      <div className="border-b border-slate-200/80 p-5 dark:border-stroke">
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.24em] text-teal-700 dark:text-teal-300">Clinical Queue</p>
-            <h2 className="mt-2 text-xl font-black tracking-tight text-slate-950 dark:text-white">Patients</h2>
+            <h2 className="mt-2 text-xl font-black tracking-tight text-slate-950 dark:text-text-primary">Patients</h2>
           </div>
           <div className="flex size-11 items-center justify-center rounded-xl bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-200">
             <Users size={20} />
           </div>
         </div>
         <div className="relative mt-5">
-          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
           <input
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
             placeholder="Search patients"
-            className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10 dark:border-white/10 dark:bg-slate-950/40 dark:text-slate-100"
+            className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10 dark:border-stroke dark:bg-background/40 dark:text-slate-100"
           />
         </div>
       </div>
 
       <div className="max-h-[calc(100vh-260px)] space-y-3 overflow-y-auto p-4">
         {patients.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm font-semibold text-slate-400 dark:border-white/10">
+          <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm font-semibold text-text-muted dark:border-stroke">
             No patients found
           </div>
         ) : patients.map((patient) => {
@@ -185,13 +185,13 @@ function PatientList({ patients, selectedPatientId, onSelect, query, onQueryChan
               className={`w-full rounded-xl border p-4 text-left transition-all ${
                 isSelected
                   ? 'border-teal-500 bg-teal-50/80 shadow-[0_18px_42px_-30px_rgba(15,118,110,0.85)] dark:border-teal-400/50 dark:bg-teal-500/10'
-                  : 'border-slate-200 bg-white hover:-translate-y-0.5 hover:border-teal-200 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-950/25 dark:hover:border-teal-400/30'
+                  : 'border-slate-200 bg-white hover:-translate-y-0.5 hover:border-teal-200 hover:bg-slate-50 dark:border-stroke dark:bg-background/25 dark:hover:border-teal-400/30'
               }`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-black text-slate-950 dark:text-white">{patient.name}</p>
-                  <p className="mt-1 truncate text-xs font-semibold text-slate-500 dark:text-slate-400">{patient.email}</p>
+                  <p className="truncate text-sm font-black text-slate-950 dark:text-text-primary">{patient.name}</p>
+                  <p className="mt-1 truncate text-xs font-semibold text-slate-500 dark:text-text-muted">{patient.email}</p>
                 </div>
                 <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-black ${triageTone[triage] || triageTone.UNKNOWN}`}>
                   {triage}
@@ -199,17 +199,17 @@ function PatientList({ patients, selectedPatientId, onSelect, query, onQueryChan
               </div>
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Risk</p>
-                  <p className="mt-1 text-lg font-black text-slate-950 dark:text-white">{formatRisk(patient.risk_score)}</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-text-muted">Risk</p>
+                  <p className="mt-1 text-lg font-black text-slate-950 dark:text-text-primary">{formatRisk(patient.risk_score)}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Alerts</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-text-muted">Alerts</p>
                   <p className={`mt-1 text-lg font-black ${patient.alert_status === 'critical' ? 'text-red-600' : patient.alert_status === 'active' ? 'text-amber-600' : 'text-emerald-600'}`}>
                     {patient.active_alerts || 0}
                   </p>
                 </div>
               </div>
-              <div className="mt-4 flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400">
+              <div className="mt-4 flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-text-muted">
                 <Clock size={14} />
                 <span>{relativeTime(patient.last_activity)}</span>
               </div>
@@ -224,11 +224,11 @@ function PatientList({ patients, selectedPatientId, onSelect, query, onQueryChan
 function AlertsPanel({ alerts, onSelectPatient }) {
   return (
     <Panel className="min-h-[720px] overflow-hidden">
-      <div className="border-b border-slate-200/80 p-5 dark:border-white/10">
+      <div className="border-b border-slate-200/80 p-5 dark:border-stroke">
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.24em] text-red-600 dark:text-red-300">Live Feed</p>
-            <h2 className="mt-2 text-xl font-black tracking-tight text-slate-950 dark:text-white">Alerts</h2>
+            <h2 className="mt-2 text-xl font-black tracking-tight text-slate-950 dark:text-text-primary">Alerts</h2>
           </div>
           <div className="relative flex size-11 items-center justify-center rounded-xl bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-200">
             <Bell size={20} />
@@ -238,9 +238,9 @@ function AlertsPanel({ alerts, onSelectPatient }) {
       </div>
       <div className="max-h-[calc(100vh-220px)] space-y-3 overflow-y-auto p-4">
         {alerts.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center dark:border-white/10">
+          <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center dark:border-stroke">
             <CheckCircle2 className="mx-auto text-emerald-500" size={30} />
-            <p className="mt-3 text-sm font-bold text-slate-500 dark:text-slate-400">No active alerts</p>
+            <p className="mt-3 text-sm font-bold text-slate-500 dark:text-text-muted">No active alerts</p>
           </div>
         ) : alerts.map((alert) => {
           const tone = alertTone[alert.severity] || alertTone.info;
@@ -257,7 +257,7 @@ function AlertsPanel({ alerts, onSelectPatient }) {
                   <div className="flex items-center justify-between gap-3">
                     <p className="truncate text-sm font-black">{alert.title}</p>
                     {alert.emergency ? (
-                      <span className="rounded-full bg-red-600 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.16em] text-white">
+                      <span className="rounded-full bg-red-600 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.16em] text-text-primary">
                         Emergency
                       </span>
                     ) : null}
@@ -289,7 +289,7 @@ function PatientDetail({ detail, loading, onReviewed, onSendRecommendation, onFo
       <Panel className="flex min-h-[720px] items-center justify-center p-8">
         <div className="text-center">
           <Activity className="mx-auto animate-pulse text-teal-600" size={34} />
-          <p className="mt-4 text-sm font-bold text-slate-500 dark:text-slate-400">Loading patient telemetry...</p>
+          <p className="mt-4 text-sm font-bold text-slate-500 dark:text-text-muted">Loading patient telemetry...</p>
         </div>
       </Panel>
     );
@@ -299,8 +299,8 @@ function PatientDetail({ detail, loading, onReviewed, onSendRecommendation, onFo
     return (
       <Panel className="flex min-h-[720px] items-center justify-center p-8">
         <div className="text-center">
-          <Stethoscope className="mx-auto text-slate-300" size={42} />
-          <p className="mt-4 text-sm font-bold text-slate-500 dark:text-slate-400">Select a patient to open monitoring details.</p>
+          <Stethoscope className="mx-auto text-text-secondary" size={42} />
+          <p className="mt-4 text-sm font-bold text-slate-500 dark:text-text-muted">Select a patient to open monitoring details.</p>
         </div>
       </Panel>
     );
@@ -329,7 +329,7 @@ function PatientDetail({ detail, loading, onReviewed, onSendRecommendation, onFo
   return (
     <div className="space-y-5">
       <Panel className="overflow-hidden">
-        <div className="border-b border-slate-200/80 bg-[linear-gradient(135deg,rgba(15,118,110,0.10),rgba(14,165,233,0.08))] p-6 dark:border-white/10">
+        <div className="border-b border-slate-200/80 bg-[linear-gradient(135deg,rgba(15,118,110,0.10),rgba(14,165,233,0.08))] p-6 dark:border-stroke">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="flex flex-wrap items-center gap-2">
@@ -340,21 +340,21 @@ function PatientDetail({ detail, loading, onReviewed, onSendRecommendation, onFo
                   {triage}
                 </span>
               </div>
-              <h1 className="mt-4 text-3xl font-black tracking-tight text-slate-950 dark:text-white">{patient.name}</h1>
-              <p className="mt-2 text-sm font-semibold text-slate-500 dark:text-slate-400">{patient.email}</p>
+              <h1 className="mt-4 text-3xl font-black tracking-tight text-slate-950 dark:text-text-primary">{patient.name}</h1>
+              <p className="mt-2 text-sm font-semibold text-slate-500 dark:text-text-muted">{patient.email}</p>
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <div className="rounded-xl border border-white/70 bg-white/80 p-4 shadow-sm dark:border-white/10 dark:bg-slate-950/35">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Risk</p>
-                <p className="mt-2 text-2xl font-black text-slate-950 dark:text-white">{formatRisk(patient.risk_score)}</p>
+              <div className="rounded-xl border border-white/70 bg-white/80 p-4 shadow-sm dark:border-stroke dark:bg-background/35">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Risk</p>
+                <p className="mt-2 text-2xl font-black text-slate-950 dark:text-text-primary">{formatRisk(patient.risk_score)}</p>
               </div>
-              <div className="rounded-xl border border-white/70 bg-white/80 p-4 shadow-sm dark:border-white/10 dark:bg-slate-950/35">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Alerts</p>
+              <div className="rounded-xl border border-white/70 bg-white/80 p-4 shadow-sm dark:border-stroke dark:bg-background/35">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Alerts</p>
                 <p className="mt-2 text-2xl font-black text-red-600">{patient.active_alerts || 0}</p>
               </div>
-              <div className="rounded-xl border border-white/70 bg-white/80 p-4 shadow-sm dark:border-white/10 dark:bg-slate-950/35">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Updated</p>
-                <p className="mt-2 text-sm font-black text-slate-700 dark:text-slate-200">{relativeTime(patient.last_activity)}</p>
+              <div className="rounded-xl border border-white/70 bg-white/80 p-4 shadow-sm dark:border-stroke dark:bg-background/35">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Updated</p>
+                <p className="mt-2 text-sm font-black text-slate-700 dark:text-text-primary">{relativeTime(patient.last_activity)}</p>
               </div>
             </div>
           </div>
@@ -366,7 +366,7 @@ function PatientDetail({ detail, loading, onReviewed, onSendRecommendation, onFo
             label="Heart Rate"
             value={`${formatNumber(vitals.heart_rate?.value)} bpm`}
             meta={formatDateTime(vitals.heart_rate?.timestamp)}
-            tone={Number(vitals.heart_rate?.value) > 100 ? 'text-red-600' : 'text-slate-950 dark:text-white'}
+            tone={Number(vitals.heart_rate?.value) > 100 ? 'text-red-600' : 'text-slate-950 dark:text-text-primary'}
           />
           <MetricTile
             icon={Moon}
@@ -389,8 +389,8 @@ function PatientDetail({ detail, loading, onReviewed, onSendRecommendation, onFo
         <Panel className="p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Vitals Trend</p>
-              <h3 className="mt-2 text-lg font-black text-slate-950 dark:text-white">Recent telemetry</h3>
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-text-muted">Vitals Trend</p>
+              <h3 className="mt-2 text-lg font-black text-slate-950 dark:text-text-primary">Recent telemetry</h3>
             </div>
             <Activity className="text-teal-600" size={22} />
           </div>
@@ -413,22 +413,22 @@ function PatientDetail({ detail, loading, onReviewed, onSendRecommendation, onFo
         <Panel className="p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">ML Prediction</p>
-              <h3 className="mt-2 text-lg font-black text-slate-950 dark:text-white">{prediction.risk_level || 'No prediction'}</h3>
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-text-muted">ML Prediction</p>
+              <h3 className="mt-2 text-lg font-black text-slate-950 dark:text-text-primary">{prediction.risk_level || 'No prediction'}</h3>
             </div>
             <Brain className="text-sky-600" size={22} />
           </div>
           <div className="mt-5 grid grid-cols-2 gap-3">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-slate-950/35">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Score</p>
-              <p className="mt-2 text-2xl font-black text-slate-950 dark:text-white">{formatRisk(prediction.risk_score)}</p>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-stroke dark:bg-background/35">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Score</p>
+              <p className="mt-2 text-2xl font-black text-slate-950 dark:text-text-primary">{formatRisk(prediction.risk_score)}</p>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-slate-950/35">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Confidence</p>
-              <p className="mt-2 text-2xl font-black text-slate-950 dark:text-white">{formatRisk(prediction.confidence)}</p>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-stroke dark:bg-background/35">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Confidence</p>
+              <p className="mt-2 text-2xl font-black text-slate-950 dark:text-text-primary">{formatRisk(prediction.confidence)}</p>
             </div>
           </div>
-          <p className="mt-4 text-xs font-bold text-slate-500 dark:text-slate-400">
+          <p className="mt-4 text-xs font-bold text-slate-500 dark:text-text-muted">
             {prediction.model_version || 'Latest persisted model'} | {formatDateTime(prediction.calculated_at)}
           </p>
         </Panel>
@@ -438,30 +438,30 @@ function PatientDetail({ detail, loading, onReviewed, onSendRecommendation, onFo
         <Panel className="p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">SHAP Insights</p>
-              <h3 className="mt-2 text-lg font-black text-slate-950 dark:text-white">Drivers</h3>
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-text-muted">SHAP Insights</p>
+              <h3 className="mt-2 text-lg font-black text-slate-950 dark:text-text-primary">Drivers</h3>
             </div>
             <Sparkles className="text-amber-500" size={22} />
           </div>
           <div className="mt-5 space-y-3">
             {shapInsights.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-200 p-6 text-sm font-semibold text-slate-400 dark:border-white/10">
+              <div className="rounded-xl border border-dashed border-slate-200 p-6 text-sm font-semibold text-text-muted dark:border-stroke">
                 No SHAP driver data for the latest prediction.
               </div>
             ) : shapInsights.slice(0, 6).map((item) => {
               const width = Math.max(8, ((Number(item.abs_shap_value) || 0) / shapMax) * 100);
               return (
-                <div key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-slate-950/35">
+                <div key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-stroke dark:bg-background/35">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="truncate text-sm font-black text-slate-900 dark:text-white">{String(item.feature_name || '').replaceAll('_', ' ')}</p>
+                    <p className="truncate text-sm font-black text-slate-900 dark:text-text-primary">{String(item.feature_name || '').replaceAll('_', ' ')}</p>
                     <span className={`text-xs font-black ${Number(item.shap_value) >= 0 ? 'text-red-600' : 'text-emerald-600'}`}>
                       {Number(item.shap_value || 0).toFixed(3)}
                     </span>
                   </div>
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-card">
                     <div className={`h-full rounded-full ${Number(item.shap_value) >= 0 ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${width}%` }} />
                   </div>
-                  {item.explanation ? <p className="mt-3 text-xs font-semibold leading-relaxed text-slate-500 dark:text-slate-400">{item.explanation}</p> : null}
+                  {item.explanation ? <p className="mt-3 text-xs font-semibold leading-relaxed text-slate-500 dark:text-text-muted">{item.explanation}</p> : null}
                 </div>
               );
             })}
@@ -471,15 +471,15 @@ function PatientDetail({ detail, loading, onReviewed, onSendRecommendation, onFo
         <Panel className="p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">RAG Explanation</p>
-              <h3 className="mt-2 text-lg font-black text-slate-950 dark:text-white">Clinical context</h3>
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-text-muted">RAG Explanation</p>
+              <h3 className="mt-2 text-lg font-black text-slate-950 dark:text-text-primary">Clinical context</h3>
             </div>
             <ListChecks className="text-teal-600" size={22} />
           </div>
           <div className="mt-5 space-y-4">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-slate-950/35">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Summary</p>
-              <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-700 dark:text-slate-200">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-stroke dark:bg-background/35">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Summary</p>
+              <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-700 dark:text-text-primary">
                 {rag.summary || rag.clinical_insight || 'No RAG explanation available for the latest prediction.'}
               </p>
             </div>
@@ -504,28 +504,28 @@ function PatientDetail({ detail, loading, onReviewed, onSendRecommendation, onFo
         <Panel className="p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Clinical Timeline</p>
-              <h3 className="mt-2 text-lg font-black text-slate-950 dark:text-white">Reports, labs, alerts</h3>
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-text-muted">Clinical Timeline</p>
+              <h3 className="mt-2 text-lg font-black text-slate-950 dark:text-text-primary">Reports, labs, alerts</h3>
             </div>
             <History className="text-slate-500" size={22} />
           </div>
           <div className="mt-5 space-y-3">
             {timeline.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-200 p-6 text-sm font-semibold text-slate-400 dark:border-white/10">
+              <div className="rounded-xl border border-dashed border-slate-200 p-6 text-sm font-semibold text-text-muted dark:border-stroke">
                 No timeline events yet.
               </div>
             ) : timeline.map((event) => (
-              <div key={event.id} className="flex gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-slate-950/35">
+              <div key={event.id} className="flex gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-stroke dark:bg-background/35">
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white text-slate-500 dark:bg-white/5">
                   {event.type === 'Reports' ? <FileText size={18} /> : event.type === 'Alerts' ? <AlertCircle size={18} /> : <Activity size={18} />}
                 </div>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-black text-slate-900 dark:text-white">{event.title}</p>
-                    <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-black text-slate-500 dark:border-white/10 dark:bg-slate-900">{event.type}</span>
+                    <p className="text-sm font-black text-slate-900 dark:text-text-primary">{event.title}</p>
+                    <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-black text-slate-500 dark:border-stroke dark:bg-background">{event.type}</span>
                   </div>
                   <p className="mt-1 text-xs font-bold text-slate-500">{formatDateTime(event.event_date || event.timestamp)}</p>
-                  <p className="mt-2 line-clamp-2 text-sm font-semibold text-slate-600 dark:text-slate-300">{event.description}</p>
+                  <p className="mt-2 line-clamp-2 text-sm font-semibold text-slate-600 dark:text-text-secondary">{event.description}</p>
                 </div>
               </div>
             ))}
@@ -535,8 +535,8 @@ function PatientDetail({ detail, loading, onReviewed, onSendRecommendation, onFo
         <Panel className="p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Action Panel</p>
-              <h3 className="mt-2 text-lg font-black text-slate-950 dark:text-white">Care actions</h3>
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-text-muted">Action Panel</p>
+              <h3 className="mt-2 text-lg font-black text-slate-950 dark:text-text-primary">Care actions</h3>
             </div>
             <Stethoscope className="text-teal-600" size={22} />
           </div>
@@ -545,25 +545,25 @@ function PatientDetail({ detail, loading, onReviewed, onSendRecommendation, onFo
               type="button"
               onClick={onReviewed}
               disabled={actionLoading}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-background px-4 py-3 text-sm font-black text-text-primary transition hover:bg-card disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
             >
               <CheckCircle2 size={17} />
               Mark Reviewed
             </button>
 
             <div>
-              <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Recommendation</label>
+              <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Recommendation</label>
               <textarea
                 value={recommendationText}
                 onChange={(event) => setRecommendationText(event.target.value)}
                 placeholder="Write a recommendation"
-                className="mt-2 min-h-28 w-full resize-none rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10 dark:border-white/10 dark:bg-slate-950/35 dark:text-slate-100"
+                className="mt-2 min-h-28 w-full resize-none rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10 dark:border-stroke dark:bg-background/35 dark:text-slate-100"
               />
               <button
                 type="button"
                 onClick={handleSend}
                 disabled={actionLoading || !recommendationText.trim()}
-                className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-3 text-sm font-black text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-3 text-sm font-black text-text-primary transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Send size={17} />
                 Send Recommendation
@@ -571,12 +571,12 @@ function PatientDetail({ detail, loading, onReviewed, onSendRecommendation, onFo
             </div>
 
             <div>
-              <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Follow-up</label>
+              <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Follow-up</label>
               <input
                 value={followUpReason}
                 onChange={(event) => setFollowUpReason(event.target.value)}
                 placeholder="Follow-up reason"
-                className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10 dark:border-white/10 dark:bg-slate-950/35 dark:text-slate-100"
+                className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10 dark:border-stroke dark:bg-background/35 dark:text-slate-100"
               />
               <button
                 type="button"
@@ -755,11 +755,11 @@ export default function DoctorDashboard() {
 
   if (!isDoctor) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f6f5f8] p-6 dark:bg-[#0B0819]">
+      <div className="flex min-h-screen items-center justify-center bg-background p-6 dark:bg-background">
         <Panel className="max-w-lg p-8 text-center">
-          <Stethoscope className="mx-auto text-slate-300" size={44} />
-          <h1 className="mt-4 text-2xl font-black text-slate-950 dark:text-white">Doctor access required</h1>
-          <p className="mt-3 text-sm font-semibold leading-relaxed text-slate-500 dark:text-slate-400">
+          <Stethoscope className="mx-auto text-text-secondary" size={44} />
+          <h1 className="mt-4 text-2xl font-black text-slate-950 dark:text-text-primary">Doctor access required</h1>
+          <p className="mt-3 text-sm font-semibold leading-relaxed text-slate-500 dark:text-text-muted">
             This monitoring layer is restricted to authenticated doctor accounts.
           </p>
         </Panel>
@@ -772,18 +772,18 @@ export default function DoctorDashboard() {
       <main className="mx-auto max-w-[1840px] p-4 sm:p-6 xl:p-8">
         <div className="mb-6 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <div className="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">
+            <div className="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.24em] text-text-muted">
               <span>Clinical Monitoring</span>
               <ChevronRight size={12} />
               <span className="text-teal-700 dark:text-teal-300">Real-time Triage</span>
             </div>
-            <h1 className="mt-3 text-4xl font-black tracking-tight text-slate-950 dark:text-white">Doctor Dashboard</h1>
-            <p className="mt-3 max-w-3xl text-sm font-semibold leading-relaxed text-slate-500 dark:text-slate-400">
+            <h1 className="mt-3 text-4xl font-black tracking-tight text-slate-950 dark:text-text-primary">Doctor Dashboard</h1>
+            <p className="mt-3 max-w-3xl text-sm font-semibold leading-relaxed text-slate-500 dark:text-text-muted">
               Monitor patient risk, alerts, vitals, ML explanations, and longitudinal history from one clinical queue.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-black text-slate-500 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+            <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-black text-slate-500 shadow-sm dark:border-stroke dark:bg-white/5 dark:text-text-secondary">
               <span className="size-2 rounded-full bg-emerald-500" />
               Polling every {POLL_INTERVAL_MS / 1000}s
             </div>
@@ -791,7 +791,7 @@ export default function DoctorDashboard() {
               type="button"
               onClick={handleManualRefresh}
               disabled={loadingPatients}
-              className="inline-flex items-center gap-2 rounded-xl bg-teal-700 px-5 py-3 text-sm font-black text-white shadow-lg shadow-teal-900/10 transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-xl bg-teal-700 px-5 py-3 text-sm font-black text-text-primary shadow-lg shadow-teal-900/10 transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <RotateCcw size={17} className={loadingPatients ? 'animate-spin' : ''} />
               Refresh
@@ -848,3 +848,4 @@ export default function DoctorDashboard() {
     </div>
   );
 }
+

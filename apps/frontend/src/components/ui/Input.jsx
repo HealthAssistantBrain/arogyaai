@@ -14,3 +14,4 @@ const Input = ({ label, error, ...props }) => {
 };
 
 export default Input;
+

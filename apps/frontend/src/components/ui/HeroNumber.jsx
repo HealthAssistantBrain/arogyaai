@@ -13,3 +13,4 @@ const HeroNumber = ({ value, unit, label, className = "" }) => {
 };
 
 export default HeroNumber;
+

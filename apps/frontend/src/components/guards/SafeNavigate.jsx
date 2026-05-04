@@ -42,3 +42,4 @@ export default function SafeNavigate({ to, replace, state }) {
   // Safe to navigate
   return <Navigate to={to} replace={replace} state={state} />;
 }
+

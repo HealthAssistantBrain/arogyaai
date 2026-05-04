@@ -59,9 +59,9 @@ const HelpCenterHome = () => {
     ];
 
     const categories = [
-        { title: 'Getting Started', desc: 'Setting up your profile and initial sync.', icon: Rocket, color: 'text-[#6143f4]', bg: 'bg-[#6143f4]/15' },
-        { title: 'Device Connection', desc: 'Pairing wearables and smart devices.', icon: Link, color: 'text-[#009cde]', bg: 'bg-[#009cde]/15' },
-        { title: 'AI Insights Explained', desc: 'Understanding your predictive scores.', icon: Brain, color: 'text-[#6143f4]', bg: 'bg-[#6143f4]/15' },
+        { title: 'Getting Started', desc: 'Setting up your profile and initial sync.', icon: Rocket, color: 'text-primary', bg: 'bg-primary/15' },
+        { title: 'Device Connection', desc: 'Pairing wearables and smart devices.', icon: Link, color: 'text-secondary', bg: 'bg-secondary/15' },
+        { title: 'AI Insights Explained', desc: 'Understanding your predictive scores.', icon: Brain, color: 'text-primary', bg: 'bg-primary/15' },
         { title: 'Privacy & Security', desc: 'How we protect your medical data.', icon: Lock, color: 'text-red-500', bg: 'bg-red-500/15' },
         { title: 'Billing', desc: 'Managing subscriptions and payments.', icon: CreditCard, color: 'text-emerald-500', bg: 'bg-emerald-500/15' },
     ];
@@ -70,7 +70,7 @@ const HelpCenterHome = () => {
         {
             title: 'How to interpret the Disease Simulator v2.0',
             tag: 'NEW UPDATES',
-            tagColor: 'text-[#009cde]',
+            tagColor: 'text-secondary',
             desc: 'Our latest algorithm update improves prediction accuracy by 15%...',
             img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDM2C9IYshF0aIYpexL2v1LMQzWtfZC-c7jhHLZg6jLDbWwt_jFUHr7F97vfSZ0W8XkGLjSIEh17uYH4lkAErtgNrbx-pkNiSHZUhVvLDMxmyj7CsB1m46EeHNaZL-FbTC0k6l9Cz3YpQFICYJ4FvzUBih1DsUpQLAR9R63CywjK5dddlG4GjDpQvmYWcBRg0GpvxF689yj1yPxsidgsqgtVGDhciFIYWyLkK3l9o98xvs3rfIPaNB52d8sQSX8_RKjTkTaB5y82qeX'
         },
@@ -91,13 +91,13 @@ const HelpCenterHome = () => {
     ];
 
     return (
-        <div className="bg-[#f6f5f8] dark:bg-[#0B0819] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased text-[14px]">
+        <div className="bg-background dark:bg-background text-text-primary dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased text-[14px]">
             <div className="flex flex-1 overflow-hidden">
                 {/* Sidebar - Dr. Elena Smith Branding */}
 
 
                 {/* Main Content Area */}
-                <main className="flex-1 flex flex-col h-full relative overflow-y-auto no-scrollbar bg-[#f6f5f8] dark:bg-[#0B0819]">
+                <main className="flex-1 flex flex-col h-full relative overflow-y-auto no-scrollbar bg-background dark:bg-background">
                     {/* Top Navigation Bar */}
                     
 
@@ -105,36 +105,36 @@ const HelpCenterHome = () => {
                     <div className="flex-1 custom-scrollbar overflow-y-auto no-scrollbar">
                         {/* Hero Gradient Section */}
                         <section className="relative pt-24 pb-32 px-10 text-center overflow-hidden">
-                            <div className="absolute inset-0 bg-gradient-to-br from-[#6143f4]/10 via-transparent to-[#009cde]/10 -z-10 animate-pulse-slow"></div>
-                            <div className="absolute -top-32 left-1/2 -translate-x-1/2 size-[600px] bg-[#6143f4]/5 blur-[120px] rounded-full pointer-events-none"></div>
+                            <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-secondary/10 -z-10 animate-pulse-slow"></div>
+                            <div className="absolute -top-32 left-1/2 -translate-x-1/2 size-[600px] bg-primary/5 blur-[120px] rounded-full pointer-events-none"></div>
 
                             <div className="max-w-4xl mx-auto space-y-12">
                                 <div className="space-y-6">
-                                    <h2 className="text-6xl md:text-8xl font-black tracking-tighter text-[#13082a] dark:text-white uppercase italic leading-[0.85] animate-fade-in-up">How can we <br /> help you today?</h2>
-                                    <p className="text-xl text-slate-500 dark:text-slate-400 font-bold uppercase tracking-tight max-w-2xl mx-auto opacity-70 italic leading-snug">Search our knowledge base for answers to common questions about ArogyaAI predictive diagnostics.</p>
+                                    <h2 className="text-6xl md:text-8xl font-black tracking-tighter text-text-primary dark:text-text-primary uppercase italic leading-[0.85] animate-fade-in-up">How can we <br /> help you today?</h2>
+                                    <p className="text-xl text-slate-500 dark:text-text-muted font-bold uppercase tracking-tight max-w-2xl mx-auto opacity-70 italic leading-snug">Search our knowledge base for answers to common questions about ArogyaAI predictive diagnostics.</p>
                                 </div>
 
                                 <div className="relative max-w-3xl mx-auto group/hero">
-                                    <div className="absolute inset-0 bg-[#6143f4]/10 blur-3xl opacity-0 group-focus-within/hero:opacity-50 transition-opacity"></div>
-                                    <div className="relative flex items-center bg-white dark:bg-white/5 backdrop-blur-3xl rounded-[2.5rem] p-3 shadow-[0_40px_80px_-20px_rgba(97,67,244,0.15)] ring-1 ring-[#6143f4]/10 border border-white dark:border-white/5">
-                                        <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="ml-6 text-[#6143f4]" size={28} strokeWidth={2.5} />
-                                        <input className="flex-1 bg-transparent border-none outline-none px-6 py-4 text-[13px] font-black uppercase tracking-widest text-[#13082a] dark:text-white placeholder:text-slate-400 italic" placeholder="Search for articles, guides, and more..." type="text" />
-                                        <button className="bg-[#6143f4] text-white px-10 py-5 rounded-[1.75rem] font-black text-[11px] uppercase tracking-[0.2em] shadow-xl shadow-[#6143f4]/30 hover:scale-105 active:scale-95 transition-all">Search</button>
+                                    <div className="absolute inset-0 bg-primary/10 blur-3xl opacity-0 group-focus-within/hero:opacity-50 transition-opacity"></div>
+                                    <div className="relative flex items-center bg-surface backdrop-blur-3xl rounded-[2.5rem] p-3 shadow-[0_40px_80px_-20px_rgba(97,67,244,0.15)] ring-1 ring-[var(--color-primary)]/10 border border-white dark:border-stroke/50">
+                                        <Search onClick={openCommandPalette} style={{ cursor: "pointer", pointerEvents: "auto" }} className="ml-6 text-primary" size={28} strokeWidth={2.5} />
+                                        <input className="flex-1 bg-transparent border-none outline-none px-6 py-4 text-[13px] font-black uppercase tracking-widest text-text-primary dark:text-text-primary placeholder:text-text-muted italic" placeholder="Search for articles, guides, and more..." type="text" />
+                                        <button className="bg-primary text-white px-10 py-5 rounded-[1.75rem] font-black text-[11px] uppercase tracking-[0.2em] shadow-xl shadow-primary/30 hover:scale-105 active:scale-95 transition-all">Search</button>
                                     </div>
                                 </div>
 
                                 <div className="flex flex-wrap justify-center gap-6 pt-4">
-                                    <button className="flex items-center gap-4 px-10 py-6 bg-white dark:bg-[#131022] rounded-[1.75rem] shadow-xl shadow-[#13082a]/5 border border-slate-100 dark:border-white/5 hover:scale-105 hover:border-[#6143f4]/30 transition-all active:scale-95 group">
-                                        <div className="size-10 rounded-xl bg-[#009cde]/15 flex items-center justify-center text-[#009cde] group-hover:rotate-12 transition-transform">
+                                    <button className="flex items-center gap-4 px-10 py-6 bg-surface rounded-[1.75rem] shadow-xl shadow-[#13082a]/5 border border-slate-100 dark:border-stroke/50 hover:scale-105 hover:border-primary/30 transition-all active:scale-95 group">
+                                        <div className="size-10 rounded-xl bg-secondary/15 flex items-center justify-center text-secondary group-hover:rotate-12 transition-transform">
                                             <MessagesSquare size={20} strokeWidth={2.5} />
                                         </div>
-                                        <span className="text-[11px] font-black uppercase tracking-[0.25em] text-[#13082a] dark:text-white leading-none italic">View Community Forum</span>
+                                        <span className="text-[11px] font-black uppercase tracking-[0.25em] text-text-primary dark:text-text-primary leading-none italic">View Community Forum</span>
                                     </button>
-                                    <button className="flex items-center gap-4 px-10 py-6 bg-white dark:bg-[#131022] rounded-[1.75rem] shadow-xl shadow-[#13082a]/5 border border-slate-100 dark:border-white/5 hover:scale-105 hover:border-[#6143f4]/30 transition-all active:scale-95 group">
-                                        <div className="size-10 rounded-xl bg-[#6143f4]/15 flex items-center justify-center text-[#6143f4] group-hover:rotate-12 transition-transform">
+                                    <button className="flex items-center gap-4 px-10 py-6 bg-surface rounded-[1.75rem] shadow-xl shadow-[#13082a]/5 border border-slate-100 dark:border-stroke/50 hover:scale-105 hover:border-primary/30 transition-all active:scale-95 group">
+                                        <div className="size-10 rounded-xl bg-primary/15 flex items-center justify-center text-primary group-hover:rotate-12 transition-transform">
                                             <BookOpen size={20} strokeWidth={2.5} />
                                         </div>
-                                        <span className="text-[11px] font-black uppercase tracking-[0.25em] text-[#13082a] dark:text-white leading-none italic">Read Documentation</span>
+                                        <span className="text-[11px] font-black uppercase tracking-[0.25em] text-text-primary dark:text-text-primary leading-none italic">Read Documentation</span>
                                     </button>
                                 </div>
                             </div>
@@ -143,19 +143,19 @@ const HelpCenterHome = () => {
                         {/* Category Grid Section */}
                         <section className="px-10 lg:px-20 py-24 bg-white/5 backdrop-blur-3xl">
                             <div className="max-w-7xl mx-auto">
-                                <h3 className="text-3xl font-black text-[#13082a] dark:text-white uppercase tracking-tighter italic leading-none mb-16">Browse by Category</h3>
+                                <h3 className="text-3xl font-black text-text-primary dark:text-text-primary uppercase tracking-tighter italic leading-none mb-16">Browse by Category</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-8">
                                     {categories.map(({ icon: CatIcon, ...cat }, idx) => (
                                         <motion.div
                                             key={idx}
                                             whileHover={{ y: -8 }}
-                                            className="bg-white dark:bg-[#131022] p-10 rounded-[2.5rem] shadow-[0_20px_40px_-20px_rgba(19,8,42,0.05)] border border-slate-100 dark:border-white/5 hover:border-[#6143f4]/20 transition-all cursor-pointer group flex flex-col items-center text-center"
+                                            className="bg-surface p-10 rounded-[2.5rem] shadow-[0_20px_40px_-20px_rgba(19,8,42,0.05)] border border-slate-100 dark:border-stroke/50 hover:border-primary/20 transition-all cursor-pointer group flex flex-col items-center text-center"
                                         >
                                             <div className={`size-16 rounded-[1.5rem] flex items-center justify-center mb-8 shadow-inner group-hover:scale-110 group-hover:rotate-12 transition-transform ${cat.bg} ${cat.color}`}>
                                                 <CatIcon size={32} strokeWidth={2.5} />
                                             </div>
-                                            <h4 className="font-black text-sm uppercase tracking-tight text-[#13082a] dark:text-white mb-2 leading-tight">{cat.title}</h4>
-                                            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-tight leading-normal italic opacity-70">{cat.desc}</p>
+                                            <h4 className="font-black text-sm uppercase tracking-tight text-text-primary dark:text-text-primary mb-2 leading-tight">{cat.title}</h4>
+                                            <p className="text-[10px] text-slate-500 dark:text-text-muted font-bold uppercase tracking-tight leading-normal italic opacity-70">{cat.desc}</p>
                                         </motion.div>
                                     ))}
                                 </div>
@@ -163,14 +163,14 @@ const HelpCenterHome = () => {
                         </section>
 
                         {/* Featured Articles Section */}
-                        <section className="px-10 lg:px-20 py-32 overflow-hidden bg-[#f6f5f8] dark:bg-[#0B0819]">
+                        <section className="px-10 lg:px-20 py-32 overflow-hidden bg-background dark:bg-background">
                             <div className="max-w-7xl mx-auto">
                                 <div className="flex items-center justify-between mb-16">
                                     <div className="space-y-1">
-                                        <h3 className="text-3xl font-black text-[#13082a] dark:text-white uppercase tracking-tighter italic leading-none">Featured Articles</h3>
-                                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] italic">Hand-picked guides for advanced intelligence</p>
+                                        <h3 className="text-3xl font-black text-text-primary dark:text-text-primary uppercase tracking-tighter italic leading-none">Featured Articles</h3>
+                                        <p className="text-[10px] text-text-muted font-black uppercase tracking-[0.2em] italic">Hand-picked guides for advanced intelligence</p>
                                     </div>
-                                    <button className="text-[#6143f4] font-black text-[11px] uppercase tracking-[0.2em] italic flex items-center gap-3 group hover:scale-105 transition-transform">
+                                    <button className="text-primary font-black text-[11px] uppercase tracking-[0.2em] italic flex items-center gap-3 group hover:scale-105 transition-transform">
                                         View all articles
                                         <ArrowRight size={16} className="group-hover:translate-x-1.5 transition-transform" />
                                     </button>
@@ -178,15 +178,15 @@ const HelpCenterHome = () => {
 
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
                                     {featuredArticles.map((article, idx) => (
-                                        <div key={idx} className="bg-white dark:bg-[#131022] rounded-[3rem] p-10 shadow-[0_40px_80px_-20px_rgba(19,8,42,0.05)] border border-white dark:border-white/5 hover:shadow-2xl hover:shadow-[#6143f4]/10 transition-all cursor-pointer group relative overflow-hidden">
+                                        <div key={idx} className="bg-surface rounded-[3rem] p-10 shadow-[0_40px_80px_-20px_rgba(19,8,42,0.05)] border border-white dark:border-stroke/50 hover:shadow-2xl hover:shadow-primary/10 transition-all cursor-pointer group relative overflow-hidden">
                                             <div className="relative h-56 w-full rounded-[2rem] overflow-hidden mb-8 shadow-xl">
                                                 <img alt={article.title} className="size-full object-cover transition-transform duration-700 group-hover:scale-110 origin-center" src={article.img} />
                                                 <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
                                             </div>
                                             <div className="space-y-4">
                                                 <span className={`text-[9px] font-black uppercase tracking-[0.3em] italic ${article.tagColor}`}>{article.tag}</span>
-                                                <h5 className="text-xl font-black uppercase tracking-tight text-[#13082a] dark:text-white leading-[1.2] group-hover:text-[#6143f4] transition-colors">{article.title}</h5>
-                                                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-tight leading-relaxed italic opacity-70 line-clamp-3">{article.desc}</p>
+                                                <h5 className="text-xl font-black uppercase tracking-tight text-text-primary dark:text-text-primary leading-[1.2] group-hover:text-primary transition-colors">{article.title}</h5>
+                                                <p className="text-[11px] text-slate-500 dark:text-text-muted font-bold uppercase tracking-tight leading-relaxed italic opacity-70 line-clamp-3">{article.desc}</p>
                                             </div>
                                         </div>
                                     ))}
@@ -196,7 +196,7 @@ const HelpCenterHome = () => {
 
                         {/* Still Need Help Section */}
                         <section className="px-10 lg:px-20 py-24 pb-48">
-                            <div className="bg-gradient-to-br from-[#6143f4] to-[#009cde] rounded-[3.5rem] p-20 text-center text-white relative overflow-hidden shadow-2xl shadow-[#6143f4]/40 group">
+                            <div className="bg-gradient-to-br from-primary to-secondary rounded-[3.5rem] p-20 text-center text-text-primary relative overflow-hidden shadow-2xl shadow-primary/40 group">
                                 <div className="absolute top-0 right-0 w-[40rem] h-[40rem] bg-white/10 rounded-full blur-[140px] -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform duration-1000"></div>
                                 <div className="absolute bottom-0 left-0 w-[30rem] h-[30rem] bg-black/10 rounded-full blur-[120px] translate-y-1/2 -translate-x-1/2 group-hover:scale-110 transition-transform duration-1000"></div>
 
@@ -206,11 +206,11 @@ const HelpCenterHome = () => {
                                         <p className="text-xl opacity-90 font-bold uppercase tracking-tight max-w-2xl mx-auto italic leading-relaxed">Our expert support team is available 24/7 to help you with any technical or medical platform queries.</p>
                                     </div>
                                     <div className="flex flex-col sm:flex-row items-center justify-center gap-6 pt-4">
-                                        <button className="bg-white text-[#6143f4] px-12 py-6 rounded-[1.75rem] font-black text-[11px] uppercase tracking-[0.25em] shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-4 italic group/sup">
+                                        <button className="bg-white text-primary px-12 py-6 rounded-[1.75rem] font-black text-[11px] uppercase tracking-[0.25em] shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-4 italic group/sup">
                                             <Headphones size={22} className="group-hover/sup:rotate-12 transition-transform" />
                                             Contact Support
                                         </button>
-                                        <button className="bg-white/10 backdrop-blur-3xl border-2 border-white/30 text-white px-12 py-6 rounded-[1.75rem] font-black text-[11px] uppercase tracking-[0.25em] hover:bg-white/20 transition-all active:scale-95 flex items-center gap-4 italic group/chat">
+                                        <button className="bg-white/10 backdrop-blur-3xl border-2 border-white/30 text-text-primary px-12 py-6 rounded-[1.75rem] font-black text-[11px] uppercase tracking-[0.25em] hover:bg-white/20 transition-all active:scale-95 flex items-center gap-4 italic group/chat">
                                             <MessageSquare size={22} className="group-hover/chat:rotate-12 transition-transform" />
                                             Start Live Chat
                                         </button>
@@ -220,18 +220,18 @@ const HelpCenterHome = () => {
                         </section>
 
                         {/* Standardized Branding Footer */}
-                        <footer className="px-12 py-16 border-t border-[#6143f4]/10 flex flex-col md:flex-row items-center justify-between gap-10 bg-white/5 backdrop-blur-xl">
+                        <footer className="px-12 py-16 border-t border-primary/10 flex flex-col md:flex-row items-center justify-between gap-10 bg-white/5 backdrop-blur-xl">
                             <div className="flex items-center gap-4 opacity-40 grayscale group-hover:grayscale-0 transition-all">
-                                <div className="size-8 bg-slate-400 rounded-lg flex items-center justify-center text-white">
+                                <div className="size-8 bg-slate-400 rounded-lg flex items-center justify-center text-text-primary">
                                     <Waves size={16} strokeWidth={3} />
                                 </div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-[#13082a] dark:text-white italic">© 2026 ArogyaAI Health Intelligence Labs.</p>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-text-primary dark:text-text-primary italic">© 2026 ArogyaAI Health Intelligence Labs.</p>
                             </div>
-                            <div className="flex flex-wrap justify-center gap-10 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-                                <button className="hover:text-[#6143f4] transition-colors italic">Privacy Policy</button>
-                                <button className="hover:text-[#6143f4] transition-colors italic">Terms of Service</button>
-                                <button className="hover:text-[#6143f4] transition-colors italic">Cookie Settings</button>
-                                <button className="hover:text-[#6143f4] transition-colors italic">Trust Center</button>
+                            <div className="flex flex-wrap justify-center gap-10 text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">
+                                <button className="hover:text-primary transition-colors italic">Privacy Policy</button>
+                                <button className="hover:text-primary transition-colors italic">Terms of Service</button>
+                                <button className="hover:text-primary transition-colors italic">Cookie Settings</button>
+                                <button className="hover:text-primary transition-colors italic">Trust Center</button>
                             </div>
                         </footer>
                     </div>
@@ -256,4 +256,5 @@ const HelpCenterHome = () => {
 };
 
 export default HelpCenterHome;
+
 

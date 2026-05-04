@@ -1,77 +1,34 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Activity,
     AlertTriangle,
-    Brain,
-    Dumbbell,
+    CalendarCheck,
+    ClipboardList,
+    HeartPulse,
     Moon,
     RefreshCcw,
-    Sparkles,
+    ShieldAlert,
+    Stethoscope,
     Utensils,
-    Wind,
 } from 'lucide-react';
 import useHealthStore from '../store/healthStore';
 import useDashboardStore from '../store/dashboardStore';
-import ClinicalInsightCard from '../components/clinical/ClinicalInsightCard';
 import SmartLoadingOverlay from '../components/ui/SmartLoadingOverlay';
 import useSmartFetchOverlay from '../hooks/useSmartFetchOverlay';
+import RecommendationSection, { ActionItem, PriorityTag } from '../components/recommendations/RecommendationSection';
+import ActionTimeline from '../components/recommendations/ActionTimeline';
+import MonitoringCard from '../components/recommendations/MonitoringCard';
 
-const CATEGORY_CONFIG = {
-    lifestyle: {
-        title: 'Lifestyle Improvements',
-        icon: Sparkles,
-        iconClass: 'text-[#6143f4]',
-        panelClass: 'border-[#6143f4]/10 bg-white dark:bg-[#1a1433]',
-    },
-    diet: {
-        title: 'Dietary Optimization',
-        icon: Utensils,
-        iconClass: 'text-[#009cde]',
-        panelClass: 'border-[#009cde]/10 bg-white dark:bg-[#1a1433]',
-    },
-    fitness: {
-        title: 'Fitness & Activity',
-        icon: Dumbbell,
-        iconClass: 'text-orange-500',
-        panelClass: 'border-orange-500/10 bg-white dark:bg-[#1a1433]',
-    },
-    sleep: {
-        title: 'Sleep Optimization',
-        icon: Moon,
-        iconClass: 'text-indigo-500',
-        panelClass: 'border-indigo-500/10 bg-white dark:bg-[#1a1433]',
-    },
-    environment: {
-        title: 'Environmental Risk',
-        icon: Wind,
-        iconClass: 'text-emerald-500',
-        panelClass: 'border-emerald-500/10 bg-white dark:bg-[#1a1433]',
-    },
-};
-
-const PRIORITY_STYLES = {
-    high: 'bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-300 ring-1 ring-red-500/20',
-    medium: 'bg-amber-500/10 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300 ring-1 ring-amber-500/20',
-    low: 'bg-slate-200 text-slate-700 dark:bg-slate-700/60 dark:text-slate-200 ring-1 ring-slate-300/60 dark:ring-slate-600',
-};
-
-const formatMetricValue = (metric) => {
-    const value = Number(metric?.value);
-    if (!Number.isFinite(value)) {
-        return '--';
-    }
-
-    const precision = Number.isFinite(Number(metric?.precision)) ? Number(metric.precision) : 0;
-    const fixed = value.toFixed(precision);
-    return fixed.endsWith('.0') ? fixed.slice(0, -2) : fixed;
+const RISK_CLASSES = {
+    HIGH: 'border-red-200 bg-red-50 text-red-700 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-200',
+    MEDIUM: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-200',
+    LOW: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-200',
 };
 
 const formatUpdatedAt = (value) => {
-    if (!value) return 'Waiting for new data';
+    if (!value) return 'Waiting for data';
     const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-        return 'Waiting for new data';
-    }
+    if (Number.isNaN(date.getTime())) return 'Waiting for data';
 
     return date.toLocaleString(undefined, {
         month: 'short',
@@ -81,65 +38,115 @@ const formatUpdatedAt = (value) => {
     });
 };
 
-const formatImpact = (value) => {
+const formatConfidence = (value) => {
     const numeric = Number(value);
-    if (!Number.isFinite(numeric)) {
-        return '0.000';
-    }
+    if (!Number.isFinite(numeric)) return '--';
+    return `${Math.round((numeric > 1 ? numeric / 100 : numeric) * 100)}%`;
+};
 
-    return `${numeric >= 0 ? '+' : '-'}${Math.abs(numeric).toFixed(3)}`;
+const metricLabel = (metric) => {
+    if (!metric) return '--';
+    if (typeof metric.value === 'string' && metric.value.trim()) {
+        return `${metric.value}${metric.unit ? ` ${metric.unit}` : ''}`;
+    }
+    const value = Number(metric.value);
+    if (!Number.isFinite(value)) return '--';
+    const formatted = value.toFixed(Number(metric.precision ?? 0));
+    return `${formatted.endsWith('.0') ? formatted.slice(0, -2) : formatted}${metric.unit ? ` ${metric.unit}` : ''}`;
 };
 
 const RecommendationSkeleton = () => (
-    <div className="space-y-10">
-        <div className="rounded-[28px] border border-slate-200/80 bg-white/90 p-8 shadow-sm dark:border-white/5 dark:bg-[#1a1433]">
-            <div className="h-4 w-32 animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
-            <div className="mt-5 h-12 w-3/4 animate-pulse rounded-2xl bg-slate-200 dark:bg-white/10" />
+    <div className="space-y-6">
+        <div className="rounded-2xl border border-slate-200 bg-white p-8 dark:border-stroke dark:bg-[#171923]">
+            <div className="h-4 w-36 animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
+            <div className="mt-5 h-10 w-3/4 animate-pulse rounded-xl bg-slate-200 dark:bg-white/10" />
             <div className="mt-4 h-4 w-full animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
             <div className="mt-3 h-4 w-5/6 animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
         </div>
-
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            {[0, 1, 2].map((index) => (
-                <div
-                    key={index}
-                    className="rounded-3xl border border-slate-200/80 bg-white/90 p-6 shadow-sm dark:border-white/5 dark:bg-[#1a1433]"
-                >
-                    <div className="h-4 w-20 animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
-                    <div className="mt-4 h-10 w-24 animate-pulse rounded-2xl bg-slate-200 dark:bg-white/10" />
-                    <div className="mt-4 h-3 w-28 animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
+        {[0, 1, 2, 3].map((item) => (
+            <div key={item} className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-stroke dark:bg-[#171923]">
+                <div className="h-5 w-52 animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
+                <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div className="h-24 animate-pulse rounded-xl bg-slate-100 dark:bg-white/10" />
+                    <div className="h-24 animate-pulse rounded-xl bg-slate-100 dark:bg-white/10" />
                 </div>
-            ))}
-        </div>
-
-        <div className="grid grid-cols-1 gap-8 xl:grid-cols-2">
-            {[0, 1, 2, 3].map((index) => (
-                <div
-                    key={index}
-                    className="rounded-3xl border border-slate-200/80 bg-white/90 p-6 shadow-sm dark:border-white/5 dark:bg-[#1a1433]"
-                >
-                    <div className="h-5 w-44 animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
-                    <div className="mt-6 space-y-4">
-                        {[0, 1].map((line) => (
-                            <div
-                                key={line}
-                                className="rounded-2xl border border-slate-100 bg-slate-50/70 p-5 dark:border-white/5 dark:bg-white/[0.03]"
-                            >
-                                <div className="h-4 w-32 animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
-                                <div className="mt-4 h-3 w-full animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
-                                <div className="mt-3 h-3 w-4/5 animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            ))}
-        </div>
+            </div>
+        ))}
     </div>
 );
 
+const EmptyPlan = ({ error, onRetry }) => (
+    <div className="mx-auto max-w-3xl rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm dark:border-stroke dark:bg-[#171923]">
+        <div className="mx-auto flex size-14 items-center justify-center rounded-xl bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-200">
+            <AlertTriangle size={26} />
+        </div>
+        <h2 className="mt-6 text-2xl font-black tracking-tight text-slate-950 dark:text-text-primary">No prevention plan available yet</h2>
+        <p className="mx-auto mt-3 max-w-xl text-sm font-medium leading-relaxed text-slate-600 dark:text-text-muted">
+            {error || 'Run a fresh prediction or connect recent wearable and lab data to generate a structured prevention plan.'}
+        </p>
+        <button
+            onClick={onRetry}
+            className="mt-8 inline-flex items-center gap-2 rounded-xl bg-background px-5 py-3 text-sm font-black uppercase tracking-[0.14em] text-text-primary transition hover:bg-card dark:bg-white dark:text-slate-950"
+        >
+            <RefreshCcw size={16} />
+            Refresh
+        </button>
+    </div>
+);
+
+const PlanTabs = ({ plans, selectedIndex, onSelect }) => {
+    if (plans.length <= 1) return null;
+
+    return (
+        <div className="flex gap-2 overflow-x-auto pb-1">
+            {plans.map((plan, index) => (
+                <button
+                    key={`${plan.conditionKey}-${index}`}
+                    type="button"
+                    onClick={() => onSelect(index)}
+                    className={`h-11 shrink-0 rounded-xl border px-4 text-sm font-black transition ${
+                        index === selectedIndex
+                            ? 'border-slate-950 bg-background text-text-primary dark:border-white dark:bg-white dark:text-slate-950'
+                            : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-stroke dark:bg-white/[0.03] dark:text-text-primary'
+                    }`}
+                >
+                    {plan.condition}
+                </button>
+            ))}
+        </div>
+    );
+};
+
+const SourceStrip = ({ plan }) => {
+    const sources = plan.sources ?? [];
+    const generatedFrom = plan.generatedFrom ?? {};
+    const dataSources = [
+        generatedFrom.ml ? 'ML risk' : null,
+        generatedFrom.wearables ? 'Wearables' : null,
+        generatedFrom.labs ? 'Labs' : null,
+        generatedFrom.symptoms ? 'Symptoms' : null,
+    ].filter(Boolean);
+
+    return (
+        <div className="flex flex-wrap gap-2">
+            {dataSources.map((item) => (
+                <span key={item} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 dark:border-stroke dark:bg-white/[0.04] dark:text-text-secondary">
+                    {item}
+                </span>
+            ))}
+            {sources.slice(0, 3).map((source, index) => (
+                <span key={`${source.title}-${index}`} className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700 dark:border-blue-500/25 dark:bg-blue-500/10 dark:text-blue-200">
+                    {source.title || source.source || 'Medical reference'}
+                </span>
+            ))}
+        </div>
+    );
+};
+
 const PreventiveRecommendations = () => {
     const explanation = useHealthStore((state) => state.explanation);
-    const recommendations = useHealthStore((state) => state.recommendations);
+    const recommendationPlans = useHealthStore((state) => state.recommendationPlans);
+    const recommendationPlan = useHealthStore((state) => state.recommendationPlan);
     const loading = useHealthStore((state) => state.loading);
     const error = useHealthStore((state) => state.error);
     const metrics = useHealthStore((state) => state.metrics);
@@ -153,17 +160,24 @@ const PreventiveRecommendations = () => {
     const dashboardHydrated = useDashboardStore((state) => state.hasHydratedCache);
     const predictionId = useDashboardStore((state) => state.prediction?.data?.prediction_id ?? null);
 
+    const [selectedPlanIndex, setSelectedPlanIndex] = useState(0);
     const refreshKeyRef = useRef(null);
+    const plans = useMemo(
+        () => (recommendationPlans?.length ? recommendationPlans : (recommendationPlan ? [recommendationPlan] : [])),
+        [recommendationPlan, recommendationPlans]
+    );
+    const activePlan = plans[Math.min(selectedPlanIndex, Math.max(plans.length - 1, 0))] ?? null;
+    const hasPlan = Boolean(activePlan);
     const hasExplanationSnapshot = Boolean(explanation);
-    const showSkeleton = !hasExplanationSnapshot && (loading || metricsLoading || dashboardIsFetching || !dashboardHydrated);
+    const showSkeleton = !hasExplanationSnapshot && !hasPlan && (loading || metricsLoading || dashboardIsFetching || !dashboardHydrated);
     const showRefreshOverlay = useSmartFetchOverlay(
         loading || metricsLoading || dashboardIsFetching,
-        hasExplanationSnapshot,
+        hasExplanationSnapshot || hasPlan,
         { exitDelayMs: 200 }
     );
 
     useEffect(() => {
-        const silent = hasExplanationSnapshot;
+        const silent = hasExplanationSnapshot || hasPlan;
         const loadPage = async () => {
             try {
                 await Promise.all([
@@ -177,17 +191,13 @@ const PreventiveRecommendations = () => {
         };
 
         void loadPage();
-    }, [fetchDashboardData, fetchHealthMetrics, fetchExplanation, hasExplanationSnapshot, predictionId]);
+    }, [fetchDashboardData, fetchHealthMetrics, fetchExplanation, hasExplanationSnapshot, hasPlan, predictionId]);
 
     useEffect(() => {
-        if (!dashboardUpdatedAt) {
-            return;
-        }
+        if (!dashboardUpdatedAt) return;
 
         const refreshKey = `${predictionId ?? 'latest'}:${dashboardUpdatedAt}`;
-        if (refreshKeyRef.current === refreshKey) {
-            return;
-        }
+        if (refreshKeyRef.current === refreshKey) return;
 
         refreshKeyRef.current = refreshKey;
         void Promise.all([
@@ -196,32 +206,20 @@ const PreventiveRecommendations = () => {
         ]);
     }, [dashboardUpdatedAt, fetchExplanation, fetchHealthMetrics, predictionId]);
 
-    const groupedRecommendations = useMemo(() => {
-        const grouped = recommendations.reduce((acc, recommendation) => {
-            const category = CATEGORY_CONFIG[recommendation.category] ? recommendation.category : 'lifestyle';
-            if (!acc[category]) {
-                acc[category] = [];
-            }
-            acc[category].push(recommendation);
-            return acc;
-        }, {});
-
-        return Object.entries(CATEGORY_CONFIG)
-            .map(([key, config]) => ({
-                key,
-                config,
-                items: grouped[key] ?? [],
-            }))
-            .filter((section) => section.items.length > 0);
-    }, [recommendations]);
+    useEffect(() => {
+        if (selectedPlanIndex >= plans.length) {
+            setSelectedPlanIndex(0);
+        }
+    }, [plans.length, selectedPlanIndex]);
 
     const metricCards = useMemo(() => metrics?.cards ?? [], [metrics]);
-    const factors = useMemo(() => explanation?.factors ?? [], [explanation]);
-    const clinicalCards = useMemo(() => explanation?.clinicalCards ?? [], [explanation]);
-    const strongestFactorMagnitude = useMemo(
-        () => Math.max(...factors.map((factor) => Math.abs(Number(factor.impact) || 0)), 0.001),
-        [factors]
-    );
+    const snapshotMetrics = useMemo(() => {
+        const wanted = ['steps', 'heart_rate', 'sleep', 'blood_pressure'];
+        return wanted
+            .map((key) => metricCards.find((metric) => metric.key === key))
+            .filter(Boolean)
+            .slice(0, 4);
+    }, [metricCards]);
 
     const handleRetry = () => {
         void Promise.all([
@@ -233,7 +231,7 @@ const PreventiveRecommendations = () => {
 
     if (showSkeleton) {
         return (
-            <div className="min-h-screen bg-[#f6f5f8] px-6 py-8 text-[#13082a] dark:bg-[#131022] dark:text-slate-100 lg:px-8">
+            <div className="min-h-screen bg-slate-100 px-6 py-8 text-slate-950 dark:bg-[#10131a] dark:text-slate-100 lg:px-8">
                 <div className="mx-auto max-w-7xl">
                     <RecommendationSkeleton />
                 </div>
@@ -241,259 +239,190 @@ const PreventiveRecommendations = () => {
         );
     }
 
-    if (!hasExplanationSnapshot && error) {
-        return (
-            <div className="min-h-screen bg-[#f6f5f8] px-6 py-8 text-[#13082a] dark:bg-[#131022] dark:text-slate-100 lg:px-8">
-                <div className="mx-auto flex max-w-3xl flex-col items-center rounded-[32px] border border-red-200 bg-white p-10 text-center shadow-sm dark:border-red-500/20 dark:bg-[#1a1433]">
-                    <div className="flex size-16 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
-                        <AlertTriangle size={28} />
-                    </div>
-                    <h2 className="mt-6 text-3xl font-black tracking-tight">Unable to load personalized recommendations</h2>
-                    <p className="mt-3 max-w-xl text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-400">
-                        {error}
-                    </p>
-                    <button
-                        onClick={handleRetry}
-                        className="mt-8 inline-flex items-center gap-2 rounded-2xl bg-[#6143f4] px-5 py-3 text-sm font-black uppercase tracking-[0.2em] text-white transition-transform hover:scale-[1.02]"
-                    >
-                        <RefreshCcw size={16} />
-                        Retry
-                    </button>
-                </div>
-            </div>
-        );
-    }
-
     return (
-        <div className="relative min-h-screen bg-[#f6f5f8] text-[#13082a] dark:bg-[#131022] dark:text-slate-100">
-            {showRefreshOverlay ? <SmartLoadingOverlay label="Refreshing recommendations" /> : null}
+        <div className="relative min-h-screen bg-slate-100 text-slate-950 dark:bg-[#10131a] dark:text-slate-100">
+            {showRefreshOverlay ? <SmartLoadingOverlay label="Refreshing prevention plan" /> : null}
 
             <div className="mx-auto max-w-7xl px-6 py-8 lg:px-8">
-                <div className="space-y-10">
-                    <section className="relative overflow-hidden rounded-[32px] border border-white/60 bg-gradient-to-br from-[#13082a] via-[#1a1433] to-[#0f172a] p-8 text-white shadow-2xl shadow-[#13082a]/10 lg:p-10">
-                        <div className="relative z-10 flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
-                            <div className="max-w-4xl">
-                                <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.2em] text-white/80">
-                                    <Brain size={14} />
-                                    Live AI Output
-                                </span>
-                                <h1 className="mt-5 text-4xl font-black uppercase tracking-tight lg:text-5xl">
-                                    Personalized Health Recommendations
-                                </h1>
-                                <p className="mt-4 max-w-3xl text-base font-medium leading-relaxed text-white/75 lg:text-lg">
-                                    {explanation?.summary || 'Personalized recommendations update as new SHAP factors and health metrics arrive.'}
-                                </p>
-                            </div>
+                {!hasPlan ? (
+                    <EmptyPlan error={error} onRetry={handleRetry} />
+                ) : (
+                    <div className="space-y-6">
+                        <PlanTabs plans={plans} selectedIndex={selectedPlanIndex} onSelect={setSelectedPlanIndex} />
 
-                            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                                <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
-                                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/50">Risk Level</p>
-                                    <p className="mt-2 text-xl font-black">{explanation?.riskLevel || 'Pending'}</p>
-                                </div>
-                                <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
-                                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/50">Risk Score</p>
-                                    <p className="mt-2 text-xl font-black">
-                                        {Number.isFinite(Number(explanation?.riskPercent))
-                                            ? `${Number(explanation.riskPercent).toFixed(1)}%`
-                                            : '--'}
-                                    </p>
-                                </div>
-                                <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
-                                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/50">Last Updated</p>
-                                    <p className="mt-2 text-sm font-black uppercase tracking-[0.16em] text-white/85">
-                                        {formatUpdatedAt(metrics?.lastUpdated ?? dashboardUpdatedAt)}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="absolute -right-16 -top-16 size-72 rounded-full bg-[#6143f4]/20 blur-3xl" />
-                        <div className="absolute -bottom-24 left-1/3 size-72 rounded-full bg-[#009cde]/20 blur-3xl" />
-                    </section>
-
-                    {error ? (
-                        <div className="flex flex-col gap-4 rounded-3xl border border-amber-300/70 bg-amber-50 p-5 text-sm font-medium text-amber-900 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="flex items-start gap-3">
-                                <AlertTriangle className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-300" size={18} />
-                                <p>{error}</p>
-                            </div>
-                            <button
-                                onClick={handleRetry}
-                                className="inline-flex items-center gap-2 rounded-2xl bg-amber-500 px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-white"
-                            >
-                                <RefreshCcw size={14} />
-                                Retry
-                            </button>
-                        </div>
-                    ) : null}
-
-                    {clinicalCards.length > 0 ? (
-                        <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-                            {clinicalCards.slice(0, 4).map((card, index) => (
-                                <ClinicalInsightCard
-                                    key={`${card.condition}-${card.icdCode}-${index}`}
-                                    card={card}
-                                    fallback={{
-                                        summary: explanation?.summary,
-                                        recommendations,
-                                        sources: explanation?.sources,
-                                    }}
-                                />
-                            ))}
-                        </section>
-                    ) : null}
-
-                    <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                        {metricCards.map((metric) => (
-                            <div
-                                key={metric.key}
-                                className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm dark:border-white/5 dark:bg-[#1a1433]"
-                            >
-                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
-                                    {metric.label}
-                                </p>
-                                <div className="mt-4 flex items-end gap-2">
-                                    <span className="text-3xl font-black text-[#13082a] dark:text-white">
-                                        {formatMetricValue(metric)}
-                                    </span>
-                                    <span className="pb-1 text-sm font-bold text-slate-400 dark:text-slate-500">
-                                        {metric.unit || ''}
-                                    </span>
-                                </div>
-                                <p className="mt-4 text-sm font-medium text-slate-500 dark:text-slate-400">
-                                    {metric.caption || metric.emptyMessage || 'Waiting for new health data.'}
-                                </p>
-                            </div>
-                        ))}
-                    </section>
-
-                    <section className="grid grid-cols-1 gap-8 xl:grid-cols-2">
-                        {groupedRecommendations.length > 0 ? (
-                            groupedRecommendations.map(({ key, config, items }) => {
-                                const Icon = config.icon;
-                                return (
-                                    <div
-                                        key={key}
-                                        className={`rounded-[28px] border p-6 shadow-sm ${config.panelClass}`}
-                                    >
-                                        <div className="mb-6 flex items-center gap-3">
-                                            <div className={`flex size-11 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/5 ${config.iconClass}`}>
-                                                <Icon size={22} />
-                                            </div>
-                                            <h2 className="text-xl font-black uppercase tracking-tight">{config.title}</h2>
-                                        </div>
-
-                                        <div className="space-y-4">
-                                            {items.map((recommendation) => (
-                                                <article
-                                                    key={recommendation.id}
-                                                    className="rounded-2xl border border-slate-100 bg-slate-50/80 p-5 transition-transform duration-300 hover:-translate-y-1 hover:shadow-lg dark:border-white/5 dark:bg-white/[0.03]"
-                                                >
-                                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                                        <div>
-                                                            <h3 className="text-lg font-black tracking-tight text-[#13082a] dark:text-white">
-                                                                {recommendation.title}
-                                                            </h3>
-                                                            <p className="mt-3 text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-400">
-                                                                {recommendation.description}
-                                                            </p>
-                                                        </div>
-                                                        <span
-                                                            className={`inline-flex w-fit items-center rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] ${PRIORITY_STYLES[recommendation.priority] || PRIORITY_STYLES.medium}`}
-                                                        >
-                                                            {recommendation.priority}
-                                                        </span>
-                                                    </div>
-                                                </article>
-                                            ))}
-                                        </div>
+                        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-stroke dark:bg-[#171923] lg:p-8">
+                            <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+                                <div className="max-w-4xl">
+                                    <div className="flex flex-wrap items-center gap-3">
+                                        <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-black uppercase tracking-[0.14em] text-slate-600 dark:border-stroke dark:bg-white/[0.04] dark:text-text-secondary">
+                                            <HeartPulse size={14} />
+                                            Prevention plan
+                                        </span>
+                                        <span className={`rounded-full border px-3 py-1.5 text-xs font-black uppercase tracking-[0.14em] ${RISK_CLASSES[activePlan.riskLevel] || RISK_CLASSES.MEDIUM}`}>
+                                            {activePlan.riskLevel} risk
+                                        </span>
+                                        {activePlan.badgeLabel ? (
+                                            <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-black uppercase tracking-[0.14em] text-sky-700 dark:border-sky-500/25 dark:bg-sky-500/10 dark:text-sky-200">
+                                                {activePlan.badgeLabel}
+                                            </span>
+                                        ) : null}
+                                        <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-black uppercase tracking-[0.14em] text-slate-600 dark:border-stroke dark:bg-white/[0.04] dark:text-text-secondary">
+                                            Confidence {formatConfidence(activePlan.confidence)}
+                                        </span>
                                     </div>
-                                );
-                            })
-                        ) : (
-                            <div className="xl:col-span-2 rounded-[28px] border border-dashed border-slate-300 bg-white/90 p-10 text-center shadow-sm dark:border-slate-700 dark:bg-[#1a1433]">
-                                <div className="mx-auto flex size-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-500 dark:bg-white/5 dark:text-slate-300">
-                                    <Activity size={28} />
-                                </div>
-                                <h2 className="mt-6 text-2xl font-black tracking-tight">No recommendations yet</h2>
-                                <p className="mx-auto mt-3 max-w-2xl text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">
-                                    No personalized recommendations available yet. Connect more data sources.
-                                </p>
-                            </div>
-                        )}
-                    </section>
-
-                    <section className="rounded-[28px] border border-slate-200/80 bg-white p-8 shadow-sm dark:border-white/5 dark:bg-[#1a1433]">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                            <div>
-                                <span className="inline-flex items-center gap-2 rounded-full bg-[#6143f4]/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.2em] text-[#6143f4]">
-                                    <Brain size={14} />
-                                    SHAP Drivers
-                                </span>
-                                <h2 className="mt-4 text-2xl font-black tracking-tight">Why the model generated these recommendations</h2>
-                                <p className="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
-                                    These live factors come from the latest explanation payload and update whenever the backend prediction changes.
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="mt-8 space-y-5">
-                            {factors.length > 0 ? (
-                                factors.map((factor) => {
-                                    const numericImpact = Number(factor.impact) || 0;
-                                    const width = `${Math.max(
-                                        8,
-                                        Math.round((Math.abs(numericImpact) / strongestFactorMagnitude) * 100)
-                                    )}%`;
-                                    const increasingRisk = numericImpact >= 0;
-
-                                    return (
-                                        <div key={`${factor.featureName}-${factor.title}`} className="space-y-2">
-                                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                                <div>
-                                                    <p className="font-black text-[#13082a] dark:text-white">{factor.title}</p>
-                                                    {factor.description ? (
-                                                        <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
-                                                            {factor.description}
-                                                        </p>
-                                                    ) : null}
-                                                </div>
-                                                <span
-                                                    className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] ${
-                                                        increasingRisk
-                                                            ? 'bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-300'
-                                                            : 'bg-emerald-500/10 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
-                                                    }`}
-                                                >
-                                                    {increasingRisk ? 'Raises Risk' : 'Lowers Risk'}
-                                                    {formatImpact(numericImpact)}
-                                                </span>
-                                            </div>
-
-                                            <div className="relative h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                                                <div
-                                                    className={`absolute top-0 h-full rounded-full ${
-                                                        increasingRisk ? 'left-0 bg-red-500' : 'right-0 bg-emerald-500'
-                                                    }`}
-                                                    style={{ width }}
-                                                />
-                                            </div>
-                                        </div>
-                                    );
-                                })
-                            ) : (
-                                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 p-6 text-center dark:border-slate-700 dark:bg-white/[0.03]">
-                                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-                                        SHAP factor data has not arrived yet. The page will refresh automatically once the prediction service publishes a new explanation.
+                                    <h1 className="mt-5 text-3xl font-black tracking-tight text-slate-950 dark:text-text-primary lg:text-5xl">
+                                        {activePlan.condition}
+                                    </h1>
+                                    <p className="mt-4 max-w-3xl text-base font-semibold leading-relaxed text-slate-600 dark:text-text-secondary">
+                                        {activePlan.summary}
                                     </p>
                                 </div>
-                            )}
-                        </div>
-                    </section>
-                </div>
+
+                                <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-4 xl:w-[420px] xl:grid-cols-2">
+                                    {snapshotMetrics.map((metric) => (
+                                        <div key={metric.key} className="min-h-[92px] rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-stroke dark:bg-white/[0.03]">
+                                            <p className="truncate text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 dark:text-text-muted">{metric.label}</p>
+                                            <p className="mt-3 text-lg font-black text-slate-950 dark:text-text-primary">{metricLabel(metric)}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="mt-6 flex flex-col gap-4 border-t border-slate-200 pt-5 dark:border-stroke lg:flex-row lg:items-center lg:justify-between">
+                                <SourceStrip plan={activePlan} />
+                                <p className="text-xs font-black uppercase tracking-[0.14em] text-text-muted">
+                                    Updated {formatUpdatedAt(metrics?.lastUpdated ?? dashboardUpdatedAt)}
+                                </p>
+                            </div>
+                        </section>
+
+                        {error ? (
+                            <div className="flex flex-col gap-4 rounded-2xl border border-amber-300/70 bg-amber-50 p-5 text-sm font-semibold text-amber-900 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="flex items-start gap-3">
+                                    <AlertTriangle className="mt-0.5 shrink-0" size={18} />
+                                    <p>{error}</p>
+                                </div>
+                                <button
+                                    onClick={handleRetry}
+                                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 text-xs font-black uppercase tracking-[0.14em] text-text-primary"
+                                >
+                                    <RefreshCcw size={14} />
+                                    Retry
+                                </button>
+                            </div>
+                        ) : null}
+
+                        <RecommendationSection title="Immediate precautions" icon={ShieldAlert} tone="red">
+                            <ul className="space-y-3">
+                                {activePlan.precautions.map((item) => (
+                                    <ActionItem key={item.id} item={item} />
+                                ))}
+                            </ul>
+                        </RecommendationSection>
+
+                        <RecommendationSection title="Lifestyle plan" icon={Utensils} tone="emerald">
+                            <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+                                {[
+                                    ['Diet', activePlan.lifestyle.diet, Utensils],
+                                    ['Activity', activePlan.lifestyle.activity, Activity],
+                                    ['Sleep', activePlan.lifestyle.sleep, Moon],
+                                ].map(([title, items, Icon]) => (
+                                    <div key={title} className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-stroke dark:bg-white/[0.04]">
+                                        <div className="flex items-center gap-3">
+                                            <span className="flex size-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-100">
+                                                <Icon size={20} />
+                                            </span>
+                                            <h3 className="text-base font-black text-slate-950 dark:text-text-primary">{title}</h3>
+                                        </div>
+                                        <ul className="mt-5 space-y-3">
+                                            {items.map((item) => (
+                                                <ActionItem key={item.id} item={item} />
+                                            ))}
+                                        </ul>
+                                    </div>
+                                ))}
+                            </div>
+                        </RecommendationSection>
+
+                        <RecommendationSection title="Clinical actions" icon={Stethoscope} tone="blue">
+                            <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+                                <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-stroke dark:bg-white/[0.04]">
+                                    <div className="flex items-center gap-3">
+                                        <ClipboardList size={20} />
+                                        <h3 className="text-base font-black text-slate-950 dark:text-text-primary">Tests</h3>
+                                    </div>
+                                    <ul className="mt-5 space-y-3">
+                                        {activePlan.clinicalActions.tests.map((item) => (
+                                            <ActionItem key={item.id} item={item} />
+                                        ))}
+                                    </ul>
+                                </div>
+
+                                <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-stroke dark:bg-white/[0.04]">
+                                    <div className="flex items-center gap-3">
+                                        <CalendarCheck size={20} />
+                                        <h3 className="text-base font-black text-slate-950 dark:text-text-primary">Doctor advice</h3>
+                                    </div>
+                                    <div className="mt-5">
+                                        {activePlan.clinicalActions.doctorVisit ? (
+                                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-stroke dark:bg-background/20">
+                                                <div className="mb-3">
+                                                    <PriorityTag priority={activePlan.clinicalActions.doctorVisit.priority} />
+                                                </div>
+                                                <p className="text-sm font-semibold leading-relaxed text-slate-800 dark:text-slate-100">
+                                                    {activePlan.clinicalActions.doctorVisit.text}
+                                                </p>
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                </div>
+
+                                <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-stroke dark:bg-white/[0.04]">
+                                    <div className="flex items-center gap-3">
+                                        <ShieldAlert size={20} />
+                                        <h3 className="text-base font-black text-slate-950 dark:text-text-primary">Warning signs</h3>
+                                    </div>
+                                    <ul className="mt-5 space-y-3">
+                                        {activePlan.clinicalActions.warningSigns.map((item) => (
+                                            <ActionItem key={item.id} item={item} />
+                                        ))}
+                                    </ul>
+                                </div>
+                            </div>
+                        </RecommendationSection>
+
+                        <RecommendationSection title="Action plan" icon={CalendarCheck} tone="amber">
+                            <ActionTimeline daily={activePlan.actionPlan.daily} weekly={activePlan.actionPlan.weekly} />
+                        </RecommendationSection>
+
+                        <RecommendationSection title="Monitoring" icon={HeartPulse} tone="slate">
+                            <MonitoringCard monitoring={activePlan.monitoring} />
+                        </RecommendationSection>
+
+                        {activePlan.clinicalBasis || activePlan.generatedFrom?.topDrivers?.length ? (
+                            <RecommendationSection title="Why these actions" icon={ClipboardList} tone="blue" defaultOpen={false}>
+                                {activePlan.clinicalBasis ? (
+                                    <p className="text-sm font-semibold leading-relaxed text-slate-700 dark:text-text-secondary">
+                                        {activePlan.clinicalBasis}
+                                    </p>
+                                ) : null}
+                                {activePlan.generatedFrom?.topDrivers?.length ? (
+                                    <div className="mt-4 flex flex-wrap gap-2">
+                                        {activePlan.generatedFrom.topDrivers.map((driver) => (
+                                            <span key={driver} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 dark:border-stroke dark:bg-white/[0.04] dark:text-text-secondary">
+                                                {driver}
+                                            </span>
+                                        ))}
+                                    </div>
+                                ) : null}
+                            </RecommendationSection>
+                        ) : null}
+                    </div>
+                )}
             </div>
         </div>
     );
 };
 
 export default PreventiveRecommendations;
+

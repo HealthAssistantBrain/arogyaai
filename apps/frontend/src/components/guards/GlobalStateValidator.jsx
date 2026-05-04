@@ -99,3 +99,4 @@ export default function GlobalStateValidator() {
   // This is a headless component. It only runs side-effects.
   return null;
 }
+

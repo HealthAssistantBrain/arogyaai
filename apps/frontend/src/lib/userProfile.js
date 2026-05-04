@@ -1,9 +1,9 @@
 const DEFAULT_AVATAR = `data:image/svg+xml;utf8,${encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" fill="none">
     <rect width="96" height="96" rx="24" fill="#F3F1FF"/>
-    <circle cx="48" cy="36" r="18" fill="#6143F4" fill-opacity="0.18"/>
-    <path d="M22 78c4.8-13.6 16-20.4 26-20.4S69.2 64.4 74 78" fill="#6143F4" fill-opacity="0.22"/>
-    <circle cx="48" cy="34" r="15" fill="#6143F4" fill-opacity="0.78"/>
+    <circle cx="48" cy="36" r="18" fill="var(--color-primary)" fill-opacity="0.18"/>
+    <path d="M22 78c4.8-13.6 16-20.4 26-20.4S69.2 64.4 74 78" fill="var(--color-primary)" fill-opacity="0.22"/>
+    <circle cx="48" cy="34" r="15" fill="var(--color-primary)" fill-opacity="0.78"/>
   </svg>`
 )}`;
 

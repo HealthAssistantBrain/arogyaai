@@ -22,10 +22,10 @@ import useSmartFetchOverlay from '../hooks/useSmartFetchOverlay';
 
 const FILTERS = [
     { name: 'All', apiType: null, color: 'text-slate-500', bg: 'bg-slate-500/10' },
-    { name: 'AI Insights', apiType: 'ai_insight', color: 'text-[#6143f4]', bg: 'bg-[#6143f4]/10' },
+    { name: 'AI Insights', apiType: 'ai_insight', color: 'text-primary', bg: 'bg-primary/10' },
     { name: 'Health Alerts', apiType: 'health_alert', color: 'text-red-500', bg: 'bg-red-500/10' },
     { name: 'Simulations', apiType: 'simulation', color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { name: 'Appointments', apiType: 'appointment', color: 'text-[#009cde]', bg: 'bg-[#009cde]/10' },
+    { name: 'Appointments', apiType: 'appointment', color: 'text-secondary', bg: 'bg-secondary/10' },
     { name: 'System', apiType: 'system', color: 'text-amber-500', bg: 'bg-amber-500/10' },
 ];
 
@@ -127,22 +127,22 @@ const NotificationCentre = () => {
     };
 
     return (
-        <div className="bg-[#f6f5f8] dark:bg-[#0B0819] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased text-[14px]">
+        <div className="bg-background dark:bg-background text-text-primary dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased text-[14px]">
             <div className="flex flex-1 overflow-hidden">
-                <main className="flex-1 flex flex-col h-full relative overflow-y-auto no-scrollbar bg-[#f6f5f8] dark:bg-[#0B0819]">
+                <main className="flex-1 flex flex-col h-full relative overflow-y-auto no-scrollbar bg-background dark:bg-background">
                     <div className="flex-1 p-10 lg:p-12 custom-scrollbar overflow-y-auto">
                         <div className="max-w-6xl mx-auto space-y-10 pb-16">
 
                             {/* Header Section */}
                             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                                 <div className="space-y-4">
-                                    <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">
+                                    <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.25em] text-text-muted">
                                         <span>Management</span>
                                         <ChevronRight size={12} strokeWidth={3} />
-                                        <span className="text-[#13082a] dark:text-white italic">Notification Centre</span>
+                                        <span className="text-text-primary dark:text-text-primary italic">Notification Centre</span>
                                     </div>
-                                    <h1 className="text-5xl lg:text-6xl font-black text-[#13082a] dark:text-white tracking-tighter uppercase italic leading-none">Notification Centre</h1>
-                                    <p className="text-lg text-slate-500 dark:text-slate-400 font-bold uppercase tracking-tight opacity-80 leading-snug max-w-2xl">
+                                    <h1 className="text-5xl lg:text-6xl font-black text-text-primary dark:text-text-primary tracking-tighter uppercase italic leading-none">Notification Centre</h1>
+                                    <p className="text-lg text-slate-500 dark:text-text-muted font-bold uppercase tracking-tight opacity-80 leading-snug max-w-2xl">
                                         Stay synchronized with your health intelligence ecosystem. Monitor critical alerts and predictive insights.
                                     </p>
                                 </div>
@@ -150,7 +150,7 @@ const NotificationCentre = () => {
                                     <button
                                         onClick={markAllAsRead}
                                         disabled={unreadCount === 0 || loading}
-                                        className="px-6 py-4 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-[1.25rem] text-[10px] font-black uppercase tracking-[0.25em] text-slate-500 hover:text-[#6143f4] hover:bg-[#6143f4]/5 transition-all flex items-center gap-3 shadow-sm active:scale-95 group disabled:opacity-40 disabled:cursor-not-allowed"
+                                        className="px-6 py-4 bg-surface border border-slate-200 dark:border-stroke rounded-[1.25rem] text-[10px] font-black uppercase tracking-[0.25em] text-slate-500 hover:text-primary hover:bg-primary/5 transition-all flex items-center gap-3 shadow-sm active:scale-95 group disabled:opacity-40 disabled:cursor-not-allowed"
                                     >
                                         <CheckCheck size={18} className="group-hover:scale-110 transition-transform" />
                                         Mark all as read
@@ -165,13 +165,13 @@ const NotificationCentre = () => {
                                         key={filter.name}
                                         onClick={() => setActiveFilter(filter.name)}
                                         className={`px-6 py-3.5 rounded-[1.5rem] text-[10px] font-black uppercase tracking-[0.2em] whitespace-nowrap transition-all flex items-center gap-3 border ${activeFilter === filter.name
-                                                ? 'bg-[#6143f4] text-white shadow-2xl shadow-[#6143f4]/30 border-transparent scale-105 z-10'
-                                                : 'bg-white dark:bg-white/5 text-slate-500 dark:text-slate-400 border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/10 hover:border-[#6143f4]/20'
+                                                ? 'bg-primary text-white shadow-2xl shadow-primary/30 border-transparent scale-105 z-10'
+                                                : 'bg-surface text-slate-500 dark:text-text-muted border-slate-100 dark:border-stroke/50 hover:bg-slate-50 dark:hover:bg-white/10 hover:border-primary/20'
                                             }`}
                                     >
                                         {filter.name}
                                         {filter.count !== null && filter.count !== undefined && (
-                                            <span className={`px-2.5 py-1 rounded-full text-[9px] font-black transition-colors ${activeFilter === filter.name ? 'bg-white/20 text-white' : (filter.bg + ' ' + filter.color)
+                                            <span className={`px-2.5 py-1 rounded-full text-[9px] font-black transition-colors ${activeFilter === filter.name ? 'bg-white/20 text-text-primary' : (filter.bg + ' ' + filter.color)
                                                 }`}>
                                                 {filter.count}
                                             </span>
@@ -202,13 +202,13 @@ const NotificationCentre = () => {
                                 )}
 
                                 {showEmptyState && (
-                                    <div className="py-24 text-center space-y-8 bg-white/50 dark:bg-white/5 rounded-[4rem] border-2 border-dashed border-slate-200 dark:border-white/10">
-                                        <div className="size-24 bg-slate-100 dark:bg-white/5 rounded-[2.5rem] flex items-center justify-center mx-auto text-slate-300 dark:text-slate-700">
+                                    <div className="py-24 text-center space-y-8 bg-white/50 dark:bg-white/5 rounded-[4rem] border-2 border-dashed border-slate-200 dark:border-stroke">
+                                        <div className="size-24 bg-slate-100 dark:bg-white/5 rounded-[2.5rem] flex items-center justify-center mx-auto text-text-secondary dark:text-slate-700">
                                             <Bell size={48} strokeWidth={1} />
                                         </div>
                                         <div className="space-y-2">
-                                            <p className="text-xl font-black text-[#13082a] dark:text-white uppercase tracking-tighter italic">You're all caught up</p>
-                                            <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-[0.2em]">New alerts will appear here as soon as they arrive.</p>
+                                            <p className="text-xl font-black text-text-primary dark:text-text-primary uppercase tracking-tighter italic">You're all caught up</p>
+                                            <p className="text-xs text-slate-500 dark:text-text-muted font-bold uppercase tracking-[0.2em]">New alerts will appear here as soon as they arrive.</p>
                                         </div>
                                     </div>
                                 )}
@@ -216,7 +216,7 @@ const NotificationCentre = () => {
                                 <div className="flex items-center justify-center pt-8">
                                     <button
                                         onClick={() => navigate(ROUTES.NOTIFICATIONS_HISTORY)}
-                                        className="px-10 py-5 rounded-[2rem] bg-white dark:bg-[#131022] border border-slate-100 dark:border-white/5 text-[#6143f4] text-[11px] font-black uppercase tracking-[0.3em] transition-all flex items-center gap-4 group shadow-2xl shadow-[#6143f4]/5 hover:shadow-[#6143f4]/20 hover:scale-105 active:scale-95"
+                                        className="px-10 py-5 rounded-[2rem] bg-surface border border-slate-100 dark:border-stroke/50 text-primary text-[11px] font-black uppercase tracking-[0.3em] transition-all flex items-center gap-4 group shadow-2xl shadow-primary/5 hover:shadow-primary/20 hover:scale-105 active:scale-95"
                                     >
                                         <History size={20} className="group-hover:rotate-12 transition-transform" />
                                         Full Notification History
@@ -244,3 +244,4 @@ const NotificationCentre = () => {
 };
 
 export default NotificationCentre;
+

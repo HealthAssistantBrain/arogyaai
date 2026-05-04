@@ -72,16 +72,16 @@ export default function EmailVerificationPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#f6f5f8] dark:bg-[#131022] p-4">
-      <div className="w-full max-w-md bg-white dark:bg-slate-900/50 rounded-2xl shadow-2xl shadow-[#6143f4]/10 border border-slate-200/60 dark:border-slate-800 overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-background dark:bg-card p-4">
+      <div className="w-full max-w-md bg-white dark:bg-background/50 rounded-2xl shadow-2xl shadow-primary/10 border border-slate-200/60 dark:border-stroke overflow-hidden">
         {/* Top accent */}
-        <div className="h-1.5 w-full bg-gradient-to-r from-[#6143f4]/30 via-[#6143f4] to-[#6143f4]/30" />
+        <div className="h-1.5 w-full bg-gradient-to-r from-primary/30 via-primary to-primary/30" />
 
         <div className="p-8 text-center space-y-6">
           {/* Icon */}
           <div className="flex justify-center">
-            <div className="size-16 rounded-2xl bg-[#6143f4]/10 flex items-center justify-center">
-              <Mail size={32} className="text-[#6143f4]" />
+            <div className="size-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+              <Mail size={32} className="text-primary" />
             </div>
           </div>
 
@@ -90,9 +90,9 @@ export default function EmailVerificationPage() {
             <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">
               Verify your email to continue
             </h1>
-            <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">
+            <p className="text-slate-500 dark:text-text-muted text-sm leading-relaxed">
               We sent a verification link to{' '}
-              <span className="font-semibold text-[#6143f4]">
+              <span className="font-semibold text-primary">
                 {email || 'your email address'}
               </span>
               . Click the link in the email to verify your account.
@@ -104,7 +104,7 @@ export default function EmailVerificationPage() {
             <button
               onClick={handleCheckVerification}
               disabled={checking}
-              className="w-full h-12 bg-[#6143f4] hover:bg-[#6143f4]/90 disabled:opacity-60 text-white font-semibold rounded-xl shadow-lg shadow-[#6143f4]/25 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+              className="w-full h-12 bg-primary hover:bg-primary/90 disabled:opacity-60 text-white font-semibold rounded-xl shadow-lg shadow-primary/25 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
             >
               {checking ? (
                 <><Loader2 size={18} className="animate-spin" /> Checking…</>
@@ -116,7 +116,7 @@ export default function EmailVerificationPage() {
             <button
               onClick={handleResend}
               disabled={resending}
-              className="w-full h-12 bg-transparent border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-60 text-slate-700 dark:text-slate-300 font-semibold rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+              className="w-full h-12 bg-transparent border border-slate-200 dark:border-stroke hover:bg-slate-50 dark:hover:bg-card disabled:opacity-60 text-slate-700 dark:text-text-secondary font-semibold rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2"
             >
               {resending ? (
                 <><Loader2 size={18} className="animate-spin" /> Sending…</>
@@ -126,7 +126,7 @@ export default function EmailVerificationPage() {
             </button>
           </div>
 
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-text-muted">
             Didn't receive the email? Check your spam folder or click resend above.
           </p>
         </div>

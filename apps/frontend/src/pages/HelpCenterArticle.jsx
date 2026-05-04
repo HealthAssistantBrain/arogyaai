@@ -63,13 +63,13 @@ const HelpCenterArticle = () => {
     ];
 
     return (
-        <div className="bg-[#f6f5f8] dark:bg-[#0B0819] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased text-[14px]">
+        <div className="bg-background dark:bg-background text-text-primary dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased text-[14px]">
             <div className="flex flex-1 overflow-hidden">
                 {/* Sidebar - Dr. Elena Smith Branding */}
 
 
                 {/* Main Content Area */}
-                <main className="flex-1 flex flex-col h-full relative overflow-y-auto no-scrollbar bg-[#f6f5f8] dark:bg-[#0B0819]">
+                <main className="flex-1 flex flex-col h-full relative overflow-y-auto no-scrollbar bg-background dark:bg-background">
                     {/* Top Navigation Bar */}
                     
 
@@ -77,62 +77,62 @@ const HelpCenterArticle = () => {
                     <div className="flex-1 custom-scrollbar overflow-y-auto no-scrollbar p-10 lg:p-16">
                         <div className="max-w-5xl mx-auto space-y-16">
                             {/* Breadcrumbs */}
-                            <nav className="flex items-center gap-3 text-[11px] font-black uppercase tracking-[0.25em] text-slate-400 italic">
-                                <button onClick={() => navigate(ROUTES.HELP)} className="hover:text-[#6143f4] transition-colors">Help Center</button>
+                            <nav className="flex items-center gap-3 text-[11px] font-black uppercase tracking-[0.25em] text-text-muted italic">
+                                <button onClick={() => navigate(ROUTES.HELP)} className="hover:text-primary transition-colors">Help Center</button>
                                 <ChevronRight size={14} className="opacity-40" strokeWidth={3} />
-                                <button className="hover:text-[#6143f4] transition-colors">Device Connection</button>
+                                <button className="hover:text-primary transition-colors">Device Connection</button>
                                 <ChevronRight size={14} className="opacity-40" strokeWidth={3} />
-                                <span className="text-[#6143f4]">Apple Watch Sync</span>
+                                <span className="text-primary">Apple Watch Sync</span>
                             </nav>
 
                             {/* Article Header Container */}
                             <motion.article 
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className="bg-white dark:bg-[#131022] rounded-[3.5rem] border border-[#6143f4]/10 shadow-[0_50px_100px_-20px_rgba(97,67,244,0.1)] overflow-hidden"
+                                className="bg-surface rounded-[3.5rem] border border-primary/10 shadow-[0_50px_100px_-20px_rgba(97,67,244,0.1)] overflow-hidden"
                             >
-                                <div className="p-12 lg:p-20 border-b border-slate-50 dark:border-white/5">
+                                <div className="p-12 lg:p-20 border-b border-slate-50 dark:border-stroke/50">
                                     <div className="flex flex-wrap items-center gap-6 mb-12">
-                                        <span className="px-5 py-2 bg-[#009cde]/10 text-[#009cde] text-[10px] font-black rounded-full uppercase tracking-[0.25em] italic border border-[#009cde]/20">Device Connection</span>
-                                        <div className="flex items-center gap-3 text-slate-400">
+                                        <span className="px-5 py-2 bg-secondary/10 text-secondary text-[10px] font-black rounded-full uppercase tracking-[0.25em] italic border border-secondary/20">Device Connection</span>
+                                        <div className="flex items-center gap-3 text-text-muted">
                                             <History size={16} className="opacity-50" strokeWidth={3} />
                                             <span className="text-[11px] font-black uppercase tracking-widest italic opacity-70">Updated 2 days ago</span>
                                         </div>
-                                        <div className="flex items-center gap-3 text-slate-400">
+                                        <div className="flex items-center gap-3 text-text-muted">
                                             <Clock size={16} className="opacity-50" strokeWidth={3} />
                                             <span className="text-[11px] font-black uppercase tracking-widest italic opacity-70">5 min read</span>
                                         </div>
                                     </div>
-                                    <h2 className="text-5xl lg:text-7xl font-black text-[#13082a] dark:text-white tracking-tighter uppercase leading-[0.85] mb-10 italic">How to sync your Apple Watch with ArogyaAI Dashboard</h2>
-                                    <p className="text-xl lg:text-2xl text-slate-500 dark:text-slate-400 font-bold uppercase tracking-tight leading-relaxed max-w-3xl italic opacity-80">Learn how to connect health data and biometric sensors directly for real-time AI-driven analysis.</p>
+                                    <h2 className="text-5xl lg:text-7xl font-black text-text-primary dark:text-text-primary tracking-tighter uppercase leading-[0.85] mb-10 italic">How to sync your Apple Watch with ArogyaAI Dashboard</h2>
+                                    <p className="text-xl lg:text-2xl text-slate-500 dark:text-text-muted font-bold uppercase tracking-tight leading-relaxed max-w-3xl italic opacity-80">Learn how to connect health data and biometric sensors directly for real-time AI-driven analysis.</p>
                                 </div>
 
                                 <div className="p-12 lg:p-20 space-y-16">
                                     <section className="space-y-8">
-                                        <h3 className="text-3xl font-black text-[#13082a] dark:text-white uppercase tracking-tighter italic flex items-center gap-4">
-                                            <div className="size-2 bg-[#6143f4] rounded-full"></div>
+                                        <h3 className="text-3xl font-black text-text-primary dark:text-text-primary uppercase tracking-tighter italic flex items-center gap-4">
+                                            <div className="size-2 bg-primary rounded-full"></div>
                                             Before You Begin
                                         </h3>
-                                        <p className="text-[14px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-tight leading-relaxed italic opacity-80">
+                                        <p className="text-[14px] font-bold text-slate-600 dark:text-text-muted uppercase tracking-tight leading-relaxed italic opacity-80">
                                             Ensure your Apple Watch is updated to the latest watchOS version and you have the ArogyaAI app installed on your iPhone. Your device must be within Bluetooth range for initial handshake and secure authentication cycles.
                                         </p>
-                                        <div className="bg-[#f6f5f8] dark:bg-white/5 rounded-[2.5rem] p-10 lg:p-14 border border-slate-100 dark:border-white/5 flex flex-col md:flex-row items-center gap-14 shadow-inner relative overflow-hidden group/step">
-                                            <div className="absolute top-0 left-0 w-2 h-full bg-[#6143f4]"></div>
+                                        <div className="bg-background dark:bg-white/5 rounded-[2.5rem] p-10 lg:p-14 border border-slate-100 dark:border-stroke/50 flex flex-col md:flex-row items-center gap-14 shadow-inner relative overflow-hidden group/step">
+                                            <div className="absolute top-0 left-0 w-2 h-full bg-primary"></div>
                                             <div className="flex-1 space-y-4">
-                                                <h4 className="text-xl font-black text-[#13082a] dark:text-white uppercase tracking-tight italic">Step 1: Enable Health Permissions</h4>
-                                                 <p className="text-[12px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tight leading-loose italic opacity-80">
+                                                <h4 className="text-xl font-black text-text-primary dark:text-text-primary uppercase tracking-tight italic">Step 1: Enable Health Permissions</h4>
+                                                 <p className="text-[12px] font-bold text-slate-500 dark:text-text-muted uppercase tracking-tight leading-loose italic opacity-80">
                                                      Navigate to your iPhone Settings {'>'} Health {'>'} Data Access {'&'} Devices {'>'} ArogyaAI and toggle all listed permissions to &apos;On&apos; to allow biometrics flow.
                                                  </p>
                                             </div>
-                                            <div className="size-48 bg-white dark:bg-[#1A162D] rounded-[2rem] flex items-center justify-center text-[#6143f4]/20 border border-[#6143f4]/10 shadow-2xl transition-transform group-hover/step:rotate-12 duration-500">
+                                            <div className="size-48 bg-white dark:bg-[#1A162D] rounded-[2rem] flex items-center justify-center text-primary/20 border border-primary/10 shadow-2xl transition-transform group-hover/step:rotate-12 duration-500">
                                                 <Watch size={80} strokeWidth={1} />
                                             </div>
                                         </div>
                                     </section>
 
                                     <section className="space-y-10">
-                                        <h3 className="text-3xl font-black text-[#13082a] dark:text-white uppercase tracking-tighter italic flex items-center gap-4">
-                                            <div className="size-2 bg-[#6143f4] rounded-full"></div>
+                                        <h3 className="text-3xl font-black text-text-primary dark:text-text-primary uppercase tracking-tighter italic flex items-center gap-4">
+                                            <div className="size-2 bg-primary rounded-full"></div>
                                             Connection Steps
                                         </h3>
                                         <div className="space-y-6">
@@ -144,14 +144,14 @@ const HelpCenterArticle = () => {
                                                 'Watch vibrates once multi-factor handshake is complete.'
                                             ].map((step, idx) => (
                                                 <div key={idx} className="flex items-start gap-8 group/li">
-                                                    <div className="size-10 rounded-xl bg-[#6143f4] text-white flex items-center justify-center text-[12px] font-black shrink-0 shadow-lg shadow-[#6143f4]/20 group-hover/li:scale-110 transition-transform italic">
+                                                    <div className="size-10 rounded-xl bg-primary text-white flex items-center justify-center text-[12px] font-black shrink-0 shadow-lg shadow-primary/20 group-hover/li:scale-110 transition-transform italic">
                                                         {idx + 1}
                                                     </div>
-                                                    <p className="text-[13px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest leading-none pt-3 italic">
+                                                    <p className="text-[13px] font-black text-slate-700 dark:text-text-secondary uppercase tracking-widest leading-none pt-3 italic">
                                                         {step.split('ArogyaAI').map((part, i, arr) => (
                                                             <React.Fragment key={i}>
                                                                 {part}
-                                                                {i < arr.length - 1 && <span className="text-[#6143f4]">ArogyaAI</span>}
+                                                                {i < arr.length - 1 && <span className="text-primary">ArogyaAI</span>}
                                                             </React.Fragment>
                                                         ))}
                                                     </p>
@@ -161,15 +161,15 @@ const HelpCenterArticle = () => {
                                     </section>
 
                                     {/* Privacy Note Banner */}
-                                    <div className="bg-[#6143f4]/5 border-l-[8px] border-[#6143f4] p-10 rounded-r-[2.5rem] shadow-sm relative overflow-hidden group/note">
-                                        <div className="absolute -right-10 -top-10 size-48 bg-[#6143f4]/10 rounded-full blur-[80px] group-hover/note:scale-150 transition-transform duration-1000"></div>
+                                    <div className="bg-primary/5 border-l-[8px] border-primary p-10 rounded-r-[2.5rem] shadow-sm relative overflow-hidden group/note">
+                                        <div className="absolute -right-10 -top-10 size-48 bg-primary/10 rounded-full blur-[80px] group-hover/note:scale-150 transition-transform duration-1000"></div>
                                         <div className="flex gap-8 relative z-10 items-center">
-                                            <div className="size-16 rounded-2xl bg-[#6143f4]/10 flex items-center justify-center text-[#6143f4] shrink-0 shadow-inner">
+                                            <div className="size-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shrink-0 shadow-inner">
                                                 <Lock size={28} strokeWidth={2.5} />
                                             </div>
                                             <div className="space-y-2">
-                                                <h5 className="text-[11px] font-black text-[#6143f4] uppercase tracking-[0.3em] italic leading-none">Confidential Protocol</h5>
-                                                <p className="text-[13px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-tight leading-relaxed max-w-2xl italic">
+                                                <h5 className="text-[11px] font-black text-primary uppercase tracking-[0.3em] italic leading-none">Confidential Protocol</h5>
+                                                <p className="text-[13px] font-bold text-slate-600 dark:text-text-muted uppercase tracking-tight leading-relaxed max-w-2xl italic">
                                                     ArogyaAI uses end-to-end encryption for all biometric data. Your physician only sees anonymized aggregates unless you specifically grant clinical access.
                                                 </p>
                                             </div>
@@ -177,25 +177,25 @@ const HelpCenterArticle = () => {
                                     </div>
 
                                     <section className="space-y-8">
-                                        <h3 className="text-3xl font-black text-[#13082a] dark:text-white uppercase tracking-tighter italic flex items-center gap-4">
-                                            <div className="size-2 bg-[#6143f4] rounded-full"></div>
+                                        <h3 className="text-3xl font-black text-text-primary dark:text-text-primary uppercase tracking-tighter italic flex items-center gap-4">
+                                            <div className="size-2 bg-primary rounded-full"></div>
                                             Troubleshooting Bluetooth
                                         </h3>
-                                        <p className="text-[14px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-tight leading-relaxed italic opacity-80">
+                                        <p className="text-[14px] font-bold text-slate-600 dark:text-text-muted uppercase tracking-tight leading-relaxed italic opacity-80">
                                             If the device fails to appear, restart both watch and iPhone concurrently. Ensure 'Background App Refresh' is enabled for ArogyaAI in your system settings to maintain continuous data flow.
                                         </p>
                                     </section>
                                 </div>
 
                                 {/* Feedback Section */}
-                                <div className="p-16 lg:p-24 bg-[#f6f5f8]/50 dark:bg-white/5 border-t border-slate-100 dark:border-white/5 flex flex-col items-center gap-12">
-                                    <p className="text-3xl font-black text-[#13082a] dark:text-white uppercase tracking-tighter italic">Was this article helpful?</p>
+                                <div className="p-16 lg:p-24 bg-background/50 dark:bg-white/5 border-t border-slate-100 dark:border-stroke/50 flex flex-col items-center gap-12">
+                                    <p className="text-3xl font-black text-text-primary dark:text-text-primary uppercase tracking-tighter italic">Was this article helpful?</p>
                                     <div className="flex flex-wrap justify-center gap-8">
-                                        <button className="flex items-center gap-4 px-14 py-6 bg-[#6143f4] text-white rounded-2xl font-black text-[11px] uppercase tracking-[0.25em] shadow-2xl shadow-[#6143f4]/30 hover:scale-105 active:scale-95 transition-all italic group/yes">
+                                        <button className="flex items-center gap-4 px-14 py-6 bg-primary text-white rounded-2xl font-black text-[11px] uppercase tracking-[0.25em] shadow-2xl shadow-primary/30 hover:scale-105 active:scale-95 transition-all italic group/yes">
                                             <ThumbsUp size={20} className="group-hover/yes:rotate-12 transition-transform" />
                                             Yes, It Helped
                                         </button>
-                                        <button className="flex items-center gap-4 px-14 py-6 bg-white dark:bg-white/5 border-2 border-slate-100 dark:border-white/10 text-slate-500 dark:text-slate-400 rounded-2xl font-black text-[11px] uppercase tracking-[0.25em] hover:bg-slate-50 dark:hover:bg-white/10 transition-all active:scale-95 italic group/no">
+                                        <button className="flex items-center gap-4 px-14 py-6 bg-surface border-2 border-slate-100 dark:border-stroke text-slate-500 dark:text-text-muted rounded-2xl font-black text-[11px] uppercase tracking-[0.25em] hover:bg-slate-50 dark:hover:bg-white/10 transition-all active:scale-95 italic group/no">
                                             <ThumbsDown size={20} className="group-hover/no:-rotate-12 transition-transform" />
                                             Not Quite
                                         </button>
@@ -205,30 +205,30 @@ const HelpCenterArticle = () => {
 
                             {/* Related Articles Grid */}
                             <section className="mt-32 space-y-12 pb-10">
-                                <h3 className="text-4xl font-black text-[#13082a] dark:text-white uppercase tracking-tighter italic">Related articles you might like</h3>
+                                <h3 className="text-4xl font-black text-text-primary dark:text-text-primary uppercase tracking-tighter italic">Related articles you might like</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                                     {relatedArticles.map((art, idx) => (
                                         <button
                                             key={idx}
-                                            className="group flex flex-col items-start text-left bg-white dark:bg-[#131022] p-12 rounded-[3.5rem] border border-transparent shadow-2xl shadow-[#13082a]/5 hover:border-[#6143f4]/20 transition-all duration-500 relative overflow-hidden"
+                                            className="group flex flex-col items-start text-left bg-surface p-12 rounded-[3.5rem] border border-transparent shadow-2xl shadow-[#13082a]/5 hover:border-primary/20 transition-all duration-500 relative overflow-hidden"
                                         >
-                                            <div className="absolute -right-10 -top-10 size-48 bg-[#6143f4]/10 rounded-full blur-[80px] group-hover:scale-150 transition-transform duration-1000"></div>
+                                            <div className="absolute -right-10 -top-10 size-48 bg-primary/10 rounded-full blur-[80px] group-hover:scale-150 transition-transform duration-1000"></div>
                                             <div className="flex items-center justify-between w-full mb-8 relative z-10">
-                                                <span className="px-5 py-2 bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400 text-[10px] font-black rounded-full uppercase tracking-[0.25em] leading-none italic">{art.label}</span>
-                                                <div className="size-12 rounded-2xl bg-[#6143f4]/5 flex items-center justify-center text-[#6143f4] group-hover:bg-[#6143f4] group-hover:text-white transition-all duration-500 group-hover:translate-x-2">
+                                                <span className="px-5 py-2 bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-text-muted text-[10px] font-black rounded-full uppercase tracking-[0.25em] leading-none italic">{art.label}</span>
+                                                <div className="size-12 rounded-2xl bg-primary/5 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-all duration-500 group-hover:translate-x-2">
                                                     <ArrowRight size={20} strokeWidth={3} />
                                                 </div>
                                             </div>
-                                            <h4 className="text-2xl font-black text-[#13082a] dark:text-white uppercase tracking-tight mb-4 group-hover:text-[#6143f4] transition-colors relative z-10 leading-tight italic">{art.title}</h4>
-                                            <p className="text-[12px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-tight leading-relaxed line-clamp-2 relative z-10 italic opacity-80">{art.desc}</p>
+                                            <h4 className="text-2xl font-black text-text-primary dark:text-text-primary uppercase tracking-tight mb-4 group-hover:text-primary transition-colors relative z-10 leading-tight italic">{art.title}</h4>
+                                            <p className="text-[12px] text-slate-500 dark:text-text-muted font-bold uppercase tracking-tight leading-relaxed line-clamp-2 relative z-10 italic opacity-80">{art.desc}</p>
                                         </button>
                                     ))}
                                 </div>
                             </section>
 
                             {/* Massive Support CTA */}
-                            <section className="bg-gradient-to-br from-[#13082a] to-[#261B4D] dark:from-[#05040A] dark:to-[#131022] rounded-[4rem] p-16 lg:p-24 text-white relative overflow-hidden shadow-2xl shadow-[#13082a]/40 group/bottom">
-                                <div className="absolute top-0 right-0 w-[50rem] h-[50rem] bg-[#6143f4]/15 rounded-full blur-[160px] -translate-y-1/2 translate-x-1/2 group-hover/bottom:scale-110 transition-transform duration-1000"></div>
+                            <section className="bg-gradient-to-br from-[#13082a] to-[#261B4D] dark:from-[#05040A] dark:to-[#131022] rounded-[4rem] p-16 lg:p-24 text-text-primary relative overflow-hidden shadow-2xl shadow-[#13082a]/40 group/bottom">
+                                <div className="absolute top-0 right-0 w-[50rem] h-[50rem] bg-primary/15 rounded-full blur-[160px] -translate-y-1/2 translate-x-1/2 group-hover/bottom:scale-110 transition-transform duration-1000"></div>
                                 <div className="absolute bottom-0 left-0 w-[40rem] h-[40rem] bg-black/20 rounded-full blur-[140px] translate-y-1/2 -translate-x-1/2 group-hover/bottom:scale-110 transition-transform duration-1000"></div>
                                 
                                 <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-20">
@@ -236,8 +236,8 @@ const HelpCenterArticle = () => {
                                         <h3 className="text-5xl lg:text-7xl font-black uppercase tracking-tighter leading-[0.8] italic">Still need <br/> expert help?</h3>
                                         <p className="text-xl opacity-80 font-bold uppercase tracking-tight italic leading-relaxed">Our support team is active 24/7 for technical setups and emergency medical data navigation.</p>
                                     </div>
-                                    <button className="relative z-10 px-16 py-8 bg-white text-[#13082a] rounded-[2.25rem] font-black text-[12px] uppercase tracking-[0.3em] shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-6 italic group/btn">
-                                        <MessageSquare size={24} className="group-hover/btn:rotate-12 transition-transform text-[#6143f4]" />
+                                    <button className="relative z-10 px-16 py-8 bg-white text-text-primary rounded-[2.25rem] font-black text-[12px] uppercase tracking-[0.3em] shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-6 italic group/btn">
+                                        <MessageSquare size={24} className="group-hover/btn:rotate-12 transition-transform text-primary" />
                                         Contact Support
                                         <ArrowUpRight size={24} strokeWidth={3} className="opacity-40" />
                                     </button>
@@ -245,18 +245,18 @@ const HelpCenterArticle = () => {
                             </section>
 
                             {/* Refined Footer */}
-                            <footer className="py-24 flex flex-col md:flex-row items-center justify-between gap-12 opacity-30 shrink-0 border-t border-slate-200 dark:border-white/5">
+                            <footer className="py-24 flex flex-col md:flex-row items-center justify-between gap-12 opacity-30 shrink-0 border-t border-slate-200 dark:border-stroke/50">
                                 <div className="flex items-center gap-5">
-                                    <div className="size-10 bg-slate-400 rounded-xl flex items-center justify-center text-white shadow-inner">
+                                    <div className="size-10 bg-slate-400 rounded-xl flex items-center justify-center text-text-primary shadow-inner">
                                         <Waves size={20} strokeWidth={3} />
                                     </div>
-                                    <p className="text-[11px] font-black uppercase tracking-widest text-[#13082a] dark:text-white italic leading-none">© 2026 ArogyaAI Health Systems. All rights reserved.</p>
+                                    <p className="text-[11px] font-black uppercase tracking-widest text-text-primary dark:text-text-primary italic leading-none">© 2026 ArogyaAI Health Systems. All rights reserved.</p>
                                 </div>
-                                <div className="flex flex-wrap justify-center gap-12 text-[11px] font-black uppercase tracking-[0.3em] text-[#13082a] dark:text-white">
-                                    <button className="hover:text-[#6143f4] transition-colors italic">Privacy Policy</button>
-                                    <button className="hover:text-[#6143f4] transition-colors italic">Terms of Service</button>
-                                    <button className="hover:text-[#6143f4] transition-colors italic">Trust Center</button>
-                                    <button className="hover:text-[#6143f4] transition-colors italic">Cookie Core</button>
+                                <div className="flex flex-wrap justify-center gap-12 text-[11px] font-black uppercase tracking-[0.3em] text-text-primary dark:text-text-primary">
+                                    <button className="hover:text-primary transition-colors italic">Privacy Policy</button>
+                                    <button className="hover:text-primary transition-colors italic">Terms of Service</button>
+                                    <button className="hover:text-primary transition-colors italic">Trust Center</button>
+                                    <button className="hover:text-primary transition-colors italic">Cookie Core</button>
                                 </div>
                             </footer>
                         </div>
@@ -278,4 +278,5 @@ const HelpCenterArticle = () => {
 };
 
 export default HelpCenterArticle;
+
 

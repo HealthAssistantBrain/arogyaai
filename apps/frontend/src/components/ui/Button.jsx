@@ -9,7 +9,7 @@ const Button = ({
 }) => {
     const variants = {
         primary: 'bg-primary text-white hover:bg-opacity-90 shadow-sm',
-        accent: 'bg-accent text-white hover:bg-opacity-90 shadow-sm',
+        accent: 'bg-accent text-text-primary hover:bg-opacity-90 shadow-sm',
         outline: 'border-2 border-stroke bg-card text-text-secondary hover:bg-surface-muted',
         ghost: 'text-text-secondary hover:bg-surface-muted',
         danger: 'bg-danger text-white hover:bg-opacity-90 shadow-sm',
@@ -32,3 +32,4 @@ const Button = ({
 };
 
 export default Button;
+

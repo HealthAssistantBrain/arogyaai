@@ -73,3 +73,4 @@ const HeartBreathChart = ({ data, height = 220 }) => {
 };
 
 export default HeartBreathChart;
+

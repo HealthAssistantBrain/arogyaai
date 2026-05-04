@@ -15,7 +15,7 @@ const itemVariants = {
 };
 
 const LoadingCard = () => (
-  <div className="rounded-[1.5rem] border border-slate-200/80 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/[0.03]">
+  <div className="rounded-[1.5rem] border border-slate-200/80 bg-white p-5 shadow-sm dark:border-stroke dark:bg-white/[0.03]">
     <div className="h-28 animate-pulse rounded-[1.25rem] bg-slate-100 dark:bg-white/10" />
     <div className="mt-4 h-3 w-24 animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
     <div className="mt-3 h-8 w-32 animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
@@ -61,11 +61,11 @@ const VitalsCards = ({ items = [], loading = false, className = '', emptyMessage
           ))}
         </div>
       ) : (
-        <div className="flex min-h-[148px] flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white p-6 text-center shadow-sm dark:border-white/10 dark:bg-[#131022]">
-          <div className="flex size-11 items-center justify-center rounded-xl bg-slate-100 text-slate-400 dark:bg-white/5 dark:text-slate-500">
+        <div className="flex min-h-[148px] flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white p-6 text-center shadow-sm dark:border-stroke dark:bg-card">
+          <div className="flex size-11 items-center justify-center rounded-xl bg-slate-100 text-text-muted dark:bg-white/5 dark:text-slate-500">
             <Activity size={18} />
           </div>
-          <p className="mt-4 text-[14px] font-black tracking-tight text-[#13082a] dark:text-white">
+          <p className="mt-4 text-[14px] font-black tracking-tight text-text-primary dark:text-text-primary">
             {emptyMessage}
           </p>
         </div>
@@ -75,3 +75,4 @@ const VitalsCards = ({ items = [], loading = false, className = '', emptyMessage
 };
 
 export default memo(VitalsCards);
+

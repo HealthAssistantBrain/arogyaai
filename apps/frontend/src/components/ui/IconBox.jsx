@@ -9,3 +9,4 @@ const IconBox = ({ icon: Icon, color = 'bg-primary', className = "" }) => {
 };
 
 export default IconBox;
+

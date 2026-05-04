@@ -59,7 +59,7 @@ const SystemStatus = () => {
   ];
 
   return (
-    <div className="bg-[#EAEAEA] dark:bg-[#13082A] text-[#13082A] font-display min-h-screen flex h-screen overflow-hidden antialiased transition-colors duration-500">
+    <div className="bg-[#EAEAEA] dark:bg-card text-text-primary font-display min-h-screen flex h-screen overflow-hidden antialiased transition-colors duration-500">
       {/* Sidebar */}
 
 
@@ -76,7 +76,7 @@ const SystemStatus = () => {
             <motion.div 
               initial={{ scale: 0.98, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              className="relative overflow-hidden rounded-[4rem] bg-gradient-to-r from-[#6143f4] to-[#009CDE] p-16 text-white shadow-3xl shadow-[#6143f4]/20"
+              className="relative overflow-hidden rounded-[4rem] bg-gradient-to-r from-primary to-secondary p-16 text-text-primary shadow-3xl shadow-primary/20"
             >
               <div className="relative z-10 flex flex-col xl:flex-row xl:items-center justify-between gap-12">
                 <div className="space-y-8">
@@ -86,7 +86,7 @@ const SystemStatus = () => {
                     </div>
                     <h2 className="text-6xl font-black tracking-tighter uppercase italic leading-none">All Systems<br/>Operational</h2>
                   </div>
-                  <p className="text-xl font-bold text-white/80 max-w-2xl uppercase tracking-tight leading-relaxed italic">
+                  <p className="text-xl font-bold text-text-secondary max-w-2xl uppercase tracking-tight leading-relaxed italic">
                     ArogyaAI's infrastructure is currently performing at peak efficiency. All diagnostic pipelines and secure data stores are fully responsive.
                   </p>
                 </div>
@@ -96,7 +96,7 @@ const SystemStatus = () => {
                     Live Metrics
                   </button>
                   <div className="flex flex-col items-center gap-2">
-                    <p className="text-[10px] font-black uppercase tracking-[0.4em] text-white/60 italic">Refreshed 12s ago</p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.4em] text-text-muted italic">Refreshed 12s ago</p>
                     <div className="flex gap-1">
                       {[1,2,3].map(i => <div key={i} className="w-4 h-1 bg-white/30 rounded-full overflow-hidden relative">
                          <motion.div 
@@ -118,27 +118,27 @@ const SystemStatus = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               {[
                 { label: '90-Day Uptime', value: '99.98%', trend: '+0.02%', color: 'from-green-500 to-emerald-600', sub: 'Calculated global average' },
-                { label: 'Avg. API Latency', value: '142ms', trend: 'Stable', color: 'from-[#6143f4] to-[#009CDE]', sub: 'P99 end-to-end response' },
-                { label: 'Data Throughput', value: '1.2 TB/s', trend: 'High', color: 'from-[#009CDE] to-cyan-500', sub: 'Encrypted HL7 stream volume' }
+                { label: 'Avg. API Latency', value: '142ms', trend: 'Stable', color: 'from-primary to-secondary', sub: 'P99 end-to-end response' },
+                { label: 'Data Throughput', value: '1.2 TB/s', trend: 'High', color: 'from-secondary to-cyan-500', sub: 'Encrypted HL7 stream volume' }
               ].map((m, i) => (
                 <motion.div 
                   initial={{ y: 20, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
                   transition={{ delay: 0.1 * i }}
                   key={i} 
-                  className="bg-white dark:bg-white/5 p-10 rounded-[3.5rem] border border-slate-100 dark:border-white/5 shadow-2xl shadow-[#6143f4]/5 hover:border-[#6143f4]/20 transition-all group"
+                  className="bg-white dark:bg-white/5 p-10 rounded-[3.5rem] border border-slate-100 dark:border-stroke/50 shadow-2xl shadow-primary/5 hover:border-primary/20 transition-all group"
                 >
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 italic">{m.label}</p>
+                  <p className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] mb-4 italic">{m.label}</p>
                   <div className="flex items-end gap-4 mb-8">
-                    <span className="text-5xl font-black text-[#13082A] dark:text-white tracking-tighter italic">{m.value}</span>
-                    <span className={`text-[11px] font-black uppercase tracking-widest mb-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-white/5 text-slate-500 group-hover:text-[#6143f4] transition-colors italic`}>{m.trend}</span>
+                    <span className="text-5xl font-black text-text-primary dark:text-text-primary tracking-tighter italic">{m.value}</span>
+                    <span className={`text-[11px] font-black uppercase tracking-widest mb-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-white/5 text-slate-500 group-hover:text-primary transition-colors italic`}>{m.trend}</span>
                   </div>
                   <div className="flex gap-1 h-2.5 mb-6">
                     {[...Array(12)].map((_, j) => (
                       <div key={j} className={`flex-1 rounded-full ${j === 8 ? 'bg-amber-400' : 'bg-green-500'} opacity-${j > 10 ? '20' : '100'} group-hover:animate-pulse`} style={{ animationDelay: `${j * 0.1}s` }}></div>
                     ))}
                   </div>
-                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 opacity-60 italic">{m.sub}</p>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-text-muted opacity-60 italic">{m.sub}</p>
                 </motion.div>
               ))}
             </div>
@@ -147,27 +147,27 @@ const SystemStatus = () => {
               {/* Service Components */}
               <div className="lg:col-span-2 space-y-12">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-3xl font-black text-[#13082A] dark:text-white uppercase tracking-tighter flex items-center gap-6 italic">
-                    <div className="bg-[#6143f4] size-12 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-[#6143f4]/20">
+                  <h3 className="text-3xl font-black text-text-primary dark:text-text-primary uppercase tracking-tighter flex items-center gap-6 italic">
+                    <div className="bg-primary size-12 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-primary/20">
                       <Server size={24} strokeWidth={2.5} />
                     </div>
                     Service Components Pulse
                   </h3>
-                  <button className="px-6 py-3 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-[#13082A] dark:text-white hover:bg-slate-50 transition-all italic">Refresh All</button>
+                  <button className="px-6 py-3 bg-white dark:bg-white/5 border border-slate-200 dark:border-stroke rounded-2xl text-[10px] font-black uppercase tracking-widest text-text-primary dark:text-text-primary hover:bg-slate-50 transition-all italic">Refresh All</button>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   {services.map((s, idx) => (
                     <motion.div 
                       whileHover={{ scale: 1.02 }}
                       key={idx} 
-                      className="bg-white dark:bg-white/5 p-10 rounded-[3rem] border border-slate-100 dark:border-white/5 hover:border-[#6143f4]/20 transition-all group flex items-center justify-between relative overflow-hidden"
+                      className="bg-white dark:bg-white/5 p-10 rounded-[3rem] border border-slate-100 dark:border-stroke/50 hover:border-primary/20 transition-all group flex items-center justify-between relative overflow-hidden"
                     >
                       <div className="flex items-center gap-8 relative z-10">
-                        <div className="size-16 rounded-[1.5rem] bg-[#6143f4]/5 text-[#6143f4] flex items-center justify-center group-hover:bg-[#6143f4] group-hover:text-white transition-all duration-500 shadow-inner group-hover:shadow-[#6143f4]/30 group-hover:scale-110">
+                        <div className="size-16 rounded-[1.5rem] bg-primary/5 text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-all duration-500 shadow-inner group-hover:shadow-primary/30 group-hover:scale-110">
                           {s.icon}
                         </div>
                         <div>
-                          <p className="text-base font-black text-[#13082A] dark:text-white uppercase tracking-widest mb-1 italic leading-none">{s.name}</p>
+                          <p className="text-base font-black text-text-primary dark:text-text-primary uppercase tracking-widest mb-1 italic leading-none">{s.name}</p>
                           <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest opacity-60 italic">{s.sub}</p>
                         </div>
                       </div>
@@ -175,7 +175,7 @@ const SystemStatus = () => {
                         <span className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse shadow-[0_0_12px_#22c55e]"></span>
                         {s.status}
                       </div>
-                      <div className="absolute right-[-10%] bottom-[-10%] size-24 rounded-full bg-[#6143f4]/5 blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
+                      <div className="absolute right-[-10%] bottom-[-10%] size-24 rounded-full bg-primary/5 blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
                     </motion.div>
                   ))}
                 </div>
@@ -183,13 +183,13 @@ const SystemStatus = () => {
                 {/* Vertical Timeline */}
                 <div className="space-y-10 pt-10">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-3xl font-black text-[#13082A] dark:text-white uppercase tracking-tighter flex items-center gap-6 italic">
-                      <div className="bg-[#6143f4] size-12 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-[#6143f4]/20">
+                    <h3 className="text-3xl font-black text-text-primary dark:text-text-primary uppercase tracking-tighter flex items-center gap-6 italic">
+                      <div className="bg-primary size-12 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-primary/20">
                         <Clock size={24} strokeWidth={2.5} />
                       </div>
                       Real-time Incident Feed
                     </h3>
-                    <button className="text-[11px] font-black text-[#6143f4] uppercase tracking-[0.2em] hover:bg-[#6143f4] hover:text-white px-8 py-3 bg-[#6143f4]/10 rounded-2xl transition-all italic">View Archive</button>
+                    <button className="text-[11px] font-black text-primary uppercase tracking-[0.2em] hover:bg-primary hover:text-white px-8 py-3 bg-primary/10 rounded-2xl transition-all italic">View Archive</button>
                   </div>
                   <div className="space-y-0 relative before:absolute xl:before:left-12 before:left-8 before:top-10 before:bottom-10 before:w-[3px] before:bg-slate-200 dark:before:bg-white/5 before:rounded-full">
                     {incidents.map((incident, i) => (
@@ -200,18 +200,18 @@ const SystemStatus = () => {
                         key={i} 
                         className={`relative xl:pl-32 pl-24 pb-16 ${!incident.active && 'opacity-50 grayscale'}`}
                       >
-                        <div className={`absolute xl:left-0 left-[-4px] top-2 size-24 rounded-[2.5rem] bg-white dark:bg-[#13082A] border-8 ${incident.active ? 'border-[#6143f4] shadow-2xl shadow-[#6143f4]/20' : 'border-slate-100 dark:border-white/5'} flex items-center justify-center z-10 transform hover:rotate-6 transition-transform duration-500`}>
-                          <Check className={`size-10 ${incident.active ? 'text-[#6143f4]' : 'text-slate-200'} font-black`} strokeWidth={4} />
+                        <div className={`absolute xl:left-0 left-[-4px] top-2 size-24 rounded-[2.5rem] bg-white dark:bg-card border-8 ${incident.active ? 'border-primary shadow-2xl shadow-primary/20' : 'border-slate-100 dark:border-stroke/50'} flex items-center justify-center z-10 transform hover:rotate-6 transition-transform duration-500`}>
+                          <Check className={`size-10 ${incident.active ? 'text-primary' : 'text-text-primary'} font-black`} strokeWidth={4} />
                         </div>
-                        <div className="bg-white dark:bg-white/5 p-12 rounded-[4rem] border border-slate-100 dark:border-white/5 shadow-3xl shadow-[#6143f4]/5 hover:shadow-[#6143f4]/10 transition-shadow">
+                        <div className="bg-white dark:bg-white/5 p-12 rounded-[4rem] border border-slate-100 dark:border-stroke/50 shadow-3xl shadow-primary/5 hover:shadow-primary/10 transition-shadow">
                           <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-8">
-                            <h4 className="text-2xl font-black text-[#13082A] dark:text-white uppercase tracking-tighter italic">{incident.title}</h4>
+                            <h4 className="text-2xl font-black text-text-primary dark:text-text-primary uppercase tracking-tighter italic">{incident.title}</h4>
                             <span className="px-8 py-3 rounded-full bg-green-500/10 text-green-500 text-[10px] font-black uppercase tracking-[0.2em] border border-green-500/10 italic shrink-0 text-center">{incident.status}</span>
                           </div>
-                          <p className="text-lg font-bold text-slate-500 dark:text-slate-400 leading-relaxed uppercase tracking-tight italic mb-10">{incident.desc}</p>
-                          <div className="flex flex-wrap items-center gap-12 text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] italic">
-                            <span className="flex items-center gap-3"><Calendar size={18} className="text-[#6143f4]" /> {incident.date}</span>
-                            <span className="flex items-center gap-3"><Clock size={18} className="text-[#009CDE]" /> {incident.time}</span>
+                          <p className="text-lg font-bold text-slate-500 dark:text-text-muted leading-relaxed uppercase tracking-tight italic mb-10">{incident.desc}</p>
+                          <div className="flex flex-wrap items-center gap-12 text-[10px] font-black text-text-muted uppercase tracking-[0.3em] italic">
+                            <span className="flex items-center gap-3"><Calendar size={18} className="text-primary" /> {incident.date}</span>
+                            <span className="flex items-center gap-3"><Clock size={18} className="text-secondary" /> {incident.time}</span>
                           </div>
                         </div>
                       </motion.div>
@@ -223,8 +223,8 @@ const SystemStatus = () => {
               {/* Sidebar Support / Trust */}
               <div className="space-y-12">
                 {/* Maintenance Notice */}
-                <div className="bg-white dark:bg-white/5 p-12 rounded-[4rem] border border-slate-100 dark:border-white/5 shadow-3xl shadow-[#6143f4]/5 space-y-10 relative overflow-hidden group">
-                  <h3 className="text-2xl font-black text-[#13082A] dark:text-white uppercase tracking-tighter flex items-center gap-6 italic">
+                <div className="bg-white dark:bg-white/5 p-12 rounded-[4rem] border border-slate-100 dark:border-stroke/50 shadow-3xl shadow-primary/5 space-y-10 relative overflow-hidden group">
+                  <h3 className="text-2xl font-black text-text-primary dark:text-text-primary uppercase tracking-tighter flex items-center gap-6 italic">
                     <div className="bg-amber-100 dark:bg-amber-500/10 size-12 rounded-2xl flex items-center justify-center text-amber-500 shadow-xl shadow-amber-500/10">
                       <AlertTriangle size={24} strokeWidth={2.5} />
                     </div>
@@ -237,7 +237,7 @@ const SystemStatus = () => {
                     ].map((m, i) => (
                       <div key={i} className={`p-8 rounded-[2.5rem] bg-${m.color === 'amber' ? 'amber' : 'blue'}-500/5 border border-${m.color === 'amber' ? 'amber' : 'blue'}-500/10 group/item transition-all hover:bg-${m.color === 'amber' ? 'amber' : 'blue'}-500/10`}>
                         <p className={`text-[10px] font-black text-${m.color === 'amber' ? 'amber' : 'blue'}-500 uppercase tracking-[0.4em] mb-3 italic`}>{m.date}, 2026</p>
-                        <p className="text-sm font-black text-[#13082A] dark:text-white uppercase tracking-tighter mb-3 italic leading-none">{m.title}</p>
+                        <p className="text-sm font-black text-text-primary dark:text-text-primary uppercase tracking-tighter mb-3 italic leading-none">{m.title}</p>
                         <p className="text-[11px] font-black text-slate-500 uppercase tracking-tight italic leading-relaxed opacity-80">{m.desc}</p>
                       </div>
                     ))}
@@ -246,45 +246,45 @@ const SystemStatus = () => {
                 </div>
 
                 {/* Trust Section */}
-                <div className="bg-[#13082A] p-12 rounded-[4rem] text-white relative overflow-hidden group shadow-3xl shadow-[#13082A]/30">
+                <div className="bg-card p-12 rounded-[4rem] text-text-primary relative overflow-hidden group shadow-3xl shadow-[#13082A]/30">
                   <div className="relative z-10 space-y-8">
                     <div className="space-y-3">
                       <h3 className="text-2xl font-black uppercase tracking-tighter italic">Trust & Security</h3>
-                      <p className="text-xs font-bold text-white/50 leading-relaxed uppercase tracking-widest italic leading-tight">Our infrastructure is audited annually for SOC2 Type II, HIPAA, and GDPR compliance.</p>
+                      <p className="text-xs font-bold text-text-primary/50 leading-relaxed uppercase tracking-widest italic leading-tight">Our infrastructure is audited annually for SOC2 Type II, HIPAA, and GDPR compliance.</p>
                     </div>
                     
                     <div className="grid grid-cols-2 gap-4">
                       {[
-                        { icon: <ShieldCheck size={28} className="text-[#009CDE]" />, label: 'HIPAA Compliant' },
-                        { icon: <Lock size={28} className="text-[#6143f4]" />, label: 'SOC2 Type II' }
+                        { icon: <ShieldCheck size={28} className="text-secondary" />, label: 'HIPAA Compliant' },
+                        { icon: <Lock size={28} className="text-primary" />, label: 'SOC2 Type II' }
                       ].map((t, i) => (
-                        <div key={i} className="p-6 bg-white/5 rounded-3xl flex flex-col items-center gap-4 border border-white/5 group-hover:bg-white/10 transition-colors">
+                        <div key={i} className="p-6 bg-white/5 rounded-3xl flex flex-col items-center gap-4 border border-stroke/50 group-hover:bg-white/10 transition-colors">
                           {t.icon}
                           <span className="text-[9px] font-black uppercase tracking-[0.2em] text-center leading-tight italic">{t.label}</span>
                         </div>
                       ))}
                     </div>
-                    <button className="w-full py-6 bg-white text-[#13082A] font-black text-[11px] uppercase tracking-[0.4em] rounded-[2rem] hover:bg-slate-200 transition-all active:scale-95 italic">
+                    <button className="w-full py-6 bg-white text-text-primary font-black text-[11px] uppercase tracking-[0.4em] rounded-[2rem] hover:bg-slate-200 transition-all active:scale-95 italic">
                       Open Security Portal
                     </button>
                   </div>
-                  <div className="absolute -right-24 -bottom-24 size-64 bg-[#6143f4]/20 rounded-full blur-[100px] group-hover:scale-125 transition-transform duration-1000"></div>
+                  <div className="absolute -right-24 -bottom-24 size-64 bg-primary/20 rounded-full blur-[100px] group-hover:scale-125 transition-transform duration-1000"></div>
                 </div>
 
                 {/* Urgent Support */}
-                <div className="bg-gradient-to-br from-[#009CDE] to-[#6143f4] p-12 rounded-[4rem] text-white shadow-3xl shadow-[#6143f4]/20 space-y-10 relative overflow-hidden group">
+                <div className="bg-gradient-to-br from-secondary to-primary p-12 rounded-[4rem] text-text-primary shadow-3xl shadow-primary/20 space-y-10 relative overflow-hidden group">
                   <div className="space-y-4 relative z-10">
                     <h4 className="text-3xl font-black uppercase tracking-tighter italic leading-none">Global<br/>Support</h4>
-                    <p className="text-xs font-bold text-white/70 leading-relaxed uppercase tracking-widest italic opacity-80">
+                    <p className="text-xs font-bold text-text-primary/70 leading-relaxed uppercase tracking-widest italic opacity-80">
                       Our support engineering team is available 24/7 for critical clinical system issues.
                     </p>
                   </div>
                   <div className="space-y-6 relative z-10">
-                    <button className="w-full flex items-center gap-6 p-6 bg-white/10 hover:bg-white/20 border border-white/10 rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] transition-all italic group/btn">
+                    <button className="w-full flex items-center gap-6 p-6 bg-white/10 hover:bg-white/20 border border-stroke rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] transition-all italic group/btn">
                       <Mail size={22} className="group-hover:rotate-12 transition-transform" />
                       support@arogyaai.com
                     </button>
-                    <button className="w-full flex items-center gap-6 p-6 bg-white/10 hover:bg-white/20 border border-white/10 rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] transition-all italic group/btn">
+                    <button className="w-full flex items-center gap-6 p-6 bg-white/10 hover:bg-white/20 border border-stroke rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] transition-all italic group/btn">
                       <Phone size={22} className="group-hover:rotate-12 transition-transform" />
                       +1 (800) AROGYA-9
                     </button>
@@ -295,20 +295,20 @@ const SystemStatus = () => {
             </div>
             
             {/* Footer */}
-            <footer className="pt-20 border-t border-slate-200 dark:border-white/5">
+            <footer className="pt-20 border-t border-slate-200 dark:border-stroke/50">
               <div className="flex flex-col md:flex-row justify-between items-center gap-12 opacity-40 hover:opacity-100 transition-opacity">
                 <div className="flex items-center gap-4 group">
-                  <div className="size-10 rounded-xl bg-slate-300 dark:bg-white/10 flex items-center justify-center group-hover:bg-[#6143f4] transition-colors">
-                    <Activity size={20} className="text-white" strokeWidth={3} />
+                  <div className="size-10 rounded-xl bg-slate-300 dark:bg-white/10 flex items-center justify-center group-hover:bg-primary transition-colors">
+                    <Activity size={20} className="text-text-primary" strokeWidth={3} />
                   </div>
-                  <span className="text-2xl font-black text-slate-500 uppercase tracking-tighter group-hover:text-[#13082A] dark:group-hover:text-white transition-colors">Arogya<span className="text-slate-400">AI</span></span>
+                  <span className="text-2xl font-black text-slate-500 uppercase tracking-tighter group-hover:text-text-primary dark:group-hover:text-text-primary transition-colors">Arogya<span className="text-text-muted">AI</span></span>
                 </div>
                 <div className="flex flex-wrap justify-center gap-10">
                   {['Legal', 'Privacy Policy', 'Terms of Service', 'Compliance'].map(link => (
-                    <a key={link} href="#" className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] hover:text-[#6143f4] transition-colors italic">{link}</a>
+                    <a key={link} href="#" className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] hover:text-primary transition-colors italic">{link}</a>
                   ))}
                 </div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic opacity-60">© 2026 ArogyaAI Systems. Global Monitoring.</p>
+                <p className="text-[10px] font-black text-text-muted uppercase tracking-widest italic opacity-60">© 2026 ArogyaAI Systems. Global Monitoring.</p>
               </div>
             </footer>
           </div>

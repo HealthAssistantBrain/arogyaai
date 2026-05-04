@@ -83,10 +83,10 @@ const HealthSummary = () => {
   }, []);
 
   return (
-    <div className="bg-white dark:bg-slate-900 p-8 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col">
+    <div className="bg-white dark:bg-background p-8 rounded-xl shadow-sm border border-slate-100 dark:border-stroke flex flex-col">
       <div className="mb-6 flex items-center justify-between gap-3">
         <h3 className="text-slate-500 font-bold text-xs uppercase tracking-[0.2em]">Health Summary</h3>
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#6143f4]/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-[#6143f4]">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-primary">
           <Sparkles size={12} />
           AI
         </span>
@@ -102,19 +102,19 @@ const HealthSummary = () => {
 
             return (
               <div key={`${item.title}-${index}`} className="flex gap-4 group">
-                <div className={`${IconConfig.bg} ${IconConfig.color} size-10 shrink-0 rounded-full flex items-center justify-center transition-transform group-hover:scale-110 shadow-sm border border-white dark:border-slate-700`}>
+                <div className={`${IconConfig.bg} ${IconConfig.color} size-10 shrink-0 rounded-full flex items-center justify-center transition-transform group-hover:scale-110 shadow-sm border border-white dark:border-stroke`}>
                   <Icon size={18} />
                 </div>
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-bold text-[#13082A] dark:text-white tracking-tight">{item.title}</p>
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.16em] text-slate-500 dark:bg-white/5 dark:text-slate-300">
+                    <p className="text-sm font-bold text-text-primary dark:text-text-primary tracking-tight">{item.title}</p>
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.16em] text-slate-500 dark:bg-white/5 dark:text-text-secondary">
                       {item.value}
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 leading-relaxed font-medium mt-1">{item.description}</p>
                   {item.recommendation ? (
-                    <p className="mt-2 text-[11px] font-black uppercase tracking-[0.14em] text-[#6143f4]">
+                    <p className="mt-2 text-[11px] font-black uppercase tracking-[0.14em] text-primary">
                       {item.recommendation}
                     </p>
                   ) : null}
@@ -123,13 +123,13 @@ const HealthSummary = () => {
             );
           })
         ) : (
-          <div className="flex min-h-[132px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 px-4 text-center dark:border-white/10">
-            <AlertCircle size={22} className="text-slate-300 dark:text-slate-600" />
-            <p className="mt-3 text-sm font-bold text-slate-500 dark:text-slate-400">
+          <div className="flex min-h-[132px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 px-4 text-center dark:border-stroke">
+            <AlertCircle size={22} className="text-text-secondary dark:text-slate-600" />
+            <p className="mt-3 text-sm font-bold text-slate-500 dark:text-text-muted">
               Not enough data to generate insights
             </p>
             {error ? (
-              <p className="mt-2 text-xs font-medium text-slate-400 dark:text-slate-500">{error}</p>
+              <p className="mt-2 text-xs font-medium text-text-muted dark:text-slate-500">{error}</p>
             ) : null}
           </div>
         )}
@@ -139,3 +139,4 @@ const HealthSummary = () => {
 };
 
 export default HealthSummary;
+

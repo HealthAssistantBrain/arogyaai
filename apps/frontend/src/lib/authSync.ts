@@ -81,17 +81,17 @@ export const syncUser = async ({
   const runSync = async () => {
     authStore.getState().setSupabaseSession?.(session);
 
-    const meResponse = await fetch(`${API_BASE_URL}/users/me`, {
-      method: 'GET',
+    const socialLoginResponse = await fetch(`${API_BASE_URL}/auth/social-login`, {
+      method: 'POST',
       credentials: 'include',
       headers: {
         Authorization: `Bearer ${token}`,
       },
     });
 
-    let payload = await parsePayload(meResponse);
+    let payload = await parsePayload(socialLoginResponse);
 
-    if (meResponse.status === 404) {
+    if (socialLoginResponse.status === 404) {
       const createResponse = await fetch(`${API_BASE_URL}/users/create-from-auth`, {
         method: 'POST',
         credentials: 'include',
@@ -105,8 +105,8 @@ export const syncUser = async ({
       if (!createResponse.ok) {
         throw buildError(createResponse.status, payload);
       }
-    } else if (!meResponse.ok) {
-      throw buildError(meResponse.status, payload);
+    } else if (!socialLoginResponse.ok) {
+      throw buildError(socialLoginResponse.status, payload);
     }
 
     const user = extractUser(payload);

@@ -34,11 +34,54 @@ CARDIO_KEYWORDS = (
     "resting",
     "palpitation",
 )
+RESPIRATORY_KEYWORDS = (
+    "respiratory",
+    "lung",
+    "breathing",
+    "breathlessness",
+    "shortness",
+    "oxygen",
+    "spo2",
+    "asthma",
+    "copd",
+)
 SLEEP_KEYWORDS = ("sleep", "insomnia", "snoring", "apnea", "fatigue", "daytime")
 
 DIABETES_SYMPTOMS = ("thirst", "urination", "fatigue", "blurred vision", "weight loss", "sugar")
 CARDIO_SYMPTOMS = ("chest pain", "palpitation", "shortness of breath", "dizziness", "syncope", "breathlessness")
+RESPIRATORY_SYMPTOMS = (
+    "shortness of breath",
+    "breathlessness",
+    "wheezing",
+    "cough",
+    "chest tightness",
+    "low oxygen",
+)
 SLEEP_SYMPTOMS = ("insomnia", "snoring", "apnea", "daytime sleepiness", "poor sleep", "fatigue")
+
+CONDITION_ALIASES = {
+    "cardio": "cardiovascular",
+    "cardiovascular": "cardiovascular",
+    "cad": "cardiovascular",
+    "coronary": "cardiovascular",
+    "heart": "cardiovascular",
+    "hypertension": "cardiovascular",
+    "blood pressure": "cardiovascular",
+    "bp": "cardiovascular",
+    "diabetes": "diabetes",
+    "diabetes mellitus": "diabetes",
+    "glucose": "diabetes",
+    "hba1c": "diabetes",
+    "metabolic": "diabetes",
+    "respiratory": "respiratory",
+    "respiratory strain": "respiratory",
+    "lung": "respiratory",
+    "breathing": "respiratory",
+    "pulmonary": "respiratory",
+    "sleep": "sleep",
+}
+
+PREDICTED_CONDITIONS = ("cardiovascular", "diabetes", "respiratory")
 
 
 @dataclass
@@ -123,7 +166,70 @@ def _risk_from_cards(cards: Any, *keys: str) -> float | None:
     return max(values) if values else None
 
 
-def _extract_disease_probabilities(risk_score: RiskScore | None) -> dict[str, float]:
+def _condition_key(value: Any) -> str | None:
+    text = _lower_text(value)
+    if not text:
+        return None
+    normalized = text.removesuffix(" risk").removesuffix(" score")
+    normalized = normalized.removesuffix("_risk").removesuffix("_score")
+    for alias, condition in CONDITION_ALIASES.items():
+        if alias in normalized:
+            return condition
+    return None
+
+
+def _fallback_condition_probabilities(risk_score: RiskScore | None, feature_payload: dict[str, Any]) -> dict[str, float]:
+    if risk_score is None:
+        return {}
+
+    overall = _normalize_probability(risk_score.overall_score) or 0.0
+    systolic_bp = _safe_float(feature_payload.get("systolic_bp"), 0.0) or 0.0
+    diastolic_bp = _safe_float(feature_payload.get("diastolic_bp"), 0.0) or 0.0
+    bmi = _safe_float(feature_payload.get("bmi"), 0.0) or 0.0
+    glucose = _safe_float(feature_payload.get("glucose"), 0.0) or 0.0
+    steps = _safe_float(feature_payload.get("activity_level") or feature_payload.get("steps"), 0.0) or 0.0
+    sleep = _safe_float(feature_payload.get("sleep_duration") or feature_payload.get("sleep"), 0.0) or 0.0
+    heart_rate = _safe_float(
+        feature_payload.get("avg_rhr")
+        or feature_payload.get("hr_mean_7d")
+        or feature_payload.get("heart_rate"),
+        0.0,
+    ) or 0.0
+
+    cardiovascular = overall
+    diabetes = overall
+    respiratory = overall * 0.75
+
+    if systolic_bp >= 130 or diastolic_bp >= 80:
+        cardiovascular += 0.08
+    if steps < 5000:
+        cardiovascular += 0.05
+        diabetes += 0.06
+        respiratory += 0.04
+    if sleep < 6.5:
+        cardiovascular += 0.04
+        diabetes += 0.04
+        respiratory += 0.08
+    if bmi >= 30:
+        cardiovascular += 0.06
+        diabetes += 0.10
+    if glucose >= 100:
+        diabetes += 0.10
+    if heart_rate >= 90:
+        cardiovascular += 0.05
+        respiratory += 0.05
+
+    return {
+        "cardiovascular": round(max(0.0, min(1.0, cardiovascular)), 4),
+        "diabetes": round(max(0.0, min(1.0, diabetes)), 4),
+        "respiratory": round(max(0.0, min(1.0, respiratory)), 4),
+    }
+
+
+def _extract_disease_probabilities(
+    risk_score: RiskScore | None,
+    feature_payload: dict[str, Any] | None = None,
+) -> dict[str, float]:
     if risk_score is None:
         return {}
 
@@ -131,6 +237,15 @@ def _extract_disease_probabilities(risk_score: RiskScore | None) -> dict[str, fl
     risks = payload.get("risks") if isinstance(payload.get("risks"), dict) else {}
     combined = {**payload, **risks}
     cards = payload.get("cards")
+    probabilities: dict[str, float] = {}
+
+    for key, raw_value in combined.items():
+        condition = _condition_key(key)
+        if condition is None:
+            continue
+        value = _normalize_probability(raw_value)
+        if value is not None:
+            probabilities[condition] = max(probabilities.get(condition, 0.0), value)
 
     diabetes = (
         _risk_value(combined, "diabetes", "diabetes_risk")
@@ -145,17 +260,27 @@ def _extract_disease_probabilities(risk_score: RiskScore | None) -> dict[str, fl
         _risk_value(combined, "sleep", "sleep_risk")
         or _risk_from_cards(cards, "sleep")
     )
+    respiratory = (
+        _risk_value(combined, "respiratory", "respiratory_risk", "respiratory_score")
+        or _risk_from_cards(cards, "respiratory", "lung", "pulmonary")
+    )
 
-    probabilities: dict[str, float] = {}
     if diabetes is not None:
-        probabilities["diabetes"] = diabetes
+        probabilities["diabetes"] = max(probabilities.get("diabetes", 0.0), diabetes)
 
     cardio_candidates = [value for value in cardio_values if value is not None]
     if cardio_candidates:
-        probabilities["cardiovascular"] = max(cardio_candidates)
+        probabilities["cardiovascular"] = max(probabilities.get("cardiovascular", 0.0), max(cardio_candidates))
+
+    if respiratory is not None:
+        probabilities["respiratory"] = max(probabilities.get("respiratory", 0.0), respiratory)
 
     if sleep is not None:
-        probabilities["sleep"] = sleep
+        probabilities["sleep"] = max(probabilities.get("sleep", 0.0), sleep)
+
+    if risk_score is not None and not all(condition in probabilities for condition in PREDICTED_CONDITIONS):
+        for condition, probability in _fallback_condition_probabilities(risk_score, feature_payload or {}).items():
+            probabilities.setdefault(condition, probability)
 
     return probabilities
 
@@ -254,6 +379,7 @@ def _collect_vitals(db: Session, user_id: UUID | str, feature_payload: dict[str,
         "sleep_hours": _sleep_hours(latest.get("sleep", {}).get("value"), latest.get("sleep", {}).get("unit")),
         "systolic_bp": latest.get("blood_pressure_systolic", {}).get("value"),
         "diastolic_bp": latest.get("blood_pressure_diastolic", {}).get("value"),
+        "fasting_glucose": latest.get("fasting_glucose", {}).get("value"),
         "source_rows": len(rows),
     }
 
@@ -272,6 +398,12 @@ def _collect_vitals(db: Session, user_id: UUID | str, feature_payload: dict[str,
     vitals["sleep_efficiency"] = _safe_float(feature_payload.get("sleep_efficiency"))
     vitals["systolic_bp"] = vitals["systolic_bp"] or _safe_float(feature_payload.get("systolic_bp"))
     vitals["diastolic_bp"] = vitals["diastolic_bp"] or _safe_float(feature_payload.get("diastolic_bp"))
+    vitals["fasting_glucose"] = vitals["fasting_glucose"] or _safe_float(
+        feature_payload.get("fasting_glucose")
+        or feature_payload.get("glucose")
+        or feature_payload.get("blood_glucose")
+        or feature_payload.get("blood_sugar")
+    )
 
     return vitals
 
@@ -381,7 +513,7 @@ def _collect_signals(db: Session, user_id: UUID | str) -> RecommendationSignals:
 
     return RecommendationSignals(
         risk_score=_normalize_probability(latest_risk.overall_score if latest_risk else None),
-        disease_probabilities=_extract_disease_probabilities(latest_risk),
+        disease_probabilities=_extract_disease_probabilities(latest_risk, feature_payload),
         drivers=_extract_drivers(db, latest_risk),
         vitals=vitals,
         labs=labs,

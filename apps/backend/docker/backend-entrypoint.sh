@@ -50,7 +50,7 @@ PY
 
 run_migrations() {
   echo "[startup] Running Alembic migrations once"
-  if alembic upgrade heads; then
+  if alembic upgrade head; then
     echo "[startup] Migrations complete"
     return 0
   fi

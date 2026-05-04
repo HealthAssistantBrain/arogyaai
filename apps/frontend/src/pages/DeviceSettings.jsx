@@ -52,14 +52,14 @@ function extractErrorMessage(error, fallback) {
 
 function StatCard({ label, value, helper, icon: Icon }) {
   return (
-    <div className="rounded-[1.75rem] border border-slate-200/70 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/[0.03]">
+    <div className="rounded-[1.75rem] border border-slate-200/70 bg-white p-5 shadow-sm dark:border-stroke dark:bg-white/[0.03]">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="mb-2 text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">{label}</p>
-          <p className="text-[24px] font-black tracking-tight text-[#13082a] dark:text-white">{value}</p>
-          <p className="mt-2 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">{helper}</p>
+          <p className="mb-2 text-[11px] font-black uppercase tracking-[0.2em] text-text-muted">{label}</p>
+          <p className="text-[24px] font-black tracking-tight text-text-primary dark:text-text-primary">{value}</p>
+          <p className="mt-2 text-[12px] leading-relaxed text-slate-500 dark:text-text-muted">{helper}</p>
         </div>
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#6143f4]/20 bg-[#6143f4]/10 text-[#6143f4]">
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
           <Icon size={20} />
         </div>
       </div>
@@ -223,28 +223,28 @@ const DeviceSettings = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f6f5f8] text-[#13082a] dark:bg-[#0B0819] dark:text-slate-100">
+    <div className="min-h-screen bg-background text-text-primary dark:bg-background dark:text-slate-100">
       
 
       <main className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10">
         {!isGoogleFit ? (
-          <section className="rounded-[2rem] border border-slate-200/70 bg-white p-8 shadow-sm dark:border-white/10 dark:bg-white/[0.03]">
+          <section className="rounded-[2rem] border border-slate-200/70 bg-white p-8 shadow-sm dark:border-stroke dark:bg-white/[0.03]">
             <div className="flex items-start gap-4">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-amber-500/20 bg-amber-500/10 text-amber-500">
                 <AlertTriangle size={22} />
               </div>
               <div className="min-w-0">
-                <h1 className="text-[28px] font-black tracking-tight text-[#13082a] dark:text-white">
+                <h1 className="text-[28px] font-black tracking-tight text-text-primary dark:text-text-primary">
                   Device settings are backend-driven only
                 </h1>
-                <p className="mt-3 max-w-3xl text-[14px] leading-relaxed text-slate-500 dark:text-slate-400">
+                <p className="mt-3 max-w-3xl text-[14px] leading-relaxed text-slate-500 dark:text-text-muted">
                   This route no longer uses mock device data. The backend currently exposes live Google Fit state,
                   so other device ids are shown as unavailable instead of being faked.
                 </p>
                 <button
                   type="button"
                   onClick={() => navigate(ROUTES.DEVICES)}
-                  className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-[#6143f4] px-5 py-3 text-[12px] font-black uppercase tracking-[0.16em] text-white transition hover:bg-[#5235dc]"
+                  className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-[12px] font-black uppercase tracking-[0.16em] text-white transition hover:bg-[#5235dc]"
                 >
                   Return to Device Manager
                 </button>
@@ -253,31 +253,31 @@ const DeviceSettings = () => {
           </section>
         ) : (
           <>
-            <section className="rounded-[2rem] border border-slate-200/70 bg-white p-8 shadow-sm dark:border-white/10 dark:bg-white/[0.03]">
+            <section className="rounded-[2rem] border border-slate-200/70 bg-white p-8 shadow-sm dark:border-stroke dark:bg-white/[0.03]">
               <div className="grid gap-8 lg:grid-cols-[1.5fr_1fr]">
                 <div>
                   <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400">
                     <CheckCircle2 size={14} />
                     Live backend status
                   </div>
-                  <h1 className="text-[32px] font-black leading-tight tracking-tight text-[#13082a] dark:text-white">
+                  <h1 className="text-[32px] font-black leading-tight tracking-tight text-text-primary dark:text-text-primary">
                     {deviceName}
                   </h1>
-                  <p className="mt-3 max-w-3xl text-[14px] leading-relaxed text-slate-500 dark:text-slate-400">
+                  <p className="mt-3 max-w-3xl text-[14px] leading-relaxed text-slate-500 dark:text-text-muted">
                     This page only shows data returned by the backend. Sync, connect, and disconnect actions use the
                     existing Google Fit pipeline without changing any API contracts.
                   </p>
                 </div>
 
-                <div className="rounded-[1.75rem] border border-slate-200/70 bg-slate-50/80 p-5 dark:border-white/10 dark:bg-[#131022]">
-                  <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Connection</p>
-                  <p className="mt-3 text-[22px] font-black tracking-tight text-[#13082a] dark:text-white">
+                <div className="rounded-[1.75rem] border border-slate-200/70 bg-slate-50/80 p-5 dark:border-stroke dark:bg-card">
+                  <p className="text-[11px] font-black uppercase tracking-[0.2em] text-text-muted">Connection</p>
+                  <p className="mt-3 text-[22px] font-black tracking-tight text-text-primary dark:text-text-primary">
                     {isLoading ? 'Loading...' : connected ? 'Connected' : 'Not connected'}
                   </p>
-                  <p className="mt-2 text-[13px] text-slate-500 dark:text-slate-400">
+                  <p className="mt-2 text-[13px] text-slate-500 dark:text-text-muted">
                     {status?.google_email || 'No Google account is currently linked.'}
                   </p>
-                  <div className="mt-4 flex flex-wrap gap-2 text-[12px] text-slate-500 dark:text-slate-400">
+                  <div className="mt-4 flex flex-wrap gap-2 text-[12px] text-slate-500 dark:text-text-muted">
                     <span className="rounded-full bg-white px-3 py-1 dark:bg-white/5">Timezone: {timezone}</span>
                     <span className="rounded-full bg-white px-3 py-1 dark:bg-white/5">
                       Last sync: {formatDateTime(status?.last_synced_at, timezone)}
@@ -299,11 +299,11 @@ const DeviceSettings = () => {
             )}
 
             <section className="mt-6 grid gap-4 lg:grid-cols-[1.45fr_0.95fr]">
-              <div className="rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.03]">
+              <div className="rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-sm dark:border-stroke dark:bg-white/[0.03]">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Actions</p>
-                    <h2 className="mt-2 text-[22px] font-black tracking-tight text-[#13082a] dark:text-white">
+                    <p className="text-[11px] font-black uppercase tracking-[0.2em] text-text-muted">Actions</p>
+                    <h2 className="mt-2 text-[22px] font-black tracking-tight text-text-primary dark:text-text-primary">
                       Google Fit sync controls
                     </h2>
                   </div>
@@ -313,7 +313,7 @@ const DeviceSettings = () => {
                         type="button"
                         onClick={handleConnect}
                         disabled={isConnecting}
-                        className="inline-flex items-center gap-2 rounded-2xl bg-[#6143f4] px-5 py-3 text-[12px] font-black uppercase tracking-[0.16em] text-white transition hover:bg-[#5235dc] disabled:cursor-not-allowed disabled:opacity-70"
+                        className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-[12px] font-black uppercase tracking-[0.16em] text-white transition hover:bg-[#5235dc] disabled:cursor-not-allowed disabled:opacity-70"
                       >
                         <Link2 size={16} />
                         {isConnecting ? 'Opening Google...' : 'Connect Google Fit'}
@@ -324,7 +324,7 @@ const DeviceSettings = () => {
                           type="button"
                           onClick={handleSync}
                           disabled={isSyncing}
-                          className="inline-flex items-center gap-2 rounded-2xl bg-[#6143f4] px-5 py-3 text-[12px] font-black uppercase tracking-[0.16em] text-white transition hover:bg-[#5235dc] disabled:cursor-not-allowed disabled:opacity-70"
+                          className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-[12px] font-black uppercase tracking-[0.16em] text-white transition hover:bg-[#5235dc] disabled:cursor-not-allowed disabled:opacity-70"
                         >
                           <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
                           {isSyncing ? 'Syncing...' : 'Sync Latest 7 Days'}
@@ -383,23 +383,23 @@ const DeviceSettings = () => {
                 </div>
               </div>
 
-              <div className="rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.03]">
-                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Implementation notes</p>
-                <ul className="mt-4 space-y-3 text-[13px] leading-relaxed text-slate-600 dark:text-slate-400">
+              <div className="rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-sm dark:border-stroke dark:bg-white/[0.03]">
+                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-text-muted">Implementation notes</p>
+                <ul className="mt-4 space-y-3 text-[13px] leading-relaxed text-slate-600 dark:text-text-muted">
                   <li>Connection state is fetched from the live Google Fit status endpoint.</li>
                   <li>Sync and disconnect use the existing Google Fit backend routes.</li>
                   <li>No fallback devices, fake statuses, or placeholder timestamps are shown here.</li>
                   <li>Other device ids are treated as unavailable until a real backend source exists.</li>
                 </ul>
 
-                <div className="mt-6 rounded-[1.5rem] border border-slate-200/70 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-[#131022]">
+                <div className="mt-6 rounded-[1.5rem] border border-slate-200/70 bg-slate-50/80 p-4 dark:border-stroke dark:bg-card">
                   <div className="flex items-start gap-3">
                     <AlertTriangle className="mt-0.5 text-amber-500" size={18} />
                     <div>
-                      <p className="text-[12px] font-black uppercase tracking-[0.14em] text-[#13082a] dark:text-white">
+                      <p className="text-[12px] font-black uppercase tracking-[0.14em] text-text-primary dark:text-text-primary">
                         Safety check
                       </p>
-                      <p className="mt-2 text-[13px] leading-relaxed text-slate-500 dark:text-slate-400">
+                      <p className="mt-2 text-[13px] leading-relaxed text-slate-500 dark:text-text-muted">
                         This page intentionally avoids generic device fallbacks so the frontend stays aligned with
                         backend truth and the Google Fit pipeline remains unchanged.
                       </p>
@@ -416,3 +416,4 @@ const DeviceSettings = () => {
 };
 
 export default DeviceSettings;
+

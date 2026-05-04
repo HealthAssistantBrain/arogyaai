@@ -111,6 +111,7 @@ async def csrf_protection_middleware(request: Request, call_next):
         "/api/v1/auth/login",
         "/api/v1/auth/signup",
         "/api/v1/auth/oauth",
+        "/api/v1/auth/social-login",
         "/api/v1/auth/refresh",
         "/api/v1/auth/refresh-token",
         "/api/v1/health",

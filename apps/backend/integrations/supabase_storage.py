@@ -121,3 +121,34 @@ def upload_report(user_id: Any, original_name: str, file_bytes: bytes) -> tuple[
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"File storage is temporarily unavailable: {exc}",
         ) from exc
+
+
+def delete_report(storage_path: str, bucket_name: str | None = None) -> None:
+    """
+    Delete a report object from Supabase Storage.
+
+    Missing or blank paths are treated as a no-op so callers can safely clean up
+    legacy rows that were created before storage_path was available.
+    """
+    if not storage_path:
+        return
+
+    bucket = bucket_name or settings.SUPABASE_BUCKET_NAME
+
+    try:
+        client = _get_client()
+        client.storage.from_(bucket).remove([storage_path])
+        logger.info("Supabase Storage delete succeeded: bucket=%s path=%s", bucket, storage_path)
+    except SupabaseStorageError:
+        raise
+    except Exception as exc:
+        logger.exception(
+            "Supabase Storage delete failed: bucket=%s path=%s error=%s",
+            bucket,
+            storage_path,
+            exc,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"File storage is temporarily unavailable: {exc}",
+        ) from exc

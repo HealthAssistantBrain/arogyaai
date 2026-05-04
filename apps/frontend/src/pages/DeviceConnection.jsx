@@ -140,7 +140,7 @@ const DeviceConnection = () => {
   ];
 
   return (
-    <div className="bg-[#f6f5f8] dark:bg-[#131022] font-display text-[#13082A] dark:text-slate-100 min-h-screen flex flex-col antialiased">
+    <div className="bg-background dark:bg-card font-display text-text-primary dark:text-slate-100 min-h-screen flex flex-col antialiased">
       {/* Navigation Header - Matched Stitch */}
       <OnboardingHeader step={4} onSaveAndExit={handleSaveAndExit} />
 
@@ -149,36 +149,36 @@ const DeviceConnection = () => {
           variants={containerVariants}
           initial="initial"
           animate="animate"
-          className="max-w-4xl w-full bg-white dark:bg-slate-900 rounded-xl shadow-xl shadow-[#6143f4]/5 overflow-hidden border border-[#6143f4]/5"
+          className="max-w-4xl w-full bg-white dark:bg-background rounded-xl shadow-xl shadow-primary/5 overflow-hidden border border-primary/5"
         >
           <div className="p-6 md:p-10">
             {/* Progress Indicator */}
             <div className="mb-10">
               <div className="flex justify-between items-end mb-3">
                 <div>
-                  <span className="text-xs font-bold text-[#6143f4] tracking-widest uppercase mb-1 block">Final Step</span>
+                  <span className="text-xs font-bold text-primary tracking-widest uppercase mb-1 block">Final Step</span>
                   <h1 className="text-2xl md:text-3xl font-bold">Device Connection</h1>
                 </div>
                 <div className="text-right">
-                  <span className="text-sm font-bold text-[#6143f4]">100% Complete</span>
+                  <span className="text-sm font-bold text-primary">100% Complete</span>
                 </div>
               </div>
-              <div className="h-2 w-full bg-[#6143f4]/10 rounded-full overflow-hidden">
+              <div className="h-2 w-full bg-primary/10 rounded-full overflow-hidden">
                 <motion.div
                   initial={{ width: '75%' }}
                   animate={{ width: '100%' }}
                   transition={{ duration: 1, ease: "easeOut" }}
-                  className="h-full bg-[#6143f4] rounded-full"
+                  className="h-full bg-primary rounded-full"
                 ></motion.div>
               </div>
             </div>
 
             {/* Hero Section */}
             <div className="text-center mb-12">
-              <h2 className="text-3xl font-bold text-[#13082A] dark:text-white mb-4 tracking-tight">
+              <h2 className="text-3xl font-bold text-text-primary dark:text-text-primary mb-4 tracking-tight">
                 Connect Your Health Ecosystem
               </h2>
-              <p className="text-slate-600 dark:text-slate-400 text-base max-w-xl mx-auto font-medium leading-relaxed">
+              <p className="text-slate-600 dark:text-text-muted text-base max-w-xl mx-auto font-medium leading-relaxed">
                 Sync your wearable data for personalized health insights powered by clinical-grade AI models.
               </p>
             </div>
@@ -193,13 +193,13 @@ const DeviceConnection = () => {
               {devices.map((device) => (
                 <div
                   key={device.id}
-                  className="group bg-slate-50 dark:bg-slate-800/50 border-2 border-slate-100 dark:border-slate-800 p-6 rounded-xl flex flex-col items-center text-center transition-all hover:bg-[#6143f4]/5 hover:border-[#6143f4]/20"
+                  className="group bg-slate-50 dark:bg-card/50 border-2 border-slate-100 dark:border-stroke p-6 rounded-xl flex flex-col items-center text-center transition-all hover:bg-primary/5 hover:border-primary/20"
                 >
-                  <div className="size-20 bg-white dark:bg-slate-700 rounded-2xl mb-6 flex items-center justify-center overflow-hidden shadow-sm border border-slate-100 dark:border-white/5 p-4">
+                  <div className="size-20 bg-white dark:bg-slate-700 rounded-2xl mb-6 flex items-center justify-center overflow-hidden shadow-sm border border-slate-100 dark:border-stroke/50 p-4">
                     <img src={device.logo} alt={device.name} className="w-full h-full object-contain" />
                   </div>
 
-                  <h3 className="text-lg font-bold text-[#13082A] dark:text-white mb-1">{device.name}</h3>
+                  <h3 className="text-lg font-bold text-text-primary dark:text-text-primary mb-1">{device.name}</h3>
                   <p className="text-[10px] font-bold text-slate-500 mb-6 uppercase tracking-widest">
                     {device.status}
                   </p>
@@ -207,7 +207,7 @@ const DeviceConnection = () => {
                   <button
                     onClick={device.action}
                     disabled={device.status === 'Connected'}
-                    className={`w-full py-3 ${device.status === 'Connected' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-[#6143f4] hover:bg-[#6143f4]/90'} text-white rounded-lg font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#6143f4]/20 active:scale-95 transition-all`}
+                    className={`w-full py-3 ${device.status === 'Connected' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-primary hover:bg-primary/90'} text-white rounded-lg font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-primary/20 active:scale-95 transition-all`}
                   >
                     {device.status === 'Connected' ? <CheckCircle size={16} /> : <LinkIcon size={16} />}
                     {device.status === 'Connected' ? 'Connected' : 'Connect Now'}
@@ -220,7 +220,7 @@ const DeviceConnection = () => {
             <div className="text-center mb-12">
               <button
                 onClick={handleFinish}
-                className="text-slate-400 hover:text-[#6143f4] font-bold text-xs uppercase tracking-widest transition-all flex items-center gap-2 mx-auto"
+                className="text-text-muted hover:text-primary font-bold text-xs uppercase tracking-widest transition-all flex items-center gap-2 mx-auto"
               >
                 Skip for now, I'll connect later
                 <ChevronRight size={14} />
@@ -228,17 +228,17 @@ const DeviceConnection = () => {
             </div>
 
             {/* Navigation Controls */}
-            <div className="pt-8 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-4 justify-between items-center">
+            <div className="pt-8 border-t border-slate-100 dark:border-stroke flex flex-col sm:flex-row gap-4 justify-between items-center">
               <button
                 onClick={() => navigate(ROUTES.ONBOARDING_STEP_3)}
-                className="w-full sm:w-auto px-8 py-3 rounded-lg border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
+                className="w-full sm:w-auto px-8 py-3 rounded-lg border-2 border-slate-200 dark:border-stroke text-slate-600 dark:text-text-secondary font-bold hover:bg-slate-50 dark:hover:bg-card transition-all flex items-center justify-center gap-2"
               >
                 <ArrowLeft size={16} />
                 Back
               </button>
               <button
                 onClick={handleFinish}
-                className="w-full sm:w-auto px-10 py-3 rounded-lg bg-[#6143f4] text-white font-bold hover:bg-[#6143f4]/90 shadow-lg shadow-[#6143f4]/25 transition-all flex items-center justify-center gap-2"
+                className="w-full sm:w-auto px-10 py-3 rounded-lg bg-primary text-white font-bold hover:bg-primary/90 shadow-lg shadow-primary/25 transition-all flex items-center justify-center gap-2"
               >
                 Continue to Summary
                 <ArrowRight size={16} />
@@ -248,13 +248,14 @@ const DeviceConnection = () => {
         </motion.div>
       </main>
 
-      <footer className="py-8 px-10 text-center text-slate-400 text-xs mt-auto">
+      <footer className="py-8 px-10 text-center text-text-muted text-xs mt-auto">
         © 2024 ArogyaAI Health Systems. All data is encrypted and HIPAA compliant.
       </footer>
       {/* Footer Decoration */}
-      <div className="fixed bottom-0 left-0 w-full h-1 bg-gradient-to-r from-[#6143f4] via-[#009CDE] to-[#6143f4] opacity-50 z-50"></div>
+      <div className="fixed bottom-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-secondary to-primary opacity-50 z-50"></div>
     </div>
   );
 };
 
 export default DeviceConnection;
+

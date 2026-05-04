@@ -79,6 +79,14 @@ async def get_health_metrics(
     return await svc.get_health_metrics(current_user, db)
 
 
+@router.get("/health/recommendation-plan")
+async def get_recommendation_plan(
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
+    return await svc.get_recommendation_plan(current_user, db)
+
+
 @router.get("/prediction/latest")
 async def get_latest_prediction(
     current_user: User = Depends(get_current_user_from_header),

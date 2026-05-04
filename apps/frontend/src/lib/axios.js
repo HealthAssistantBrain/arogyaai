@@ -4,6 +4,7 @@ import { isSystemLocked } from './systemLock';
 import { getApiRootUrl, getApiUrl } from './apiBaseUrl';
 import { applyCsrfHeader } from './csrf';
 import { getSupabaseClient, supabase } from './supabaseClient';
+import { useSystemHealthStore } from '../store/systemHealthStore';
 
 const BASE_URL = getApiRootUrl(import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000');
 const API_URL = getApiUrl(import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000');
@@ -32,6 +33,8 @@ const processRefreshQueue = (error, token = null) => {
 };
 
 const getCurrentSupabaseToken = async (fallbackToken = null) => {
+  if (fallbackToken) return fallbackToken;
+
   const client = getSupabaseClient() ?? supabase;
   if (!client) return fallbackToken;
 
@@ -51,6 +54,7 @@ api.interceptors.request.use(
     const method = (config.method || 'get').toUpperCase();
     const headers = config.headers || {};
     const token = await getCurrentSupabaseToken(useAuthStore.getState().token);
+    if (token) console.debug('[api] Authorization attached', { url: config.url });
     if (token) headers.Authorization = `Bearer ${token}`;
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
       applyCsrfHeader(headers);
@@ -117,18 +121,20 @@ async function checkAndTriggerMaintenance() {
 
   try {
     const response = await axios.get(`${BASE_URL}/health`, { timeout: 5000 });
+    const backendStatus = String(response.data?.status || '').toLowerCase();
 
-    if (response.status === 503 || !response.data?.success) {
-      throw new Error('Health check returned degraded status');
+    if (response.status === 503 || response.status < 200 || response.status >= 300 || backendStatus === 'down') {
+      throw new Error(`Health check returned ${response.status}${backendStatus ? `/${backendStatus}` : ''}`);
     }
 
     consecutiveHealthFailures = 0; // reset on success
+    useSystemHealthStore.getState().setMaintenance(false);
   } catch {
     consecutiveHealthFailures += 1;
     console.warn(`[Maintenance] Health failure #${consecutiveHealthFailures}/${MAX_HEALTH_FAILURES}`);
     if (consecutiveHealthFailures >= MAX_HEALTH_FAILURES) {
-      console.warn('[Maintenance] TRIGGERED — redirecting to /maintenance');
-      window.location.href = '/maintenance';
+      console.warn('[Maintenance] TRIGGERED — backend health is down');
+      useSystemHealthStore.getState().setMaintenance(true, 'Backend health check failed');
     }
   }
 }
@@ -183,6 +189,7 @@ api.interceptors.response.use(
       isRefreshingSession = true;
 
       try {
+        console.debug('[api] 401 received; refreshing session once', { url: config.url });
         const refreshed = await useAuthStore.getState().refreshSession?.();
         const newToken = useAuthStore.getState().token;
 
@@ -198,7 +205,9 @@ api.interceptors.response.use(
         processRefreshQueue(refreshError, null);
         const store = useAuthStore.getState();
         store.hardReset ? store.hardReset() : store.logout();
-        window.location.href = '/login?sessionExpired=true';
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login?sessionExpired=true';
+        }
         return Promise.reject(refreshError);
       } finally {
         isRefreshingSession = false;

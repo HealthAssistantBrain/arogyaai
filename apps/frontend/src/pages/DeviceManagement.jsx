@@ -115,7 +115,7 @@ function dedupeDevices(devices) {
 
 function DeviceCard({ device, onSyncNow, onOpenGoogleFit, syncing }) {
   return (
-    <div className="flex min-h-[220px] flex-col rounded-xl border border-slate-200/60 bg-white p-5 transition-all hover:shadow-md dark:border-white/5 dark:bg-[#131022]">
+    <div className="flex min-h-[220px] flex-col rounded-xl border border-slate-200/60 bg-white p-5 transition-all hover:shadow-md dark:border-stroke/50 dark:bg-card">
       <div className="mb-3.5 flex items-start justify-between">
         <div
           className="flex h-11 w-11 items-center justify-center rounded-lg"
@@ -137,11 +137,11 @@ function DeviceCard({ device, onSyncNow, onOpenGoogleFit, syncing }) {
         </div>
       </div>
 
-      <h4 className="mb-1.5 text-[14px] font-bold tracking-tight text-[#13082a] dark:text-white">
+      <h4 className="mb-1.5 text-[14px] font-bold tracking-tight text-text-primary dark:text-text-primary">
         {device.name}
       </h4>
 
-      <div className="mb-4 flex items-center gap-2.5 text-[11px] font-medium text-slate-400">
+      <div className="mb-4 flex items-center gap-2.5 text-[11px] font-medium text-text-muted">
         {device.lastSynced ? (
           <span className="flex items-center gap-1">
             <RotateCw size={11} />
@@ -171,7 +171,7 @@ function DeviceCard({ device, onSyncNow, onOpenGoogleFit, syncing }) {
 
         {device.provider === GOOGLE_FIT_PROVIDER ? (
           <button
-            className="rounded-lg border border-slate-200 px-3 py-2.5 text-[12px] font-semibold text-slate-600 transition-all hover:border-[#6143f4]/30 hover:text-[#6143f4] dark:border-white/10 dark:text-slate-300"
+            className="rounded-lg border border-slate-200 px-3 py-2.5 text-[12px] font-semibold text-slate-600 transition-all hover:border-primary/30 hover:text-primary dark:border-stroke dark:text-text-secondary"
             type="button"
             onClick={onOpenGoogleFit}
           >
@@ -201,34 +201,34 @@ function DeviceGrid({ devices, onSyncNow, onOpenGoogleFit, syncingDeviceId }) {
 
 function SyncPanel({ integrations, lastUpdated }) {
   return (
-    <div className="rounded-xl border border-slate-200/60 bg-white p-6 dark:border-white/5 dark:bg-[#131022]">
+    <div className="rounded-xl border border-slate-200/60 bg-white p-6 dark:border-stroke/50 dark:bg-card">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-[15px] font-bold tracking-tight text-[#13082a] dark:text-white">
+          <h3 className="text-[15px] font-bold tracking-tight text-text-primary dark:text-text-primary">
             Sync Health
           </h3>
-          <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+          <p className="mt-1 text-[11px] leading-relaxed text-text-muted">
             Connected integrations reported by the backend.
           </p>
         </div>
         <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#22c55e]">
-          <CheckCircle2 size={14} className="text-white" />
+          <CheckCircle2 size={14} className="text-text-primary" />
         </div>
       </div>
 
       {lastUpdated ? (
-        <p className="mb-4 text-[11px] font-medium text-slate-400">
+        <p className="mb-4 text-[11px] font-medium text-text-muted">
           Last backend update: {formatLastSynced(lastUpdated)}
         </p>
       ) : null}
 
-      <div className="space-y-3 border-t border-slate-100 pt-4 dark:border-white/5">
+      <div className="space-y-3 border-t border-slate-100 pt-4 dark:border-stroke/50">
         {integrations.length > 0 ? (
           integrations.map((item) => (
             <div key={item.name} className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <span className="text-[14px]">💚</span>
-                <span className="text-[12px] font-semibold text-[#13082a] dark:text-white">
+                <span className="text-[12px] font-semibold text-text-primary dark:text-text-primary">
                   {item.name}
                 </span>
               </div>
@@ -238,8 +238,8 @@ function SyncPanel({ integrations, lastUpdated }) {
             </div>
           ))
         ) : (
-          <div className="rounded-xl border border-dashed border-slate-200 px-4 py-5 text-center dark:border-white/10">
-            <p className="text-[12px] font-semibold text-slate-500 dark:text-slate-400">
+          <div className="rounded-xl border border-dashed border-slate-200 px-4 py-5 text-center dark:border-stroke">
+            <p className="text-[12px] font-semibold text-slate-500 dark:text-text-muted">
               No connected integrations returned by the backend.
             </p>
           </div>
@@ -422,16 +422,16 @@ const DeviceManagement = () => {
       <div className="mx-auto w-full max-w-[1440px] p-8 pb-16">
         <div className="mb-7 flex flex-col justify-between gap-4 md:flex-row md:items-end">
           <div>
-            <h2 className="mb-1.5 text-[28px] font-black tracking-tight text-[#13082a] dark:text-white">
+            <h2 className="mb-1.5 text-[28px] font-black tracking-tight text-text-primary dark:text-text-primary">
               Device Manager
             </h2>
-            <p className="text-[13px] font-medium text-slate-400">
+            <p className="text-[13px] font-medium text-text-muted">
               Connected devices and integrations are rendered directly from the backend.
             </p>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+            <div className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:border-stroke dark:bg-white/5 dark:text-text-secondary">
               {connectedDevices.length} connected
             </div>
             <Button
@@ -439,7 +439,7 @@ const DeviceManagement = () => {
               onClick={handleOpenAddModal}
               variant="primary"
               size="md"
-              className="bg-[#6143f4] text-white hover:bg-[#5235dc]"
+              className="bg-primary text-white hover:bg-[#5235dc]"
             >
               + Add Device
             </Button>
@@ -456,21 +456,21 @@ const DeviceManagement = () => {
           <div className="space-y-6 lg:col-span-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <h3 className="text-[14px] font-bold text-[#13082a] dark:text-white">
+                <h3 className="text-[14px] font-bold text-text-primary dark:text-text-primary">
                   Connected Devices
                 </h3>
-                <span className="rounded-md border border-[#6143f4]/10 bg-[#6143f4]/[0.06] px-2 py-0.5 text-[10px] font-bold text-[#6143f4]">
+                <span className="rounded-md border border-primary/10 bg-primary/[0.06] px-2 py-0.5 text-[10px] font-bold text-primary">
                   {filteredDevices.length} visible
                 </span>
               </div>
             </div>
 
             {isLoading ? (
-              <div className="rounded-xl border border-dashed border-slate-200 bg-white px-6 py-10 text-center dark:border-white/10 dark:bg-[#131022]">
-                <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-[#6143f4]/10 text-[#6143f4]">
+              <div className="rounded-xl border border-dashed border-slate-200 bg-white px-6 py-10 text-center dark:border-stroke dark:bg-card">
+                <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
                   <RefreshCw size={18} className="animate-spin" />
                 </div>
-                <p className="text-[13px] font-semibold text-slate-500 dark:text-slate-400">
+                <p className="text-[13px] font-semibold text-slate-500 dark:text-text-muted">
                   Loading connected devices from the backend...
                 </p>
               </div>
@@ -482,11 +482,11 @@ const DeviceManagement = () => {
                 syncingDeviceId={syncingDeviceId}
               />
             ) : (
-              <div className="rounded-xl border border-dashed border-slate-200 bg-white px-6 py-10 text-center dark:border-white/10 dark:bg-[#131022]">
-                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#6143f4]/10 text-[#6143f4]">
+              <div className="rounded-xl border border-dashed border-slate-200 bg-white px-6 py-10 text-center dark:border-stroke dark:bg-card">
+                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
                   <Watch size={22} />
                 </div>
-                <p className="text-[14px] font-semibold text-slate-500 dark:text-slate-400">
+                <p className="text-[14px] font-semibold text-slate-500 dark:text-text-muted">
                   {query.trim()
                     ? 'No connected devices match your search.'
                     : 'No devices connected. Add a device to start syncing health data.'}
@@ -497,7 +497,7 @@ const DeviceManagement = () => {
                     onClick={handleOpenAddModal}
                     variant="primary"
                     size="md"
-                    className="mt-5 bg-[#6143f4] text-white hover:bg-[#5235dc]"
+                    className="mt-5 bg-primary text-white hover:bg-[#5235dc]"
                   >
                     + Add Device
                   </Button>
@@ -509,16 +509,16 @@ const DeviceManagement = () => {
           <div className="space-y-5">
             <SyncPanel integrations={syncIntegrations} lastUpdated={lastUpdated} />
 
-            <div className="rounded-xl border border-slate-200/60 bg-white p-6 dark:border-white/5 dark:bg-[#131022]">
-              <h3 className="mb-2 text-[15px] font-bold tracking-tight text-[#13082a] dark:text-white">
+            <div className="rounded-xl border border-slate-200/60 bg-white p-6 dark:border-stroke/50 dark:bg-card">
+              <h3 className="mb-2 text-[15px] font-bold tracking-tight text-text-primary dark:text-text-primary">
                 Search behavior
               </h3>
-              <p className="text-[11px] leading-relaxed text-slate-400">
+              <p className="text-[11px] leading-relaxed text-text-muted">
                 Search is filtered against connected backend devices only, so the page never shows mock or
                 placeholder integrations.
               </p>
               <button
-                className="mt-5 inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#6143f4] transition-colors hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-5 inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-primary transition-colors hover:underline disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
                 onClick={() => setQuery('')}
                 disabled={!query}
@@ -539,3 +539,4 @@ const DeviceManagement = () => {
 };
 
 export default DeviceManagement;
+

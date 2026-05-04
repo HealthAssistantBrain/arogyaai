@@ -38,6 +38,8 @@ const processQueue = (error: any, token: string | null = null) => {
 };
 
 const getCurrentSupabaseToken = async (fallbackToken: string | null = null) => {
+  if (fallbackToken) return fallbackToken;
+
   const client = getSupabaseClient() ?? supabase;
   if (!client) return fallbackToken;
 
@@ -57,6 +59,7 @@ apiClient.interceptors.request.use(
     const headers = (config.headers as Record<string, string | undefined>) || {};
     const token = await getCurrentSupabaseToken(useAuthStore.getState().token);
     if (token) {
+      console.debug('[apiClient] Authorization attached', { url: config.url });
       headers.Authorization = `Bearer ${token}`;
     }
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
@@ -103,7 +106,8 @@ apiClient.interceptors.response.use(
       originalRequest._retry = true;
       isRefreshing = true;
 
-    try {
+      try {
+        console.debug('[apiClient] 401 received; refreshing session once', { url: originalRequest.url });
         const refreshed = await useAuthStore.getState().refreshSession?.();
         const newAccessToken = useAuthStore.getState().token;
 
@@ -118,7 +122,9 @@ apiClient.interceptors.response.use(
         processQueue(refreshError, null);
         const store = useAuthStore.getState();
         store.hardReset ? store.hardReset() : store.logout();
-        window.location.href = '/login?sessionExpired=true';
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login?sessionExpired=true';
+        }
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

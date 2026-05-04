@@ -225,11 +225,11 @@ const Lifestyle = () => {
     animate: { opacity: 1, y: 0 }
   };
 
-  const activeDietClass = "px-5 py-2 rounded-full border-2 border-[#6143f4] bg-[#6143f4]/5 text-[#6143f4] text-sm font-bold shadow-lg shadow-[#6143f4]/10 transition-all active:scale-95";
-  const inactiveDietClass = "px-5 py-2 rounded-full border-2 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-sm font-bold hover:border-[#6143f4]/50 transition-all active:scale-95";
+  const activeDietClass = "px-5 py-2 rounded-full border-2 border-primary bg-primary/5 text-primary text-sm font-bold shadow-lg shadow-primary/10 transition-all active:scale-95";
+  const inactiveDietClass = "px-5 py-2 rounded-full border-2 border-slate-200 dark:border-stroke text-slate-500 dark:text-text-muted text-sm font-bold hover:border-primary/50 transition-all active:scale-95";
 
   return (
-    <div className="bg-[#f6f5f8] dark:bg-[#131022] font-display text-[#13082A] dark:text-slate-100 min-h-screen flex flex-col">
+    <div className="bg-background dark:bg-card font-display text-text-primary dark:text-slate-100 min-h-screen flex flex-col">
       {/* Header Section - Standardized */}
       <OnboardingHeader step={3} onSaveAndExit={handleSaveAndExit} loading={loading} />
 
@@ -238,25 +238,25 @@ const Lifestyle = () => {
           variants={containerVariants}
           initial="initial"
           animate="animate"
-          className="max-w-4xl w-full bg-white dark:bg-slate-900 rounded-xl shadow-xl shadow-[#6143f4]/5 overflow-hidden border border-[#6143f4]/5"
+          className="max-w-4xl w-full bg-white dark:bg-background rounded-xl shadow-xl shadow-primary/5 overflow-hidden border border-primary/5"
         >
           <div className="p-6 md:p-10">
             <div className="mb-10">
               <div className="flex justify-between items-end mb-3">
                 <div>
-                  <span className="text-xs font-bold text-[#6143f4] tracking-widest uppercase mb-1 block">Assessment</span>
+                  <span className="text-xs font-bold text-primary tracking-widest uppercase mb-1 block">Assessment</span>
                   <h1 className="text-2xl md:text-3xl font-bold">Lifestyle Assessment</h1>
                 </div>
                 <div className="text-right">
-                  <span className="text-sm font-bold text-[#6143f4]">75% Complete</span>
+                  <span className="text-sm font-bold text-primary">75% Complete</span>
                 </div>
               </div>
-              <div className="h-2 w-full bg-[#6143f4]/10 rounded-full overflow-hidden">
+              <div className="h-2 w-full bg-primary/10 rounded-full overflow-hidden">
                 <motion.div
                   initial={{ width: '50%' }}
                   animate={{ width: '75%' }}
                   transition={{ duration: 1, ease: "easeOut" }}
-                  className="h-full bg-[#6143f4] rounded-full"
+                  className="h-full bg-primary rounded-full"
                 ></motion.div>
               </div>
             </div>
@@ -264,9 +264,9 @@ const Lifestyle = () => {
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-12">
               {/* Section 1: Activity Level */}
               <motion.section variants={itemVariants}>
-                <div className="flex items-center gap-2 mb-6 text-[#6143f4]">
+                <div className="flex items-center gap-2 mb-6 text-primary">
                   <Activity size={24} />
-                  <h3 className="text-lg font-bold text-[#13082A] dark:text-white">How active are you daily?</h3>
+                  <h3 className="text-lg font-bold text-text-primary dark:text-text-primary">How active are you daily?</h3>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {[
@@ -281,10 +281,10 @@ const Lifestyle = () => {
                         className="peer sr-only"
                         type="radio"
                       />
-                      <div className="p-5 rounded-lg border-2 border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 transition-all peer-checked:border-[#6143f4] peer-checked:bg-[#6143f4]/5 group-hover:bg-[#6143f4]/5">
+                      <div className="p-5 rounded-lg border-2 border-slate-100 dark:border-stroke bg-slate-50 dark:bg-card/50 transition-all peer-checked:border-primary peer-checked:bg-primary/5 group-hover:bg-primary/5">
                         <div className="flex flex-col items-center text-center gap-3">
                           <div className="size-12 rounded-full bg-white dark:bg-slate-700 flex items-center justify-center shadow-sm">
-                            <item.icon size={24} className="text-slate-400 group-hover:text-[#6143f4] transition-colors" />
+                            <item.icon size={24} className="text-text-muted group-hover:text-primary transition-colors" />
                           </div>
                           <div>
                             <p className="font-bold">{item.label}</p>
@@ -299,9 +299,9 @@ const Lifestyle = () => {
 
               {/* Section 2: Diet Habits */}
               <motion.section variants={itemVariants}>
-                <div className="flex items-center gap-2 mb-6 text-[#009CDE]">
+                <div className="flex items-center gap-2 mb-6 text-secondary">
                   <Utensils size={24} />
-                  <h3 className="text-lg font-bold text-[#13082A] dark:text-white">Select your dietary preferences</h3>
+                  <h3 className="text-lg font-bold text-text-primary dark:text-text-primary">Select your dietary preferences</h3>
                 </div>
                 <div className="flex flex-wrap gap-3">
                   <AnimatePresence mode="popLayout">
@@ -327,21 +327,21 @@ const Lifestyle = () => {
                 <motion.section variants={itemVariants}>
                   <div className="flex items-center gap-2 mb-6 text-indigo-500">
                     <Moon size={24} />
-                    <h3 className="text-lg font-bold text-[#13082A] dark:text-white">Average sleep duration</h3>
+                    <h3 className="text-lg font-bold text-text-primary dark:text-text-primary">Average sleep duration</h3>
                   </div>
                   <div className="px-2">
-                    <div className="flex justify-between text-xs font-bold text-slate-400 mb-2 uppercase tracking-widest">
+                    <div className="flex justify-between text-xs font-bold text-text-muted mb-2 uppercase tracking-widest">
                       <span>0h</span>
                       <span>6h</span>
                       <span>12h+</span>
                     </div>
                     <input
                       {...register('sleep')}
-                      className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-[#6143f4]"
+                      className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-[var(--color-primary)]"
                       max="12" min="0" step="0.5" type="range"
                     />
                     <div className="mt-4 text-center">
-                      <span className="text-3xl font-bold text-[#6143f4]">{sleepValue}</span>
+                      <span className="text-3xl font-bold text-primary">{sleepValue}</span>
                       <span className="text-slate-500 font-medium ml-1 text-sm">hours / night</span>
                     </div>
                   </div>
@@ -351,22 +351,22 @@ const Lifestyle = () => {
                 <motion.section variants={itemVariants}>
                   <div className="flex items-center gap-2 mb-6 text-orange-500">
                     <BrainCircuit size={24} />
-                    <h3 className="text-lg font-bold text-[#13082A] dark:text-white">Current stress level</h3>
+                    <h3 className="text-lg font-bold text-text-primary dark:text-text-primary">Current stress level</h3>
                   </div>
                   <div className="px-2">
-                    <div className="flex justify-between text-xs font-bold text-slate-400 mb-2 uppercase tracking-widest">
+                    <div className="flex justify-between text-xs font-bold text-text-muted mb-2 uppercase tracking-widest">
                       <span>Very Low</span>
                       <span>Moderate</span>
                       <span>Very High</span>
                     </div>
                     <input
                       {...register('stress')}
-                      className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-[#6143f4]"
+                      className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-[var(--color-primary)]"
                       max="5" min="1" step="1" type="range"
                     />
                     <div className="mt-4 flex justify-center items-center gap-2">
                       <Scale size={20} className="text-amber-500" />
-                      <span className="text-slate-600 dark:text-slate-300 font-medium">{getStressText(stressValue)}</span>
+                      <span className="text-slate-600 dark:text-text-secondary font-medium">{getStressText(stressValue)}</span>
                     </div>
                   </div>
                 </motion.section>
@@ -376,7 +376,7 @@ const Lifestyle = () => {
                 <div className="space-y-5">
                   <div className="flex items-center gap-2 text-emerald-600">
                     <User size={22} />
-                    <h3 className="text-lg font-bold text-[#13082A] dark:text-white">Personal History</h3>
+                    <h3 className="text-lg font-bold text-text-primary dark:text-text-primary">Personal History</h3>
                   </div>
                   <input type="hidden" {...register('smoking')} />
                   <input type="hidden" {...register('alcohol')} />
@@ -386,7 +386,7 @@ const Lifestyle = () => {
                       { key: 'smoking', label: 'Smoking' },
                       { key: 'alcohol', label: 'Alcohol' },
                     ].map((item) => (
-                      <div key={item.key} className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 px-4 py-3">
+                      <div key={item.key} className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-stroke bg-slate-50 dark:bg-card/40 px-4 py-3">
                         <span className="font-semibold">{item.label}</span>
                         <div className="flex gap-2">
                           {[
@@ -409,10 +409,10 @@ const Lifestyle = () => {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="flex flex-col gap-2">
-                      <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Appetite</label>
+                      <label className="text-sm font-bold text-slate-700 dark:text-text-secondary">Appetite</label>
                       <select
                         {...register('appetite')}
-                        className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 px-4 py-3 outline-none focus:ring-2 focus:ring-[#6143f4] dark:text-white"
+                        className="rounded-xl border border-slate-200 dark:border-stroke bg-slate-50 dark:bg-card/40 px-4 py-3 outline-none focus:ring-2 focus:ring-[var(--color-primary)] dark:text-text-primary"
                       >
                         <option value="">Select</option>
                         <option value="low">Low</option>
@@ -421,10 +421,10 @@ const Lifestyle = () => {
                       </select>
                     </div>
                     <div className="flex flex-col gap-2">
-                      <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Bowel Habits</label>
+                      <label className="text-sm font-bold text-slate-700 dark:text-text-secondary">Bowel Habits</label>
                       <select
                         {...register('bowelHabits')}
-                        className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 px-4 py-3 outline-none focus:ring-2 focus:ring-[#6143f4] dark:text-white"
+                        className="rounded-xl border border-slate-200 dark:border-stroke bg-slate-50 dark:bg-card/40 px-4 py-3 outline-none focus:ring-2 focus:ring-[var(--color-primary)] dark:text-text-primary"
                       >
                         <option value="">Select</option>
                         <option value="normal">Normal</option>
@@ -435,16 +435,16 @@ const Lifestyle = () => {
                 </div>
 
                 <div className="space-y-5">
-                  <div className="flex items-center gap-2 text-[#6143f4]">
+                  <div className="flex items-center gap-2 text-primary">
                     <TrendingUp size={22} />
-                    <h3 className="text-lg font-bold text-[#13082A] dark:text-white">Current Health Status</h3>
+                    <h3 className="text-lg font-bold text-text-primary dark:text-text-primary">Current Health Status</h3>
                   </div>
 
                   <div className="flex flex-col gap-2">
-                    <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Chief Complaint <span className="text-slate-400 font-medium">(optional)</span></label>
+                    <label className="text-sm font-bold text-slate-700 dark:text-text-secondary">Chief Complaint <span className="text-text-muted font-medium">(optional)</span></label>
                     <input
                       {...register('chiefComplaint')}
-                      className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 px-4 py-3 outline-none focus:ring-2 focus:ring-[#6143f4] dark:text-white"
+                      className="rounded-xl border border-slate-200 dark:border-stroke bg-slate-50 dark:bg-card/40 px-4 py-3 outline-none focus:ring-2 focus:ring-[var(--color-primary)] dark:text-text-primary"
                       placeholder="e.g. Headache for 2 days"
                       type="text"
                     />
@@ -467,14 +467,14 @@ const Lifestyle = () => {
                     <div className="flex gap-3">
                       <input
                         {...register('durationValue')}
-                        className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 px-4 py-3 outline-none focus:ring-2 focus:ring-[#6143f4] dark:text-white"
+                        className="w-full rounded-xl border border-slate-200 dark:border-stroke bg-slate-50 dark:bg-card/40 px-4 py-3 outline-none focus:ring-2 focus:ring-[var(--color-primary)] dark:text-text-primary"
                         min="1"
                         placeholder="Duration"
                         type="number"
                       />
                       <select
                         {...register('durationUnit')}
-                        className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 px-4 py-3 outline-none focus:ring-2 focus:ring-[#6143f4] dark:text-white"
+                        className="rounded-xl border border-slate-200 dark:border-stroke bg-slate-50 dark:bg-card/40 px-4 py-3 outline-none focus:ring-2 focus:ring-[var(--color-primary)] dark:text-text-primary"
                       >
                         <option value="hours">hours</option>
                         <option value="days">days</option>
@@ -483,7 +483,7 @@ const Lifestyle = () => {
                     </div>
                     <select
                       {...register('onset')}
-                      className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 px-4 py-3 outline-none focus:ring-2 focus:ring-[#6143f4] dark:text-white"
+                      className="rounded-xl border border-slate-200 dark:border-stroke bg-slate-50 dark:bg-card/40 px-4 py-3 outline-none focus:ring-2 focus:ring-[var(--color-primary)] dark:text-text-primary"
                     >
                       <option value="">Onset</option>
                       <option value="sudden">Sudden</option>
@@ -492,14 +492,14 @@ const Lifestyle = () => {
                   </div>
 
                   <div className="px-2">
-                    <div className="flex justify-between text-xs font-bold text-slate-400 mb-2 uppercase tracking-widest">
+                    <div className="flex justify-between text-xs font-bold text-text-muted mb-2 uppercase tracking-widest">
                       <span>Mild</span>
                       <span>Severity {severityValue}/10</span>
                       <span>Severe</span>
                     </div>
                     <input
                       {...register('severity')}
-                      className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-[#6143f4]"
+                      className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-[var(--color-primary)]"
                       max="10" min="1" step="1" type="range"
                     />
                   </div>
@@ -507,26 +507,26 @@ const Lifestyle = () => {
               </motion.section>
 
               {/* AI Insight Bar */}
-              <motion.div variants={itemVariants} className="bg-[#6143f4]/5 border border-[#6143f4]/10 p-4 rounded-lg flex gap-4 items-start">
-                <Info size={20} className="text-[#6143f4] shrink-0" />
-                <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-                  <span className="font-bold text-[#6143f4]">AI Insight:</span> This lifestyle data helps our models calibrate your metabolic baseline. Combined with your medical history, it allows for 40% higher accuracy in personal health recommendations.
+              <motion.div variants={itemVariants} className="bg-primary/5 border border-primary/10 p-4 rounded-lg flex gap-4 items-start">
+                <Info size={20} className="text-primary shrink-0" />
+                <p className="text-sm text-slate-600 dark:text-text-muted leading-relaxed">
+                  <span className="font-bold text-primary">AI Insight:</span> This lifestyle data helps our models calibrate your metabolic baseline. Combined with your medical history, it allows for 40% higher accuracy in personal health recommendations.
                 </p>
               </motion.div>
 
               {/* Action Buttons */}
-              <div className="mt-12 pt-8 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-4 justify-between items-center">
+              <div className="mt-12 pt-8 border-t border-slate-100 dark:border-stroke flex flex-col sm:flex-row gap-4 justify-between items-center">
                 <button
                   type="button"
                   onClick={() => navigate(ROUTES.ONBOARDING_STEP_2)}
-                  className="w-full sm:w-auto px-8 py-3 rounded-lg border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
+                  className="w-full sm:w-auto px-8 py-3 rounded-lg border-2 border-slate-200 dark:border-stroke text-slate-600 dark:text-text-secondary font-bold hover:bg-slate-50 dark:hover:bg-card transition-all flex items-center justify-center gap-2"
                 >
                   <ArrowLeft size={18} />
                   Back
                 </button>
                 <button
                   type="submit"
-                  className="w-full sm:w-auto px-10 py-3 rounded-lg bg-[#6143f4] text-white font-bold hover:bg-[#6143f4]/90 shadow-lg shadow-[#6143f4]/25 transition-all flex items-center justify-center gap-2"
+                  className="w-full sm:w-auto px-10 py-3 rounded-lg bg-primary text-white font-bold hover:bg-primary/90 shadow-lg shadow-primary/25 transition-all flex items-center justify-center gap-2"
                 >
                   Continue to Step 4
                   <ArrowRight size={18} />
@@ -537,7 +537,7 @@ const Lifestyle = () => {
         </motion.div>
       </main>
 
-      <footer className="py-8 px-10 text-center text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-auto">
+      <footer className="py-8 px-10 text-center text-text-muted text-[10px] font-bold uppercase tracking-widest mt-auto">
         © 2024 ArogyaAI Health Systems. All data is encrypted and HIPAA compliant.
       </footer>
     </div>
@@ -545,3 +545,4 @@ const Lifestyle = () => {
 };
 
 export default Lifestyle;
+

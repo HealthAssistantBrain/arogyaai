@@ -21,3 +21,4 @@ const Card = ({ children, className = "", noPadding = false, animate = true }) =
 };
 
 export default Card;
+

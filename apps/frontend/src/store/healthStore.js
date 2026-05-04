@@ -80,6 +80,114 @@ const normalizeExplanationRecommendation = (item, index) => {
   };
 };
 
+const normalizePlanPriority = (value) => {
+  const normalized = String(value || '').trim().toUpperCase();
+  if (normalized === 'HIGH' || normalized === 'MEDIUM' || normalized === 'LOW') {
+    return normalized;
+  }
+  return 'MEDIUM';
+};
+
+const normalizeActionItem = (item, index, fallbackPriority = 'MEDIUM') => {
+  const payload = typeof item === 'string' ? { text: item } : safeObject(item);
+  const text = safeText(payload.text ?? payload.description ?? payload.detail ?? payload.title, `Action ${index + 1}`);
+
+  return {
+    id: safeText(payload.id, `${text.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'action'}-${index}`),
+    text,
+    priority: normalizePlanPriority(payload.priority ?? fallbackPriority),
+    rationale: safeText(payload.rationale ?? payload.why),
+  };
+};
+
+const normalizeActionList = (value, fallbackPriority = 'MEDIUM') =>
+  safeArray(value)
+    .map((item, index) => normalizeActionItem(item, index, fallbackPriority))
+    .filter((item) => item.text);
+
+const withFallbackAction = (items, text, priority = 'MEDIUM') =>
+  items.length ? items : [normalizeActionItem({ text, priority }, 0, priority)];
+
+const normalizeSingleAction = (value, fallbackText, fallbackPriority = 'MEDIUM') => {
+  if (!value && fallbackText) {
+    return normalizeActionItem({ text: fallbackText, priority: fallbackPriority }, 0, fallbackPriority);
+  }
+  if (typeof value === 'string' || value) {
+    return normalizeActionItem(value, 0, fallbackPriority);
+  }
+  return null;
+};
+
+const normalizeRecommendationPlan = (value) => {
+  const payload = safeObject(value);
+  if (!Object.keys(payload).length) {
+    return null;
+  }
+
+  const lifestyle = safeObject(payload.lifestyle);
+  const clinicalActions = safeObject(payload.clinical_actions ?? payload.clinicalActions);
+  const actionPlan = safeObject(payload.action_plan ?? payload.actionPlan);
+  const monitoring = safeObject(payload.monitoring);
+  const generatedFrom = safeObject(payload.generated_from ?? payload.generatedFrom);
+  const riskLevel = safeText(payload.risk_level ?? payload.riskLevel, 'MEDIUM').toUpperCase();
+  const fallbackSummary =
+    riskLevel === 'LOW'
+      ? 'No immediate concern, but maintaining habits is recommended.'
+      : 'Preventive plan generated. Continue monitoring and review changes with a qualified clinician if symptoms worsen.';
+
+  return {
+    condition: safeText(payload.condition, 'Personalized prevention plan'),
+    conditionKey: safeText(payload.condition_key ?? payload.conditionKey, 'general'),
+    riskLevel,
+    confidence: toFiniteNumber(payload.confidence),
+    summary: safeText(payload.summary, fallbackSummary),
+    badgeLabel: safeText(payload.badge_label ?? payload.badgeLabel, riskLevel === 'LOW' ? 'Preventive Care' : ''),
+    careLabel: safeText(payload.care_label ?? payload.careLabel, riskLevel === 'LOW' ? 'Preventive Care' : ''),
+    ragStatus: safeText(payload.rag_status ?? payload.ragStatus),
+    precautions: withFallbackAction(
+      normalizeActionList(payload.precautions, 'HIGH'),
+      'Continue regular monitoring and watch for new or worsening symptoms.',
+      riskLevel === 'LOW' ? 'LOW' : 'MEDIUM'
+    ),
+    lifestyle: {
+      diet: withFallbackAction(normalizeActionList(lifestyle.diet, 'MEDIUM'), 'Maintain balanced, minimally processed meals with adequate protein and fiber.', 'LOW'),
+      activity: withFallbackAction(normalizeActionList(lifestyle.activity, 'MEDIUM'), 'Keep regular walking or equivalent moderate activity within your tolerance.', 'LOW'),
+      sleep: withFallbackAction(normalizeActionList(lifestyle.sleep, 'LOW'), 'Maintain a consistent sleep and wake schedule.', 'LOW'),
+    },
+    clinicalActions: {
+      tests: withFallbackAction(normalizeActionList(clinicalActions.tests, 'MEDIUM'), 'Use routine preventive screening unless symptoms or readings change.', 'LOW'),
+      doctorVisit: normalizeSingleAction(
+        clinicalActions.doctor_visit ?? clinicalActions.doctorVisit,
+        'Review this prevention plan with a qualified clinician if symptoms persist or readings worsen.',
+        'MEDIUM'
+      ),
+      warningSigns: withFallbackAction(
+        normalizeActionList(clinicalActions.warning_signs ?? clinicalActions.warningSigns, 'HIGH'),
+        'Seek urgent care for chest pain, fainting, severe breathlessness, confusion, or rapidly worsening symptoms.',
+        'HIGH'
+      ),
+    },
+    actionPlan: {
+      daily: withFallbackAction(normalizeActionList(actionPlan.daily, 'MEDIUM'), 'Track symptoms, activity, sleep, and available vital trends.', 'LOW'),
+      weekly: withFallbackAction(normalizeActionList(actionPlan.weekly, 'MEDIUM'), 'Review trends weekly and refresh the plan when new data is available.', 'LOW'),
+    },
+    monitoring: {
+      metrics: withFallbackAction(normalizeActionList(monitoring.metrics, 'MEDIUM'), 'Health trend monitoring', 'LOW'),
+      frequency: normalizeSingleAction(monitoring.frequency, 'Review metrics weekly.', 'MEDIUM'),
+      thresholds: withFallbackAction(normalizeActionList(monitoring.thresholds, 'HIGH'), 'Any high-risk warning sign should override routine monitoring.', 'HIGH'),
+    },
+    clinicalBasis: safeText(payload.clinical_basis ?? payload.clinicalBasis),
+    sources: safeArray(payload.sources),
+    generatedFrom: {
+      ml: Boolean(generatedFrom.ml),
+      wearables: Boolean(generatedFrom.wearables),
+      labs: Boolean(generatedFrom.labs),
+      symptoms: Boolean(generatedFrom.symptoms),
+      topDrivers: safeArray(generatedFrom.top_drivers ?? generatedFrom.topDrivers).map((item) => safeText(item)).filter(Boolean),
+    },
+  };
+};
+
 const normalizeExplanationPayload = (payload) => {
   if (!payload) {
     return null;
@@ -87,6 +195,10 @@ const normalizeExplanationPayload = (payload) => {
 
   const data = safeObject(payload.data ?? payload);
   const recommendations = safeArray(data.recommendations).map(normalizeExplanationRecommendation);
+  const recommendationPlan = normalizeRecommendationPlan(data.recommendation_plan ?? data.recommendationPlan);
+  const recommendationPlans = safeArray(data.recommendation_plans ?? data.recommendationPlans)
+    .map(normalizeRecommendationPlan)
+    .filter(Boolean);
   const factors = safeArray(data.factors).map(normalizeExplanationFactor);
   const clinicalReport = safeObject(data.clinical_report ?? data.clinicalReport);
   const clinicalCards = normalizeClinicalCards(data, {
@@ -114,6 +226,8 @@ const normalizeExplanationPayload = (payload) => {
     clinicalCards,
     factors,
     recommendations,
+    recommendationPlan,
+    recommendationPlans: recommendationPlans.length ? recommendationPlans : (recommendationPlan ? [recommendationPlan] : []),
     sources: safeArray(data.sources),
     retrieval: safeObject(data.retrieval),
     topFeatures: safeArray(data.top_features ?? data.topFeatures),
@@ -130,6 +244,8 @@ export const useHealthStore = create(
         wearableMetrics: {},
         labResults: [],
         recommendations: [],
+        recommendationPlan: null,
+        recommendationPlans: [],
         notifications: [],
         unreadCount: 0,
         googleFitData: null,
@@ -208,6 +324,8 @@ export const useHealthStore = create(
                 {
                   explanation: normalized,
                   recommendations: normalized?.recommendations ?? [],
+                  recommendationPlan: normalized?.recommendationPlan ?? null,
+                  recommendationPlans: normalized?.recommendationPlans ?? [],
                   loading: false,
                   error: null,
                   explanationLastFetched: Date.now(),
@@ -232,6 +350,10 @@ export const useHealthStore = create(
                   recommendations: current.recommendations?.length
                     ? current.recommendations
                     : (fallbackExplanation?.recommendations ?? []),
+                  recommendationPlan: current.recommendationPlan ?? fallbackExplanation?.recommendationPlan ?? null,
+                  recommendationPlans: current.recommendationPlans?.length
+                    ? current.recommendationPlans
+                    : (fallbackExplanation?.recommendationPlans ?? []),
                   loading: false,
                   error: message,
                   explanationPredictionId:

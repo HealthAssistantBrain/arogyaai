@@ -90,19 +90,19 @@ const DeleteAccount = () => {
             icon: WifiOff,
             title: 'Device Link',
             desc: 'Connections to wearables and smart sensors will be severed.',
-            color: 'text-[#009cde]',
-            bg: 'bg-[#009cde]/10'
+            color: 'text-secondary',
+            bg: 'bg-secondary/10'
         }
     ];
 
     return (
-        <div className="bg-[#f6f5f8] dark:bg-[#0B0819] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased text-[14px]">
+        <div className="bg-background dark:bg-background text-text-primary dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased text-[14px]">
             <div className="flex flex-1 overflow-hidden">
                 {/* Sidebar - Standardized Branding */}
 
 
                 {/* Main Content Area */}
-                <main className="flex-1 flex flex-col h-full relative overflow-y-auto no-scrollbar bg-[#f6f5f8] dark:bg-[#0B0819]">
+                <main className="flex-1 flex flex-col h-full relative overflow-y-auto no-scrollbar bg-background dark:bg-background">
                     {/* Top Navigation Bar */}
 
 
@@ -111,16 +111,16 @@ const DeleteAccount = () => {
                         <div className="max-w-5xl mx-auto space-y-12 pb-16">
 
                             {/* Breadcrumbs */}
-                            <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">
-                                <button onClick={() => navigate(ROUTES.SETTINGS)} className="hover:text-[#6143f4] transition-colors">Settings</button>
+                            <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.25em] text-text-muted">
+                                <button onClick={() => navigate(ROUTES.SETTINGS)} className="hover:text-primary transition-colors">Settings</button>
                                 <ChevronRight size={12} strokeWidth={3} />
-                                <span className="text-[#13082a] dark:text-white italic">Delete Account</span>
+                                <span className="text-text-primary dark:text-text-primary italic">Delete Account</span>
                             </div>
 
                             {/* Header */}
                             <div className="space-y-4">
-                                <h1 className="text-5xl lg:text-6xl font-black text-[#13082a] dark:text-white tracking-tighter uppercase italic leading-none">Delete Your Account</h1>
-                                <p className="text-lg text-slate-500 dark:text-slate-400 font-bold uppercase tracking-tight opacity-80 leading-snug max-w-2xl">
+                                <h1 className="text-5xl lg:text-6xl font-black text-text-primary dark:text-text-primary tracking-tighter uppercase italic leading-none">Delete Your Account</h1>
+                                <p className="text-lg text-slate-500 dark:text-text-muted font-bold uppercase tracking-tight opacity-80 leading-snug max-w-2xl">
                                     We're sorry to see you go. This process handles the permanent removal of your ArogyaAI profile, health insights, and personal history.
                                 </p>
                             </div>
@@ -132,7 +132,7 @@ const DeleteAccount = () => {
                                 className="bg-[#fff1f2] dark:bg-red-500/5 border-2 border-red-200 dark:border-red-500/20 rounded-[3rem] p-10 flex flex-col md:flex-row gap-8 items-start relative overflow-hidden group shadow-[0_20px_50px_-10px_rgba(239,68,68,0.1)]"
                             >
                                 <div className="absolute top-0 right-0 size-48 bg-red-500/5 rounded-full blur-[80px] -mr-16 -mt-16 group-hover:scale-110 transition-transform duration-1000"></div>
-                                <div className="bg-[#ef4444] text-white rounded-2xl p-5 shrink-0 shadow-2xl shadow-red-500/30 group-hover:rotate-12 transition-transform">
+                                <div className="bg-[#ef4444] text-text-primary rounded-2xl p-5 shrink-0 shadow-2xl shadow-red-500/30 group-hover:rotate-12 transition-transform">
                                     <AlertTriangle size={36} strokeWidth={2.5} />
                                 </div>
                                 <div className="space-y-4">
@@ -144,9 +144,9 @@ const DeleteAccount = () => {
                             </motion.div>
 
                             {/* CONSEQUENCES GRID */}
-                            <div className="bg-white dark:bg-[#131022] rounded-[3.5rem] shadow-[0_40px_80px_-20px_rgba(19,8,42,0.05)] border border-slate-100 dark:border-white/5 overflow-hidden group/consequences">
-                                <div className="px-12 py-8 border-b border-slate-50 dark:border-white/5 bg-slate-50/30 dark:bg-transparent">
-                                    <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em] leading-none">Forensic Impact Analysis</h3>
+                            <div className="bg-surface rounded-[3.5rem] shadow-[0_40px_80px_-20px_rgba(19,8,42,0.05)] border border-slate-100 dark:border-stroke/50 overflow-hidden group/consequences">
+                                <div className="px-12 py-8 border-b border-slate-50 dark:border-stroke/50 bg-slate-50/30 dark:bg-transparent">
+                                    <h3 className="text-[11px] font-black text-text-muted uppercase tracking-[0.3em] leading-none">Forensic Impact Analysis</h3>
                                 </div>
                                 <div className="p-10 lg:p-14 grid grid-cols-1 md:grid-cols-3 gap-12 lg:gap-16">
                                     {consequences.map((item, idx) => (
@@ -155,8 +155,8 @@ const DeleteAccount = () => {
                                                 <item.icon size={32} strokeWidth={2.5} />
                                             </div>
                                             <div className="space-y-3">
-                                                <h4 className="font-black text-lg uppercase tracking-tight text-[#13082a] dark:text-white italic leading-none">{item.title}</h4>
-                                                <p className="text-slate-500 dark:text-slate-400 text-xs font-bold leading-relaxed uppercase tracking-tight opacity-70">{item.desc}</p>
+                                                <h4 className="font-black text-lg uppercase tracking-tight text-text-primary dark:text-text-primary italic leading-none">{item.title}</h4>
+                                                <p className="text-slate-500 dark:text-text-muted text-xs font-bold leading-relaxed uppercase tracking-tight opacity-70">{item.desc}</p>
                                             </div>
                                         </div>
                                     ))}
@@ -164,14 +164,14 @@ const DeleteAccount = () => {
                             </div>
 
                             {/* CONFIRMATION CARD */}
-                            <div className="bg-white dark:bg-[#131022] rounded-[3.5rem] border border-slate-100 dark:border-white/5 shadow-[0_40px_80px_-20px_rgba(19,8,42,0.05)] p-10 lg:p-14 space-y-12 relative group/confirm">
+                            <div className="bg-surface rounded-[3.5rem] border border-slate-100 dark:border-stroke/50 shadow-[0_40px_80px_-20px_rgba(19,8,42,0.05)] p-10 lg:p-14 space-y-12 relative group/confirm">
                                 <div className="flex items-start gap-8 group/toggle cursor-pointer select-none" onClick={() => setIsConfirmed(!isConfirmed)}>
                                     <div className="pt-1.5 shrink-0">
-                                        <div className={`size-8 rounded-xl border-2 transition-all duration-500 flex items-center justify-center ${isConfirmed ? 'bg-[#ef4444] border-[#ef4444] shadow-2xl shadow-red-500/40 rotate-0' : 'border-slate-200 dark:border-slate-800 rotate-45 group-hover/toggle:border-red-500 group-hover/toggle:rotate-0'}`}>
-                                            <Check size={20} strokeWidth={4} className={`text-white transition-opacity ${isConfirmed ? 'opacity-100' : 'opacity-0'}`} />
+                                        <div className={`size-8 rounded-xl border-2 transition-all duration-500 flex items-center justify-center ${isConfirmed ? 'bg-[#ef4444] border-[#ef4444] shadow-2xl shadow-red-500/40 rotate-0' : 'border-slate-200 dark:border-stroke rotate-45 group-hover/toggle:border-red-500 group-hover/toggle:rotate-0'}`}>
+                                            <Check size={20} strokeWidth={4} className={`text-text-primary transition-opacity ${isConfirmed ? 'opacity-100' : 'opacity-0'}`} />
                                         </div>
                                     </div>
-                                    <p className="text-slate-600 dark:text-slate-400 text-[15px] font-bold leading-relaxed uppercase tracking-tight group-hover/confirm:text-[#13082a] dark:group-hover/confirm:text-white transition-colors">
+                                    <p className="text-slate-600 dark:text-text-muted text-[15px] font-bold leading-relaxed uppercase tracking-tight group-hover/confirm:text-text-primary dark:group-hover/confirm:text-text-primary transition-colors">
                                         I understand that this action is permanent and my data cannot be recovered. I agree to the permanent deletion of my ArogyaAI account and all associated personal information from the health ecosystem.
                                     </p>
                                 </div>
@@ -181,8 +181,8 @@ const DeleteAccount = () => {
                                         disabled={!isConfirmed}
                                         onClick={handleDelete}
                                         className={`flex-1 group/btn flex items-center justify-center gap-4 py-6 px-10 rounded-[2rem] font-black text-xs uppercase tracking-[0.25em] transition-all duration-500 relative overflow-hidden ${isConfirmed
-                                            ? 'bg-[#ef4444] text-white shadow-[0_25px_50px_-12px_rgba(239,68,68,0.5)] hover:scale-[1.02] active:scale-95'
-                                            : 'bg-slate-100 dark:bg-white/5 text-slate-400 cursor-not-allowed opacity-50 grayscale'
+                                            ? 'bg-[#ef4444] text-text-primary shadow-[0_25px_50px_-12px_rgba(239,68,68,0.5)] hover:scale-[1.02] active:scale-95'
+                                            : 'bg-slate-100 dark:bg-white/5 text-text-muted cursor-not-allowed opacity-50 grayscale'
                                             }`}
                                     >
                                         <Trash2 size={20} className="group-hover/btn:animate-bounce" />
@@ -190,7 +190,7 @@ const DeleteAccount = () => {
                                     </button>
                                     <button
                                         onClick={() => navigate(ROUTES.SETTINGS)}
-                                        className="flex-1 py-6 px-10 rounded-[2rem] bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-300 font-black text-xs uppercase tracking-[0.25em] hover:bg-slate-200 dark:hover:bg-white/10 hover:text-[#13082a] dark:hover:text-white transition-all active:scale-95"
+                                        className="flex-1 py-6 px-10 rounded-[2rem] bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-stroke text-slate-500 dark:text-text-secondary font-black text-xs uppercase tracking-[0.25em] hover:bg-slate-200 dark:hover:bg-white/10 hover:text-text-primary dark:hover:text-text-primary transition-all active:scale-95"
                                     >
                                         Cancel and Keep Account
                                     </button>
@@ -199,9 +199,9 @@ const DeleteAccount = () => {
 
                             {/* SUPPORT BLOCK */}
                             <div className="pt-8 text-center space-y-6">
-                                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 leading-none">
+                                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-text-muted leading-none">
                                     Need help before you go?
-                                    <button onClick={() => navigate(ROUTES.HELP)} className="text-[#009cde] hover:underline ml-2 transition-all">
+                                    <button onClick={() => navigate(ROUTES.HELP)} className="text-secondary hover:underline ml-2 transition-all">
                                         Contact our support intelligence
                                     </button>
                                 </p>
@@ -228,4 +228,5 @@ const DeleteAccount = () => {
 };
 
 export default DeleteAccount;
+
 

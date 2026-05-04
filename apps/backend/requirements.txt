@@ -16,6 +16,7 @@ certifi
 cryptography
 APScheduler
 pypdf
+reportlab
 google-cloud-vision
 pytesseract
 Pillow

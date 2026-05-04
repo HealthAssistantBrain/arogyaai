@@ -103,10 +103,10 @@ const SettingsSecurity = () => {
     return (
         <div className="max-w-4xl mx-auto space-y-12 pb-16">
             {/* Page Header */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 pb-4 border-b border-[#6143f4]/5">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 pb-4 border-b border-primary/5">
                 <div className="space-y-4">
-                    <h2 className="text-5xl font-black text-[#13082a] dark:text-white tracking-tighter uppercase italic leading-none">Security</h2>
-                    <p className="text-lg text-slate-500 dark:text-slate-400 font-bold uppercase tracking-tight opacity-80 leading-none max-w-2xl">
+                    <h2 className="text-5xl font-black text-text-primary dark:text-text-primary tracking-tighter uppercase italic leading-none">Security</h2>
+                    <p className="text-lg text-slate-500 dark:text-text-muted font-bold uppercase tracking-tight opacity-80 leading-none max-w-2xl">
                         Manage your account credentials securely.
                     </p>
                 </div>
@@ -131,3 +131,4 @@ const SettingsSecurity = () => {
 };
 
 export default SettingsSecurity;
+

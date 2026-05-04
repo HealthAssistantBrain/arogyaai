@@ -109,7 +109,7 @@ function getStatusVariant(option, connected) {
 
   return {
     label: 'COMING SOON',
-    badgeClass: 'border-slate-300 bg-slate-100 text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-400',
+    badgeClass: 'border-slate-300 bg-slate-100 text-slate-500 dark:border-stroke dark:bg-white/5 dark:text-text-muted',
     dotClass: 'bg-slate-400',
   };
 }
@@ -240,7 +240,7 @@ function AddDeviceModal({ open, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 px-4 py-6 backdrop-blur-xl"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 px-4 py-6 backdrop-blur-xl"
       role="dialog"
       aria-modal="true"
       aria-labelledby="add-device-title"
@@ -253,29 +253,29 @@ function AddDeviceModal({ open, onClose }) {
     >
       <div
         ref={modalRef}
-        className="w-full max-w-5xl overflow-hidden rounded-[2rem] border border-slate-200/80 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.25)] dark:border-white/10 dark:bg-[#0f1424]"
+        className="w-full max-w-5xl overflow-hidden rounded-[2rem] border border-slate-200/80 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.25)] dark:border-stroke dark:bg-[#0f1424]"
       >
-        <div className="border-b border-slate-100 bg-gradient-to-br from-white via-slate-50 to-cyan-50 px-6 py-6 dark:border-white/5 dark:from-[#11182a] dark:via-[#0f1424] dark:to-[#101f33]">
+        <div className="border-b border-slate-100 bg-gradient-to-br from-white via-slate-50 to-cyan-50 px-6 py-6 dark:border-stroke/50 dark:from-[#11182a] dark:via-[#0f1424] dark:to-[#101f33]">
           <div className="flex items-start justify-between gap-4">
             <div className="max-w-2xl">
-              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">
+              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-text-muted">
                 Device onboarding
               </p>
               <h2
                 id="add-device-title"
-                className="mt-2 text-[28px] font-black tracking-tight text-[#13082a] dark:text-white"
+                className="mt-2 text-[28px] font-black tracking-tight text-text-primary dark:text-text-primary"
               >
                 Add Device
               </h2>
               <p
                 id="add-device-description"
-                className="mt-2 text-[14px] leading-relaxed text-slate-500 dark:text-slate-400"
+                className="mt-2 text-[14px] leading-relaxed text-slate-500 dark:text-text-muted"
               >
                 Choose a device or service to connect. Supported integrations are actionable, coming-soon entries
                 stay visible but disabled, and already connected services surface their live state from Zustand.
               </p>
               <div className="mt-4 flex flex-wrap gap-2 text-[11px] font-bold uppercase tracking-[0.18em]">
-                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-500 dark:border-stroke dark:bg-white/5 dark:text-text-secondary">
                   {visibleOptions.length} options
                 </span>
                 <span className="rounded-full border border-sky-500/20 bg-sky-500/10 px-3 py-1 text-sky-600 dark:text-sky-300">
@@ -287,18 +287,18 @@ function AddDeviceModal({ open, onClose }) {
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-transform duration-200 hover:scale-105 hover:border-sky-300 hover:text-sky-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-transform duration-200 hover:scale-105 hover:border-sky-300 hover:text-sky-600 dark:border-stroke dark:bg-white/5 dark:text-text-secondary"
               aria-label="Close add device modal"
             >
               <X size={18} />
             </button>
           </div>
 
-          <div className="mt-5 flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
-            <Search size={16} className="text-slate-400" />
+          <div className="mt-5 flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-stroke dark:bg-white/[0.04]">
+            <Search size={16} className="text-text-muted" />
             <input
               ref={inputRef}
-              className="w-full bg-transparent text-[14px] font-medium text-[#13082a] outline-none placeholder:text-slate-400 dark:text-white"
+              className="w-full bg-transparent text-[14px] font-medium text-text-primary outline-none placeholder:text-text-muted dark:text-text-primary"
               placeholder="Search devices..."
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -307,7 +307,7 @@ function AddDeviceModal({ open, onClose }) {
               <button
                 type="button"
                 onClick={() => setQuery('')}
-                className="text-[12px] font-bold uppercase tracking-[0.16em] text-slate-400 transition-colors hover:text-[#6143f4]"
+                className="text-[12px] font-bold uppercase tracking-[0.16em] text-text-muted transition-colors hover:text-primary"
               >
                 Clear
               </button>
@@ -327,10 +327,10 @@ function AddDeviceModal({ open, onClose }) {
                 return (
                   <article
                     key={option.id}
-                    className="group flex min-h-[230px] flex-col rounded-[1.5rem] border border-slate-200/80 bg-slate-50/80 p-5 transition-all duration-200 hover:-translate-y-1 hover:border-sky-300 hover:bg-white hover:shadow-[0_18px_45px_rgba(2,132,199,0.12)] dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-sky-500/30 dark:hover:bg-white/[0.05]"
+                    className="group flex min-h-[230px] flex-col rounded-[1.5rem] border border-slate-200/80 bg-slate-50/80 p-5 transition-all duration-200 hover:-translate-y-1 hover:border-sky-300 hover:bg-white hover:shadow-[0_18px_45px_rgba(2,132,199,0.12)] dark:border-stroke dark:bg-white/[0.03] dark:hover:border-sky-500/30 dark:hover:bg-white/[0.05]"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/50 bg-white text-[#6143f4] shadow-sm transition-transform duration-200 group-hover:scale-105 dark:border-white/5 dark:bg-white/5">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-stroke/500 bg-white text-primary shadow-sm transition-transform duration-200 group-hover:scale-105 dark:border-stroke/50 dark:bg-white/5">
                         <Icon size={22} />
                       </div>
                       <span
@@ -342,10 +342,10 @@ function AddDeviceModal({ open, onClose }) {
                     </div>
 
                     <div className="mt-4">
-                      <h3 className="text-[16px] font-bold tracking-tight text-[#13082a] dark:text-white">
+                      <h3 className="text-[16px] font-bold tracking-tight text-text-primary dark:text-text-primary">
                         {option.name}
                       </h3>
-                      <p className="mt-2 truncate text-[13px] leading-5 text-slate-500 dark:text-slate-400" title={option.description}>
+                      <p className="mt-2 truncate text-[13px] leading-5 text-slate-500 dark:text-text-muted" title={option.description}>
                         {option.description}
                       </p>
                     </div>
@@ -359,8 +359,8 @@ function AddDeviceModal({ open, onClose }) {
                           connected
                             ? 'cursor-not-allowed border border-sky-500/20 bg-sky-500/10 text-sky-600 dark:text-sky-300'
                             : option.status === 'supported'
-                              ? 'bg-[#6143f4] text-white shadow-sm hover:bg-[#5235dc] hover:shadow-md disabled:opacity-60'
-                              : 'cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400 dark:border-white/10 dark:bg-white/5 dark:text-slate-500'
+                              ? 'bg-primary text-white shadow-sm hover:bg-[#5235dc] hover:shadow-md disabled:opacity-60'
+                              : 'cursor-not-allowed border border-slate-200 bg-slate-100 text-text-muted dark:border-stroke dark:bg-white/5 dark:text-slate-500'
                         }`}
                       >
                         {connected ? (
@@ -386,21 +386,21 @@ function AddDeviceModal({ open, onClose }) {
               })}
             </div>
           ) : (
-            <div className="flex min-h-[280px] flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-slate-200 bg-slate-50/60 px-6 py-10 text-center dark:border-white/10 dark:bg-white/[0.03]">
+            <div className="flex min-h-[280px] flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-slate-200 bg-slate-50/60 px-6 py-10 text-center dark:border-stroke dark:bg-white/[0.03]">
               <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-600">
                 <Search size={20} />
               </div>
-              <h3 className="text-[16px] font-bold tracking-tight text-[#13082a] dark:text-white">
+              <h3 className="text-[16px] font-bold tracking-tight text-text-primary dark:text-text-primary">
                 No devices found
               </h3>
-              <p className="mt-2 max-w-md text-[13px] leading-relaxed text-slate-500 dark:text-slate-400">
+              <p className="mt-2 max-w-md text-[13px] leading-relaxed text-slate-500 dark:text-text-muted">
                 Try a different search term or clear the filter to see all supported, coming-soon, and connected
                 integrations.
               </p>
               <button
                 type="button"
                 onClick={() => setQuery('')}
-                className="mt-5 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[12px] font-black uppercase tracking-[0.16em] text-[#13082a] transition-colors hover:border-sky-300 hover:text-sky-600 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                className="mt-5 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[12px] font-black uppercase tracking-[0.16em] text-text-primary transition-colors hover:border-sky-300 hover:text-sky-600 dark:border-stroke dark:bg-white/5 dark:text-text-primary"
               >
                 Clear Search
                 <ArrowRight size={14} />
@@ -414,3 +414,4 @@ function AddDeviceModal({ open, onClose }) {
 }
 
 export default AddDeviceModal;
+

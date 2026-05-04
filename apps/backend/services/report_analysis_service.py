@@ -12,6 +12,7 @@ from integrations.prediction_client import PredictionClient
 from integrations.ocr_service import OCRInput, OCRService
 from models import Report, ReportStatusEnum, ReportTypeEnum, User
 from services.report_service import ReportService
+from services.timeline_service import create_report_timeline_event
 
 logger = logging.getLogger("uvicorn.error")
 prediction_client = PredictionClient()
@@ -37,6 +38,7 @@ async def analyze_report_upload(
     )
 
     extracted_text, text_source, ocr_confidence, text_pages = _extract_text_from_pdf(file_bytes, file.filename or "report.pdf")
+    print("Extracted text length:", len(extracted_text or ""))
     logger.warning(
         "Medical report text extracted: request_id=%s name=%s chars=%s preview=%s",
         request_id,
@@ -91,6 +93,20 @@ async def analyze_report_upload(
             text_pages=text_pages,
         )
 
+    structured_summary = ReportService._normalize_structured_summary(
+        prediction_data.get("structured_summary") or prediction_data.get("summary"),
+        fallback_title=file.filename or "Medical Report",
+        fallback_summary=prediction_data.get("patient_summary") or prediction_data.get("summary") or "Analysis complete.",
+    )
+    summary_view = ReportService._summary_view_from_structured_summary(
+        structured_summary,
+        source=prediction_data.get("summary_source") or "prediction-service",
+        stored_view=prediction_data.get("summary_view") if isinstance(prediction_data.get("summary_view"), dict) else {},
+    )
+    patient_summary = prediction_data.get("patient_summary") or " ".join(
+        ReportService._summary_lines(structured_summary)
+    ) or "Analysis complete."
+
     response_data = {
         "request_id": request_id,
         "report_id": persisted_report["id"] if persisted_report else fallback_report_id,
@@ -109,8 +125,10 @@ async def analyze_report_upload(
             "prediction": "completed",
             "insights": "completed",
         },
-        "summary": prediction_data.get("summary") or prediction_data.get("patient_summary") or "Analysis complete.",
-        "patient_summary": prediction_data.get("patient_summary") or prediction_data.get("summary") or "Analysis complete.",
+        "summary": structured_summary,
+        "structured_summary": structured_summary,
+        "summary_view": summary_view,
+        "patient_summary": patient_summary,
         "risks": prediction_data.get("risks") or [],
         "risk_level": prediction_data.get("risk_level") or _derive_risk_level(prediction_data.get("risks") or []),
         "recommendations": prediction_data.get("recommendations") or [],
@@ -191,26 +209,60 @@ def _persist_analyzed_report(
     ocr_confidence: float | None,
     text_pages: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    storage_path, public_url = ReportService._persist_file(current_user.id, file.filename or "report.pdf", file_bytes)
-    normalized_type = _coerce_report_type(report_type, file.filename or "report.pdf")
+    original_filename = file.filename or "report.pdf"
+    storage_path, public_url = ReportService._persist_file(current_user.id, original_filename, file_bytes)
+    stored_filename = ReportService._stored_filename(storage_path, public_url)
+    normalized_type = _coerce_report_type(report_type, original_filename)
+    structured_summary = ReportService._normalize_structured_summary(
+        prediction_data.get("structured_summary") or prediction_data.get("summary"),
+        fallback_title=original_filename,
+        fallback_summary=prediction_data.get("patient_summary") or prediction_data.get("summary") or "Analysis complete.",
+    )
+    summary_view = ReportService._summary_view_from_structured_summary(
+        structured_summary,
+        source=prediction_data.get("summary_source") or "prediction-service",
+        stored_view=prediction_data.get("summary_view") if isinstance(prediction_data.get("summary_view"), dict) else {},
+    )
+    patient_summary = prediction_data.get("patient_summary") or " ".join(
+        ReportService._summary_lines(structured_summary)
+    ) or "Analysis complete."
 
     report = Report(
         user_id=current_user.id,
         report_type=normalized_type,
         file_url=public_url,
+        original_filename=original_filename,
+        stored_filename=stored_filename,
         parsed_text=extracted_text,
         summary_data={
+            "upload_metadata": {
+                "file_name": original_filename,
+                "original_filename": original_filename,
+                "stored_filename": stored_filename,
+                "file_size": len(file_bytes),
+                "storage_path": str(storage_path),
+            },
             "full_text": extracted_text,
             "ocr_text": extracted_text[:1200],
             "text_source": text_source,
             "ocr_confidence": ocr_confidence,
             "text_pages": text_pages,
+            "summary": structured_summary,
+            "structured_summary": structured_summary,
+            "summary_view": summary_view,
+            "patient_summary": patient_summary,
+            "risks": prediction_data.get("risks") or [],
+            "risk_level": prediction_data.get("risk_level") or _derive_risk_level(prediction_data.get("risks") or []),
+            "recommendations": prediction_data.get("recommendations") or [],
+            "abnormal_values": prediction_data.get("abnormal_values") or [],
+            "summary_source": prediction_data.get("summary_source") or "prediction-service",
         },
         status=ReportStatusEnum.COMPLETED,
     )
     db.add(report)
     db.commit()
     db.refresh(report)
+    create_report_timeline_event(db, report)
 
     # ── Lab pipeline hook (non-fatal) ──────────────────────────────────────
     # Runs after the report is committed so report.id exists in the DB.
@@ -233,8 +285,10 @@ def _persist_analyzed_report(
 
     return {
         "id": str(report.id),
-        "name": ReportService._report_name(report.file_url, file.filename),
-        "file_name": file.filename or "report.pdf",
+        "name": original_filename,
+        "file_name": original_filename,
+        "original_filename": original_filename,
+        "stored_filename": stored_filename,
         "file_url": report.file_url,
         "file_size": len(file_bytes),
         "report_type": report.report_type.value,

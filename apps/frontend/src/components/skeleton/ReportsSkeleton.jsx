@@ -12,7 +12,7 @@ const ReportsSkeleton = () => (
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.3 }}
-        className="bg-[#f6f5f8] dark:bg-[#131022] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased"
+        className="bg-background dark:bg-card text-text-primary dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased"
     >
         <div className="flex flex-1 overflow-hidden">
             <div className="flex-1 flex flex-col min-w-0">
@@ -31,7 +31,7 @@ const ReportsSkeleton = () => (
                     <div className="w-full md:w-[35%] flex flex-col gap-4">
                         {[1, 2, 3, 4].map(i => (
                             <div key={i} className="p-6 rounded-[2.25rem] bg-white/60 dark:bg-white/5 border border-transparent flex items-center gap-5 animate-pulse">
-                                <div className="size-14 rounded-[1.25rem] bg-slate-200 dark:bg-slate-800 shrink-0" />
+                                <div className="size-14 rounded-[1.25rem] bg-slate-200 dark:bg-card shrink-0" />
                                 <div className="flex-1 space-y-2">
                                     <SkeletonBox className="h-4 w-40 rounded" />
                                     <SkeletonBox className="h-3 w-28 rounded" />
@@ -43,8 +43,8 @@ const ReportsSkeleton = () => (
 
                     {/* Preview panel */}
                     <div className="flex-1 flex min-w-0">
-                        <div className="flex-1 bg-white/40 dark:bg-white/5 backdrop-blur-2xl rounded-[3rem] overflow-hidden flex flex-col border border-white/40 dark:border-white/10">
-                            <div className="p-7 border-b border-white/20 dark:border-white/10 flex items-center gap-4">
+                        <div className="flex-1 bg-white/40 dark:bg-white/5 backdrop-blur-2xl rounded-[3rem] overflow-hidden flex flex-col border border-white/40 dark:border-stroke">
+                            <div className="p-7 border-b border-stroke dark:border-stroke flex items-center gap-4">
                                 <SkeletonBox className="size-8 rounded-lg" />
                                 <SkeletonBox className="h-3 w-48 rounded" />
                             </div>
@@ -64,3 +64,4 @@ const ReportsSkeleton = () => (
 );
 
 export default ReportsSkeleton;
+

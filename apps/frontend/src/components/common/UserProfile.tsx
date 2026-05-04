@@ -36,13 +36,13 @@ export default function UserProfile() {
             }}
         >
             <div className="text-right hidden sm:block">
-                <p className="text-xs font-bold text-[#13082A] dark:text-white leading-none">{displayName}</p>
+                <p className="text-xs font-bold text-text-primary dark:text-text-primary leading-none">{displayName}</p>
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">Live profile</p>
             </div>
             {avatarUrl ? (
-                <img className="size-10 rounded-full border-2 border-[#6043F4]/20 p-0.5 object-cover" src={avatarUrl} alt={displayName} />
+                <img className="size-10 rounded-full border-2 border-primary/20 p-0.5 object-cover" src={avatarUrl} alt={displayName} />
             ) : (
-                <div className="size-10 rounded-full border-2 border-[#6043F4]/20 p-0.5 flex items-center justify-center bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-white font-bold">
+                <div className="size-10 rounded-full border-2 border-primary/20 p-0.5 flex items-center justify-center bg-slate-100 dark:bg-card text-slate-700 dark:text-text-primary font-bold">
                     {avatarInitials}
                 </div>
             )}

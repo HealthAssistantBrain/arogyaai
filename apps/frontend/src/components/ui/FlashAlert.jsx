@@ -30,7 +30,7 @@ const FlashAlert = ({ message, type = 'high_risk', duration = 5000, onClose }) =
                     initial={{ opacity: 0, y: -20, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
-                    className={`flex items-center gap-3 p-4 rounded-2xl shadow-lg text-white ${config.bg} mb-4`}
+                    className={`flex items-center gap-3 p-4 rounded-2xl shadow-lg text-text-primary ${config.bg} mb-4`}
                 >
                     <config.icon className="w-5 h-5 flex-shrink-0" />
                     <p className="text-sm font-bold flex-1">{message}</p>
@@ -50,3 +50,4 @@ const FlashAlert = ({ message, type = 'high_risk', duration = 5000, onClose }) =
 };
 
 export default FlashAlert;
+

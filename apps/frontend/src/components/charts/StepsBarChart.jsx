@@ -48,3 +48,4 @@ const StepsBarChart = ({ data, height = 200 }) => {
 };
 
 export default StepsBarChart;
+

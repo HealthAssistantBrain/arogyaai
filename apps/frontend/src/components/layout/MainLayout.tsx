@@ -35,14 +35,14 @@ export default function MainLayout() {
 
     if (!authReady && !isDashboardRoute && !fromOAuth) {
         return (
-            <div className="flex min-h-screen items-center justify-center bg-[#f6f5f8] dark:bg-[#0B0819] text-sm font-bold text-slate-500">
+            <div className="flex min-h-screen items-center justify-center bg-background dark:bg-background text-sm font-bold text-slate-500">
                 Restoring your session...
             </div>
         );
     }
 
     return (
-        <div className="bg-[#f6f5f8] dark:bg-[#0B0819] font-display text-[#13082A] dark:text-slate-100 min-h-screen flex antialiased relative">
+        <div className="bg-background dark:bg-background font-display text-text-primary dark:text-slate-100 min-h-screen flex antialiased relative">
             <Sidebar />
 
             <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto custom-scrollbar">

@@ -153,7 +153,7 @@ const OnboardingSummary = () => {
   };
 
   return (
-    <div className="bg-[#f6f5f8] dark:bg-[#131022] text-[#13082A] dark:text-slate-100 min-h-screen font-display antialiased flex flex-col">
+    <div className="bg-background dark:bg-card text-text-primary dark:text-slate-100 min-h-screen font-display antialiased flex flex-col">
       {/* Navigation Header - Matched Stitch */}
       <OnboardingHeader step="Summary" />
 
@@ -162,180 +162,180 @@ const OnboardingSummary = () => {
           variants={containerVariants}
           initial="initial"
           animate="animate"
-          className="max-w-4xl w-full bg-white dark:bg-slate-900 rounded-xl shadow-xl shadow-[#6143f4]/5 overflow-hidden border border-[#6143f4]/5"
+          className="max-w-4xl w-full bg-white dark:bg-background rounded-xl shadow-xl shadow-primary/5 overflow-hidden border border-primary/5"
         >
           <div className="p-6 md:p-10">
             {/* Progress Header */}
             <div className="mb-10">
               <div className="flex justify-between items-end mb-3">
                 <div>
-                  <span className="text-xs font-bold text-[#6143f4] tracking-widest uppercase mb-1 block">Review</span>
+                  <span className="text-xs font-bold text-primary tracking-widest uppercase mb-1 block">Review</span>
                   <h1 className="text-2xl md:text-3xl font-bold">Onboarding Summary</h1>
                 </div>
                 <div className="text-right">
-                  <span className="text-sm font-bold text-[#6143f4]">100% Complete</span>
+                  <span className="text-sm font-bold text-primary">100% Complete</span>
                 </div>
               </div>
-              <div className="h-2 w-full bg-[#6143f4]/10 rounded-full overflow-hidden">
+              <div className="h-2 w-full bg-primary/10 rounded-full overflow-hidden">
                 <motion.div
                   initial={{ width: '75%' }}
                   animate={{ width: '100%' }}
                   transition={{ duration: 1, ease: "easeOut" }}
-                  className="h-full bg-[#6143f4] rounded-full"
+                  className="h-full bg-primary rounded-full"
                 ></motion.div>
               </div>
             </div>
 
-            <h2 className="text-2xl font-bold mb-8 text-[#13082A] dark:text-white">Review Your Health Profile</h2>
+            <h2 className="text-2xl font-bold mb-8 text-text-primary dark:text-text-primary">Review Your Health Profile</h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
               {/* Personal Profile Summary */}
-              <motion.div variants={itemVariants} className="p-6 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+              <motion.div variants={itemVariants} className="p-6 rounded-xl bg-slate-50 dark:bg-card/50 border border-slate-100 dark:border-stroke">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
-                    <User className="text-[#6143f4]" size={20} />
-                    <h3 className="font-bold text-lg dark:text-white">Personal Profile</h3>
+                    <User className="text-primary" size={20} />
+                    <h3 className="font-bold text-lg dark:text-text-primary">Personal Profile</h3>
                   </div>
-                  <button onClick={() => handleEdit(1)} className="text-slate-400 hover:text-[#6143f4] transition-colors">
+                  <button onClick={() => handleEdit(1)} className="text-text-muted hover:text-primary transition-colors">
                     <Edit3 size={18} />
                   </button>
                 </div>
                 <div className="space-y-3">
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 font-medium">Full Name</span>
-                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.full_name)}</span>
+                    <span className="font-bold text-text-primary dark:text-text-primary">{safeValue(userData?.full_name)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 font-medium">Gender</span>
-                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.user_profile?.sex || userData?.gender)}</span>
+                    <span className="font-bold text-text-primary dark:text-text-primary">{safeValue(userData?.user_profile?.sex || userData?.gender)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 font-medium">Height/Weight</span>
-                    <span className="font-bold text-[#13082A] dark:text-white">
+                    <span className="font-bold text-text-primary dark:text-text-primary">
                       {userData?.height && userData?.weight ? `${userData.height} cm / ${userData.weight} kg` : "---"}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 font-medium">Occupation</span>
-                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.user_profile?.occupation || userData?.occupation)}</span>
+                    <span className="font-bold text-text-primary dark:text-text-primary">{safeValue(userData?.user_profile?.occupation || userData?.occupation)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 font-medium">City</span>
-                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.user_profile?.city || userData?.city)}</span>
+                    <span className="font-bold text-text-primary dark:text-text-primary">{safeValue(userData?.user_profile?.city || userData?.city)}</span>
                   </div>
                 </div>
               </motion.div>
 
               {/* Medical History Summary */}
-              <motion.div variants={itemVariants} className="p-6 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+              <motion.div variants={itemVariants} className="p-6 rounded-xl bg-slate-50 dark:bg-card/50 border border-slate-100 dark:border-stroke">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
-                    <Heart className="text-[#6143f4]" size={20} />
-                    <h3 className="font-bold text-lg dark:text-white">Medical History</h3>
+                    <Heart className="text-primary" size={20} />
+                    <h3 className="font-bold text-lg dark:text-text-primary">Medical History</h3>
                   </div>
-                  <button onClick={() => handleEdit(2)} className="text-slate-400 hover:text-[#6143f4] transition-colors">
+                  <button onClick={() => handleEdit(2)} className="text-text-muted hover:text-primary transition-colors">
                     <Edit3 size={18} />
                   </button>
                 </div>
                 <div className="space-y-3">
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 font-medium">Conditions</span>
-                    <span className="font-bold text-[#13082A] dark:text-white">{formatMedicalField(userData?.medical_history?.conditions || userData?.conditions)}</span>
+                    <span className="font-bold text-text-primary dark:text-text-primary">{formatMedicalField(userData?.medical_history?.conditions || userData?.conditions)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 font-medium">Allergies</span>
-                    <span className="font-bold text-[#13082A] dark:text-white">{formatMedicalField(userData?.medical_history?.allergies || userData?.allergies)}</span>
+                    <span className="font-bold text-text-primary dark:text-text-primary">{formatMedicalField(userData?.medical_history?.allergies || userData?.allergies)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 font-medium">Family History</span>
-                    <span className="font-bold text-[#13082A] dark:text-white">{formatMedicalField(userData?.medical_history?.family_history || userData?.family_history)}</span>
+                    <span className="font-bold text-text-primary dark:text-text-primary">{formatMedicalField(userData?.medical_history?.family_history || userData?.family_history)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 font-medium">Surgeries</span>
-                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.medical_history?.surgeries || userData?.surgeries)}</span>
+                    <span className="font-bold text-text-primary dark:text-text-primary">{safeValue(userData?.medical_history?.surgeries || userData?.surgeries)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 font-medium">Medications</span>
-                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.medical_history?.medications || userData?.current_medications)}</span>
+                    <span className="font-bold text-text-primary dark:text-text-primary">{safeValue(userData?.medical_history?.medications || userData?.current_medications)}</span>
                   </div>
                 </div>
               </motion.div>
 
               {/* Lifestyle Assessment Summary */}
-              <motion.div variants={itemVariants} className="p-6 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+              <motion.div variants={itemVariants} className="p-6 rounded-xl bg-slate-50 dark:bg-card/50 border border-slate-100 dark:border-stroke">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
-                    <Activity className="text-[#6143f4]" size={20} />
-                    <h3 className="font-bold text-lg dark:text-white">Lifestyle habits</h3>
+                    <Activity className="text-primary" size={20} />
+                    <h3 className="font-bold text-lg dark:text-text-primary">Lifestyle habits</h3>
                   </div>
-                  <button onClick={() => handleEdit(3)} className="text-slate-400 hover:text-[#6143f4] transition-colors">
+                  <button onClick={() => handleEdit(3)} className="text-text-muted hover:text-primary transition-colors">
                     <Edit3 size={18} />
                   </button>
                 </div>
                 <div className="space-y-3">
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 font-medium">Activity</span>
-                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.activity)}</span>
+                    <span className="font-bold text-text-primary dark:text-text-primary">{safeValue(userData?.activity)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 font-medium">Diet</span>
-                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.lifestyle_profile?.diet || userData?.diet)}</span>
+                    <span className="font-bold text-text-primary dark:text-text-primary">{safeValue(userData?.lifestyle_profile?.diet || userData?.diet)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 font-medium">Sleep</span>
-                    <span className="font-bold text-[#13082A] dark:text-white">{userData?.lifestyle_profile?.sleep_hours || userData?.sleep ? `${userData?.lifestyle_profile?.sleep_hours || userData?.sleep} hrs` : "---"}</span>
+                    <span className="font-bold text-text-primary dark:text-text-primary">{userData?.lifestyle_profile?.sleep_hours || userData?.sleep ? `${userData?.lifestyle_profile?.sleep_hours || userData?.sleep} hrs` : "---"}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 font-medium">Stress</span>
-                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.lifestyle_profile?.stress_level || userData?.stress)}</span>
+                    <span className="font-bold text-text-primary dark:text-text-primary">{safeValue(userData?.lifestyle_profile?.stress_level || userData?.stress)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 font-medium">Smoking / Alcohol</span>
-                    <span className="font-bold text-[#13082A] dark:text-white">
+                    <span className="font-bold text-text-primary dark:text-text-primary">
                       {`${typeof userData?.lifestyle_profile?.smoking === 'boolean' ? (userData.lifestyle_profile.smoking ? 'yes' : 'no') : safeValue(userData?.smoking)} / ${typeof userData?.lifestyle_profile?.alcohol === 'boolean' ? (userData.lifestyle_profile.alcohol ? 'yes' : 'no') : safeValue(userData?.alcohol)}`}
                     </span>
                   </div>
                 </div>
               </motion.div>
 
-              <motion.div variants={itemVariants} className="p-6 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+              <motion.div variants={itemVariants} className="p-6 rounded-xl bg-slate-50 dark:bg-card/50 border border-slate-100 dark:border-stroke">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
-                    <Stethoscope className="text-[#6143f4]" size={20} />
-                    <h3 className="font-bold text-lg dark:text-white">Clinical Snapshot</h3>
+                    <Stethoscope className="text-primary" size={20} />
+                    <h3 className="font-bold text-lg dark:text-text-primary">Clinical Snapshot</h3>
                   </div>
-                  <button onClick={() => handleEdit(3)} className="text-slate-400 hover:text-[#6143f4] transition-colors">
+                  <button onClick={() => handleEdit(3)} className="text-text-muted hover:text-primary transition-colors">
                     <Edit3 size={18} />
                   </button>
                 </div>
                 <div className="space-y-3">
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 font-medium">Chief Complaint</span>
-                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.initial_clinical_snapshot?.chief_complaint || userData?.chief_complaint)}</span>
+                    <span className="font-bold text-text-primary dark:text-text-primary">{safeValue(userData?.initial_clinical_snapshot?.chief_complaint || userData?.chief_complaint)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 font-medium">Symptoms</span>
-                    <span className="font-bold text-[#13082A] dark:text-white">{formatMedicalField(userData?.initial_clinical_snapshot?.symptoms || userData?.symptoms)}</span>
+                    <span className="font-bold text-text-primary dark:text-text-primary">{formatMedicalField(userData?.initial_clinical_snapshot?.symptoms || userData?.symptoms)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 font-medium">Duration</span>
-                    <span className="font-bold text-[#13082A] dark:text-white">{safeValue(userData?.initial_clinical_snapshot?.duration || userData?.duration)}</span>
+                    <span className="font-bold text-text-primary dark:text-text-primary">{safeValue(userData?.initial_clinical_snapshot?.duration || userData?.duration)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 font-medium">Severity</span>
-                    <span className="font-bold text-[#13082A] dark:text-white">{userData?.initial_clinical_snapshot?.severity || userData?.severity ? `${userData?.initial_clinical_snapshot?.severity || userData?.severity}/10` : '---'}</span>
+                    <span className="font-bold text-text-primary dark:text-text-primary">{userData?.initial_clinical_snapshot?.severity || userData?.severity ? `${userData?.initial_clinical_snapshot?.severity || userData?.severity}/10` : '---'}</span>
                   </div>
                 </div>
               </motion.div>
 
               {/* Connected Devices Summary */}
-              <motion.div variants={itemVariants} className="p-6 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+              <motion.div variants={itemVariants} className="p-6 rounded-xl bg-slate-50 dark:bg-card/50 border border-slate-100 dark:border-stroke">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
-                    <Watch className="text-[#6143f4]" size={20} />
-                    <h3 className="font-bold text-lg dark:text-white">Connected Devices</h3>
+                    <Watch className="text-primary" size={20} />
+                    <h3 className="font-bold text-lg dark:text-text-primary">Connected Devices</h3>
                   </div>
-                  <button onClick={() => handleEdit(4)} className="text-slate-400 hover:text-[#6143f4] transition-colors">
+                  <button onClick={() => handleEdit(4)} className="text-text-muted hover:text-primary transition-colors">
                     <Edit3 size={18} />
                   </button>
                 </div>
@@ -343,7 +343,7 @@ const OnboardingSummary = () => {
                   {authConnections.map((connection) => (
                     <div key={connection.name} className="flex justify-between text-sm">
                       <span className="text-slate-500 font-medium">{connection.name}</span>
-                      <span className={`font-bold ${connection.connected ? 'text-green-500' : 'text-slate-400'}`}>
+                      <span className={`font-bold ${connection.connected ? 'text-green-500' : 'text-text-muted'}`}>
                         {connection.value}
                       </span>
                     </div>
@@ -352,14 +352,14 @@ const OnboardingSummary = () => {
                     devices.map(device => (
                       <div key={device.name} className="flex justify-between text-sm">
                         <span className="text-slate-500 font-medium">{device.name}</span>
-                        <span className={`font-bold ${device.is_connected ? 'text-green-500' : 'text-slate-400'}`}>
+                        <span className={`font-bold ${device.is_connected ? 'text-green-500' : 'text-text-muted'}`}>
                           {device.is_connected ? 'Connected' : 'Not Connected'}
                         </span>
                       </div>
                     ))
                   ) : (
                     <div className="flex justify-between text-sm">
-                      <span className="font-bold text-[#13082A] dark:text-white">---</span>
+                      <span className="font-bold text-text-primary dark:text-text-primary">---</span>
                     </div>
                   )}
                 </div>
@@ -367,18 +367,18 @@ const OnboardingSummary = () => {
             </div>
 
             {/* AI Insight Bar */}
-            <motion.div variants={itemVariants} className="bg-[#6143f4]/5 border border-[#6143f4]/10 p-4 rounded-lg flex gap-4 items-start mb-12">
-              <ShieldCheck size={20} className="text-[#6143f4] shrink-0" />
-              <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-                <span className="font-bold text-[#6143f4]">Security:</span> Your health profile is encrypted and HIPAA compliant. This comprehensive baseline enables 70% better predictive accuracy for your clinical health models.
+            <motion.div variants={itemVariants} className="bg-primary/5 border border-primary/10 p-4 rounded-lg flex gap-4 items-start mb-12">
+              <ShieldCheck size={20} className="text-primary shrink-0" />
+              <p className="text-sm text-slate-600 dark:text-text-muted leading-relaxed">
+                <span className="font-bold text-primary">Security:</span> Your health profile is encrypted and HIPAA compliant. This comprehensive baseline enables 70% better predictive accuracy for your clinical health models.
               </p>
             </motion.div>
 
             {/* Action Buttons */}
-            <div className="mt-12 pt-8 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-4 justify-between items-center">
+            <div className="mt-12 pt-8 border-t border-slate-100 dark:border-stroke flex flex-col sm:flex-row gap-4 justify-between items-center">
               <button
                 onClick={() => navigate(ROUTES.ONBOARDING_STEP_4)}
-                className="w-full sm:w-auto px-8 py-3 rounded-lg border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
+                className="w-full sm:w-auto px-8 py-3 rounded-lg border-2 border-slate-200 dark:border-stroke text-slate-600 dark:text-text-secondary font-bold hover:bg-slate-50 dark:hover:bg-card transition-all flex items-center justify-center gap-2"
               >
                 <ArrowLeft size={16} />
                 Back
@@ -386,7 +386,7 @@ const OnboardingSummary = () => {
               <button
                 onClick={handleConfirm}
                 disabled={submitting}
-                className="w-full sm:w-auto px-10 py-3 rounded-lg bg-[#6143f4] text-white font-bold hover:bg-[#6143f4]/90 shadow-lg shadow-[#6143f4]/25 transition-all flex items-center justify-center gap-2"
+                className="w-full sm:w-auto px-10 py-3 rounded-lg bg-primary text-white font-bold hover:bg-primary/90 shadow-lg shadow-primary/25 transition-all flex items-center justify-center gap-2"
               >
                 {submitting ? 'Finalizing...' : 'Complete Initialization'}
                 <ArrowRight size={16} />
@@ -396,13 +396,14 @@ const OnboardingSummary = () => {
         </motion.div>
       </main>
 
-      <footer className="py-8 px-10 text-center text-slate-400 text-xs mt-auto">
+      <footer className="py-8 px-10 text-center text-text-muted text-xs mt-auto">
         © 2024 ArogyaAI Health Systems. All data is encrypted and HIPAA compliant.
       </footer>
       {/* Footer Decoration */}
-      <div className="fixed bottom-0 left-0 w-full h-1 bg-gradient-to-r from-[#6143f4] via-[#009CDE] to-[#6143f4] opacity-50 z-50"></div>
+      <div className="fixed bottom-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-secondary to-primary opacity-50 z-50"></div>
     </div>
   );
 };
 
 export default OnboardingSummary;
+

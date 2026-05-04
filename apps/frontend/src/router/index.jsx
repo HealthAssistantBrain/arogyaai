@@ -14,7 +14,7 @@ import MainLayout from '../components/layout/MainLayout'
 import { useAuthStore } from '../store/authStore'
 
 // ── lazy imports (all 59 pages) ──────────────────────────────────
-const LandingPage = lazy(() => import('../pages/Landing'))
+const LandingPage = lazy(() => import('../pages/Landing/LandingPage'))
 const Login = lazy(() => import('../pages/Login'))
 const SignUp = lazy(() => import('../pages/Signup'))
 const ForgotPassword = lazy(() => import('../pages/ForgotPassword'))
@@ -187,3 +187,4 @@ export default function AppRouter() {
     </Suspense>
   )
 }
+

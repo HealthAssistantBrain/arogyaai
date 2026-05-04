@@ -127,6 +127,8 @@ const fetchJson = async (url, { method = 'GET', body, token = null, retryOn401 =
   }
 }
 
+const extractAuthData = (payload = {}) => payload?.data || payload || {}
+
 const postToFirstAvailableEndpoint = async (urls, options = {}) => {
   let lastError = null
 
@@ -468,39 +470,105 @@ export const useAuthStore = create(
       },
 
       refreshSession: async () => {
-        const client = getSupabase()
-        if (!client) {
-          get().reset()
-          set({ isHydrated: true }, false, 'refreshSession_no_client')
-          return false
-        }
-
         set({ isHydratingAuth: true }, false, 'refreshSession_start')
 
         try {
-          let { data, error } = await client.auth.getSession()
-          if (error) throw error
+          console.debug('[authStore] refreshSession start')
+          const client = getSupabase()
 
-          if (!data?.session) {
-            const refreshed = await client.auth.refreshSession()
-            if (refreshed.error) throw refreshed.error
-            data = refreshed.data
+          if (client) {
+            try {
+              console.debug('[authStore] checking Supabase session first')
+              let { data, error } = await client.auth.getSession()
+              if (error) throw error
+
+              if (!data?.session) {
+                const refreshed = await client.auth.refreshSession()
+                if (refreshed.error) throw refreshed.error
+                data = refreshed.data
+              }
+
+              if (data?.session?.access_token) {
+                const syncedUser = await syncUser({ session: data.session })
+                if (!syncedUser?.id) {
+                  throw new Error('Unable to synchronize Supabase user')
+                }
+
+                set({ isHydrated: true, isHydratingAuth: false, profileError: null }, false, 'refreshSession_SUPABASE_SUCCESS')
+                return data.session
+              }
+            } catch (supabaseRefreshError) {
+              console.warn('[authStore] Supabase session refresh failed; trying backend refresh:', supabaseRefreshError?.message)
+            }
           }
 
-          if (!data?.session?.access_token) {
+          const envelope = await fetchJson(`${API_BASE_URL}/auth/refresh-token`, {
+            method: 'POST',
+            body: {},
+            token: null,
+            retryOn401: false,
+          })
+          const data = extractAuthData(envelope)
+          const token = data?.access_token ?? data?.token ?? null
+
+          if (!token) {
+            throw new Error('Refresh endpoint did not return an access token')
+          }
+
+          get().setAccessToken(token)
+          console.debug('[authStore] token set from refresh')
+
+          if (data?.user?.id) {
+            get().applyBackendUser(data.user)
+          } else {
+            const userEnvelope = await fetchJson(`${API_BASE_URL}/users/me`, {
+              method: 'GET',
+              token,
+              retryOn401: false,
+            })
+            const user = withOnboardingAliases(userEnvelope.data || userEnvelope || {})
+            if (!user?.id) throw new Error('Unable to fetch user after refresh')
+            get().applyBackendUser(user)
+          }
+
+          set({ isHydrated: true, isHydratingAuth: false }, false, 'refreshSession_SUCCESS')
+          console.debug('[authStore] refreshSession success', { hasUser: !!get().user?.id })
+          return true
+        } catch (backendRefreshError) {
+          const client = getSupabase()
+          if (!client) {
+            console.warn('[authStore] Backend refresh failed and no Supabase fallback is configured:', backendRefreshError?.message)
             get().reset()
-            set({ isHydrated: true, isHydratingAuth: false }, false, 'refreshSession_no_session')
+            set({ isHydrated: true, isHydratingAuth: false }, false, 'refreshSession_FAIL')
             return false
           }
 
-          get().setSupabaseSession(data.session)
-          set({ isHydrated: true, isHydratingAuth: false }, false, 'refreshSession_SUCCESS')
-          return data.session
-        } catch (err) {
-          console.error('[authStore] Supabase refresh failed:', err)
-          get().reset()
-          set({ isHydrated: true, isHydratingAuth: false }, false, 'refreshSession_FAIL')
-          return false
+          try {
+            console.debug('[authStore] falling back to Supabase refresh')
+            let { data, error } = await client.auth.getSession()
+            if (error) throw error
+
+            if (!data?.session) {
+              const refreshed = await client.auth.refreshSession()
+              if (refreshed.error) throw refreshed.error
+              data = refreshed.data
+            }
+
+            if (!data?.session?.access_token) {
+              get().reset()
+              set({ isHydrated: true, isHydratingAuth: false }, false, 'refreshSession_no_session')
+              return false
+            }
+
+            get().setSupabaseSession(data.session)
+            set({ isHydrated: true, isHydratingAuth: false }, false, 'refreshSession_SUCCESS')
+            return data.session
+          } catch (err) {
+            console.error('[authStore] Supabase refresh failed:', err)
+            get().reset()
+            set({ isHydrated: true, isHydratingAuth: false }, false, 'refreshSession_FAIL')
+            return false
+          }
         }
       },
 
@@ -509,6 +577,7 @@ export const useAuthStore = create(
 
         set({ profileLoading: true, profileError: null })
         try {
+          console.debug('[authStore] /users/me request')
           const envelope = await fetchJson(`${API_BASE_URL}/users/me`, {
             method: 'GET',
             token: get().token,
@@ -517,6 +586,7 @@ export const useAuthStore = create(
           const data = withOnboardingAliases(envelope.data || envelope || {})
           get().applyBackendUser(data)
           set({ profileLoading: false }, false, 'fetchProfile_SUCCESS')
+          console.debug('[authStore] /users/me response', { id: data?.id, onboardingDone: data?.onboardingCompleted })
           return true
         } catch (err) {
           console.error('fetchProfile error:', err)
@@ -529,6 +599,8 @@ export const useAuthStore = create(
           return false
         }
       },
+
+      fetchUser: async () => get().fetchProfile(),
 
       updateProfile: async (newHealthProfile) => {
         const payload = normalizeProfilePayload(newHealthProfile)
@@ -647,28 +719,49 @@ export const useAuthStore = create(
         const client = getSupabase()
         set({ isHydratingAuth: true }, false, 'hydrateAuth_start')
 
-        if (!client && !tokenOverride) {
-          get().reset()
-          set({ isHydrated: true, isHydratingAuth: false }, false, 'hydrateAuth_no_client')
-          return null
-        }
-
         try {
+          console.debug('[authStore] hydrateAuth start')
+          const memoryToken = tokenOverride ?? get().token ?? null
+          if (memoryToken) {
+            get().setAccessToken(memoryToken)
+            const fetched = await get().fetchProfile()
+            if (!fetched) throw new Error('Unable to fetch user with in-memory token')
+            set({ isHydrated: true, isHydratingAuth: false, profileError: null }, false, 'hydrateAuth_MEMORY_SUCCESS')
+            return useAuthStore.getState()
+          }
+
+          const refreshed = await get().refreshSession()
+          if (refreshed && useAuthStore.getState().user?.id) {
+            set({ isHydrated: true, isHydratingAuth: false, profileError: null }, false, 'hydrateAuth_REFRESH_SUCCESS')
+            return useAuthStore.getState()
+          }
+
+          if (!client) {
+            get().reset()
+            set({ isHydrated: true, isHydratingAuth: false }, false, 'hydrateAuth_no_session')
+            return null
+          }
+
           let session = null
 
           const currentUrl = isBrowser() ? new URL(window.location.href) : null
           const code = currentUrl?.searchParams.get('code')
-          if (code && client) {
-            const exchanged = await client.auth.exchangeCodeForSession(code)
-            if (exchanged.error) throw exchanged.error
-            session = exchanged.data?.session ?? null
-            window.history.replaceState({}, '', window.location.pathname)
-          }
-
-          if (!session && client) {
+          if (client) {
             const { data, error } = await client.auth.getSession()
             if (error) throw error
             session = data?.session ?? null
+          }
+
+          if (!session && code && client) {
+            const exchanged = await client.auth.exchangeCodeForSession(code)
+            if (exchanged.error) throw exchanged.error
+            session = exchanged.data?.session ?? null
+
+            const { data, error } = await client.auth.getSession()
+            if (error) throw error
+            session = data?.session ?? session
+
+            window.history.replaceState({}, '', window.location.pathname)
           }
 
           if (!session?.access_token && tokenOverride) {

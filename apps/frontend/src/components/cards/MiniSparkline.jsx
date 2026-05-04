@@ -52,3 +52,4 @@ const MiniSparkline = ({ data = [], metric, color = '#64748b' }) => {
 };
 
 export default MiniSparkline;
+

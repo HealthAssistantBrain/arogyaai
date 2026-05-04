@@ -22,8 +22,8 @@ const SECTIONS = [
     title: 'AI Insights',
     description: 'Updates when new model-driven analysis, risk explanations, and recommendation bundles are ready.',
     icon: Sparkles,
-    color: 'text-[#6143f4]',
-    bgColor: 'bg-[#6143f4]/10',
+    color: 'text-primary',
+    bgColor: 'bg-primary/10',
     emailKey: 'ai_insights_email',
     pushKey: 'ai_insights_push',
   },
@@ -42,23 +42,23 @@ const SECTIONS = [
     title: 'Reminders',
     description: 'Appointment-style reminders and scheduled nudges routed through the same delivery pipeline.',
     icon: Bell,
-    color: 'text-[#009cde]',
-    bgColor: 'bg-[#009cde]/10',
+    color: 'text-secondary',
+    bgColor: 'bg-secondary/10',
     emailKey: 'reminders_email',
     pushKey: 'reminders_push',
   },
 ];
 
-function Toggle({ active, pending, onClick, color = 'bg-[#6143f4]' }) {
+function Toggle({ active, pending, onClick, color = 'bg-primary' }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`relative inline-flex h-8 w-14 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-4 focus:ring-[#6143f4]/10 ${active ? color : 'bg-slate-200 dark:bg-slate-700'}`}
+      className={`relative inline-flex h-8 w-14 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-4 focus:ring-[var(--color-primary)]/10 ${active ? color : 'bg-slate-200 dark:bg-slate-700'}`}
     >
       {pending ? (
         <span className="absolute inset-0 flex items-center justify-center">
-          <LoaderCircle size={14} className="animate-spin text-white" />
+          <LoaderCircle size={14} className="animate-spin text-text-primary" />
         </span>
       ) : null}
       <span
@@ -72,8 +72,8 @@ function Toggle({ active, pending, onClick, color = 'bg-[#6143f4]' }) {
 function ChannelCheckbox({ checked, pending, label, onClick }) {
   return (
     <button type="button" onClick={onClick} className="flex items-center gap-4">
-      <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase">{label}</span>
-      <div className={`flex size-6 items-center justify-center rounded-lg border-2 transition-all ${checked ? 'border-[#6143f4] bg-[#6143f4] text-white' : 'border-slate-200 dark:border-white/10'}`}>
+      <span className="text-[10px] font-black tracking-widest text-text-muted uppercase">{label}</span>
+      <div className={`flex size-6 items-center justify-center rounded-lg border-2 transition-all ${checked ? 'border-primary bg-primary text-white' : 'border-slate-200 dark:border-stroke'}`}>
         {pending ? <LoaderCircle size={13} className="animate-spin" /> : checked ? <Check size={14} strokeWidth={4} /> : null}
       </div>
     </button>
@@ -186,9 +186,9 @@ const SettingsNotifications = () => {
 
   return (
     <div className="max-w-5xl mx-auto space-y-12 pb-16">
-      <div className="space-y-4 pb-4 border-b border-[#6143f4]/5">
-        <h2 className="text-5xl font-black text-[#13082a] dark:text-white tracking-tighter uppercase italic leading-none">Notification Settings</h2>
-        <p className="text-lg text-slate-500 dark:text-slate-400 font-bold uppercase tracking-tight opacity-80 leading-snug">
+      <div className="space-y-4 pb-4 border-b border-primary/5">
+        <h2 className="text-5xl font-black text-text-primary dark:text-text-primary tracking-tighter uppercase italic leading-none">Notification Settings</h2>
+        <p className="text-lg text-slate-500 dark:text-text-muted font-bold uppercase tracking-tight opacity-80 leading-snug">
           Control how ArogyaAI delivers real alerts, AI insight summaries, and reminder traffic across email and browser push.
         </p>
       </div>
@@ -201,19 +201,19 @@ const SettingsNotifications = () => {
 
       <section className="space-y-8">
         <div className="flex items-center gap-4">
-          <div className="size-1.5 bg-[#6143f4] rounded-full"></div>
-          <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] leading-none">Global Delivery Channels</h3>
+          <div className="size-1.5 bg-primary rounded-full"></div>
+          <h3 className="text-[10px] font-black text-text-muted uppercase tracking-[0.3em] leading-none">Global Delivery Channels</h3>
         </div>
 
         <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
-          <div className="flex items-center justify-between rounded-[3rem] border border-slate-100 bg-white/80 p-8 shadow-sm transition-all duration-500 hover:border-[#6143f4]/20 dark:border-white/5 dark:bg-[#131022]/80">
+          <div className="flex items-center justify-between rounded-[3rem] border border-slate-100 bg-white/80 p-8 shadow-sm transition-all duration-500 hover:border-primary/20 dark:border-stroke/50 dark:bg-card/80">
             <div className="flex items-center gap-6">
-              <div className="flex size-16 items-center justify-center rounded-2xl bg-[#6143f4]/10 text-[#6143f4] shadow-inner">
+              <div className="flex size-16 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-inner">
                 <Mail size={30} />
               </div>
               <div>
-                <p className="text-2xl font-black uppercase tracking-tighter italic leading-none text-[#13082a] dark:text-white">Email Alerts</p>
-                <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-slate-400">SMTP or SendGrid backed delivery</p>
+                <p className="text-2xl font-black uppercase tracking-tighter italic leading-none text-text-primary dark:text-text-primary">Email Alerts</p>
+                <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-text-muted">SMTP or SendGrid backed delivery</p>
               </div>
             </div>
             <Toggle
@@ -223,21 +223,21 @@ const SettingsNotifications = () => {
             />
           </div>
 
-          <div className="flex items-center justify-between rounded-[3rem] border border-slate-100 bg-white/80 p-8 shadow-sm transition-all duration-500 hover:border-[#009cde]/20 dark:border-white/5 dark:bg-[#131022]/80">
+          <div className="flex items-center justify-between rounded-[3rem] border border-slate-100 bg-white/80 p-8 shadow-sm transition-all duration-500 hover:border-secondary/20 dark:border-stroke/50 dark:bg-card/80">
             <div className="flex items-center gap-6">
-              <div className="flex size-16 items-center justify-center rounded-2xl bg-[#009cde]/10 text-[#009cde] shadow-inner">
+              <div className="flex size-16 items-center justify-center rounded-2xl bg-secondary/10 text-secondary shadow-inner">
                 <Bell size={30} />
               </div>
               <div>
-                <p className="text-2xl font-black uppercase tracking-tighter italic leading-none text-[#13082a] dark:text-white">Push Notifications</p>
-                <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Service worker + backend web push</p>
+                <p className="text-2xl font-black uppercase tracking-tighter italic leading-none text-text-primary dark:text-text-primary">Push Notifications</p>
+                <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-text-muted">Service worker + backend web push</p>
               </div>
             </div>
             <Toggle
               active={preferences.push_enabled}
               pending={Boolean(pendingKeys.push_enabled)}
               onClick={() => void handleToggle('push_enabled')}
-              color="bg-[#009cde]"
+              color="bg-secondary"
             />
           </div>
         </div>
@@ -246,13 +246,13 @@ const SettingsNotifications = () => {
       <section className="space-y-8">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="size-1.5 bg-[#009cde] rounded-full"></div>
-            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] leading-none">Event-Level Delivery Matrix</h3>
+            <div className="size-1.5 bg-secondary rounded-full"></div>
+            <h3 className="text-[10px] font-black text-text-muted uppercase tracking-[0.3em] leading-none">Event-Level Delivery Matrix</h3>
           </div>
-          <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">Active: {statusSummary}</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.25em] text-text-muted">Active: {statusSummary}</p>
         </div>
 
-        <div className="overflow-hidden rounded-[3.5rem] border border-[#6143f4]/5 bg-white shadow-[0_40px_80px_-20px_rgba(19,8,42,0.05)] dark:bg-[#131022]">
+        <div className="overflow-hidden rounded-[3.5rem] border border-primary/5 bg-white shadow-[0_40px_80px_-20px_rgba(19,8,42,0.05)] dark:bg-card">
           <div className="divide-y divide-slate-100 dark:divide-white/5">
             {SECTIONS.map((section) => {
               const SectionIcon = section.icon;
@@ -264,8 +264,8 @@ const SettingsNotifications = () => {
                       <SectionIcon size={30} />
                     </div>
                     <div className="max-w-2xl space-y-2">
-                      <p className="text-2xl font-black uppercase tracking-tighter italic leading-none text-[#13082a] dark:text-white">{section.title}</p>
-                      <p className="text-sm font-bold uppercase tracking-tight text-slate-500 dark:text-slate-400 opacity-75">{section.description}</p>
+                      <p className="text-2xl font-black uppercase tracking-tighter italic leading-none text-text-primary dark:text-text-primary">{section.title}</p>
+                      <p className="text-sm font-bold uppercase tracking-tight text-slate-500 dark:text-text-muted opacity-75">{section.description}</p>
                     </div>
                   </div>
 
@@ -291,9 +291,9 @@ const SettingsNotifications = () => {
       </section>
 
       {isLoading ? (
-        <div className="flex items-center gap-4 rounded-[2rem] border border-[#6143f4]/10 bg-white/70 px-6 py-5 dark:border-white/5 dark:bg-[#131022]/70">
-          <LoaderCircle size={18} className="animate-spin text-[#6143f4]" />
-          <span className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Loading notification preferences</span>
+        <div className="flex items-center gap-4 rounded-[2rem] border border-primary/10 bg-white/70 px-6 py-5 dark:border-stroke/50 dark:bg-card/70">
+          <LoaderCircle size={18} className="animate-spin text-primary" />
+          <span className="text-xs font-black uppercase tracking-[0.2em] text-text-muted">Loading notification preferences</span>
         </div>
       ) : null}
     </div>
@@ -301,3 +301,4 @@ const SettingsNotifications = () => {
 };
 
 export default SettingsNotifications;
+

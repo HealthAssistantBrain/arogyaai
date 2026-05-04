@@ -17,3 +17,4 @@ const Toggle = ({ active, label, onChange }) => {
 };
 
 export default Toggle;
+

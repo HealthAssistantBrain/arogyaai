@@ -69,10 +69,10 @@ const TONES = {
 };
 
 const DEFAULT_TONE = {
-  border: 'border-slate-200/80 dark:border-white/10',
+  border: 'border-slate-200/80 dark:border-stroke',
   wash: 'from-slate-50/90 via-white to-white dark:from-white/10 dark:via-white/[0.02] dark:to-white/5',
-  icon: 'bg-slate-500/10 text-slate-600 dark:text-slate-300',
-  text: 'text-slate-600 dark:text-slate-300',
+  icon: 'bg-slate-500/10 text-slate-600 dark:text-text-secondary',
+  text: 'text-slate-600 dark:text-text-secondary',
   spark: '#64748b',
 };
 
@@ -103,7 +103,7 @@ const STATUS_TONES = {
 const TREND_TONES = {
   up: 'bg-emerald-500/10 text-emerald-600 ring-1 ring-emerald-500/15 dark:text-emerald-300',
   down: 'bg-red-500/10 text-red-600 ring-1 ring-red-500/15 dark:text-red-300',
-  stable: 'bg-slate-500/10 text-slate-500 ring-1 ring-slate-500/15 dark:text-slate-300',
+  stable: 'bg-slate-500/10 text-slate-500 ring-1 ring-slate-500/15 dark:text-text-secondary',
 };
 
 const TREND_META = {
@@ -179,17 +179,17 @@ const HealthMetricCard = ({
       variants={variants}
       whileHover={{ y: -3 }}
       transition={{ duration: 0.22, ease: 'easeOut' }}
-      className={`relative min-h-[236px] overflow-hidden rounded-xl border ${borderTone} bg-white p-5 shadow-sm shadow-slate-900/5 dark:bg-[#131022] ${anomalous ? 'metric-anomaly-glow' : ''}`}
+      className={`relative min-h-[236px] overflow-hidden rounded-xl border ${borderTone} bg-white p-5 shadow-sm shadow-slate-900/5 dark:bg-card ${anomalous ? 'metric-anomaly-glow' : ''}`}
     >
       <div className={`absolute inset-0 bg-gradient-to-br ${tone.wash} opacity-90 pointer-events-none`} />
       <div className="relative z-10 flex h-full flex-col">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-400">
+            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-text-muted">
               {label}
             </p>
             <div className="mt-5 flex min-h-[48px] items-end gap-2">
-              <span className={`break-words font-black leading-none tracking-tight text-[#13082a] dark:text-white ${hasValue ? 'text-[34px]' : 'text-[22px]'}`}>
+              <span className={`break-words font-black leading-none tracking-tight text-text-primary dark:text-text-primary ${hasValue ? 'text-[34px]' : 'text-[22px]'}`}>
                 {hasValue ? formatValue(value, precision) : '--'}
               </span>
               {hasValue && hasTrendData ? (
@@ -201,7 +201,7 @@ const HealthMetricCard = ({
                 </span>
               ) : null}
               {hasValue ? (
-                <span className="pb-1 text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
+                <span className="pb-1 text-[11px] font-black uppercase tracking-[0.18em] text-text-muted">
                   {unit}
                 </span>
               ) : null}
@@ -221,7 +221,7 @@ const HealthMetricCard = ({
         </div>
 
         <div className="mt-4 flex items-center justify-between gap-3">
-          <p className="line-clamp-2 text-[12px] font-medium leading-relaxed text-slate-500 dark:text-slate-400">
+          <p className="line-clamp-2 text-[12px] font-medium leading-relaxed text-slate-500 dark:text-text-muted">
             {displayCaption}
           </p>
           {hasValue && !isRecent ? (
@@ -235,15 +235,15 @@ const HealthMetricCard = ({
           {hasTrendData ? (
             <MiniSparkline data={series} metric={metricKey} color={accentColor} />
           ) : (
-            <div className="flex h-[48px] items-center gap-2 rounded-xl border border-dashed border-white/60 bg-white/45 px-4 text-[11px] font-semibold text-slate-400 dark:border-white/10 dark:bg-white/5">
+            <div className="flex h-[48px] items-center gap-2 rounded-xl border border-dashed border-white/60 bg-white/45 px-4 text-[11px] font-semibold text-text-muted dark:border-stroke dark:bg-white/5">
               <TrendingUp size={14} className={statusTone?.icon ?? tone.text} />
               {hasValue ? 'No trend data' : 'No data yet'}
             </div>
           )}
         </div>
 
-        <p className="mt-4 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">
-          Last updated: <span className="normal-case tracking-normal text-slate-500 dark:text-slate-300">{formatTimestamp(timestamp)}</span>
+        <p className="mt-4 text-[11px] font-black uppercase tracking-[0.16em] text-text-muted">
+          Last updated: <span className="normal-case tracking-normal text-slate-500 dark:text-text-secondary">{formatTimestamp(timestamp)}</span>
         </p>
       </div>
     </Motion.article>
@@ -251,3 +251,4 @@ const HealthMetricCard = ({
 };
 
 export default HealthMetricCard;
+

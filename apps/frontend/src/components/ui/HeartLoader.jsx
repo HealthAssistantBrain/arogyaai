@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-export default function HeartLoader({ size = 100, color = "#6143f4" }) {
+export default function HeartLoader({ size = 100, color = "var(--color-primary)" }) {
     const svgRef = useRef(null);
 
     useEffect(() => {
@@ -37,3 +37,4 @@ export default function HeartLoader({ size = 100, color = "#6143f4" }) {
         </div>
     );
 }
+

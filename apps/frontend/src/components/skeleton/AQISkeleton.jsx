@@ -12,7 +12,7 @@ const AQISkeleton = () => (
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.3 }}
-        className="bg-[#f6f5f8] dark:bg-[#131022] text-[#13082a] dark:text-slate-100 min-h-screen font-display antialiased"
+        className="bg-background dark:bg-card text-text-primary dark:text-slate-100 min-h-screen font-display antialiased"
     >
         <div className="flex h-screen overflow-hidden">
             <main className="flex-1 overflow-y-auto p-8">
@@ -30,7 +30,7 @@ const AQISkeleton = () => (
                     </div>
 
                     {/* AQI Hero Gauge */}
-                    <div className="bg-white dark:bg-slate-900 p-10 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col items-center">
+                    <div className="bg-white dark:bg-background p-10 rounded-[2rem] border border-slate-100 dark:border-stroke shadow-sm flex flex-col items-center">
                         <SkeletonBox className="size-40 rounded-full mb-6" />
                         <SkeletonBox className="h-5 w-32 rounded mb-3" />
                         <SkeletonBox className="h-3 w-48 rounded" />
@@ -39,7 +39,7 @@ const AQISkeleton = () => (
                     {/* Pollutant grid */}
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                         {[1, 2, 3, 4, 5, 6].map(i => (
-                            <div key={i} className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                            <div key={i} className="bg-white dark:bg-background p-5 rounded-xl border border-slate-100 dark:border-stroke shadow-sm">
                                 <SkeletonBox className="h-3 w-12 rounded mb-3" />
                                 <SkeletonBox className="h-7 w-16 rounded mb-2" />
                                 <SkeletonBox className="h-2.5 w-20 rounded" />
@@ -49,15 +49,15 @@ const AQISkeleton = () => (
 
                     {/* Trend chart + Alerts */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                        <div className="bg-white dark:bg-background p-6 rounded-xl border border-slate-100 dark:border-stroke shadow-sm">
                             <SkeletonBox className="h-4 w-32 rounded mb-6" />
                             <div className="flex items-end gap-3 h-36">
                                 {[1, 2, 3, 4, 5, 6, 7].map(i => (
-                                    <div key={i} className="flex-1 animate-pulse bg-slate-200 dark:bg-slate-800 rounded-t" style={{ height: `${[65, 40, 80, 55, 90, 35, 70][i % 7]}%` }} />
+                                    <div key={i} className="flex-1 animate-pulse bg-slate-200 dark:bg-card rounded-t" style={{ height: `${[65, 40, 80, 55, 90, 35, 70][i % 7]}%` }} />
                                 ))}
                             </div>
                         </div>
-                        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                        <div className="bg-white dark:bg-background p-6 rounded-xl border border-slate-100 dark:border-stroke shadow-sm">
                             <SkeletonBox className="h-4 w-36 rounded mb-6" />
                             <div className="space-y-4">
                                 {[1, 2, 3].map(i => (
@@ -79,3 +79,4 @@ const AQISkeleton = () => (
 );
 
 export default AQISkeleton;
+

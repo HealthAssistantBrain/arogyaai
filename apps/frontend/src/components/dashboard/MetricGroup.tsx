@@ -19,14 +19,14 @@ const MetricGroup = ({ title, hero, mini, index = 0 }: MetricGroupProps) => {
       initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, delay: index * 0.08, ease: 'easeOut' }}
-      className="rounded-[2rem] border border-white/65 bg-white/35 p-6 shadow-[0_14px_44px_rgba(15,23,42,0.07)] backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.035]"
+      className="rounded-[2rem] border border-white/65 bg-white/35 p-6 shadow-[0_14px_44px_rgba(15,23,42,0.07)] backdrop-blur-xl dark:border-stroke dark:bg-white/[0.035]"
       aria-label={title}
     >
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-[12px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">
+        <h3 className="text-[12px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-text-secondary">
           {title}
         </h3>
-        <span className="rounded-full bg-white/70 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 shadow-sm dark:bg-white/10 dark:text-slate-400">
+        <span className="rounded-full bg-white/70 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-text-muted shadow-sm dark:bg-white/10 dark:text-text-muted">
           3 signals
         </span>
       </div>

@@ -77,8 +77,8 @@ function SelectionPill({ active, label, onClick }) {
       onClick={onClick}
       className={`${pillBaseClasses} ${
         active
-          ? 'border-[#009cde]/40 bg-[#009cde]/10 text-[#06668d] dark:border-[#009cde]/30 dark:bg-[#009cde]/15 dark:text-[#8ad6ff]'
-          : 'border-slate-200 bg-white text-slate-500 hover:border-[#6143f4]/25 hover:text-[#6143f4] dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-300 dark:hover:border-[#009cde]/40'
+          ? 'border-secondary/40 bg-secondary/10 text-[#06668d] dark:border-secondary/30 dark:bg-secondary/15 dark:text-[#8ad6ff]'
+          : 'border-slate-200 bg-white text-slate-500 hover:border-primary/25 hover:text-primary dark:border-stroke dark:bg-background/70 dark:text-text-secondary dark:hover:border-secondary/40'
       }`}
     >
       {label}
@@ -89,11 +89,11 @@ function SelectionPill({ active, label, onClick }) {
 function SectionLabel({ icon: Icon, title, subtitle }) {
   return (
     <div className="space-y-1">
-      <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.25em] text-slate-400 dark:text-slate-500">
+      <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.25em] text-text-muted dark:text-slate-500">
         <Icon size={14} />
         <span>{title}</span>
       </div>
-      {subtitle ? <p className="text-sm text-slate-500 dark:text-slate-400">{subtitle}</p> : null}
+      {subtitle ? <p className="text-sm text-slate-500 dark:text-text-muted">{subtitle}</p> : null}
     </div>
   );
 }
@@ -215,26 +215,26 @@ export default function MedicalHistoryPanel({ onTimelineRefresh }) {
   };
 
   return (
-    <aside className="lg:sticky lg:top-8 self-start rounded-[2rem] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(242,248,252,0.94))] p-5 shadow-[0_28px_80px_-42px_rgba(15,23,42,0.45)] backdrop-blur dark:border-slate-800 dark:bg-[linear-gradient(180deg,rgba(16,23,42,0.96),rgba(11,18,32,0.94))]">
-      <div className="overflow-hidden rounded-[1.6rem] border border-white/60 bg-white/70 dark:border-white/5 dark:bg-slate-950/35">
-        <div className="border-b border-slate-200/80 bg-[radial-gradient(circle_at_top_left,rgba(0,156,222,0.14),transparent_55%),radial-gradient(circle_at_top_right,rgba(97,67,244,0.16),transparent_52%)] px-5 py-5 dark:border-slate-800">
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/80 px-3 py-1 text-[10px] font-black uppercase tracking-[0.28em] text-slate-500 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+    <aside className="lg:sticky lg:top-8 self-start rounded-[2rem] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(242,248,252,0.94))] p-5 shadow-[0_28px_80px_-42px_rgba(15,23,42,0.45)] backdrop-blur dark:border-stroke dark:bg-[linear-gradient(180deg,rgba(16,23,42,0.96),rgba(11,18,32,0.94))]">
+      <div className="overflow-hidden rounded-[1.6rem] border border-white/60 bg-white/70 dark:border-stroke/50 dark:bg-background/35">
+        <div className="border-b border-slate-200/80 bg-[radial-gradient(circle_at_top_left,rgba(0,156,222,0.14),transparent_55%),radial-gradient(circle_at_top_right,rgba(97,67,244,0.16),transparent_52%)] px-5 py-5 dark:border-stroke">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/80 px-3 py-1 text-[10px] font-black uppercase tracking-[0.28em] text-slate-500 shadow-sm dark:border-stroke dark:bg-white/5 dark:text-text-secondary">
             <ClipboardPlus size={13} />
             Structured Intake
           </div>
           <div className="mt-4 flex items-start justify-between gap-3">
             <div>
-              <h2 className="text-2xl font-black tracking-tight text-slate-950 dark:text-white">Add Medical History</h2>
-              <p className="mt-2 max-w-sm text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+              <h2 className="text-2xl font-black tracking-tight text-slate-950 dark:text-text-primary">Add Medical History</h2>
+              <p className="mt-2 max-w-sm text-sm leading-relaxed text-slate-500 dark:text-text-muted">
                 Capture complaints, negative history, and supporting reports in a format that can flow into timeline analysis and AI insights.
               </p>
             </div>
-            <div className="rounded-2xl border border-white/70 bg-white/80 p-3 text-[#009cde] shadow-sm dark:border-white/10 dark:bg-white/5">
+            <div className="rounded-2xl border border-white/70 bg-white/80 p-3 text-secondary shadow-sm dark:border-stroke dark:bg-white/5">
               <Stethoscope size={20} />
             </div>
           </div>
 
-          <div className="mt-5 grid grid-cols-2 gap-2 rounded-2xl bg-slate-900/5 p-1 dark:bg-white/5">
+          <div className="mt-5 grid grid-cols-2 gap-2 rounded-2xl bg-background/5 p-1 dark:bg-white/5">
             {[
               { key: 'symptoms', label: 'Symptoms', icon: ActivitySquare },
               { key: 'reports', label: 'Reports', icon: FileUp },
@@ -245,8 +245,8 @@ export default function MedicalHistoryPanel({ onTimelineRefresh }) {
                 onClick={() => setActiveTab(key)}
                 className={`flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold transition-all ${
                   activeTab === key
-                    ? 'bg-white text-slate-950 shadow-sm dark:bg-slate-900 dark:text-white'
-                    : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                    ? 'bg-white text-slate-950 shadow-sm dark:bg-background dark:text-text-primary'
+                    : 'text-slate-500 hover:text-slate-900 dark:text-text-muted dark:hover:text-text-primary'
                 }`}
               >
                 <Icon size={16} />
@@ -266,33 +266,33 @@ export default function MedicalHistoryPanel({ onTimelineRefresh }) {
               />
 
               <label className="block space-y-2">
-                <span className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Chief Complaint</span>
+                <span className="text-xs font-bold uppercase tracking-[0.22em] text-text-muted">Chief Complaint</span>
                 <textarea
                   value={symptomForm.chief_complaint}
                   onChange={(event) => handleSymptomChange('chief_complaint', event.target.value)}
                   rows={3}
                   placeholder="Example: chest pain, headache, persistent cough"
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-[#009cde] focus:ring-4 focus:ring-[#009cde]/10 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-100"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-secondary focus:ring-4 focus:ring-[#009cde]/10 dark:border-stroke dark:bg-background/60 dark:text-slate-100"
                 />
               </label>
 
               <div className="grid grid-cols-[112px_minmax(0,1fr)] gap-3">
                 <label className="block space-y-2">
-                  <span className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Duration</span>
+                  <span className="text-xs font-bold uppercase tracking-[0.22em] text-text-muted">Duration</span>
                   <input
                     type="number"
                     min="1"
                     value={symptomForm.duration_value}
                     onChange={(event) => handleSymptomChange('duration_value', event.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-[#009cde] focus:ring-4 focus:ring-[#009cde]/10 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-100"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-secondary focus:ring-4 focus:ring-[#009cde]/10 dark:border-stroke dark:bg-background/60 dark:text-slate-100"
                   />
                 </label>
                 <label className="block space-y-2">
-                  <span className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Unit</span>
+                  <span className="text-xs font-bold uppercase tracking-[0.22em] text-text-muted">Unit</span>
                   <select
                     value={symptomForm.duration_unit}
                     onChange={(event) => handleSymptomChange('duration_unit', event.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-[#009cde] focus:ring-4 focus:ring-[#009cde]/10 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-100"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-secondary focus:ring-4 focus:ring-[#009cde]/10 dark:border-stroke dark:bg-background/60 dark:text-slate-100"
                   >
                     <option value="hours">Hours</option>
                     <option value="days">Days</option>
@@ -303,20 +303,20 @@ export default function MedicalHistoryPanel({ onTimelineRefresh }) {
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block space-y-2">
-                  <span className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Onset</span>
+                  <span className="text-xs font-bold uppercase tracking-[0.22em] text-text-muted">Onset</span>
                   <select
                     value={symptomForm.onset}
                     onChange={(event) => handleSymptomChange('onset', event.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-[#009cde] focus:ring-4 focus:ring-[#009cde]/10 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-100"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-secondary focus:ring-4 focus:ring-[#009cde]/10 dark:border-stroke dark:bg-background/60 dark:text-slate-100"
                   >
                     <option value="">Select onset</option>
                     <option value="sudden">Sudden</option>
                     <option value="gradual">Gradual</option>
                   </select>
                 </label>
-                <div className="rounded-[1.5rem] border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-950/60">
+                <div className="rounded-[1.5rem] border border-slate-200 bg-white px-4 py-3 dark:border-stroke dark:bg-background/60">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Severity</span>
+                    <span className="text-xs font-bold uppercase tracking-[0.22em] text-text-muted">Severity</span>
                     <span className={`text-lg font-black ${severityTone}`}>{symptomForm.severity}/10</span>
                   </div>
                   <input
@@ -360,32 +360,32 @@ export default function MedicalHistoryPanel({ onTimelineRefresh }) {
               </div>
 
               <label className="block space-y-2">
-                <span className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Aggravating Factors</span>
+                <span className="text-xs font-bold uppercase tracking-[0.22em] text-text-muted">Aggravating Factors</span>
                 <input
                   value={symptomForm.aggravating_factors}
                   onChange={(event) => handleSymptomChange('aggravating_factors', event.target.value)}
                   placeholder="Activity, stairs, meals, posture..."
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-[#009cde] focus:ring-4 focus:ring-[#009cde]/10 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-100"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-secondary focus:ring-4 focus:ring-[#009cde]/10 dark:border-stroke dark:bg-background/60 dark:text-slate-100"
                 />
               </label>
 
               <label className="block space-y-2">
-                <span className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Relieving Factors</span>
+                <span className="text-xs font-bold uppercase tracking-[0.22em] text-text-muted">Relieving Factors</span>
                 <input
                   value={symptomForm.relieving_factors}
                   onChange={(event) => handleSymptomChange('relieving_factors', event.target.value)}
                   placeholder="Rest, hydration, medication..."
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-[#009cde] focus:ring-4 focus:ring-[#009cde]/10 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-100"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-secondary focus:ring-4 focus:ring-[#009cde]/10 dark:border-stroke dark:bg-background/60 dark:text-slate-100"
                 />
               </label>
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block space-y-2">
-                  <span className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Previous Episodes</span>
+                  <span className="text-xs font-bold uppercase tracking-[0.22em] text-text-muted">Previous Episodes</span>
                   <select
                     value={symptomForm.previous_episodes}
                     onChange={(event) => handleSymptomChange('previous_episodes', event.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-[#009cde] focus:ring-4 focus:ring-[#009cde]/10 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-100"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-secondary focus:ring-4 focus:ring-[#009cde]/10 dark:border-stroke dark:bg-background/60 dark:text-slate-100"
                   >
                     <option value="">Not specified</option>
                     <option value="yes">Yes</option>
@@ -393,12 +393,12 @@ export default function MedicalHistoryPanel({ onTimelineRefresh }) {
                   </select>
                 </label>
                 <label className="block space-y-2">
-                  <span className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Treatment Taken</span>
+                  <span className="text-xs font-bold uppercase tracking-[0.22em] text-text-muted">Treatment Taken</span>
                   <input
                     value={symptomForm.treatment_taken}
                     onChange={(event) => handleSymptomChange('treatment_taken', event.target.value)}
                     placeholder="Antacid, paracetamol, inhaler..."
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-[#009cde] focus:ring-4 focus:ring-[#009cde]/10 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-100"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-secondary focus:ring-4 focus:ring-[#009cde]/10 dark:border-stroke dark:bg-background/60 dark:text-slate-100"
                   />
                 </label>
               </div>
@@ -412,24 +412,24 @@ export default function MedicalHistoryPanel({ onTimelineRefresh }) {
               <button
                 type="submit"
                 disabled={submittingSymptoms}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-background px-4 py-3 text-sm font-bold text-text-primary transition hover:bg-card disabled:cursor-not-allowed disabled:opacity-70 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
               >
                 {submittingSymptoms ? <LoaderCircle size={16} className="animate-spin" /> : <ClipboardPlus size={16} />}
                 <span>{submittingSymptoms ? 'Saving History...' : 'Save to Timeline'}</span>
               </button>
 
               {latestHistory?.analysis ? (
-                <div className="rounded-[1.6rem] border border-[#009cde]/15 bg-[linear-gradient(180deg,rgba(0,156,222,0.07),rgba(97,67,244,0.03))] p-4 dark:border-[#009cde]/20 dark:bg-[linear-gradient(180deg,rgba(0,156,222,0.12),rgba(15,23,42,0.08))]">
+                <div className="rounded-[1.6rem] border border-secondary/15 bg-[linear-gradient(180deg,rgba(0,156,222,0.07),rgba(97,67,244,0.03))] p-4 dark:border-secondary/20 dark:bg-[linear-gradient(180deg,rgba(0,156,222,0.12),rgba(15,23,42,0.08))]">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#06668d] dark:text-[#8ad6ff]">Clinical Summary</p>
-                      <p className="mt-2 text-sm leading-relaxed text-slate-700 dark:text-slate-200">
+                      <p className="mt-2 text-sm leading-relaxed text-slate-700 dark:text-text-primary">
                         {latestHistory.analysis.summary}
                       </p>
                     </div>
-                    <div className="rounded-2xl border border-white/70 bg-white/70 px-3 py-2 text-right dark:border-white/10 dark:bg-white/5">
-                      <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Priority</p>
-                      <p className="mt-1 text-sm font-black text-slate-900 dark:text-white">
+                    <div className="rounded-2xl border border-white/70 bg-white/70 px-3 py-2 text-right dark:border-stroke dark:bg-white/5">
+                      <p className="text-[10px] font-black uppercase tracking-[0.24em] text-text-muted">Priority</p>
+                      <p className="mt-1 text-sm font-black text-slate-900 dark:text-text-primary">
                         {titleCase(latestHistory.analysis.priority)}
                       </p>
                     </div>
@@ -437,12 +437,12 @@ export default function MedicalHistoryPanel({ onTimelineRefresh }) {
 
                   <div className="mt-4 grid gap-4">
                     <div>
-                      <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Possible Conditions</p>
+                      <p className="text-[11px] font-black uppercase tracking-[0.24em] text-text-muted">Possible Conditions</p>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {(latestHistory.analysis.possible_conditions || []).map((condition) => (
                           <span
                             key={condition}
-                            className="rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-xs font-bold text-slate-600 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-200"
+                            className="rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-xs font-bold text-slate-600 dark:border-stroke dark:bg-background/60 dark:text-text-primary"
                           >
                             {condition}
                           </span>
@@ -451,12 +451,12 @@ export default function MedicalHistoryPanel({ onTimelineRefresh }) {
                     </div>
 
                     <div>
-                      <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Recommendations</p>
+                      <p className="text-[11px] font-black uppercase tracking-[0.24em] text-text-muted">Recommendations</p>
                       <div className="mt-2 space-y-2">
                         {(latestHistory.analysis.recommendations || []).map((recommendation) => (
                           <div
                             key={recommendation}
-                            className="rounded-2xl border border-slate-200 bg-white/80 px-3 py-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-300"
+                            className="rounded-2xl border border-slate-200 bg-white/80 px-3 py-3 text-sm text-slate-600 dark:border-stroke dark:bg-background/60 dark:text-text-secondary"
                           >
                             {recommendation}
                           </div>
@@ -475,16 +475,16 @@ export default function MedicalHistoryPanel({ onTimelineRefresh }) {
                 subtitle="Attach a PDF or image report and keep the upload structured for timeline review."
               />
 
-              <label className="flex cursor-pointer flex-col gap-3 rounded-[1.6rem] border border-dashed border-slate-300 bg-slate-50/70 px-4 py-5 transition hover:border-[#009cde]/40 hover:bg-[#009cde]/5 dark:border-slate-700 dark:bg-slate-950/40 dark:hover:border-[#009cde]/30">
+              <label className="flex cursor-pointer flex-col gap-3 rounded-[1.6rem] border border-dashed border-slate-300 bg-slate-50/70 px-4 py-5 transition hover:border-secondary/40 hover:bg-secondary/5 dark:border-stroke dark:bg-background/40 dark:hover:border-secondary/30">
                 <div className="flex items-start gap-3">
-                  <div className="rounded-2xl border border-white/80 bg-white/80 p-3 text-[#009cde] shadow-sm dark:border-white/10 dark:bg-white/5">
+                  <div className="rounded-2xl border border-white/80 bg-white/80 p-3 text-secondary shadow-sm dark:border-stroke dark:bg-white/5">
                     <FileUp size={18} />
                   </div>
                   <div>
-                    <p className="text-sm font-black text-slate-900 dark:text-white">
+                    <p className="text-sm font-black text-slate-900 dark:text-text-primary">
                       {reportForm.file ? reportForm.file.name : 'Upload PDF or image'}
                     </p>
-                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                    <p className="mt-1 text-sm text-slate-500 dark:text-text-muted">
                       Supported: PDF, JPG, JPEG, PNG
                     </p>
                   </div>
@@ -499,11 +499,11 @@ export default function MedicalHistoryPanel({ onTimelineRefresh }) {
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block space-y-2">
-                  <span className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Report Type</span>
+                  <span className="text-xs font-bold uppercase tracking-[0.22em] text-text-muted">Report Type</span>
                   <select
                     value={reportForm.report_type}
                     onChange={(event) => handleReportChange('report_type', event.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-[#009cde] focus:ring-4 focus:ring-[#009cde]/10 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-100"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-secondary focus:ring-4 focus:ring-[#009cde]/10 dark:border-stroke dark:bg-background/60 dark:text-slate-100"
                   >
                     {REPORT_TYPE_OPTIONS.map((reportType) => (
                       <option key={reportType} value={reportType}>
@@ -514,12 +514,12 @@ export default function MedicalHistoryPanel({ onTimelineRefresh }) {
                 </label>
 
                 <label className="block space-y-2">
-                  <span className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Date of Report</span>
+                  <span className="text-xs font-bold uppercase tracking-[0.22em] text-text-muted">Date of Report</span>
                   <input
                     type="date"
                     value={reportForm.date_of_report}
                     onChange={(event) => handleReportChange('date_of_report', event.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-[#009cde] focus:ring-4 focus:ring-[#009cde]/10 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-100"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-secondary focus:ring-4 focus:ring-[#009cde]/10 dark:border-stroke dark:bg-background/60 dark:text-slate-100"
                   />
                 </label>
               </div>
@@ -533,7 +533,7 @@ export default function MedicalHistoryPanel({ onTimelineRefresh }) {
               <button
                 type="submit"
                 disabled={uploadingReport}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-background px-4 py-3 text-sm font-bold text-text-primary transition hover:bg-card disabled:cursor-not-allowed disabled:opacity-70 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
               >
                 {uploadingReport ? <LoaderCircle size={16} className="animate-spin" /> : <FileUp size={16} />}
                 <span>{uploadingReport ? 'Uploading Report...' : 'Submit Report'}</span>
@@ -545,12 +545,12 @@ export default function MedicalHistoryPanel({ onTimelineRefresh }) {
                     <CheckCircle2 size={18} />
                     <p className="text-sm font-black">Report added to timeline</p>
                   </div>
-                  <div className="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                    <p><span className="font-bold text-slate-900 dark:text-white">Title:</span> {latestReport.title || latestReport.file_name}</p>
-                    <p><span className="font-bold text-slate-900 dark:text-white">Type:</span> {titleCase(latestReport.report_type)}</p>
-                    <p><span className="font-bold text-slate-900 dark:text-white">Date:</span> {latestReport.date_of_report || 'Not specified'}</p>
+                  <div className="mt-3 space-y-2 text-sm text-slate-600 dark:text-text-secondary">
+                    <p><span className="font-bold text-slate-900 dark:text-text-primary">Title:</span> {latestReport.original_filename || latestReport.file_name || latestReport.title}</p>
+                    <p><span className="font-bold text-slate-900 dark:text-text-primary">Type:</span> {titleCase(latestReport.report_type)}</p>
+                    <p><span className="font-bold text-slate-900 dark:text-text-primary">Date:</span> {latestReport.date_of_report || 'Not specified'}</p>
                     {Array.isArray(latestReport.summary) && latestReport.summary.length > 0 ? (
-                      <p className="rounded-2xl border border-white/80 bg-white/80 px-3 py-3 text-sm leading-relaxed dark:border-white/10 dark:bg-white/5">
+                      <p className="rounded-2xl border border-white/80 bg-white/80 px-3 py-3 text-sm leading-relaxed dark:border-stroke dark:bg-white/5">
                         {latestReport.summary[0]}
                       </p>
                     ) : null}
@@ -558,12 +558,12 @@ export default function MedicalHistoryPanel({ onTimelineRefresh }) {
                 </div>
               ) : null}
 
-              <div className="rounded-[1.6rem] border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-950/40">
-                <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+              <div className="rounded-[1.6rem] border border-slate-200 bg-slate-50/80 p-4 dark:border-stroke dark:bg-background/40">
+                <div className="flex items-center gap-2 text-slate-500 dark:text-text-muted">
                   <AlertCircle size={16} />
                   <p className="text-sm font-semibold">Reports stay structured</p>
                 </div>
-                <p className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                <p className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-text-muted">
                   Report type and report date are stored with the upload so the timeline and downstream analysis can correlate symptoms with supporting documents.
                 </p>
               </div>
@@ -574,3 +574,4 @@ export default function MedicalHistoryPanel({ onTimelineRefresh }) {
     </aside>
   );
 }
+

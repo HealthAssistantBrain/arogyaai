@@ -6,6 +6,9 @@ import { useAuthStore } from './authStore';
 
 const REPORTS_STORAGE_KEY = 'arogyaai-reports';
 const STALE_THRESHOLD_MS = 60_000;
+const PROCESSING_STATUSES = new Set(['PENDING', 'PROCESSING', 'UPLOADING']);
+
+export const isReportProcessingStatus = (status = '') => PROCESSING_STATUSES.has(String(status || '').toUpperCase());
 
 const stripQuery = (value = '') => String(value).split('?')[0].split('#')[0];
 
@@ -13,8 +16,13 @@ const getFileNameFromUrl = (url = '') => {
   const cleaned = stripQuery(url);
   if (!cleaned) return '';
   const parts = cleaned.split('/');
-  return decodeURIComponent(parts[parts.length - 1] || '');
+  return stripUuidPrefix(decodeURIComponent(parts[parts.length - 1] || ''));
 };
+
+const stripUuidPrefix = (value = '') => String(value).replace(
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-/i,
+  ''
+);
 
 const inferReportType = (reportName = '', reportUrl = '', reportType = '') => {
   const normalizedType = String(reportType || '').toUpperCase();
@@ -68,12 +76,13 @@ export const hasSummaryContent = (summaryView = {}) => (
 export const normalizeReport = (report) => {
   const fileUrl = report?.fileUrl ?? report?.file_url ?? report?.url ?? '';
   const fileName =
-    report?.name ??
-    report?.fileName ??
-    report?.file_name ??
-    report?.title ??
-    getFileNameFromUrl(fileUrl) ??
+    toText(report?.originalFilename ?? report?.original_filename) ||
+    stripUuidPrefix(toText(report?.fileName ?? report?.file_name)) ||
+    stripUuidPrefix(toText(report?.name)) ||
+    toText(report?.title) ||
+    getFileNameFromUrl(fileUrl) ||
     'Medical Report';
+  const storedFilename = report?.storedFilename ?? report?.stored_filename ?? '';
   const createdAt = report?.createdAt ?? report?.created_at ?? report?.uploaded_at ?? report?.date ?? null;
   const updatedAt = report?.updatedAt ?? report?.updated_at ?? null;
   const sizeValue = Number(report?.fileSize ?? report?.file_size ?? report?.sizeBytes ?? report?.size_bytes ?? null);
@@ -101,6 +110,8 @@ export const normalizeReport = (report) => {
   return {
     id: String(report?.id ?? report?.report_id ?? fileUrl ?? `${fileName}-${createdAt ?? 'report'}`),
     fileName,
+    originalFilename: fileName,
+    storedFilename,
     title: report?.title ?? fileName,
     fileUrl,
     reportType,
@@ -109,6 +120,12 @@ export const normalizeReport = (report) => {
     createdAt,
     updatedAt,
     fileSize: Number.isFinite(sizeValue) ? sizeValue : null,
+    localPreviewUrl: report?.localPreviewUrl ?? report?.local_preview_url ?? '',
+    isOptimistic: Boolean(report?.isOptimistic ?? report?.is_optimistic),
+    uploadProgress: Number.isFinite(Number(report?.uploadProgress ?? report?.upload_progress))
+      ? Number(report?.uploadProgress ?? report?.upload_progress)
+      : null,
+    statusMessage: toText(report?.statusMessage ?? report?.status_message),
     summary: Array.isArray(report?.summary) ? report.summary : normalizeTextList(report?.summary),
     summaryView,
     summaryData,
@@ -121,6 +138,17 @@ export const normalizeReport = (report) => {
     recommendations: Array.isArray(report?.recommendations) ? report.recommendations : [],
     source: report?.source ?? summarySource ?? 'upload',
     summarySource: summarySource || summaryView.source || report?.source || 'upload',
+  };
+};
+
+const mergeReportPreservingLocalPreview = (remoteReport, existingReport) => {
+  if (!existingReport) return remoteReport;
+
+  return {
+    ...remoteReport,
+    localPreviewUrl: existingReport.localPreviewUrl || remoteReport.localPreviewUrl,
+    uploadProgress: remoteReport.uploadProgress ?? existingReport.uploadProgress,
+    statusMessage: remoteReport.statusMessage || existingReport.statusMessage,
   };
 };
 
@@ -165,6 +193,99 @@ export const useReportsStore = create(
 
       setHasHydratedCache: (value = true) => set({ hasHydratedCache: !!value }, false, 'reports/cacheHydrated'),
       setSelectedReportId: (selectedReportId = null) => set({ selectedReportId }, false, 'reports/select'),
+      addOptimisticReport: (report) => {
+        const optimisticReport = normalizeReport({
+          ...report,
+          isOptimistic: true,
+          status: report?.status ?? 'PROCESSING',
+          createdAt: report?.createdAt ?? new Date().toISOString(),
+        });
+
+        set((state) => ({
+          reports: [
+            optimisticReport,
+            ...state.reports.filter((item) => item.id !== optimisticReport.id),
+          ],
+          selectedReportId: optimisticReport.id,
+        }), false, 'reports/addOptimistic');
+
+        return optimisticReport;
+      },
+      upsertReport: (report) => {
+        const normalized = normalizeReport(report);
+        const existing = get().reports.find((item) => item.id === normalized.id);
+        const merged = mergeReportPreservingLocalPreview(normalized, existing);
+        const nextReports = get().reports.some((item) => item.id === merged.id)
+          ? get().reports.map((item) => (item.id === merged.id ? merged : item))
+          : [merged, ...get().reports];
+
+        set({ reports: normalizeReportList(nextReports) }, false, 'reports/upsert');
+        return merged;
+      },
+      replaceOptimisticReport: (temporaryId, report) => {
+        const normalized = normalizeReport(report);
+        const temporaryReport = get().reports.find((item) => item.id === temporaryId);
+        const merged = mergeReportPreservingLocalPreview(
+          { ...normalized, isOptimistic: false },
+          temporaryReport,
+        );
+        const nextReports = get().reports
+          .filter((item) => item.id !== temporaryId && item.id !== merged.id)
+          .concat(merged);
+
+        set({
+          reports: normalizeReportList(nextReports),
+          selectedReportId: merged.id,
+        }, false, 'reports/replaceOptimistic');
+
+        return merged;
+      },
+      markReportFailed: (reportId, message = 'Upload failed') => {
+        set((state) => ({
+          reports: state.reports.map((report) => (
+            report.id === reportId
+              ? { ...report, status: 'FAILED', statusMessage: message, isOptimistic: false }
+              : report
+          )),
+        }), false, 'reports/markFailed');
+      },
+      deleteReport: async (reportId) => {
+        const targetId = String(reportId || '');
+        if (!targetId) {
+          return null;
+        }
+
+        const previousReports = get().reports;
+        const previousSelectedReportId = get().selectedReportId;
+        const deletedReport = previousReports.find((report) => report.id === targetId) ?? null;
+        const nextReports = previousReports.filter((report) => report.id !== targetId);
+
+        set({
+          reports: nextReports,
+          selectedReportId: previousSelectedReportId === targetId ? (nextReports[0]?.id ?? null) : previousSelectedReportId,
+        }, false, 'reports/deleteOptimistic');
+
+        if (targetId.startsWith('local-') || deletedReport?.isOptimistic) {
+          return deletedReport;
+        }
+
+        try {
+          await apiClient.delete(`/reports/${targetId}`, { timeout: 12000 });
+          set({
+            error: null,
+            lastFetchedAt: Date.now(),
+            cacheOwnerId: getCurrentUserId(),
+          }, false, 'reports/deleteSuccess');
+          return deletedReport;
+        } catch (error) {
+          set({
+            reports: previousReports,
+            selectedReportId: previousSelectedReportId,
+            error: error?.response?.data?.error || error?.response?.data?.detail || error?.message || 'Unable to delete report',
+          }, false, 'reports/deleteRollback');
+          throw error;
+        }
+      },
 
       fetchReports: async ({ force = false } = {}) => {
         const state = get();
@@ -189,10 +310,19 @@ export const useReportsStore = create(
         try {
           const response = await apiClient.get('/reports', { timeout: 12000 });
           const remoteReports = normalizeReportList(extractReportsArray(response.data));
-          const selectedReportStillExists = remoteReports.some((report) => report.id === get().selectedReportId);
+          const currentReports = get().reports;
+          const optimisticReports = currentReports.filter((report) => report.isOptimistic || String(report.id).startsWith('local-'));
+          const mergedRemoteReports = remoteReports.map((report) => (
+            mergeReportPreservingLocalPreview(report, currentReports.find((item) => item.id === report.id))
+          ));
+          const allReports = normalizeReportList([
+            ...optimisticReports.filter((optimistic) => !mergedRemoteReports.some((report) => report.id === optimistic.id)),
+            ...mergedRemoteReports,
+          ]);
+          const selectedReportStillExists = allReports.some((report) => report.id === get().selectedReportId);
 
           set({
-            reports: remoteReports,
+            reports: allReports,
             selectedReportId: selectedReportStillExists ? get().selectedReportId : null,
             loading: false,
             isFetching: false,
@@ -232,19 +362,21 @@ export const useReportsStore = create(
           const detailedReport = normalizeReport(response.data?.data ?? response.data ?? {});
           const currentUserId = getCurrentUserId();
           const existingReports = get().reports;
+          const existingReport = existingReports.find((item) => item.id === detailedReport.id);
+          const mergedReport = mergeReportPreservingLocalPreview(detailedReport, existingReport);
           const nextReports = existingReports.some((item) => item.id === detailedReport.id)
-            ? existingReports.map((item) => (item.id === detailedReport.id ? detailedReport : item))
-            : [detailedReport, ...existingReports];
+            ? existingReports.map((item) => (item.id === detailedReport.id ? mergedReport : item))
+            : [mergedReport, ...existingReports];
 
           set({
-            reports: nextReports,
+            reports: normalizeReportList(nextReports),
             detailFetchingId: null,
             error: null,
             lastFetchedAt: Date.now(),
             cacheOwnerId: currentUserId,
           }, false, 'reports/detailSuccess');
 
-          return detailedReport;
+          return mergedReport;
         } catch (error) {
           set({
             detailFetchingId: null,
@@ -254,13 +386,50 @@ export const useReportsStore = create(
           return report ?? null;
         }
       },
+      fetchReportStatus: async (reportId) => {
+        if (!reportId || String(reportId).startsWith('local-')) {
+          return null;
+        }
+
+        const existingReport = get().reports.find((item) => item.id === reportId);
+
+        try {
+          const response = await apiClient.get(`/reports/${reportId}/status`, { timeout: 12000 });
+          const payload = response.data?.data?.report ?? response.data?.report ?? response.data?.data ?? response.data ?? {};
+          const normalized = normalizeReport(payload);
+          const merged = mergeReportPreservingLocalPreview(normalized, existingReport);
+          const nextReports = get().reports.some((item) => item.id === merged.id)
+            ? get().reports.map((item) => (item.id === merged.id ? merged : item))
+            : [merged, ...get().reports];
+
+          set({
+            reports: normalizeReportList(nextReports),
+            selectedReportId: get().selectedReportId === reportId ? merged.id : get().selectedReportId,
+            error: null,
+            lastFetchedAt: Date.now(),
+            cacheOwnerId: getCurrentUserId(),
+          }, false, 'reports/statusSuccess');
+
+          return merged;
+        } catch (error) {
+          set({
+            error: error?.response?.data?.error || error?.message || 'Unable to refresh report status',
+          }, false, 'reports/statusError');
+
+          return existingReport ?? null;
+        }
+      },
     }), { name: 'arogyaai-reports-store' }),
     {
       name: REPORTS_STORAGE_KEY,
       storage: createJSONStorage(() => window.localStorage),
       partialize: (state) => ({
-        reports: state.reports,
-        selectedReportId: state.selectedReportId,
+        reports: state.reports
+          .filter((report) => !report.isOptimistic && !String(report.id).startsWith('local-'))
+          .map(({ localPreviewUrl, uploadProgress, isOptimistic, statusMessage, ...report }) => report),
+        selectedReportId: state.selectedReportId && !String(state.selectedReportId).startsWith('local-')
+          ? state.selectedReportId
+          : null,
         lastFetchedAt: state.lastFetchedAt,
         cacheOwnerId: state.cacheOwnerId,
       }),

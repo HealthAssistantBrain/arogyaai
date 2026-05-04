@@ -34,6 +34,8 @@ class Report(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     user_id     = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     report_type = Column(Enum(ReportTypeEnum, name="report_type_enum"), nullable=False)
     file_url    = Column(Text, nullable=False)
+    original_filename = Column(Text, nullable=True)
+    stored_filename = Column(Text, nullable=True)
     parsed_text = Column(Text)
     summary_data = Column(JSONB(astext_type=Text()), nullable=True)
     status      = Column(Enum(ReportStatusEnum, name="report_status_enum"), default=ReportStatusEnum.PENDING, index=True)

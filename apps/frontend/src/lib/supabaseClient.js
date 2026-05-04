@@ -15,6 +15,20 @@ const getSupabaseEnv = () => ({
   anonKey: normalizeEnvValue(import.meta.env.VITE_SUPABASE_ANON_KEY),
 })
 
+const getBrowserLocalStorage = () => {
+  if (typeof window === 'undefined') return undefined
+  return window.localStorage
+}
+
+const getStorageKey = (url) => {
+  try {
+    const projectRef = new URL(url).hostname.split('.')[0]
+    return projectRef ? `sb-${projectRef}-auth-token` : 'arogyaai-supabase-auth-token'
+  } catch {
+    return 'arogyaai-supabase-auth-token'
+  }
+}
+
 export const getSupabaseConfigStatus = () => {
   const { url, anonKey } = getSupabaseEnv()
   const missing = []
@@ -72,10 +86,12 @@ export const getSupabaseClient = () => {
   try {
     supabaseClient = createClient(url, anonKey, {
       auth: {
-        autoRefreshToken: true,
+        detectSessionInUrl: true,
         persistSession: true,
-        detectSessionInUrl: false,
+        autoRefreshToken: true,
         flowType: 'pkce',
+        storage: getBrowserLocalStorage(),
+        storageKey: getStorageKey(url),
       },
     })
   } catch (error) {

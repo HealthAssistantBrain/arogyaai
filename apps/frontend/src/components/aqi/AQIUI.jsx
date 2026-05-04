@@ -164,14 +164,14 @@ const AQIUI = ({
   const aqiConfig = getAqiConfig(aqiValue, hasCurrentData);
 
   return (
-    <div className="w-full overflow-x-hidden bg-[#EAEAEA] px-4 py-6 text-[#13082A] transition-colors sm:px-6 lg:px-8">
+    <div className="w-full overflow-x-hidden bg-background px-4 py-6 text-text-primary transition-colors sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-7xl flex-col gap-6">
         <header className="max-w-4xl">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/80 px-4 py-1.5 text-[11px] font-black uppercase tracking-[0.24em] text-[#6143F4] shadow-sm backdrop-blur">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/80 px-4 py-1.5 text-[11px] font-black uppercase tracking-[0.24em] text-primary shadow-sm backdrop-blur">
             <Wind size={14} />
             AQI Intelligence
           </div>
-          <h1 className="text-3xl font-black tracking-tight text-[#13082A] sm:text-4xl">
+          <h1 className="text-3xl font-black tracking-tight text-text-primary sm:text-4xl">
             Air Quality Risk Monitor
           </h1>
           <p className="mt-3 max-w-3xl text-sm font-medium leading-7 text-slate-700 sm:text-base">
@@ -199,10 +199,10 @@ const AQIUI = ({
                 <button
                   type="button"
                   onClick={onLocationClick}
-                  className="inline-flex items-center gap-2 rounded-2xl border border-white/80 bg-white/95 px-4 py-3 text-sm font-bold text-[#13082A] shadow-lg transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6143F4]"
+                  className="inline-flex items-center gap-2 rounded-2xl border border-white/80 bg-white/95 px-4 py-3 text-sm font-bold text-text-primary shadow-lg transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
                   aria-label="Use current location"
                 >
-                  {loading ? <LoaderCircle size={16} className="animate-spin text-[#6143F4]" /> : <Navigation size={16} className="text-[#6143F4]" />}
+                  {loading ? <LoaderCircle size={16} className="animate-spin text-primary" /> : <Navigation size={16} className="text-primary" />}
                   Current location
                 </button>
               </div>
@@ -250,7 +250,7 @@ const AQIUI = ({
             <div className="relative z-20 rounded-[28px] border border-slate-200/80 bg-white p-6 shadow-[0_18px_60px_rgba(15,23,42,0.08)]">
               <p className="text-sm font-black uppercase tracking-[0.18em] text-slate-500">Location Search</p>
               <div ref={searchContainerRef} className="relative z-20 mt-4">
-                <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
                 <input
                   type="text"
                   value={searchQuery}
@@ -261,7 +261,7 @@ const AQIUI = ({
                   onFocus={() => onSearchOpen(true)}
                   onKeyDown={onSearchKeyDown}
                   placeholder="Search city or region"
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-4 text-sm font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#6143F4] focus:bg-white focus:ring-4 focus:ring-[#6143F4]/10"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-4 text-sm font-medium text-slate-900 outline-none transition placeholder:text-text-muted focus:border-primary focus:bg-white focus:ring-4 focus:ring-[var(--color-primary)]/10"
                   aria-label="Search location"
                 />
 
@@ -276,7 +276,7 @@ const AQIUI = ({
                       <div className="max-h-72 overflow-y-auto p-2">
                         {isSearching ? (
                           <div className="flex items-center gap-2 px-4 py-3 text-sm font-semibold text-slate-600">
-                            <LoaderCircle size={16} className="animate-spin text-[#6143F4]" />
+                            <LoaderCircle size={16} className="animate-spin text-primary" />
                             Searching locations...
                           </div>
                         ) : searchQuery.trim().length < 2 ? (
@@ -295,10 +295,10 @@ const AQIUI = ({
                               onMouseEnter={() => setHighlightedIndex(index)}
                               onClick={() => submitCitySearch(suggestion)}
                               className={`flex w-full items-start gap-3 rounded-2xl px-4 py-3 text-left transition ${
-                                highlightedIndex === index ? 'bg-[#6143F4]/10 text-[#13082A]' : 'text-slate-700 hover:bg-slate-50'
+                                highlightedIndex === index ? 'bg-primary/10 text-white' : 'text-slate-700 hover:bg-slate-50'
                               }`}
                             >
-                              <MapPin size={16} className="mt-0.5 shrink-0 text-[#6143F4]" />
+                              <MapPin size={16} className="mt-0.5 shrink-0 text-primary" />
                               <div>
                                 <p className="text-sm font-bold">{suggestion.name}</p>
                                 <p className="text-xs font-medium text-slate-500">
@@ -317,7 +317,7 @@ const AQIUI = ({
               <button
                 type="button"
                 onClick={onLocationClick}
-                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#6143F4] px-4 py-3 text-sm font-bold text-white transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6143F4] focus-visible:ring-offset-2"
+                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-bold text-white transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2"
               >
                 <Navigation size={16} />
                 Use Current Location
@@ -329,7 +329,7 @@ const AQIUI = ({
                 <div>
                   <p className="text-sm font-black uppercase tracking-[0.18em] text-slate-500">AQI Index</p>
                   <div className="mt-3 flex items-end gap-3">
-                    <span className="text-6xl font-black tracking-tight text-[#13082A]">
+                    <span className="text-6xl font-black tracking-tight text-text-primary">
                       {loading ? '...' : aqiValue}
                     </span>
                     <span
@@ -363,7 +363,7 @@ const AQIUI = ({
                     <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
                       {METRIC_META[metricKey].label}
                     </p>
-                    <p className="mt-2 text-xl font-black text-[#13082A]">
+                    <p className="mt-2 text-xl font-black text-text-primary">
                       {Number(data?.[metricKey] || 0).toFixed(1)}
                     </p>
                     <p className="text-[11px] font-semibold text-slate-500">{METRIC_META[metricKey].unit}</p>
@@ -378,7 +378,7 @@ const AQIUI = ({
           <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-sm font-black uppercase tracking-[0.18em] text-slate-500">7-Day Trend</p>
-              <h2 className="mt-2 text-2xl font-black tracking-tight text-[#13082A]">
+              <h2 className="mt-2 text-2xl font-black tracking-tight text-text-primary">
                 Pollution history for {location}
               </h2>
               <p className="mt-2 text-sm font-medium text-slate-600">
@@ -394,8 +394,8 @@ const AQIUI = ({
                     key={metricKey}
                     type="button"
                     onClick={() => onMetricChange(metricKey)}
-                    className={`rounded-2xl px-4 py-2 text-sm font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6143F4] ${
-                      isActive ? 'text-white shadow-lg' : 'border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                    className={`rounded-2xl px-4 py-2 text-sm font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] ${
+                      isActive ? 'text-text-primary shadow-lg' : 'border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
                     }`}
                     style={isActive ? { backgroundColor: meta.color } : undefined}
                   >
@@ -450,7 +450,7 @@ const AQIUI = ({
                 </ResponsiveContainer>
               ) : (
                 <div className="flex h-full flex-col items-center justify-center text-center">
-                  <Activity size={28} className="text-slate-400" />
+                  <Activity size={28} className="text-text-muted" />
                   <p className="mt-4 text-base font-bold text-slate-700">No live history available</p>
                   <p className="mt-2 max-w-sm text-sm font-medium leading-6 text-slate-500">
                     Historical AQI data for {activeMetric.label} will appear here after a successful API response.
@@ -462,13 +462,13 @@ const AQIUI = ({
             <div className="space-y-4">
               <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
                 <p className="text-sm font-black uppercase tracking-[0.18em] text-slate-500">Selected metric</p>
-                <p className="mt-3 text-2xl font-black text-[#13082A]">{activeMetric.label}</p>
+                <p className="mt-3 text-2xl font-black text-text-primary">{activeMetric.label}</p>
                 <p className="mt-2 text-sm font-medium leading-6 text-slate-600">{activeMetric.description}</p>
               </div>
 
               <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
                 <p className="text-sm font-black uppercase tracking-[0.18em] text-slate-500">Current reading</p>
-                <p className="mt-3 text-3xl font-black text-[#13082A]">
+                <p className="mt-3 text-3xl font-black text-text-primary">
                   {Number(data?.[selectedMetric] || 0).toFixed(1)}
                   <span className="ml-2 text-sm font-semibold text-slate-500">{activeMetric.unit}</span>
                 </p>
@@ -489,7 +489,7 @@ const AQIUI = ({
                     type="button"
                     onClick={() => setIsAlertEnabled(!isAlertEnabled)}
                     aria-pressed={isAlertEnabled}
-                    className={`relative ml-0 h-8 w-16 shrink-0 self-start overflow-hidden rounded-full transition sm:ml-4 ${isAlertEnabled ? 'bg-[#6143F4]' : 'bg-slate-300'}`}
+                    className={`relative ml-0 h-8 w-16 shrink-0 self-start overflow-hidden rounded-full transition sm:ml-4 ${isAlertEnabled ? 'bg-primary' : 'bg-slate-300'}`}
                   >
                     <motion.span
                       animate={{ x: isAlertEnabled ? 32 : 0 }}
@@ -499,7 +499,7 @@ const AQIUI = ({
                   </button>
                 </div>
                 <div className="mt-4 flex items-center gap-2 text-sm font-semibold text-slate-600">
-                  <Zap size={16} className={isAlertEnabled ? 'text-[#6143F4]' : 'text-slate-400'} />
+                  <Zap size={16} className={isAlertEnabled ? 'text-primary' : 'text-text-muted'} />
                   {isAlertEnabled ? 'Alerts are enabled' : 'Alerts are disabled'}
                 </div>
               </div>
@@ -517,14 +517,14 @@ const AQIUI = ({
           <motion.div
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
-            className="overflow-hidden rounded-[30px] bg-gradient-to-r from-[#6143F4] to-[#009CDE] p-[1px] shadow-[0_18px_60px_rgba(96,67,244,0.22)]"
+            className="overflow-hidden rounded-[30px] bg-gradient-to-r from-primary to-secondary p-[1px] shadow-[0_18px_60px_rgba(96,67,244,0.22)]"
           >
             <div className="rounded-[29px] bg-white p-7">
-              <div className="inline-flex items-center gap-2 rounded-full bg-[#6143F4]/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-[#6143F4]">
+              <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-primary">
                 <AlertTriangle size={14} />
                 Clinical Risk Escalation
               </div>
-              <h3 className="mt-5 text-2xl font-black tracking-tight text-[#13082A]">
+              <h3 className="mt-5 text-2xl font-black tracking-tight text-text-primary">
                 Personal Health Impact
               </h3>
               <p className="mt-3 text-sm font-medium leading-7 text-slate-700">
@@ -533,7 +533,7 @@ const AQIUI = ({
               <button
                 type="button"
                 onClick={() => navigate('/recommendations')}
-                className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-[#6143F4] px-5 py-3 text-sm font-bold text-white transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6143F4] focus-visible:ring-offset-2"
+                className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-bold text-white transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2"
               >
                 <Activity size={16} />
                 View Actions
@@ -543,12 +543,12 @@ const AQIUI = ({
 
           <div className="rounded-[30px] border border-slate-200/80 bg-white p-7 shadow-[0_18px_60px_rgba(15,23,42,0.08)]">
             <div className="flex items-center gap-4">
-              <div className="flex size-14 items-center justify-center rounded-[24px] bg-[#ECF2FF] text-[#6143F4]">
+              <div className="flex size-14 items-center justify-center rounded-[24px] bg-[#ECF2FF] text-primary">
                 <Wind size={24} />
               </div>
               <div>
                 <p className="text-sm font-black uppercase tracking-[0.18em] text-slate-500">Module status</p>
-                <p className="mt-1 text-xl font-black text-[#13082A]">
+                <p className="mt-1 text-xl font-black text-text-primary">
                   {hasCurrentData ? 'Live AQI synchronized' : 'Fallback mode active'}
                 </p>
               </div>
@@ -576,3 +576,4 @@ const AQIUI = ({
 };
 
 export default AQIUI;
+

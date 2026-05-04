@@ -65,21 +65,21 @@ const DevicesPage = () => {
 
   return (
     <div className="max-w-5xl mx-auto space-y-10 pb-16">
-      <div className="space-y-4 pb-4 border-b border-[#6143f4]/5">
-        <h2 className="text-5xl font-black text-[#13082a] dark:text-white tracking-tighter uppercase italic leading-none">Connected Devices</h2>
-        <p className="text-lg text-slate-500 dark:text-slate-400 font-bold uppercase tracking-tight opacity-80 leading-snug">
+      <div className="space-y-4 pb-4 border-b border-primary/5">
+        <h2 className="text-5xl font-black text-text-primary dark:text-text-primary tracking-tighter uppercase italic leading-none">Connected Devices</h2>
+        <p className="text-lg text-slate-500 dark:text-text-muted font-bold uppercase tracking-tight opacity-80 leading-snug">
           Manage active wearable integrations and browser push endpoints from one place.
         </p>
       </div>
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="rounded-[2rem] border border-[#6143f4]/10 bg-white/80 dark:bg-[#131022]/80 px-6 py-5">
-          <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">Active Endpoints</p>
-          <p className="mt-3 text-3xl font-black tracking-tighter text-[#13082a] dark:text-white">{devices.length}</p>
+        <div className="rounded-[2rem] border border-primary/10 bg-white/80 dark:bg-card/80 px-6 py-5">
+          <p className="text-[10px] font-black uppercase tracking-[0.25em] text-text-muted">Active Endpoints</p>
+          <p className="mt-3 text-3xl font-black tracking-tighter text-text-primary dark:text-text-primary">{devices.length}</p>
         </div>
         <Link
           to={ROUTES.GOOGLE_FIT_SETTINGS}
-          className="inline-flex items-center justify-center gap-3 rounded-[1.4rem] bg-[#6143f4] px-8 py-4 text-xs font-black uppercase tracking-[0.2em] text-white shadow-[0_20px_40px_-10px_rgba(97,67,244,0.35)] transition hover:bg-[#4a34c1]"
+          className="inline-flex items-center justify-center gap-3 rounded-[1.4rem] bg-primary px-8 py-4 text-xs font-black uppercase tracking-[0.2em] text-white shadow-[0_20px_40px_-10px_rgba(97,67,244,0.35)] transition hover:bg-[#4a34c1]"
         >
           <Link2 size={16} strokeWidth={3} />
           {connectedGoogleFit ? 'Manage Google Fit' : 'Connect Google Fit'}
@@ -87,17 +87,17 @@ const DevicesPage = () => {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center gap-4 rounded-[2.5rem] border border-[#6143f4]/10 bg-white dark:bg-[#131022] px-8 py-10">
-          <LoaderCircle className="animate-spin text-[#6143f4]" size={22} />
-          <span className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Loading device registry</span>
+        <div className="flex items-center gap-4 rounded-[2.5rem] border border-primary/10 bg-surface px-8 py-10">
+          <LoaderCircle className="animate-spin text-primary" size={22} />
+          <span className="text-xs font-black uppercase tracking-[0.2em] text-text-muted">Loading device registry</span>
         </div>
       ) : devices.length === 0 ? (
-        <div className="rounded-[3rem] border border-dashed border-[#6143f4]/20 bg-white dark:bg-[#131022] px-10 py-16 text-center">
-          <div className="mx-auto flex size-20 items-center justify-center rounded-[2rem] bg-[#6143f4]/10 text-[#6143f4]">
+        <div className="rounded-[3rem] border border-dashed border-primary/20 bg-surface px-10 py-16 text-center">
+          <div className="mx-auto flex size-20 items-center justify-center rounded-[2rem] bg-primary/10 text-primary">
             <Smartphone size={34} />
           </div>
-          <h3 className="mt-8 text-3xl font-black uppercase italic tracking-tighter text-[#13082a] dark:text-white">No devices connected</h3>
-          <p className="mt-4 text-sm font-bold uppercase tracking-tight text-slate-500 dark:text-slate-400 opacity-80">
+          <h3 className="mt-8 text-3xl font-black uppercase italic tracking-tighter text-text-primary dark:text-text-primary">No devices connected</h3>
+          <p className="mt-4 text-sm font-bold uppercase tracking-tight text-slate-500 dark:text-text-muted opacity-80">
             Connect Google Fit or enable push notifications to populate your device registry.
           </p>
         </div>
@@ -110,24 +110,24 @@ const DevicesPage = () => {
             return (
               <div
                 key={device.id}
-                className="flex flex-col gap-6 rounded-[2.5rem] border border-[#6143f4]/8 bg-white dark:bg-[#131022] p-8 shadow-[0_30px_70px_-30px_rgba(19,8,42,0.18)] md:flex-row md:items-center md:justify-between"
+                className="flex flex-col gap-6 rounded-[2.5rem] border border-primary/8 bg-surface p-8 shadow-[0_30px_70px_-30px_rgba(19,8,42,0.18)] md:flex-row md:items-center md:justify-between"
               >
                 <div className="flex items-start gap-5">
-                  <div className="flex size-16 items-center justify-center rounded-[1.4rem] bg-[#6143f4]/10 text-[#6143f4]">
+                  <div className="flex size-16 items-center justify-center rounded-[1.4rem] bg-primary/10 text-primary">
                     <DeviceIcon size={28} />
                   </div>
                   <div className="space-y-3">
                     <div>
-                      <p className="text-2xl font-black uppercase italic tracking-tighter text-[#13082a] dark:text-white">{device.name}</p>
-                      <p className="mt-1 text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">{device.platform}</p>
+                      <p className="text-2xl font-black uppercase italic tracking-tighter text-text-primary dark:text-text-primary">{device.name}</p>
+                      <p className="mt-1 text-[10px] font-black uppercase tracking-[0.25em] text-text-muted">{device.platform}</p>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="rounded-2xl bg-slate-50 px-4 py-3 dark:bg-white/5">
-                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Last Active</p>
-                        <p className="mt-2 text-sm font-black uppercase tracking-tight text-[#13082a] dark:text-white">{formatLastActive(device.last_active || device.last_synced_at)}</p>
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Last Active</p>
+                        <p className="mt-2 text-sm font-black uppercase tracking-tight text-text-primary dark:text-text-primary">{formatLastActive(device.last_active || device.last_synced_at)}</p>
                       </div>
                       <div className="rounded-2xl bg-slate-50 px-4 py-3 dark:bg-white/5">
-                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Status</p>
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Status</p>
                         <p className="mt-2 text-sm font-black uppercase tracking-tight text-emerald-600">{device.status || 'connected'}</p>
                       </div>
                     </div>
@@ -153,3 +153,4 @@ const DevicesPage = () => {
 };
 
 export default DevicesPage;
+

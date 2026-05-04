@@ -49,7 +49,7 @@ export const clearUploadedReportSession = () => {
 
 const normalizeResponse = (response, file, reportType) => {
   const payload = response?.data?.data ?? response?.data ?? {};
-  const fileName = payload.name ?? payload.file_name ?? file.name;
+  const fileName = payload.original_filename ?? payload.file_name ?? payload.fileName ?? file.name;
   const fileUrl = payload.file_url ?? payload.fileUrl ?? null;
   const summary = payload.summary ?? payload.patient_summary ?? [];
   const summaryView = payload.summary_view ?? payload.summaryView ?? null;
@@ -59,6 +59,10 @@ const normalizeResponse = (response, file, reportType) => {
     name: fileName,
     fileName,
     file_name: fileName,
+    originalFilename: fileName,
+    original_filename: fileName,
+    storedFilename: payload.stored_filename ?? payload.storedFilename ?? '',
+    stored_filename: payload.stored_filename ?? payload.storedFilename ?? '',
     fileSize: file.size,
     fileUrl,
     file_url: fileUrl,

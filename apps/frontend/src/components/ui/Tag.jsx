@@ -16,3 +16,4 @@ const Tag = ({ children, variant = 'gray' }) => {
 };
 
 export default Tag;
+

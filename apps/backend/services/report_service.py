@@ -17,11 +17,16 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency
     PdfReader = None
 from sqlalchemy.orm import Session
 
+from core.config import settings
 from core.pipeline_logger import log_pipeline
+from database.session import SessionLocal
 from integrations.ocr_service import OCRInput, OCRResult, OCRService
+from integrations.prediction_client import PredictionClient
+from integrations.supabase_storage import delete_report as _supabase_delete_report
 from integrations.supabase_storage import upload_report as _supabase_upload_report
 from models import Report, ReportStatusEnum, ReportTypeEnum, User
 from services.notification_service import trigger_notification
+from services.timeline_service import create_report_timeline_event
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -29,6 +34,7 @@ logger = logging.getLogger("uvicorn.error")
 class ReportService:
     ALLOWED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png"}
     MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
+    PROCESSING_SUMMARY = "Report uploaded successfully. Analysis is in progress."
 
     @classmethod
     async def upload_and_summarize(
@@ -42,7 +48,8 @@ class ReportService:
     ) -> dict[str, Any]:
         cls._validate_report_type(report_type)
         normalized_report_date = cls._normalize_report_date(date_of_report)
-        extension = Path(file.filename or "").suffix.lower()
+        original_filename = file.filename or "report"
+        extension = Path(original_filename).suffix.lower()
         if extension not in cls.ALLOWED_EXTENSIONS:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -59,62 +66,52 @@ class ReportService:
             )
 
         log_pipeline("report", step="upload_file", status="running", data="pending")
-        storage_path, public_url = cls._persist_file(current_user.id, file.filename, file_bytes)
+        storage_path, public_url = cls._persist_file(current_user.id, original_filename, file_bytes)
+        stored_filename = cls._stored_filename(storage_path, public_url)
         log_pipeline("report", step="upload_file", status="healthy", data="stored")
 
         report = Report(
             user_id=current_user.id,
             report_type=ReportTypeEnum(report_type),
             file_url=public_url,
-            summary_data={"upload_metadata": {"date_of_report": normalized_report_date}} if normalized_report_date else None,
+            original_filename=original_filename,
+            stored_filename=stored_filename,
+            storage_path=str(storage_path),
+            summary_data={
+                "upload_metadata": {
+                    "date_of_report": normalized_report_date,
+                    "file_name": original_filename,
+                    "original_filename": original_filename,
+                    "stored_filename": stored_filename,
+                    "file_size": len(file_bytes),
+                    "storage_path": str(storage_path),
+                }
+            },
             status=ReportStatusEnum.PROCESSING,
         )
         db.add(report)
         db.commit()
         db.refresh(report)
+        create_report_timeline_event(db, report)
 
-        try:
-            log_pipeline("report", step="analyze_report", status="running", data="pending")
-            analysis = await cls._analyze_report(file.filename or "report", file.content_type, file_bytes)
-            cls.persist_report(db, str(report.id), analysis.get("full_text") or analysis.get("ocr_text", ""), analysis)
-            cls._schedule_lab_pipeline(str(report.id), background_tasks=background_tasks)
-            db.refresh(report)
-            try:
-                await trigger_notification(
-                    user_id=str(current_user.id),
-                    event_type="health_alert",
-                    title="Lab Report Processed",
-                    message="Your medical report has been analyzed.",
-                    data={
-                        "report_id": str(report.id),
-                        "report_type": report.report_type.value,
-                        "summary": "Your uploaded report is ready for review in ArogyaAI.",
-                        "url": "/lab-results",
-                        "severity": "info",
-                    },
-                )
-            except Exception:
-                logger.exception("Failed to trigger processed-report notification for report %s", report.id)
-            log_pipeline("report", step="analyze_report", status="healthy", data="fetched",
-                         extra=f"source={analysis.get('source', '?')}")
-        except Exception as exc:
-            report.status = ReportStatusEnum.FAILED
-            db.commit()
-            db.refresh(report)
-            log_pipeline("report", step="analyze_report", status="unhealthy", data="failed")
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Report was saved, but summarization failed: {exc}",
-            ) from exc
+        cls._schedule_report_processing(
+            str(report.id),
+            original_filename,
+            file.content_type,
+            file_bytes,
+            background_tasks=background_tasks,
+        )
 
         return {
             "success": True,
-            "status": "ready",
+            "status": "uploaded",
             "error": None,
             "data": {
                 "id": str(report.id),
-                "name": cls._report_name(report.file_url, file.filename),
-                "file_name": file.filename,
+                "name": original_filename,
+                "file_name": original_filename,
+                "original_filename": original_filename,
+                "stored_filename": stored_filename,
                 "file_size": len(file_bytes),
                 "report_type": report.report_type.value,
                 "file_url": report.file_url,
@@ -122,24 +119,90 @@ class ReportService:
                 "created_at": report.created_at.isoformat() if report.created_at else None,
                 "updated_at": report.updated_at.isoformat() if report.updated_at else None,
                 "storage_path": str(storage_path),
-                "title": analysis["title"],
-                "summary": analysis["summary"],
-                "ocr_text": analysis["ocr_text"],
-                "markers": analysis["markers"],
-                "summary_source": analysis["source"],
-                "text_source": analysis.get("text_source"),
-                "ocr_provider": analysis.get("ocr_provider"),
-                "ocr_confidence": analysis.get("ocr_confidence"),
                 "date_of_report": normalized_report_date,
-                "summary_view": cls._build_summary_view(
-                    analysis["ocr_text"],
-                    analysis["summary"],
-                    analysis["markers"],
-                    analysis["title"],
-                    analysis["source"],
-                ),
+                "summary": [cls.PROCESSING_SUMMARY],
+                "ocr_text": "",
+                "markers": [],
+                "summary_source": "background-processing",
+                "summary_view": cls._build_processing_summary_view(original_filename),
             },
         }
+
+    @classmethod
+    def _schedule_report_processing(
+        cls,
+        report_id: str,
+        filename: str,
+        content_type: str | None,
+        file_bytes: bytes,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> None:
+        if background_tasks is not None:
+            background_tasks.add_task(cls.process_uploaded_report, report_id, filename, content_type, file_bytes)
+            return
+
+        try:
+            asyncio.create_task(cls.process_uploaded_report(report_id, filename, content_type, file_bytes))
+        except RuntimeError:
+            asyncio.run(cls.process_uploaded_report(report_id, filename, content_type, file_bytes))
+
+    @classmethod
+    async def process_uploaded_report(
+        cls,
+        report_id: str,
+        filename: str,
+        content_type: str | None,
+        file_bytes: bytes,
+    ) -> None:
+        db = SessionLocal()
+        try:
+            report = cls._get_report_by_id(db, report_id)
+            if not report:
+                logger.warning("Skipping report processing because report %s was not found", report_id)
+                return
+
+            log_pipeline("report", step="analyze_report", status="running", data="pending")
+            analysis = await cls._analyze_report(filename or "report", content_type, file_bytes)
+            cls.persist_report(db, report_id, analysis.get("full_text") or analysis.get("ocr_text", ""), analysis)
+            cls._schedule_lab_pipeline(report_id)
+            db.refresh(report)
+            try:
+                await trigger_notification(
+                    user_id=str(report.user_id),
+                    event_type="health_alert",
+                    title="Lab Report Processed",
+                    message="Your medical report has been analyzed.",
+                    data={
+                        "report_id": report_id,
+                        "report_type": report.report_type.value,
+                        "summary": "Your uploaded report is ready for review in ArogyaAI.",
+                        "url": "/lab-results",
+                        "severity": "info",
+                    },
+                )
+            except Exception:
+                logger.exception("Failed to trigger processed-report notification for report %s", report_id)
+            log_pipeline(
+                "report",
+                step="analyze_report",
+                status="healthy",
+                data="fetched",
+                extra=f"source={analysis.get('source', '?')}",
+            )
+        except Exception as exc:
+            logger.exception("Report background processing failed for report %s", report_id)
+            report = cls._get_report_by_id(db, report_id)
+            if report:
+                existing_summary = report.summary_data if isinstance(report.summary_data, dict) else {}
+                report.summary_data = {
+                    **existing_summary,
+                    "processing_error": str(exc),
+                }
+                report.status = ReportStatusEnum.FAILED
+                db.commit()
+            log_pipeline("report", step="analyze_report", status="unhealthy", data="failed")
+        finally:
+            db.close()
 
     @classmethod
     def list_reports(
@@ -198,6 +261,48 @@ class ReportService:
         return cls._serialize_report(report)
 
     @classmethod
+    def get_report_status(
+        cls,
+        db: Session,
+        current_user: User,
+        report_id: str,
+    ) -> dict[str, Any]:
+        report = cls._get_user_report(db, current_user, report_id)
+        serialized = cls._serialize_report(report)
+
+        return {
+            "success": True,
+            "status": serialized["status"],
+            "error": serialized.get("summary_data", {}).get("processing_error"),
+            "data": {
+                "id": serialized["id"],
+                "status": serialized["status"],
+                "updated_at": serialized["updated_at"],
+                "report": serialized,
+            },
+        }
+
+    @classmethod
+    def delete_report(
+        cls,
+        db: Session,
+        current_user: User,
+        report_id: str,
+    ) -> dict[str, Any]:
+        report = cls._get_user_report(db, current_user, report_id)
+        deleted_id = str(report.id)
+
+        cls._delete_stored_file(report)
+        db.delete(report)
+        db.commit()
+
+        return {
+            "success": True,
+            "message": "Report deleted successfully.",
+            "data": {"id": deleted_id},
+        }
+
+    @classmethod
     def persist_report(cls, db: Session, report_id: str, parsed_text: str, summary_data: dict[str, Any]) -> Report | None:
         """
         Updates an existing report with the extracted text and AI-generated summary data.
@@ -217,11 +322,54 @@ class ReportService:
                 **next_upload_metadata,
             }
 
+        if not cls._summary_lines(merged_summary.get("summary") or merged_summary.get("patient_summary")):
+            merged_summary["summary"] = [cls.PROCESSING_SUMMARY]
+            merged_summary["patient_summary"] = cls.PROCESSING_SUMMARY
+
         report.parsed_text = parsed_text
         report.summary_data = merged_summary
         report.status = ReportStatusEnum.COMPLETED
         db.commit()
         db.refresh(report)
+        create_report_timeline_event(db, report)
+        return report
+
+    @staticmethod
+    def _get_report_by_id(db: Session, report_id: str) -> Report | None:
+        try:
+            report_uuid = uuid.UUID(report_id)
+        except (TypeError, ValueError):
+            return None
+
+        return (
+            db.query(Report)
+            .filter(
+                Report.id == report_uuid,
+                Report.is_deleted == False,
+            )
+            .first()
+        )
+
+    @staticmethod
+    def _get_user_report(db: Session, current_user: User, report_id: str) -> Report:
+        try:
+            report_uuid = uuid.UUID(report_id)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid report id.") from exc
+
+        report = (
+            db.query(Report)
+            .filter(
+                Report.id == report_uuid,
+                Report.user_id == current_user.id,
+                Report.is_deleted == False,
+            )
+            .first()
+        )
+
+        if not report:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
+
         return report
 
     @classmethod
@@ -231,6 +379,66 @@ class ReportService:
         Returns (storage_path, public_url) — same contract as before.
         """
         return _supabase_upload_report(user_id, original_name, file_bytes)
+
+    @classmethod
+    def _delete_stored_file(cls, report: Report) -> None:
+        summary_data = report.summary_data if isinstance(report.summary_data, dict) else {}
+        upload_metadata = summary_data.get("upload_metadata") if isinstance(summary_data.get("upload_metadata"), dict) else {}
+        storage_path_value = (
+            getattr(report, "storage_path", None)
+            or upload_metadata.get("storage_path")
+            or cls._storage_path_from_public_url(getattr(report, "file_url", None))
+        )
+        storage_path = cls._storage_path_from_public_url(storage_path_value) or storage_path_value
+
+        if not storage_path:
+            return
+
+        if cls._delete_local_file_if_exists(storage_path):
+            return
+
+        if cls._is_legacy_local_storage_path(storage_path):
+            return
+
+        _supabase_delete_report(storage_path, getattr(report, "storage_bucket", None))
+
+    @staticmethod
+    def _delete_local_file_if_exists(path_value: str) -> bool:
+        candidate = Path(path_value)
+        search_paths = [candidate] if candidate.is_absolute() else [candidate, Path(settings.REPORT_UPLOAD_DIR) / candidate]
+
+        for path in search_paths:
+            try:
+                if path.is_file():
+                    path.unlink()
+                    logger.info("Deleted local report file: %s", path)
+                    return True
+            except FileNotFoundError:
+                return True
+            except OSError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Unable to delete stored report file: {exc}",
+                ) from exc
+
+        return False
+
+    @staticmethod
+    def _is_legacy_local_storage_path(path_value: str) -> bool:
+        normalized = str(path_value or "").replace("\\", "/").lstrip("./")
+        upload_dir = str(settings.REPORT_UPLOAD_DIR or "").replace("\\", "/").strip("/")
+        return bool(upload_dir and normalized.startswith(f"{upload_dir}/"))
+
+    @staticmethod
+    def _storage_path_from_public_url(file_url: str | None) -> str | None:
+        if not file_url:
+            return None
+        parsed_path = urlparse(file_url).path
+        bucket = settings.SUPABASE_BUCKET_NAME
+        marker = f"/storage/v1/object/public/{bucket}/"
+        if marker in parsed_path:
+            return parsed_path.split(marker, 1)[1] or None
+        return None
 
     @classmethod
     async def _analyze_report(cls, filename: str, content_type: str | None, file_bytes: bytes) -> dict[str, Any]:
@@ -249,7 +457,8 @@ class ReportService:
                 OCRInput(filename=filename, content=file_bytes, content_type=mime_type)
             )
             merged_text, text_pages, text_source = cls._merge_pdf_and_ocr_text(pdf_pages, ocr_result)
-            return cls._build_local_analysis(
+            print("Extracted text length:", len(merged_text or ""))
+            analysis = cls._build_local_analysis(
                 title,
                 merged_text,
                 source=f"ocr-{ocr_result.provider}" if ocr_result.usable else "pdf-ocr-fallback",
@@ -259,11 +468,14 @@ class ReportService:
                 ocr_warnings=[*pdf_warnings, *ocr_result.warnings],
                 text_pages=text_pages,
             )
+            return await cls._enrich_analysis_with_prediction(filename, analysis)
 
         ocr_result = OCRService().extract_text(
             OCRInput(filename=filename, content=file_bytes, content_type=mime_type)
         )
-        return cls._build_ocr_analysis(title, ocr_result, fallback_kind="image")
+        print("Extracted text length:", len(ocr_result.text or ""))
+        analysis = cls._build_ocr_analysis(title, ocr_result, fallback_kind="image")
+        return await cls._enrich_analysis_with_prediction(filename, analysis)
 
     @staticmethod
     def _extract_pdf_text(file_bytes: bytes) -> str:
@@ -452,11 +664,21 @@ class ReportService:
 
         markers = cls._extract_markers(normalized_text)
         summary = cls._summarize_text(normalized_text, markers)
+        summary_view = cls._build_summary_view(
+            normalized_text,
+            summary,
+            markers,
+            title,
+            source,
+        )
         ocr_layout = cls._build_ocr_layout(normalized_text, text_pages)
 
         return {
             "title": title,
             "summary": summary,
+            "patient_summary": " ".join(summary),
+            "structured_summary": cls._structured_summary_from_view(summary_view),
+            "summary_view": summary_view,
             "full_text": normalized_text,
             "ocr_text": normalized_text[:1200],
             "markers": markers[:6],
@@ -501,6 +723,92 @@ class ReportService:
             ocr_warnings=ocr_result.warnings,
             text_pages=cls._ocr_pages(ocr_result),
         )
+
+    @staticmethod
+    def _summary_lines(value: Any, fallback: list[str] | None = None) -> list[str]:
+        if isinstance(value, list):
+            lines = [str(item).strip() for item in value if str(item or "").strip()]
+        elif isinstance(value, dict):
+            findings = value.get("findings") or value.get("key_findings") or []
+            notes = value.get("notes")
+            lines = ReportService._summary_lines(findings)
+            note_lines = ReportService._summary_lines(notes)
+            lines = [*lines, *note_lines]
+        elif isinstance(value, str):
+            lines = [value.strip()] if value.strip() else []
+        elif value is None:
+            lines = []
+        else:
+            text = str(value).strip()
+            lines = [text] if text else []
+        cleaned = [line for line in lines if not ReportService._looks_like_raw_summary_line(line)]
+        return cleaned or list(fallback or [])
+
+    @staticmethod
+    def _safe_list(value: Any) -> list[Any]:
+        if isinstance(value, list):
+            return [item for item in value if item is not None and item != ""]
+        if value is None or value == "":
+            return []
+        return [value]
+
+    @classmethod
+    async def _enrich_analysis_with_prediction(cls, filename: str, analysis: dict[str, Any]) -> dict[str, Any]:
+        extracted_text = str(analysis.get("full_text") or analysis.get("ocr_text") or "").strip()
+        if not extracted_text or cls._looks_like_fallback_text(extracted_text):
+            return analysis
+
+        try:
+            prediction_response = await PredictionClient().get_prediction(
+                {
+                    "file_name": filename,
+                    "extracted_text": extracted_text,
+                }
+            )
+        except Exception:
+            logger.exception("Prediction summary generation failed for report %s", filename)
+            return analysis
+
+        if not prediction_response.get("success") or prediction_response.get("status") != "ready":
+            logger.warning(
+                "Prediction summary generation returned non-ready response for %s: %s",
+                filename,
+                prediction_response.get("error") or prediction_response.get("status"),
+            )
+            return analysis
+
+        prediction_data = prediction_response.get("data") or {}
+        structured_summary = cls._normalize_structured_summary(
+            prediction_data.get("structured_summary") or prediction_data.get("summary"),
+            fallback_title=Path(filename).stem.replace("_", " ").replace("-", " ").strip().title() or "Medical Report",
+            fallback_summary=analysis.get("summary"),
+        )
+        prediction_summary_view = prediction_data.get("summary_view") if isinstance(prediction_data.get("summary_view"), dict) else {}
+        summary_view = cls._summary_view_from_structured_summary(
+            structured_summary,
+            source=prediction_data.get("summary_source") or prediction_response.get("source") or "prediction-service",
+            stored_view=prediction_summary_view,
+        )
+        generated_summary = cls._summary_lines(
+            structured_summary,
+            fallback=cls._summary_lines(analysis.get("summary"), fallback=[cls.PROCESSING_SUMMARY]),
+        )
+        enriched = dict(analysis)
+        enriched.update(
+            {
+                "summary": generated_summary,
+                "patient_summary": prediction_data.get("patient_summary") or generated_summary[0],
+                "structured_summary": structured_summary,
+                "summary_view": summary_view,
+                "risks": cls._safe_list(prediction_data.get("risks")),
+                "risk_level": prediction_data.get("risk_level") or "Low",
+                "recommendations": cls._safe_list(prediction_data.get("recommendations")),
+                "abnormal_values": cls._safe_list(prediction_data.get("abnormal_values")),
+                "extracted_values": cls._safe_list(prediction_data.get("extracted_values")),
+                "summary_source": prediction_data.get("summary_source") or prediction_response.get("source") or "prediction-service",
+            }
+        )
+        return enriched
 
     @staticmethod
     def _load_lab_pipeline_runner() -> Callable[[str], Any]:
@@ -562,11 +870,133 @@ class ReportService:
             )
         return markers
 
+    @staticmethod
+    def _looks_like_raw_summary_line(text: str) -> bool:
+        normalized = re.sub(r"\s+", " ", str(text or "")).strip().lower()
+        return (
+            not normalized
+            or normalized.startswith("preview:")
+            or normalized.startswith("--- page ")
+            or "extracted text is available in the ocr tab" in normalized
+        )
+
+    @staticmethod
+    def _format_patient_info(patient_info: Any) -> str:
+        if isinstance(patient_info, str):
+            return patient_info.strip()
+        if isinstance(patient_info, dict):
+            labels = {
+                "patient_name": "Name",
+                "name": "Name",
+                "age": "Age",
+                "sex": "Sex",
+                "gender": "Gender",
+                "patient_id": "Patient ID",
+                "report_date": "Report Date",
+            }
+            parts = []
+            for key, value in patient_info.items():
+                rendered = str(value or "").strip()
+                if rendered:
+                    parts.append(f"{labels.get(key, str(key).replace('_', ' ').title())}: {rendered}")
+            return "; ".join(parts)
+        return ""
+
+    @classmethod
+    def _infer_test_type(cls, title: str, text: str = "", markers: list[dict[str, Any]] | None = None) -> str:
+        marker_names = " ".join(str(marker.get("name") or "") for marker in (markers or []))
+        source = f"{title} {marker_names} {text}".lower()
+        if any(term in source for term in ["complete blood count", "cbc", "hemoglobin", "wbc", "platelet"]):
+            return "Complete Blood Count"
+        if any(term in source for term in ["lipid profile", "cholesterol", "triglyceride", "hdl", "ldl"]):
+            return "Lipid Profile"
+        if any(term in source for term in ["hba1c", "fasting glucose", "blood sugar", "glucose"]):
+            return "Glucose / Diabetes Panel"
+        if any(term in source for term in ["thyroid", "tsh", "t3", "t4"]):
+            return "Thyroid Function Test"
+        if any(term in source for term in ["creatinine", "urea", "kidney", "renal"]):
+            return "Renal Function Test"
+        if "xray" in source or "x-ray" in source:
+            return "Radiology Report"
+        return "Medical Report"
+
+    @classmethod
+    def _normalize_structured_summary(
+        cls,
+        value: Any,
+        fallback_title: str = "Medical Report",
+        fallback_summary: Any = None,
+    ) -> dict[str, Any]:
+        if isinstance(value, dict):
+            findings = cls._summary_lines(value.get("findings") or value.get("key_findings"))
+            notes_lines = cls._summary_lines(value.get("notes"))
+            notes = " ".join(notes_lines).strip()
+            abnormal = cls._safe_list(value.get("abnormal") or value.get("abnormal_values"))
+            patient = cls._format_patient_info(value.get("patient") or value.get("patient_info"))
+            test = str(value.get("test") or value.get("test_type") or value.get("title") or fallback_title).strip()
+        else:
+            findings = cls._summary_lines(value, fallback=cls._summary_lines(fallback_summary))
+            notes = ""
+            abnormal = []
+            patient = ""
+            test = fallback_title
+
+        if not findings:
+            findings = cls._summary_lines(fallback_summary, fallback=[cls.PROCESSING_SUMMARY])
+
+        return {
+            "patient": patient or "Not specified in the uploaded report.",
+            "test": test or "Medical Report",
+            "findings": findings,
+            "abnormal": abnormal,
+            "notes": notes or "Clinical review is recommended for diagnosis, treatment decisions, and comparison with prior reports.",
+        }
+
+    @classmethod
+    def _summary_view_from_structured_summary(
+        cls,
+        structured_summary: dict[str, Any],
+        source: str,
+        stored_view: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        stored_view = stored_view or {}
+        findings = cls._summary_lines(
+            stored_view.get("key_findings") or structured_summary.get("findings"),
+            fallback=[cls.PROCESSING_SUMMARY],
+        )
+        abnormal_values = cls._safe_list(stored_view.get("abnormal_values") or structured_summary.get("abnormal"))
+        notes = cls._summary_lines(stored_view.get("notes") or structured_summary.get("notes"))
+        test_type = str(stored_view.get("test_type") or structured_summary.get("test") or "Medical Report").strip()
+
+        return {
+            "title": stored_view.get("title") or test_type,
+            "summary": stored_view.get("summary") or findings[0],
+            "patient_info": stored_view.get("patient_info") or structured_summary.get("patient") or "Not specified in the uploaded report.",
+            "test_type": test_type,
+            "key_findings": findings,
+            "biomarkers": stored_view.get("biomarkers") or [],
+            "abnormal_values": abnormal_values,
+            "risks": stored_view.get("risks") or [],
+            "recommendations": stored_view.get("recommendations") or [],
+            "risk_level": stored_view.get("risk_level") or "Low",
+            "notes": notes,
+            "source": stored_view.get("source") or source,
+        }
+
+    @staticmethod
+    def _structured_summary_from_view(summary_view: dict[str, Any]) -> dict[str, Any]:
+        notes = summary_view.get("notes") or []
+        return {
+            "patient": ReportService._format_patient_info(summary_view.get("patient_info")) or "Not specified in the uploaded report.",
+            "test": str(summary_view.get("test_type") or summary_view.get("title") or "Medical Report").strip(),
+            "findings": ReportService._summary_lines(summary_view.get("key_findings")),
+            "abnormal": ReportService._safe_list(summary_view.get("abnormal_values")),
+            "notes": " ".join(ReportService._summary_lines(notes)).strip(),
+        }
 
     @staticmethod
     def _summarize_text(text: str, markers: list[dict[str, str]]) -> list[str]:
-        words = text.split()
-        line_one = "Report text extracted successfully."
+        line_one = "Readable report text was extracted and structured for clinical review."
 
         if markers:
             marker_names = ", ".join(marker["name"] for marker in markers[:3])
@@ -574,13 +1004,7 @@ class ReportService:
         else:
             line_two = "Readable report text was found, but no standard biomarker pattern was confidently detected."
 
-        preview = " ".join(words[:35]).strip()
-        if preview:
-            line_three = f"Preview: {preview[:180]}{'...' if len(preview) >= 180 else ''}"
-        else:
-            line_three = "The extracted text is available in the OCR tab for manual review."
-
-        return [line_one, line_two, line_three]
+        return [line_one, line_two]
 
     @staticmethod
     def _safe_filename(filename: str) -> str:
@@ -588,23 +1012,62 @@ class ReportService:
         return cleaned.strip("-") or "report"
 
     @staticmethod
+    def _strip_uuid_prefix(filename: str) -> str:
+        return re.sub(
+            r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}-",
+            "",
+            filename or "",
+        )
+
+    @classmethod
+    def _stored_filename(cls, storage_path: str | None = None, file_url: str | None = None) -> str | None:
+        source = storage_path or urlparse(file_url or "").path
+        if not source:
+            return None
+        filename = Path(str(source).split("?", 1)[0].split("#", 1)[0]).name
+        return filename or None
+
+    @staticmethod
     def _report_name(file_url: str, fallback_name: str | None = None) -> str:
+        if fallback_name:
+            return fallback_name
         parsed_path = urlparse(file_url or "").path
         file_name = Path(parsed_path).name if parsed_path else ""
-        return file_name or fallback_name or "Medical Report"
+        return ReportService._strip_uuid_prefix(file_name) or "Medical Report"
 
     @classmethod
     def _serialize_report(cls, report: Report) -> dict[str, Any]:
-        file_name = cls._report_name(report.file_url)
+        summary_data = report.summary_data if isinstance(report.summary_data, dict) else {}
+        upload_metadata = summary_data.get("upload_metadata") if isinstance(summary_data.get("upload_metadata"), dict) else {}
+        stored_filename = (
+            getattr(report, "stored_filename", None)
+            or upload_metadata.get("stored_filename")
+            or cls._stored_filename(getattr(report, "storage_path", None) or upload_metadata.get("storage_path"), report.file_url)
+        )
+        file_name = (
+            getattr(report, "original_filename", None)
+            or upload_metadata.get("original_filename")
+            or upload_metadata.get("file_name")
+            or cls._strip_uuid_prefix(stored_filename or "")
+            or cls._report_name(report.file_url)
+        )
         file_size = None
         parsed_path = urlparse(report.file_url or "").path.lstrip("/")
         parsed_text = (report.parsed_text or "").strip()
-        if report.summary_data:
-            summary_data = report.summary_data
+        if summary_data:
             ocr_text = summary_data.get("ocr_text", parsed_text)
-            raw_summary = summary_data.get("summary") or summary_data.get("patient_summary") or []
-            summary_lines = raw_summary if isinstance(raw_summary, list) else [raw_summary]
-            upload_metadata = summary_data.get("upload_metadata") if isinstance(summary_data.get("upload_metadata"), dict) else {}
+            summary_lines = cls._summary_lines(
+                summary_data.get("summary") or summary_data.get("patient_summary"),
+                fallback=[cls.PROCESSING_SUMMARY],
+            )
+            risks = cls._safe_list(summary_data.get("risks") or summary_data.get("risk_analysis"))
+            recommendations = cls._safe_list(summary_data.get("recommendations"))
+            structured_summary = cls._normalize_structured_summary(
+                summary_data.get("structured_summary") or summary_data.get("summary"),
+                fallback_title=file_name,
+                fallback_summary=summary_lines,
+            )
+            abnormal_values = cls._safe_list(summary_data.get("abnormal_values") or structured_summary.get("abnormal"))
             
             analysis = {
                 "title": summary_data.get("title", file_name),
@@ -612,15 +1075,25 @@ class ReportService:
                 "ocr_text": ocr_text,
                 "markers": summary_data.get("markers") or summary_data.get("biomarkers") or [],
                 "source": summary_data.get("summary_source") or summary_data.get("source", "prediction-service"),
+                "risks": risks,
+                "risk_level": summary_data.get("risk_level") or "Low",
+                "recommendations": recommendations,
+                "abnormal_values": abnormal_values,
             }
+            stored_summary_view = summary_data.get("summary_view") if isinstance(summary_data.get("summary_view"), dict) else {}
             summary_view = {
-                "title": analysis["title"],
-                "patient_info": summary_data.get("patient_info", {}),
-                "key_findings": analysis["summary"],
-                "biomarkers": analysis["markers"],
-                "abnormal_values": summary_data.get("abnormal_values") or [],
-                "notes": summary_data.get("notes", []),
-                "source": analysis["source"],
+                "title": stored_summary_view.get("title") or analysis["title"],
+                "summary": stored_summary_view.get("summary") or summary_lines[0],
+                "patient_info": stored_summary_view.get("patient_info") or structured_summary.get("patient") or summary_data.get("patient_info", {}),
+                "test_type": stored_summary_view.get("test_type") or structured_summary.get("test") or cls._infer_test_type(analysis["title"], parsed_text, analysis["markers"]),
+                "key_findings": cls._summary_lines(stored_summary_view.get("key_findings"), fallback=analysis["summary"]),
+                "biomarkers": stored_summary_view.get("biomarkers") or analysis["markers"],
+                "abnormal_values": stored_summary_view.get("abnormal_values") or abnormal_values,
+                "risks": stored_summary_view.get("risks") or risks,
+                "recommendations": stored_summary_view.get("recommendations") or recommendations,
+                "risk_level": stored_summary_view.get("risk_level") or analysis["risk_level"],
+                "notes": stored_summary_view.get("notes") or cls._summary_lines(structured_summary.get("notes") or summary_data.get("notes")),
+                "source": stored_summary_view.get("source") or analysis["source"],
             }
             date_of_report = upload_metadata.get("date_of_report")
         elif parsed_text and not cls._looks_like_fallback_text(parsed_text):
@@ -640,6 +1113,10 @@ class ReportService:
                 "ocr_text": parsed_text,
                 "markers": [],
                 "source": "local-fallback",
+                "risks": [],
+                "risk_level": "Low",
+                "recommendations": [],
+                "abnormal_values": [],
             }
             summary_view = cls._build_summary_view(
                 analysis["ocr_text"], [], [], file_name, "local-fallback"
@@ -652,35 +1129,61 @@ class ReportService:
                 "ocr_text": "",
                 "markers": [],
                 "source": "stored-empty",
+                "risks": [],
+                "risk_level": "Low",
+                "recommendations": [],
+                "abnormal_values": [],
             }
             summary_view = cls._build_summary_view("", [], [], file_name, "stored-empty")
             date_of_report = None
         if parsed_path:
             # File is now in Supabase Storage — cannot stat remote files.
             # file_size was already captured at upload time and stored by callers.
-            file_size = None
+            file_size = upload_metadata.get("file_size")
 
         return {
             "id": str(report.id),
             "name": file_name,
             "file_name": file_name,
+            "original_filename": file_name,
+            "stored_filename": stored_filename,
             "file_url": report.file_url,
             "report_type": report.report_type.value,
             "status": report.status.value,
             "created_at": report.created_at.isoformat() if report.created_at else None,
             "updated_at": report.updated_at.isoformat() if report.updated_at else None,
             "file_size": file_size,
+            "storage_path": report.storage_path or upload_metadata.get("storage_path"),
             "parsed_text": report.parsed_text,
             "ocr_text": analysis["ocr_text"],
             "summary": analysis["summary"],
+            "patient_summary": summary_data.get("patient_summary") or (analysis["summary"][0] if analysis["summary"] else cls.PROCESSING_SUMMARY),
+            "risks": analysis.get("risks", []),
+            "risk_level": analysis.get("risk_level", "Low"),
+            "recommendations": analysis.get("recommendations", []),
+            "abnormal_values": analysis.get("abnormal_values", []),
             "markers": analysis["markers"],
             "summary_source": analysis["source"],
             "text_source": (report.summary_data or {}).get("text_source") if isinstance(report.summary_data, dict) else None,
             "ocr_provider": (report.summary_data or {}).get("ocr_provider") if isinstance(report.summary_data, dict) else None,
             "ocr_confidence": (report.summary_data or {}).get("ocr_confidence") if isinstance(report.summary_data, dict) else None,
             "summary_view": summary_view,
+            "structured_summary": cls._structured_summary_from_view(summary_view),
             "summary_data": report.summary_data or {},
             "date_of_report": date_of_report,
+        }
+
+    @staticmethod
+    def _build_processing_summary_view(title: str) -> dict[str, Any]:
+        return {
+            "title": title,
+            "summary": ReportService.PROCESSING_SUMMARY,
+            "patient_info": {},
+            "key_findings": [ReportService.PROCESSING_SUMMARY],
+            "biomarkers": [],
+            "abnormal_values": [],
+            "notes": [],
+            "source": "background-processing",
         }
 
     @classmethod
@@ -693,24 +1196,29 @@ class ReportService:
         source: str,
     ) -> dict[str, Any]:
         normalized_text = re.sub(r"\s+", " ", extracted_text or "").strip()
+        safe_summary_lines = cls._summary_lines(summary_lines, fallback=[cls.PROCESSING_SUMMARY])
         if not normalized_text or source == "local-fallback":
             return {
                 "title": title,
+                "summary": safe_summary_lines[0],
                 "patient_info": {},
-                "key_findings": [],
+                "test_type": cls._infer_test_type(title, "", markers),
+                "key_findings": safe_summary_lines,
                 "biomarkers": [],
                 "abnormal_values": [],
-                "notes": [],
+                "notes": ["Clinical review is recommended once readable report text is available."],
                 "source": source,
             }
 
         return {
             "title": title,
+            "summary": safe_summary_lines[0],
             "patient_info": cls._extract_patient_info(extracted_text),
-            "key_findings": [line for line in summary_lines if line],
+            "test_type": cls._infer_test_type(title, extracted_text, markers),
+            "key_findings": safe_summary_lines,
             "biomarkers": [marker for marker in markers if marker],
             "abnormal_values": [],
-            "notes": cls._extract_notes(normalized_text),
+            "notes": ["Clinical review is recommended for diagnosis, treatment decisions, and comparison with prior reports."],
             "source": source,
         }
 
@@ -731,7 +1239,15 @@ class ReportService:
         for key, pattern in patterns.items():
             match = re.search(pattern, text, flags=re.IGNORECASE)
             if match:
-                extracted[key] = match.group(1).strip()
+                value = re.split(
+                    r"\b(?:age|sex|gender|patient id|report date|date|complete blood count|cbc|hemoglobin|wbc|platelet|glucose|cholesterol)\b",
+                    match.group(1),
+                    maxsplit=1,
+                    flags=re.IGNORECASE,
+                )[0]
+                value = value.strip()
+                if value:
+                    extracted[key] = value
         return extracted
 
     @staticmethod

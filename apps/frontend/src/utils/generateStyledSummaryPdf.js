@@ -121,6 +121,11 @@ const toTitleCase = (value) => {
         .replace(/\b\w/g, (char) => char.toUpperCase());
 };
 
+const stripUuidPrefix = (value = '') => String(value).replace(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-/i,
+    ''
+);
+
 const formatDateValue = (value) => {
     if (!value) return 'Unknown date';
 
@@ -316,13 +321,17 @@ const normalizeReportSummaryData = (data = {}) => {
         summaryView.risk_level,
         summaryView.riskLevel
     ) || 'Unknown';
-    const fileName = firstText(
+    const originalFileName = firstText(
+        data.original_filename,
+        data.originalFilename
+    );
+    const fileName = originalFileName || stripUuidPrefix(firstText(
         data.file_name,
         data.fileName,
         data.name,
         data.title,
         summaryView.title
-    ) || 'Uploaded report.pdf';
+    )) || 'Uploaded report.pdf';
     const status = firstText(data.status, data.summaryStatus) || (data.success ? 'Success' : 'Ready');
 
     return {
@@ -376,7 +385,13 @@ const buildPdfReportData = (report = {}) => {
         report.markers
     );
 
-    const fileName = firstText(
+    const originalFileName = firstText(
+        report.originalFilename,
+        report.original_filename,
+        summaryData.originalFilename,
+        summaryData.original_filename
+    );
+    const fileName = originalFileName || stripUuidPrefix(firstText(
         summaryData.fileName,
         report.fileName,
         report.file_name,
@@ -385,7 +400,7 @@ const buildPdfReportData = (report = {}) => {
         report.summaryTitle,
         report.summary_view?.title,
         report.summaryView?.title
-    ) || 'Medical report';
+    )) || 'Medical report';
 
     const status = firstText(
         summaryData.status,
@@ -798,7 +813,7 @@ const drawFooters = (pdf, report) => {
 };
 
 export const buildSummaryPdfFileName = (report = {}) => {
-    const baseName = report?.fileName || report?.title || report?.name || 'medical-report';
+    const baseName = report?.originalFilename || report?.original_filename || stripUuidPrefix(report?.fileName || report?.title || report?.name || 'medical-report');
     return `${sanitizeFileName(baseName)}-summary.pdf`;
 };
 

@@ -10,6 +10,19 @@ from pydantic import BaseModel, Field
 app = FastAPI(title="ArogyaAI Prediction Service")
 router = APIRouter()
 
+SUMMARY_PROMPT = """You are a medical report summarizer.
+
+Extract and structure the report into:
+
+- Patient Info
+- Test Type
+- Key Findings
+- Abnormal Values
+- Clinical Notes
+
+Use clean bullet points.
+Do NOT include raw OCR text."""
+
 
 class PredictRequest(BaseModel):
     extracted_text: str = Field(default="", description="Extracted medical report text")
@@ -20,47 +33,87 @@ class PredictRequest(BaseModel):
     data_points: dict[str, Any] | None = None
 
 
+def _clean_text(value: str) -> str:
+    return re.sub(r"\s+", " ", value or "").strip(" .:-")
+
+
+def _extract_patient_info(text: str) -> str:
+    patterns = {
+        "Name": r"(?:patient name|name)\s*[:\-]\s*([^\n,;|]{2,100})",
+        "Patient ID": r"(?:patient id)\s*[:\-]\s*([A-Za-z0-9-]{2,40})",
+        "Age": r"\bage\s*[:\-]\s*([0-9]{1,3}(?:\s*(?:years?|yrs?))?)",
+        "Sex": r"(?:sex|gender)\s*[:\-]\s*([A-Za-z]{3,10})",
+    }
+    parts: list[str] = []
+    for label, pattern in patterns.items():
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            value = re.split(
+                r"\b(?:age|sex|gender|patient id|report date|date|complete blood count|cbc|hemoglobin|wbc|platelet|glucose|cholesterol)\b",
+                match.group(1),
+                maxsplit=1,
+                flags=re.IGNORECASE,
+            )[0]
+            value = _clean_text(value)
+            if value and value.lower() not in {part.split(": ", 1)[-1].lower() for part in parts}:
+                parts.append(f"{label}: {value[:80]}")
+    return "; ".join(parts) if parts else "Not specified in the uploaded report."
+
+
+def _infer_test_type(text: str, file_name: str | None = None) -> str:
+    source = f"{file_name or ''} {text}".lower()
+    if any(term in source for term in ["complete blood count", "cbc", "hemoglobin", "wbc", "platelet"]):
+        return "Complete Blood Count"
+    if any(term in source for term in ["lipid profile", "cholesterol", "triglyceride", "hdl", "ldl"]):
+        return "Lipid Profile"
+    if any(term in source for term in ["hba1c", "fasting glucose", "blood sugar", "glucose"]):
+        return "Glucose / Diabetes Panel"
+    if any(term in source for term in ["thyroid", "tsh", "t3", "t4"]):
+        return "Thyroid Function Test"
+    if any(term in source for term in ["creatinine", "urea", "kidney", "renal"]):
+        return "Renal Function Test"
+    if "xray" in source or "x-ray" in source:
+        return "Radiology Report"
+    return "Medical Report"
+
+
 def _extract_numeric_matches(text: str) -> list[dict[str, Any]]:
-    pattern = re.compile(
-        r"(?P<name>[A-Za-z][A-Za-z0-9 ()/%._-]{2,40}?)\s*[:\-]?\s*(?P<value>\d+(?:\.\d+)?)\s*(?P<unit>[A-Za-z/%]+)?",
-        re.MULTILINE,
-    )
+    marker_patterns = [
+        ("Hemoglobin", r"(?:ha?emoglobin|hb)[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(g/dl|gm/dl|g%)?", lambda value: "Low" if value < 12 else "Optimal"),
+        ("WBC", r"(?:wbc|white blood cells?|total leukocyte count)[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(/mm3|cells/?u?l|10\^3/?u?l)?", lambda value: "High" if value > 11 else "Low" if value < 4 else "Optimal"),
+        ("RBC", r"(?:rbc|red blood cells?)[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(million/?u?l|10\^6/?u?l)?", lambda value: "Review"),
+        ("Platelets", r"(?:platelets?|platelet count)[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(lakhs/?cumm|10\^3/?u?l|/mm3)?", lambda value: "Low" if value < 150 else "Optimal"),
+        ("Glucose", r"(?:glucose|blood sugar|fasting glucose)[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(mg/dl)?", lambda value: "High" if value >= 126 else "Optimal"),
+        ("HbA1c", r"(?:hba1c|a1c)[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(%)?", lambda value: "High" if value >= 6.5 else "Optimal"),
+        ("Creatinine", r"creatinine[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(mg/dl)?", lambda value: "High" if value > 1.3 else "Optimal"),
+        ("TSH", r"tsh[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(uiu/ml|miu/l)?", lambda value: "Review"),
+        ("Total Cholesterol", r"(?:total cholesterol|cholesterol)[:\s\-]*([0-9]+(?:\.[0-9]+)?)\s*(mg/dl)?", lambda value: "High" if value >= 200 else "Optimal"),
+    ]
     matches: list[dict[str, Any]] = []
+    seen: set[str] = set()
 
-    for match in pattern.finditer(text):
-        name = re.sub(r"\s+", " ", match.group("name")).strip(" .:-")
-        if len(name) < 3:
-            continue
-
-        value = float(match.group("value"))
-        unit = (match.group("unit") or "").strip()
-        status = "Review"
-
-        lowered = name.lower()
-        if "glucose" in lowered:
-            status = "High" if value > 125 else "Optimal"
-        elif "cholesterol" in lowered:
-            status = "High" if value > 200 else "Optimal"
-        elif "hemoglobin" in lowered:
-            status = "Low" if value < 12 else "Optimal"
-        elif "platelet" in lowered:
-            status = "Low" if value < 150 else "Optimal"
-
-        matches.append(
-            {
-                "name": name[:50],
-                "value": match.group("value") + (f" {unit}" if unit else ""),
-                "status": status,
-            }
-        )
-
+    for name, pattern, status_for_value in marker_patterns:
+        for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+            if name in seen:
+                continue
+            value = float(match.group(1))
+            unit = (match.group(2) if match.lastindex and match.lastindex >= 2 else "") or ""
+            matches.append(
+                {
+                    "name": name,
+                    "value": match.group(1) + (f" {unit.strip()}" if unit.strip() else ""),
+                    "status": status_for_value(value),
+                }
+            )
+            seen.add(name)
+            break
         if len(matches) == 6:
             break
 
     return matches
 
 
-def _build_prediction(text: str, user_id: str | None = None) -> dict[str, Any]:
+def _build_prediction(text: str, user_id: str | None = None, file_name: str | None = None) -> dict[str, Any]:
     normalized_text = " ".join(text.split())
     lowered = normalized_text.lower()
 
@@ -97,21 +150,29 @@ def _build_prediction(text: str, user_id: str | None = None) -> dict[str, Any]:
             ]
         )
 
-    abnormal_values = _extract_numeric_matches(text)
+    extracted_values = _extract_numeric_matches(text)
+    abnormal_values = [
+        item for item in extracted_values
+        if str(item.get("status", "")).lower() not in {"optimal", "normal", "reviewed"}
+    ]
 
-    summary_parts = []
-    if abnormal_values:
-        summary_parts.append(f"Parsed {len(abnormal_values)} key measurements from the uploaded report.")
+    findings = []
+    if extracted_values:
+        names = ", ".join(item["name"] for item in extracted_values[:4])
+        findings.append(f"Identified {len(extracted_values)} structured measurement{'s' if len(extracted_values) != 1 else ''}: {names}.")
+    else:
+        findings.append("Readable report text was processed, but no standard biomarker pattern was confidently detected.")
     if user_id:
-        summary_parts.append(f"Prediction generated for user {user_id}.")
+        findings.append("Summary generated for the authenticated patient record.")
     if glucose_values or cholesterol_values:
         tracked = []
         if glucose_values:
-            tracked.append(f"glucose avg {mean(glucose_values):.1f}")
+            tracked.append(f"glucose average {mean(glucose_values):.1f}")
         if cholesterol_values:
-            tracked.append(f"cholesterol avg {mean(cholesterol_values):.1f}")
-        summary_parts.append("Tracked markers: " + ", ".join(tracked) + ".")
-    summary_parts.append("Clinical review is still recommended for diagnosis or treatment decisions.")
+            tracked.append(f"cholesterol average {mean(cholesterol_values):.1f}")
+        findings.append("Tracked markers include " + ", ".join(tracked) + ".")
+
+    notes = "Clinical review is recommended for diagnosis, treatment decisions, and comparison with prior reports."
 
     risk_level = "Low"
     if any("elevated" in risk.lower() or "warrant" in risk.lower() for risk in risks):
@@ -119,18 +180,39 @@ def _build_prediction(text: str, user_id: str | None = None) -> dict[str, Any]:
     if len(risks) >= 2 and any("cardiovascular" in risk.lower() for risk in risks):
         risk_level = "High"
 
+    structured_summary = {
+        "patient": _extract_patient_info(text),
+        "test": _infer_test_type(text, file_name),
+        "findings": findings,
+        "abnormal": abnormal_values,
+        "notes": notes,
+    }
+
     return {
         "success": True,
         "status": "ready",
         "source": "ml",
         "error": None,
         "data": {
-            "summary": " ".join(summary_parts),
-            "patient_summary": " ".join(summary_parts),
+            "summary": structured_summary,
+            "structured_summary": structured_summary,
+            "patient_summary": " ".join([*findings, notes]),
+            "summary_view": {
+                "title": structured_summary["test"],
+                "summary": findings[0],
+                "patient_info": structured_summary["patient"],
+                "test_type": structured_summary["test"],
+                "key_findings": findings,
+                "abnormal_values": abnormal_values,
+                "notes": [notes],
+                "source": "prediction-service",
+            },
             "risks": risks,
             "risk_level": risk_level,
             "recommendations": recommendations,
             "abnormal_values": abnormal_values,
+            "extracted_values": extracted_values,
+            "summary_prompt": SUMMARY_PROMPT,
         },
     }
 
@@ -148,7 +230,7 @@ async def _predict_impl(payload: PredictRequest):
     if not source_text.strip():
         source_text = "No extracted medical text provided."
 
-    return _build_prediction(source_text, payload.user_id)
+    return _build_prediction(source_text, payload.user_id, payload.file_name)
 
 
 async def _projection_impl(user_id: str):

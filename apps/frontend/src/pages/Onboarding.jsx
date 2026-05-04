@@ -198,11 +198,11 @@ const Onboarding = () => {
     animate: { opacity: 1, y: 0 }
   };
 
-  const activeGenderClass = "flex items-center justify-center gap-2 py-3 rounded-lg border-2 border-[#6143f4] bg-[#6143f4]/5 text-[#6143f4] font-bold transition-all shadow-sm";
-  const inactiveGenderClass = "flex items-center justify-center gap-2 py-3 rounded-lg border-2 border-slate-200 dark:border-slate-800 text-slate-500 hover:border-[#6143f4]/50 transition-colors";
+  const activeGenderClass = "flex items-center justify-center gap-2 py-3 rounded-lg border-2 border-primary bg-primary/5 text-primary font-bold transition-all shadow-sm";
+  const inactiveGenderClass = "flex items-center justify-center gap-2 py-3 rounded-lg border-2 border-slate-200 dark:border-stroke text-slate-500 hover:border-primary/50 transition-colors";
 
   return (
-    <div className="bg-[#f6f5f8] dark:bg-[#131022] font-display text-slate-900 dark:text-slate-100 min-h-screen">
+    <div className="bg-background dark:bg-card font-display text-slate-900 dark:text-slate-100 min-h-screen">
       <div className="relative flex min-h-screen w-full flex-col">
         {/* Header Section - Matched Stitch */}
         <OnboardingHeader step={1} onSaveAndExit={handleSaveAndExit} loading={loading} />
@@ -219,33 +219,33 @@ const Onboarding = () => {
             <div className="flex flex-col gap-4">
               <div className="flex justify-between items-end">
                 <div className="flex flex-col">
-                  <span className="text-[#6143f4] font-bold text-sm uppercase tracking-widest">Onboarding</span>
-                  <h1 className="text-4xl font-black tracking-tight text-slate-900 dark:text-white">Basic Profile</h1>
+                  <span className="text-primary font-bold text-sm uppercase tracking-widest">Onboarding</span>
+                  <h1 className="text-4xl font-black tracking-tight text-slate-900 dark:text-text-primary">Basic Profile</h1>
                 </div>
                 <div className="text-right">
-                  <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Step 1 of 4</p>
-                  <p className="text-[#6143f4] text-xl font-bold">25%</p>
+                  <p className="text-slate-500 dark:text-text-muted text-sm font-medium">Step 1 of 4</p>
+                  <p className="text-primary text-xl font-bold">25%</p>
                 </div>
               </div>
-              <div className="h-2 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-[#6143f4] to-[#009CDE]" style={{ width: '25%' }}></div>
+              <div className="h-2 w-full bg-slate-200 dark:bg-card rounded-full overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-primary to-secondary" style={{ width: '25%' }}></div>
               </div>
-              <p className="text-slate-600 dark:text-slate-400 text-base leading-relaxed">
+              <p className="text-slate-600 dark:text-text-muted text-base leading-relaxed">
                 To calculate your baseline health scores and provide personalized predictive insights, we need a few essential details about your physical profile.
               </p>
             </div>
 
             {/* Form Card */}
-            <div className="bg-white dark:bg-slate-900/50 p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl shadow-[#6143f4]/5 flex flex-col gap-6">
+            <div className="bg-white dark:bg-background/50 p-8 rounded-xl border border-slate-200 dark:border-stroke shadow-xl shadow-primary/5 flex flex-col gap-6">
               <form onSubmit={handleSubmit(handleContinue)} className="flex flex-col gap-6">
                 {/* Full Name */}
                 <div className="flex flex-col gap-2">
-                  <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Full Name</label>
+                  <label className="text-sm font-bold text-slate-700 dark:text-text-secondary">Full Name</label>
                   <div className="relative group">
-                    <Contact size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" />
+                    <Contact size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-primary transition-colors" />
                     <input
                       {...register('fullName')}
-                      className="w-full pl-12 pr-4 py-4 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-[#6143f4] focus:border-transparent outline-none transition-all dark:text-white"
+                      className="w-full pl-12 pr-4 py-4 rounded-lg bg-slate-50 dark:bg-background border border-slate-200 dark:border-stroke focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent outline-none transition-all dark:text-text-primary"
                       placeholder="e.g. Alexander Pierce"
                       type="text"
                     />
@@ -254,7 +254,7 @@ const Onboarding = () => {
 
                 {/* Gender Selection */}
                 <div className="flex flex-col gap-2">
-                  <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Biological Gender</label>
+                  <label className="text-sm font-bold text-slate-700 dark:text-text-secondary">Biological Gender</label>
                   <div className="grid grid-cols-3 gap-3">
                     <button
                       type="button"
@@ -283,24 +283,24 @@ const Onboarding = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Date of Birth */}
                   <div className="flex flex-col gap-2">
-                    <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Date of Birth</label>
+                    <label className="text-sm font-bold text-slate-700 dark:text-text-secondary">Date of Birth</label>
                     <div className="relative group">
-                      <Calendar size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" />
+                      <Calendar size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-primary transition-colors" />
                       <input
                         {...register('dob')}
-                        className="w-full pl-12 pr-4 py-4 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-[#6143f4] focus:border-transparent outline-none transition-all dark:text-white"
+                        className="w-full pl-12 pr-4 py-4 rounded-lg bg-slate-50 dark:bg-background border border-slate-200 dark:border-stroke focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent outline-none transition-all dark:text-text-primary"
                         type="date"
                       />
                     </div>
                   </div>
 
                   <div className="flex flex-col gap-2">
-                    <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Occupation</label>
+                    <label className="text-sm font-bold text-slate-700 dark:text-text-secondary">Occupation</label>
                     <div className="relative group">
-                      <User size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" />
+                      <User size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-primary transition-colors" />
                       <input
                         {...register('occupation')}
-                        className="w-full pl-12 pr-4 py-4 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-[#6143f4] focus:border-transparent outline-none transition-all dark:text-white"
+                        className="w-full pl-12 pr-4 py-4 rounded-lg bg-slate-50 dark:bg-background border border-slate-200 dark:border-stroke focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent outline-none transition-all dark:text-text-primary"
                         placeholder="e.g. Teacher"
                         type="text"
                       />
@@ -310,12 +310,12 @@ const Onboarding = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="flex flex-col gap-2">
-                    <label className="text-sm font-bold text-slate-700 dark:text-slate-300">City</label>
+                    <label className="text-sm font-bold text-slate-700 dark:text-text-secondary">City</label>
                     <div className="relative group">
-                      <Contact size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" />
+                      <Contact size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-primary transition-colors" />
                       <input
                         {...register('city')}
-                        className="w-full pl-12 pr-4 py-4 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-[#6143f4] focus:border-transparent outline-none transition-all dark:text-white"
+                        className="w-full pl-12 pr-4 py-4 rounded-lg bg-slate-50 dark:bg-background border border-slate-200 dark:border-stroke focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent outline-none transition-all dark:text-text-primary"
                         placeholder="e.g. Kolkata"
                         type="text"
                       />
@@ -323,11 +323,11 @@ const Onboarding = () => {
                   </div>
 
                   <div className="flex flex-col gap-2">
-                    <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Marital Status <span className="text-slate-400 font-medium">(optional)</span></label>
+                    <label className="text-sm font-bold text-slate-700 dark:text-text-secondary">Marital Status <span className="text-text-muted font-medium">(optional)</span></label>
                     <div className="relative group">
                       <select
                         {...register('maritalStatus')}
-                        className="w-full pl-4 pr-10 py-4 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-[#6143f4] focus:border-transparent outline-none transition-all dark:text-white appearance-none"
+                        className="w-full pl-4 pr-10 py-4 rounded-lg bg-slate-50 dark:bg-background border border-slate-200 dark:border-stroke focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent outline-none transition-all dark:text-text-primary appearance-none"
                       >
                         <option value="">Prefer not to say</option>
                         <option value="single">Single</option>
@@ -335,7 +335,7 @@ const Onboarding = () => {
                         <option value="divorced">Divorced</option>
                         <option value="widowed">Widowed</option>
                       </select>
-                      <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-400">
+                      <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-text-muted">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                       </div>
                     </div>
@@ -345,25 +345,25 @@ const Onboarding = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Height */}
                   <div className="flex flex-col gap-2">
-                    <label className="text-sm font-bold text-slate-700 dark:text-slate-300 flex justify-between">
+                    <label className="text-sm font-bold text-slate-700 dark:text-text-secondary flex justify-between">
                       Height
-                      <span className="text-[#6143f4] cursor-pointer hover:underline text-xs">cm / ft</span>
+                      <span className="text-primary cursor-pointer hover:underline text-xs">cm / ft</span>
                     </label>
                     <div className="relative group">
-                      <Ruler size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" />
+                      <Ruler size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-primary transition-colors" />
                       <input
                         {...register('height', {
                           required: 'Height is required',
                           min: { value: 50, message: 'Must be between 50 and 300 cm' },
                           max: { value: 300, message: 'Must be between 50 and 300 cm' }
                         })}
-                        className={`w-full pl-12 pr-16 py-4 rounded-lg bg-slate-50 dark:bg-slate-900 border ${errors.height ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-[#6143f4] focus:border-transparent'} outline-none transition-all dark:text-white`}
+                        className={`w-full pl-12 pr-16 py-4 rounded-lg bg-slate-50 dark:bg-background border ${errors.height ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-200 dark:border-stroke focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent'} outline-none transition-all dark:text-text-primary`}
                         placeholder="180"
                         type="number"
                         min="50"
                         max="300"
                       />
-                      <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">cm</span>
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-text-muted">cm</span>
                     </div>
                     {errors.height && <p className="text-red-500 text-xs font-medium">{errors.height.message}</p>}
                   </div>
@@ -372,36 +372,36 @@ const Onboarding = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Weight */}
                   <div className="flex flex-col gap-2">
-                    <label className="text-sm font-bold text-slate-700 dark:text-slate-300 flex justify-between">
+                    <label className="text-sm font-bold text-slate-700 dark:text-text-secondary flex justify-between">
                       Current Weight
-                      <span className="text-[#6143f4] cursor-pointer hover:underline text-xs">kg / lbs</span>
+                      <span className="text-primary cursor-pointer hover:underline text-xs">kg / lbs</span>
                     </label>
                     <div className="relative group">
-                      <Weight size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#6143f4] transition-colors" />
+                      <Weight size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-primary transition-colors" />
                       <input
                         {...register('weight', {
                           required: 'Weight is required',
                           min: { value: 20, message: 'Must be between 20 and 300 kg' },
                           max: { value: 300, message: 'Must be between 20 and 300 kg' }
                         })}
-                        className={`w-full pl-12 pr-16 py-4 rounded-lg bg-slate-50 dark:bg-slate-900 border ${errors.weight ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-[#6143f4] focus:border-transparent'} outline-none transition-all dark:text-white`}
+                        className={`w-full pl-12 pr-16 py-4 rounded-lg bg-slate-50 dark:bg-background border ${errors.weight ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-200 dark:border-stroke focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent'} outline-none transition-all dark:text-text-primary`}
                         placeholder="75"
                         type="number"
                         min="20"
                         max="300"
                       />
-                      <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">kg</span>
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-text-muted">kg</span>
                     </div>
                     {errors.weight && <p className="text-red-500 text-xs font-medium">{errors.weight.message}</p>}
                   </div>
 
                   {/* Blood Group */}
                   <div className="flex flex-col gap-2">
-                    <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Blood Group</label>
+                    <label className="text-sm font-bold text-slate-700 dark:text-text-secondary">Blood Group</label>
                     <div className="relative group">
                       <select
                         {...register('bloodGroup')}
-                        className="w-full pl-4 pr-10 py-4 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-[#6143f4] focus:border-transparent outline-none transition-all dark:text-white appearance-none"
+                        className="w-full pl-4 pr-10 py-4 rounded-lg bg-slate-50 dark:bg-background border border-slate-200 dark:border-stroke focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent outline-none transition-all dark:text-text-primary appearance-none"
                       >
                         <option value="">Select</option>
                         <option value="A+">A+</option>
@@ -413,7 +413,7 @@ const Onboarding = () => {
                         <option value="O+">O+</option>
                         <option value="O-">O-</option>
                       </select>
-                      <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-400">
+                      <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-text-muted">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                       </div>
                     </div>
@@ -421,11 +421,11 @@ const Onboarding = () => {
                 </div>
 
                 {/* Action Buttons */}
-                <div className="mt-12 pt-8 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-4 justify-between items-center">
+                <div className="mt-12 pt-8 border-t border-slate-100 dark:border-stroke flex flex-col sm:flex-row gap-4 justify-between items-center">
                   <button
                     type="button"
                     onClick={() => navigate(ROUTES.DASHBOARD)}
-                    className="w-full sm:w-auto px-8 py-3 rounded-lg border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
+                    className="w-full sm:w-auto px-8 py-3 rounded-lg border-2 border-slate-200 dark:border-stroke text-slate-600 dark:text-text-secondary font-bold hover:bg-slate-50 dark:hover:bg-card transition-all flex items-center justify-center gap-2"
                   >
                     <ArrowLeft size={18} />
                     Back
@@ -433,7 +433,7 @@ const Onboarding = () => {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full sm:w-auto px-10 py-3 rounded-lg bg-[#6143f4] text-white font-bold hover:bg-[#6143f4]/90 shadow-lg shadow-[#6143f4]/25 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                    className="w-full sm:w-auto px-10 py-3 rounded-lg bg-primary text-white font-bold hover:bg-primary/90 shadow-lg shadow-primary/25 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     {loading ? 'Saving...' : 'Continue to Step 2'}
                     <ArrowRight size={18} />
@@ -442,9 +442,9 @@ const Onboarding = () => {
               </form>
 
               {/* Informational Note */}
-              <div className="flex gap-4 p-4 rounded-lg bg-[#6143f4]/5 border border-[#6143f4]/10 items-start mt-4">
-                <ShieldCheck size={24} className="text-[#6143f4] shrink-0" />
-                <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed font-medium">
+              <div className="flex gap-4 p-4 rounded-lg bg-primary/5 border border-primary/10 items-start mt-4">
+                <ShieldCheck size={24} className="text-primary shrink-0" />
+                <p className="text-xs text-slate-600 dark:text-text-muted leading-relaxed font-medium">
                   Your privacy is our priority. This data is encrypted and used only to power the AI diagnostic engine. We never share your sensitive personal information with third parties.
                 </p>
               </div>
@@ -453,10 +453,11 @@ const Onboarding = () => {
         </main>
 
         {/* Footer Decoration */}
-        <div className="fixed bottom-0 left-0 w-full h-1 bg-gradient-to-r from-[#6143f4] via-[#009CDE] to-[#6143f4] opacity-50"></div>
+        <div className="fixed bottom-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-secondary to-primary opacity-50"></div>
       </div>
     </div>
   );
 };
 
 export default Onboarding;
+

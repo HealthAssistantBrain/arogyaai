@@ -38,16 +38,16 @@ const NotificationCardV2 = ({
             case 'ai_insight':
                 return {
                     icon: Sparkles,
-                    accent: 'border-l-[#6143f4]',
-                    iconColor: 'text-[#6143f4]',
-                    bg: 'bg-[#6143f4]/10'
+                    accent: 'border-l-[var(--color-primary)]',
+                    iconColor: 'text-primary',
+                    bg: 'bg-primary/10'
                 };
             case 'lab_result':
                 return {
                     icon: FlaskConical,
                     accent: 'border-l-[#009cde]',
-                    iconColor: 'text-[#009cde]',
-                    bg: 'bg-[#009cde]/10'
+                    iconColor: 'text-secondary',
+                    bg: 'bg-secondary/10'
                 };
             case 'simulation':
                 return {
@@ -89,7 +89,7 @@ const NotificationCardV2 = ({
             layout
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className={`bg-white/80 dark:bg-white/5 backdrop-blur-xl rounded-[2rem] p-6 lg:p-8 shadow-[0_20px_40px_-10px_rgba(19,8,42,0.05)] border border-white dark:border-white/5 border-l-8 ${style.accent} relative overflow-hidden group hover:scale-[1.01] transition-all duration-300 ${!is_read ? 'ring-2 ring-[#6143f4]/20' : ''}`}
+            className={`bg-white/80 dark:bg-white/5 backdrop-blur-xl rounded-[2rem] p-6 lg:p-8 shadow-[0_20px_40px_-10px_rgba(19,8,42,0.05)] border border-white dark:border-stroke/50 border-l-8 ${style.accent} relative overflow-hidden group hover:scale-[1.01] transition-all duration-300 ${!is_read ? 'ring-2 ring-[var(--color-primary)]/20' : ''}`}
         >
             <div className="flex flex-col md:flex-row gap-6 items-start">
                 <div className={`size-14 rounded-[1.25rem] ${style.bg} ${style.iconColor} flex items-center justify-center shrink-0 shadow-inner group-hover:rotate-12 group-hover:scale-110 transition-all duration-500`}>
@@ -98,29 +98,29 @@ const NotificationCardV2 = ({
                 <div className="flex-1 space-y-3">
                     <div className="flex items-start justify-between gap-4">
                         <div className="flex flex-wrap items-center gap-3">
-                            <h3 className={`text-lg lg:text-xl font-black ${is_read ? 'text-slate-500 dark:text-slate-400' : 'text-[#13082a] dark:text-white'} uppercase tracking-tight italic leading-none`}>
+                            <h3 className={`text-lg lg:text-xl font-black ${is_read ? 'text-slate-500 dark:text-text-muted' : 'text-text-primary dark:text-text-primary'} uppercase tracking-tight italic leading-none`}>
                                 {title}
                             </h3>
                             {style.priorityLabel && (
-                                <span className="bg-red-500 text-white text-[8px] font-black px-2 py-1 rounded-full uppercase tracking-widest shadow-lg shadow-red-500/20">
+                                <span className="bg-red-500 text-text-primary text-[8px] font-black px-2 py-1 rounded-full uppercase tracking-widest shadow-lg shadow-red-500/20">
                                     {style.priorityLabel}
                                 </span>
                             )}
-                            {!is_read && <span className="size-2 rounded-full bg-[#6143f4] animate-pulse"></span>}
+                            {!is_read && <span className="size-2 rounded-full bg-primary animate-pulse"></span>}
                         </div>
-                        <div className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-slate-400 shrink-0 mt-1">
+                        <div className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-text-muted shrink-0 mt-1">
                             <Clock size={12} />
                             {formattedTime}
                         </div>
                     </div>
-                    <p className="text-slate-500 dark:text-slate-400 text-sm lg:text-base font-bold leading-relaxed uppercase tracking-tight max-w-4xl opacity-80">
+                    <p className="text-slate-500 dark:text-text-muted text-sm lg:text-base font-bold leading-relaxed uppercase tracking-tight max-w-4xl opacity-80">
                         {description}
                     </p>
                     <div className="flex flex-wrap items-center gap-3 pt-2">
                         {onView && (
                             <button
                                 onClick={() => onView(id)}
-                                className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] bg-[#6143f4] text-white hover:bg-[#4a34c1] transition-all active:scale-95 shadow-lg"
+                                className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] bg-primary text-white hover:bg-[#4a34c1] transition-all active:scale-95 shadow-lg"
                             >
                                 View
                             </button>
@@ -128,7 +128,7 @@ const NotificationCardV2 = ({
                         {!is_read && onMarkRead && (
                             <button
                                 onClick={() => onMarkRead(id)}
-                                className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] bg-white dark:bg-white/10 border border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-[#6143f4] transition-all active:scale-95 flex items-center gap-2"
+                                className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] bg-white dark:bg-white/10 border border-slate-200 dark:border-stroke text-slate-500 dark:text-text-muted hover:text-primary transition-all active:scale-95 flex items-center gap-2"
                             >
                                 <Check size={14} strokeWidth={3} />
                                 Mark Read
@@ -137,7 +137,7 @@ const NotificationCardV2 = ({
                         {onArchive && (
                             <button
                                 onClick={() => onArchive(id)}
-                                className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 hover:text-red-500 transition-all active:scale-95"
+                                className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-text-muted hover:text-red-500 transition-all active:scale-95"
                             >
                                 Archive
                             </button>
@@ -166,3 +166,4 @@ const Check = ({ size, strokeWidth }) => (
 );
 
 export default NotificationCardV2;
+

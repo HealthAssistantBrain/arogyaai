@@ -3,13 +3,13 @@ import SettingsSidebar from './SettingsSidebar';
 
 const SettingsLayout = () => {
     return (
-        <div className="bg-[#f6f5f8] dark:bg-[#0B0819] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased text-[14px]">
+        <div className="bg-background dark:bg-background text-text-primary dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased text-[14px]">
             <div className="flex flex-1 overflow-hidden">
                 {/* Left Sidebar */}
                 <SettingsSidebar />
 
                 {/* Main Content Area */}
-                <main className="flex-1 flex flex-col h-full relative overflow-y-auto custom-scrollbar bg-[#f6f5f8] dark:bg-[#0B0819]">
+                <main className="flex-1 flex flex-col h-full relative overflow-y-auto custom-scrollbar bg-background dark:bg-background">
                     <div className="flex-1 p-6 lg:p-10 custom-scrollbar">
                         <Outlet />
                     </div>
@@ -31,3 +31,4 @@ const SettingsLayout = () => {
 };
 
 export default SettingsLayout;
+

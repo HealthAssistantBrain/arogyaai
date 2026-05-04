@@ -7,9 +7,13 @@ Exposes:
   DELETE /users/me    ← account deletion (stub)
 """
 
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status, Header as FastAPIHeader
+import jwt
 from sqlalchemy.orm import Session
 
+from core.config import settings
 from database.session import get_db
 from models import MedicalHistory, User, UserProfile
 from models.user import ROLE_DOCTOR
@@ -20,7 +24,33 @@ from services.auth_service import AuthService
 
 router = APIRouter(prefix="/api/v1/users", tags=["Users"])
 
-def get_supabase_claims_from_header(
+def _get_bearer_token(authorization: str | None) -> str | None:
+    if authorization and authorization.startswith("Bearer "):
+        return authorization.split(" ", 1)[1]
+    return None
+
+
+def _decode_internal_access_token(token: str) -> dict:
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    except jwt.PyJWTError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+
+    if payload.get("type") != "access" or not payload.get("sub"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    return payload
+
+
+def get_auth_claims_from_header(
     request: Request,
     authorization: str = FastAPIHeader(None),
 ) -> dict:
@@ -30,23 +60,39 @@ def get_supabase_claims_from_header(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    if authorization and authorization.startswith("Bearer "):
-        token = authorization.split(" ", 1)[1]
-    else:
-        token = None
-
+    token = _get_bearer_token(authorization)
     if not token:
         raise credentials_exception
 
     try:
-        return AuthService._decode_supabase_token(token)
+        internal_claims = _decode_internal_access_token(token)
+        return {**internal_claims, "auth_provider": "backend"}
+    except HTTPException:
+        pass
+
+    try:
+        return {**AuthService._decode_supabase_token(token), "auth_provider": "supabase"}
     except HTTPException:
         raise credentials_exception
 
+
+def get_supabase_claims_from_header(
+    request: Request,
+    authorization: str = FastAPIHeader(None),
+) -> dict:
+    return get_auth_claims_from_header(request, authorization)
+
 def get_current_user_from_header(
-    claims: dict = Depends(get_supabase_claims_from_header),
+    claims: dict = Depends(get_auth_claims_from_header),
     db: Session = Depends(get_db),
 ) -> User:
+    if claims.get("auth_provider") == "backend":
+        user_id = uuid.UUID(str(claims["sub"]))
+        user = db.query(User).filter(User.id == user_id, User.is_deleted == False).first()
+        if not user:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials")
+        return user
+
     return AuthService.get_or_create_user_from_supabase_claims(db, claims)
 
 
@@ -62,9 +108,19 @@ def get_current_doctor_from_header(
 
 
 def get_existing_user_from_header(
-    claims: dict = Depends(get_supabase_claims_from_header),
+    claims: dict = Depends(get_auth_claims_from_header),
     db: Session = Depends(get_db),
 ) -> User:
+    if claims.get("auth_provider") == "backend":
+        user_id = uuid.UUID(str(claims["sub"]))
+        user = db.query(User).filter(User.id == user_id, User.is_deleted == False).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Authenticated user has not been synchronized yet",
+            )
+        return user
+
     user = AuthService.get_user_from_supabase_claims(db, claims)
     if not user:
         raise HTTPException(

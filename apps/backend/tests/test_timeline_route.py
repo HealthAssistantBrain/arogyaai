@@ -19,6 +19,7 @@ from models.clinical_history import ClinicalHistory
 from models.lab_result import LabResult
 from models.notification import Notification
 from models.report import Report
+from models.timeline_event import TimelineEvent
 from models.user_vital import UserVital
 from routes.timeline import get_timeline
 from services.clinical_history_service import ClinicalHistoryService
@@ -129,6 +130,60 @@ def test_timeline_prefers_event_date_and_sorts_chronologically():
     assert events[1]["event_date"] == "2024-07-01T08:00:00+00:00"
     assert events[2]["event_date"] == "2025-01-20T09:30:00+00:00"
     assert payload["last_updated"] == "2026-01-02T10:15:00+00:00"
+
+
+def test_timeline_uses_persisted_report_event_and_skips_duplicate_report_fallback():
+    user_id = uuid4()
+    report_id = uuid4()
+    timeline_event_id = uuid4()
+    created_at = datetime(2026, 5, 4, 9, 30, tzinfo=timezone.utc)
+
+    persisted_report_event = SimpleNamespace(
+        id=timeline_event_id,
+        user_id=user_id,
+        type="report",
+        title="Medical report uploaded",
+        reference_id=report_id,
+        timestamp=created_at,
+        event_metadata={
+            "report_id": str(report_id),
+            "filename": "cbc-report.pdf",
+            "report_type": "BLOOD_TEST",
+            "status": "PROCESSING",
+            "source": "report upload",
+            "url": "/medical-reports",
+        },
+    )
+    report = SimpleNamespace(
+        id=report_id,
+        user_id=user_id,
+        is_deleted=False,
+        summary_data={"summary": ["Routine blood panel uploaded."]},
+        report_type=SimpleNamespace(value="BLOOD_TEST"),
+        status=SimpleNamespace(value="PROCESSING"),
+        created_at=created_at,
+    )
+
+    db = FakeSession(
+        {
+            TimelineEvent: [persisted_report_event],
+            UserVital: [],
+            LabResult: [],
+            Notification: [],
+            Report: [report],
+            ClinicalHistory: [],
+        }
+    )
+
+    payload = get_timeline(current_user=SimpleNamespace(id=user_id), db=db)
+    events = payload["data"]
+
+    assert len(events) == 1
+    assert events[0]["id"] == f"timeline_{timeline_event_id}"
+    assert events[0]["type"] == "report"
+    assert events[0]["category"] == "report"
+    assert events[0]["reference_id"] == str(report_id)
+    assert events[0]["metadata"]["filename"] == "cbc-report.pdf"
 
 
 def test_build_timeline_event_includes_event_date():

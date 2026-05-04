@@ -12,7 +12,7 @@ const InsightsSkeleton = () => (
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.3 }}
-        className="bg-[#EAEAEA] dark:bg-[#13082A] text-[#13082A] dark:text-slate-100 min-h-screen font-display antialiased"
+        className="bg-background dark:bg-card text-text-primary dark:text-slate-100 min-h-screen font-display antialiased"
     >
         <div className="flex h-screen overflow-hidden">
             <main className="flex-1 flex flex-col overflow-y-auto">
@@ -28,7 +28,7 @@ const InsightsSkeleton = () => (
                     {/* Risk score cards row */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         {[1, 2, 3].map(i => (
-                            <div key={i} className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                            <div key={i} className="bg-white dark:bg-background p-6 rounded-2xl border border-slate-100 dark:border-stroke shadow-sm">
                                 <SkeletonBox className="h-3 w-24 rounded mb-4" />
                                 <SkeletonBox className="h-10 w-20 rounded-lg mb-3" />
                                 <SkeletonBox className="h-3 w-32 rounded" />
@@ -37,7 +37,7 @@ const InsightsSkeleton = () => (
                     </div>
 
                     {/* SHAP drivers section */}
-                    <div className="bg-white dark:bg-slate-900 p-8 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                    <div className="bg-white dark:bg-background p-8 rounded-2xl border border-slate-100 dark:border-stroke shadow-sm">
                         <SkeletonBox className="h-5 w-44 rounded mb-6" />
                         <div className="space-y-4">
                             {[1, 2, 3, 4, 5].map(i => (
@@ -65,3 +65,4 @@ const InsightsSkeleton = () => (
 );
 
 export default InsightsSkeleton;
+

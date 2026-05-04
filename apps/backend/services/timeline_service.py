@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
+import uuid
 
 from sqlalchemy.orm import Session
 
@@ -9,6 +10,7 @@ from models.clinical_history import ClinicalHistory
 from models.lab_result import LabResult
 from models.notification import Notification, NotificationTypeEnum
 from models.report import Report
+from models.timeline_event import TimelineEvent
 from models.user_vital import UserVital, UserVitalTypeEnum
 from services.clinical_history_service import ClinicalHistoryService
 
@@ -39,6 +41,152 @@ def _event_sort_key(value: str | None) -> datetime:
     return parsed
 
 
+def _coerce_uuid(value: Any) -> uuid.UUID | None:
+    if value is None:
+        return None
+    if isinstance(value, uuid.UUID):
+        return value
+    try:
+        return uuid.UUID(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _event_metadata(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def serialize_timeline_event(event: TimelineEvent) -> dict[str, Any]:
+    metadata = _event_metadata(getattr(event, "event_metadata", None))
+    event_type = str(getattr(event, "type", "") or "event")
+    timestamp = getattr(event, "timestamp", None)
+    reference_id = getattr(event, "reference_id", None)
+
+    payload = {
+        "id": f"timeline_{event.id}",
+        "type": event_type,
+        "source": metadata.get("source") or "timeline_events",
+        "category": metadata.get("category") or ("report" if event_type == "report" else event_type),
+        "title": getattr(event, "title", None) or metadata.get("title") or "Timeline event",
+        "description": metadata.get("description") or metadata.get("filename") or metadata.get("summary") or "Clinical timeline event.",
+        "timestamp": timestamp.isoformat() if timestamp else None,
+        "event_date": timestamp.isoformat() if timestamp else None,
+        "reference_id": str(reference_id) if reference_id else None,
+        "metadata": metadata,
+    }
+
+    if event_type == "report":
+        filename = metadata.get("filename") or metadata.get("original_filename") or "Medical report"
+        report_type = str(metadata.get("report_type") or "OTHER").replace("_", " ").title()
+        status = str(metadata.get("status") or "UPLOADED").upper()
+        payload.update(
+            {
+                "source": metadata.get("source") or "report upload",
+                "category": "report",
+                "title": metadata.get("title") or "Medical report uploaded",
+                "description": metadata.get("description") or f"{filename} uploaded for clinical review.",
+                "metrics": [
+                    {"label": "File Name", "value": filename},
+                    {"label": "Report Type", "value": report_type},
+                    {"label": "Status", "value": status},
+                ],
+            }
+        )
+
+    return payload
+
+
+def create_timeline_event(db: Session, data: dict[str, Any]) -> TimelineEvent:
+    timestamp = data.get("timestamp") or datetime.now(timezone.utc)
+    if isinstance(timestamp, str):
+        timestamp = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+
+    user_id = _coerce_uuid(data.get("user_id"))
+    reference_id = _coerce_uuid(data.get("reference_id"))
+    event_type = str(data.get("type") or "").strip()
+    title = str(data.get("title") or "").strip()
+
+    if user_id is None:
+        raise ValueError("timeline event user_id is required")
+    if not event_type:
+        raise ValueError("timeline event type is required")
+    if not title:
+        raise ValueError("timeline event title is required")
+
+    existing = None
+    if reference_id is not None:
+        existing = (
+            db.query(TimelineEvent)
+            .filter(
+                TimelineEvent.user_id == user_id,
+                TimelineEvent.type == event_type,
+                TimelineEvent.reference_id == reference_id,
+            )
+            .first()
+        )
+
+    metadata = _event_metadata(data.get("metadata"))
+    if existing:
+        existing.title = title
+        existing.timestamp = timestamp
+        existing.event_metadata = {
+            **_event_metadata(existing.event_metadata),
+            **metadata,
+        }
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    event = TimelineEvent(
+        user_id=user_id,
+        type=event_type,
+        title=title,
+        reference_id=reference_id,
+        timestamp=timestamp,
+        event_metadata=metadata,
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+    return event
+
+
+def create_report_timeline_event(db: Session, report: Report) -> TimelineEvent:
+    summary_data = report.summary_data if isinstance(report.summary_data, dict) else {}
+    upload_metadata = summary_data.get("upload_metadata") if isinstance(summary_data.get("upload_metadata"), dict) else {}
+    filename = (
+        getattr(report, "original_filename", None)
+        or upload_metadata.get("original_filename")
+        or upload_metadata.get("file_name")
+        or getattr(report, "stored_filename", None)
+        or "Medical report"
+    )
+    report_type = report.report_type.value if hasattr(report.report_type, "value") else str(report.report_type)
+    status = report.status.value if hasattr(report.status, "value") else str(report.status)
+
+    return create_timeline_event(
+        db,
+        {
+            "user_id": report.user_id,
+            "type": "report",
+            "title": "Medical report uploaded",
+            "reference_id": report.id,
+            "timestamp": report.created_at or datetime.now(timezone.utc),
+            "metadata": {
+                "report_id": str(report.id),
+                "filename": filename,
+                "original_filename": getattr(report, "original_filename", None) or upload_metadata.get("original_filename"),
+                "stored_filename": getattr(report, "stored_filename", None) or upload_metadata.get("stored_filename"),
+                "file_url": getattr(report, "file_url", None),
+                "report_type": report_type,
+                "status": status,
+                "source": "report upload",
+                "url": "/medical-reports",
+            },
+        },
+    )
+
+
 def build_timeline_events(
     db: Session,
     user_id: Any,
@@ -46,7 +194,18 @@ def build_timeline_events(
     include_vitals: bool = True,
     limit_per_type: int = 30,
 ) -> list[dict[str, Any]]:
-    vitals, labs, alerts, reports, histories = [], [], [], [], []
+    vitals, labs, alerts, reports, histories, persisted_events = [], [], [], [], [], []
+
+    try:
+        persisted_events = (
+            db.query(TimelineEvent)
+            .filter(TimelineEvent.user_id == user_id)
+            .order_by(TimelineEvent.timestamp.desc())
+            .limit(max(limit_per_type, 60))
+            .all()
+        )
+    except Exception as e:
+        print(f"Error fetching timeline_events for timeline: {e}")
 
     if include_vitals:
         try:
@@ -108,6 +267,15 @@ def build_timeline_events(
         print(f"Error fetching clinical_history for timeline: {e}")
 
     timeline_events: list[dict[str, Any]] = []
+    persisted_report_ids = set()
+
+    for event in persisted_events:
+        serialized_event = serialize_timeline_event(event)
+        timeline_events.append(serialized_event)
+        if serialized_event.get("type") == "report":
+            report_id = serialized_event.get("reference_id") or serialized_event.get("metadata", {}).get("report_id")
+            if report_id:
+                persisted_report_ids.add(str(report_id))
 
     for vital in vitals:
         vital_type = vital.vital_type.value if hasattr(vital.vital_type, "value") else str(vital.vital_type)
@@ -190,6 +358,9 @@ def build_timeline_events(
         )
 
     for report in reports:
+        if str(report.id) in persisted_report_ids:
+            continue
+
         summary_data = report.summary_data if isinstance(report.summary_data, dict) else {}
         summary_lines = summary_data.get("summary") or []
         if isinstance(summary_lines, str):

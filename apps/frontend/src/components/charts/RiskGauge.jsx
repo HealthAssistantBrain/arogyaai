@@ -55,3 +55,4 @@ const RiskGauge = ({ score, level = 'moderate', className = "" }) => {
 };
 
 export default RiskGauge;
+

@@ -13,6 +13,7 @@ from pipelines.storage_pipeline.service import StoragePipelineService
 from services.clinical_insight_service import ClinicalInsightService
 from services.clinical_history_service import ClinicalHistoryService
 from services.insight_formatter import sanitize_ai_insight_payload
+from services.recommendation_engine import generate_recommendation_plans
 
 
 class PredictionExplanationService:
@@ -630,6 +631,16 @@ class PredictionExplanationService:
         db.refresh(risk_score)
 
     @staticmethod
+    def _attach_recommendation_plans(db: Session, user: User, payload: dict[str, Any] | None) -> dict[str, Any] | None:
+        if not isinstance(payload, dict):
+            return payload
+        plans = generate_recommendation_plans(user.id, db=db)
+        if plans:
+            payload["recommendation_plan"] = plans[0]
+            payload["recommendation_plans"] = plans
+        return payload
+
+    @staticmethod
     def _attach_explanation(
         prediction_response: dict[str, Any],
         explanation: dict[str, Any] | None,
@@ -739,7 +750,7 @@ class PredictionExplanationService:
                 "status": "fallback",
                 "source": "db",
                 "error": "No SHAP values were found for the selected prediction.",
-                "data": fallback_payload,
+                "data": PredictionExplanationService._attach_recommendation_plans(db, user, fallback_payload),
             }
 
         feature_payload = PredictionExplanationService._feature_snapshot_payload(risk_score)
@@ -761,7 +772,7 @@ class PredictionExplanationService:
                     "status": "ready",
                     "source": "rag_cache",
                     "error": None,
-                    "data": cached,
+                    "data": PredictionExplanationService._attach_recommendation_plans(db, user, cached),
                 }
 
         pipeline = RagExplanationPipeline()
@@ -794,7 +805,7 @@ class PredictionExplanationService:
                 "status": "fallback",
                 "source": "rag_pipeline",
                 "error": str(exc),
-                "data": fallback_payload,
+                "data": PredictionExplanationService._attach_recommendation_plans(db, user, fallback_payload),
             }
 
         explanation = {
@@ -863,6 +874,7 @@ class PredictionExplanationService:
         explanation["clinical_features"] = history_analysis.get("ml_features", {}) if isinstance(history_analysis, dict) else {}
         explanation["clinical_context"] = history_analysis.get("rag_context") if isinstance(history_analysis, dict) else None
         explanation = sanitize_ai_insight_payload(explanation) or explanation
+        explanation = PredictionExplanationService._attach_recommendation_plans(db, user, explanation) or explanation
         PredictionExplanationService._store_cache(db, risk_score, cache_key, explanation)
         return {
             "success": True,

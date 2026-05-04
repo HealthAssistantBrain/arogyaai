@@ -35,19 +35,19 @@ const MetricHeroCard = ({ metric }: { metric: DashboardMetric }) => {
 
   return (
     <article
-      className={`group relative min-h-[260px] overflow-hidden rounded-3xl border border-white/70 bg-white/75 p-6 shadow-[0_10px_32px_rgba(0,0,0,0.07)] backdrop-blur-md transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.02] hover:shadow-[0_18px_48px_rgba(15,23,42,0.12)] dark:border-white/10 dark:bg-white/[0.06] ${metric.theme.gradient} ${isAbnormal ? metric.theme.glow : ''}`}
+      className={`group relative min-h-[260px] overflow-hidden rounded-3xl border border-white/70 bg-white/75 p-6 shadow-[0_10px_32px_rgba(0,0,0,0.07)] backdrop-blur-md transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.02] hover:shadow-[0_18px_48px_rgba(15,23,42,0.12)] dark:border-stroke dark:bg-white/[0.06] ${metric.theme.gradient} ${isAbnormal ? metric.theme.glow : ''}`}
     >
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white to-transparent dark:via-white/30" />
 
       <div className="relative z-10 flex h-full flex-col">
         <div className="mb-4 flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="mb-2 text-[11px] font-black uppercase tracking-[0.22em] text-slate-500/85 dark:text-slate-300">
+            <p className="mb-2 text-[11px] font-black uppercase tracking-[0.22em] text-slate-500/85 dark:text-text-secondary">
               {metric.title}
             </p>
           </div>
           <div
-            className="flex size-14 shrink-0 items-center justify-center rounded-3xl border border-white/80 bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_10px_22px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-white/10"
+            className="flex size-14 shrink-0 items-center justify-center rounded-3xl border border-white/80 bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_10px_22px_rgba(15,23,42,0.08)] dark:border-stroke dark:bg-white/10"
             style={{ color: metric.theme.accent }}
           >
             <Icon size={24} strokeWidth={2.6} />
@@ -56,11 +56,11 @@ const MetricHeroCard = ({ metric }: { metric: DashboardMetric }) => {
 
         <div className="mb-6">
           <div className="mb-4 flex flex-wrap items-end gap-x-3 gap-y-2">
-            <span className="max-w-full text-4xl font-bold leading-none tracking-tight text-[#13082a] dark:text-white sm:text-[44px]">
+            <span className="max-w-full text-4xl font-bold leading-none tracking-tight text-text-primary dark:text-text-primary sm:text-[44px]">
               {metric.value}
             </span>
             {metric.unit ? (
-              <span className="mb-1 text-[12px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">
+              <span className="mb-1 text-[12px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-text-secondary">
                 {metric.unit}
               </span>
             ) : null}
@@ -68,16 +68,16 @@ const MetricHeroCard = ({ metric }: { metric: DashboardMetric }) => {
               {metric.status}
             </span>
           </div>
-          <div className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">
+          <div className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-text-secondary">
             <TrendIcon size={14} strokeWidth={3} style={{ color: metric.trend === 'down' ? '#0284c7' : metric.trend === 'up' ? metric.theme.accent : undefined }} />
             {metric.trendLabel ?? 'stable'}
           </div>
         </div>
 
         {isSteps ? (
-          <div className="mb-6 rounded-3xl border border-white/70 bg-white/45 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] dark:border-white/10 dark:bg-white/10">
+          <div className="mb-6 rounded-3xl border border-white/70 bg-white/45 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] dark:border-stroke dark:bg-white/10">
             <div className="flex items-center justify-between gap-3">
-              <div className="inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">
+              <div className="inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-text-secondary">
                 <Footprints size={15} />
                 Weekly streak
               </div>
@@ -100,13 +100,13 @@ const MetricHeroCard = ({ metric }: { metric: DashboardMetric }) => {
                 style={{ width: `${progress}%` }}
               />
             </div>
-            <p className="mt-2 text-[11px] font-bold text-slate-500 dark:text-slate-300">
+            <p className="mt-2 text-[11px] font-bold text-slate-500 dark:text-text-secondary">
               Goal {Number(metric.goal ?? 10000).toLocaleString()} steps
             </p>
           </div>
         ) : null}
 
-        <div className="relative mt-auto h-[120px] overflow-hidden rounded-3xl border border-white/45 bg-white/25 dark:border-white/10 dark:bg-white/[0.04]">
+        <div className="relative mt-auto h-[120px] overflow-hidden rounded-3xl border border-white/45 bg-white/25 dark:border-stroke dark:bg-white/[0.04]">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData} margin={{ top: 18, right: 6, bottom: 8, left: 6 }}>
               <defs>

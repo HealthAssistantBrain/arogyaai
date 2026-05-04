@@ -60,3 +60,4 @@ const Tag = ({ children, variant }) => (
 );
 
 export default DataPrivacy;
+

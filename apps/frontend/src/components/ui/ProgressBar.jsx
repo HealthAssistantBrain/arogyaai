@@ -12,3 +12,4 @@ const ProgressBar = ({ progress, color = 'bg-primary', height = 'h-2' }) => {
 };
 
 export default ProgressBar;
+

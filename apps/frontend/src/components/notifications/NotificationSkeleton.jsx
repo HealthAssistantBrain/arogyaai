@@ -3,7 +3,7 @@ import Skeleton from '../ui/Skeleton';
 
 const NotificationSkeleton = () => {
     return (
-        <div className="bg-white/50 dark:bg-white/5 backdrop-blur-sm rounded-[2rem] p-6 lg:p-8 border border-white dark:border-white/5 border-l-8 border-slate-200 animate-pulse">
+        <div className="bg-white/50 dark:bg-white/5 backdrop-blur-sm rounded-[2rem] p-6 lg:p-8 border border-white dark:border-stroke/50 border-l-8 border-slate-200 animate-pulse">
             <div className="flex flex-col md:flex-row gap-6 items-start">
                 <div className="size-14 rounded-[1.25rem] bg-slate-200 dark:bg-white/10 shrink-0" />
                 <div className="flex-1 space-y-4">
@@ -31,3 +31,4 @@ const NotificationSkeleton = () => {
 };
 
 export default NotificationSkeleton;
+

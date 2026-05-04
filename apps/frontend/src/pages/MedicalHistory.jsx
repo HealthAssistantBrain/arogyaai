@@ -123,11 +123,11 @@ const MedicalHistory = () => {
     animate: { opacity: 1, y: 0 }
   };
 
-  const activeClass = "px-4 py-2.5 rounded-xl bg-[#6143f4] text-white font-bold text-sm flex items-center gap-2 border border-[#6143f4] shadow-lg shadow-[#6143f4]/20 transition-all active:scale-95";
-  const inactiveClass = "px-4 py-2.5 rounded-xl bg-[#f6f5f8] dark:bg-slate-800 text-[#13082A] dark:text-slate-300 hover:bg-[#6143f4]/10 transition-all font-semibold text-sm border border-slate-200 dark:border-slate-700 active:scale-95";
+  const activeClass = "px-4 py-2.5 rounded-xl bg-primary text-white font-bold text-sm flex items-center gap-2 border border-primary shadow-lg shadow-primary/20 transition-all active:scale-95";
+  const inactiveClass = "px-4 py-2.5 rounded-xl bg-background dark:bg-card text-white dark:text-text-secondary hover:bg-primary/10 transition-all font-semibold text-sm border border-slate-200 dark:border-stroke active:scale-95";
 
   return (
-    <div className="bg-[#f6f5f8] dark:bg-[#131022] text-[#13082A] dark:text-slate-100 antialiased min-h-screen flex flex-col font-display">
+    <div className="bg-background dark:bg-card text-text-primary dark:text-slate-100 antialiased min-h-screen flex flex-col font-display">
       {/* Top Navigation Bar - Standardized */}
       <OnboardingHeader step={2} onSaveAndExit={handleSaveAndExit} />
 
@@ -143,23 +143,23 @@ const MedicalHistory = () => {
           <motion.div variants={itemVariants} className="mb-10">
             <div className="flex justify-between items-end mb-3">
               <div>
-                <p className="text-[#6143f4] font-bold text-sm uppercase tracking-widest">Onboarding</p>
-                <h1 className="text-4xl font-black mt-1 tracking-tight text-slate-900 dark:text-white">Medical History</h1>
+                <p className="text-primary font-bold text-sm uppercase tracking-widest">Onboarding</p>
+                <h1 className="text-4xl font-black mt-1 tracking-tight text-slate-900 dark:text-text-primary">Medical History</h1>
               </div>
               <div className="text-right">
-                <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Step 2 of 4</p>
-                <span className="text-[#6143f4] text-xl font-bold">50%</span>
+                <p className="text-slate-500 dark:text-text-muted text-sm font-medium">Step 2 of 4</p>
+                <span className="text-primary text-xl font-bold">50%</span>
               </div>
             </div>
-            <div className="h-2 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+            <div className="h-2 w-full bg-slate-200 dark:bg-card rounded-full overflow-hidden">
               <motion.div
                 initial={{ width: '25%' }}
                 animate={{ width: '50%' }}
                 transition={{ duration: 1, ease: "easeOut" }}
-                className="h-full bg-gradient-to-r from-[#6143f4] to-[#009CDE]"
+                className="h-full bg-gradient-to-r from-primary to-secondary"
               ></motion.div>
             </div>
-            <p className="text-slate-600 dark:text-slate-400 mt-4 text-base leading-relaxed">
+            <p className="text-slate-600 dark:text-text-muted mt-4 text-base leading-relaxed">
               Please provide details about your health background to help our AI personalize your care.
             </p>
           </motion.div>
@@ -167,16 +167,16 @@ const MedicalHistory = () => {
           {/* Form Card */}
           <motion.div
             variants={itemVariants}
-            className="bg-white dark:bg-slate-900/50 rounded-xl shadow-xl shadow-[#6143f4]/5 border border-slate-200 dark:border-slate-800 p-8 space-y-10 backdrop-blur-sm"
+            className="bg-white dark:bg-background/50 rounded-xl shadow-xl shadow-primary/5 border border-slate-200 dark:border-stroke p-8 space-y-10 backdrop-blur-sm"
           >
 
             {/* Section: Existing Conditions */}
             <section>
               <div className="flex items-center gap-3 mb-6">
-                <div className="size-8 rounded-lg bg-[#6143f4]/10 flex items-center justify-center">
-                  <FileText className="text-[#6143f4]" size={20} />
+                <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <FileText className="text-primary" size={20} />
                 </div>
-                <h3 className="text-xl font-bold dark:text-white">Existing Conditions</h3>
+                <h3 className="text-xl font-bold dark:text-text-primary">Existing Conditions</h3>
               </div>
               <div className="flex flex-wrap gap-3">
                 <AnimatePresence mode="popLayout">
@@ -195,7 +195,7 @@ const MedicalHistory = () => {
                     </motion.button>
                   ))}
                 </AnimatePresence>
-                <button type="button" className="px-4 py-2.5 rounded-xl bg-[#f6f5f8] dark:bg-slate-800 text-slate-500 font-bold text-sm border border-dashed border-slate-300 dark:border-slate-700 flex items-center gap-2 hover:border-[#6143f4]/50 transition-all">
+                <button type="button" className="px-4 py-2.5 rounded-xl bg-background dark:bg-card text-slate-500 font-bold text-sm border border-dashed border-slate-300 dark:border-stroke flex items-center gap-2 hover:border-primary/50 transition-all">
                   <Plus size={14} />
                   Other
                 </button>
@@ -205,10 +205,10 @@ const MedicalHistory = () => {
             {/* Section: Allergies */}
             <section>
               <div className="flex items-center gap-3 mb-6">
-                <div className="size-8 rounded-lg bg-[#6143f4]/10 flex items-center justify-center">
-                  <Syringe className="text-[#6143f4]" size={20} />
+                <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Syringe className="text-primary" size={20} />
                 </div>
-                <h3 className="text-xl font-bold dark:text-white">Known Allergies</h3>
+                <h3 className="text-xl font-bold dark:text-text-primary">Known Allergies</h3>
               </div>
               <div className="flex flex-wrap gap-3">
                 <AnimatePresence mode="popLayout">
@@ -227,7 +227,7 @@ const MedicalHistory = () => {
                     </motion.button>
                   ))}
                 </AnimatePresence>
-                <button type="button" className="px-4 py-2.5 rounded-xl bg-[#f6f5f8] dark:bg-slate-800 text-slate-500 font-bold text-sm border border-dashed border-slate-300 dark:border-slate-700 flex items-center gap-2 hover:border-[#6143f4]/50 transition-all">
+                <button type="button" className="px-4 py-2.5 rounded-xl bg-background dark:bg-card text-slate-500 font-bold text-sm border border-dashed border-slate-300 dark:border-stroke flex items-center gap-2 hover:border-primary/50 transition-all">
                   <Plus size={14} />
                   Add Allergy
                 </button>
@@ -237,10 +237,10 @@ const MedicalHistory = () => {
             {/* Section: Family History */}
             <section>
               <div className="flex items-center gap-3 mb-6">
-                <div className="size-8 rounded-lg bg-[#6143f4]/10 flex items-center justify-center">
-                  <Users className="text-[#6143f4]" size={20} />
+                <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Users className="text-primary" size={20} />
                 </div>
-                <h3 className="text-xl font-bold dark:text-white">Family History</h3>
+                <h3 className="text-xl font-bold dark:text-text-primary">Family History</h3>
               </div>
               <div className="flex flex-wrap gap-3">
                 <AnimatePresence mode="popLayout">
@@ -265,25 +265,25 @@ const MedicalHistory = () => {
             <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="size-8 rounded-lg bg-[#6143f4]/10 flex items-center justify-center">
-                    <Activity className="text-[#6143f4]" size={18} />
+                  <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Activity className="text-primary" size={18} />
                   </div>
-                  <h3 className="text-xl font-bold dark:text-white">Past History</h3>
+                  <h3 className="text-xl font-bold dark:text-text-primary">Past History</h3>
                 </div>
                 <textarea
                   value={surgeries}
                   onChange={(e) => setSurgeries(e.target.value)}
-                  className="min-h-28 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6143f4] dark:text-white"
+                  className="min-h-28 rounded-xl border border-slate-200 dark:border-stroke bg-slate-50 dark:bg-card px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[var(--color-primary)] dark:text-text-primary"
                   placeholder="Surgeries or procedures, if any"
                 />
               </div>
 
               <div className="flex flex-col gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="size-8 rounded-lg bg-[#6143f4]/10 flex items-center justify-center">
-                    <Brain className="text-[#6143f4]" size={18} />
+                  <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Brain className="text-primary" size={18} />
                   </div>
-                  <h3 className="text-xl font-bold dark:text-white">Hospitalizations</h3>
+                  <h3 className="text-xl font-bold dark:text-text-primary">Hospitalizations</h3>
                 </div>
                 <div className="flex gap-3">
                   {[
@@ -304,7 +304,7 @@ const MedicalHistory = () => {
                   value={hospitalizationDetails}
                   onChange={(e) => setHospitalizationDetails(e.target.value)}
                   disabled={!hospitalizations}
-                  className="min-h-28 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6143f4] disabled:opacity-50 dark:text-white"
+                  className="min-h-28 rounded-xl border border-slate-200 dark:border-stroke bg-slate-50 dark:bg-card px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 dark:text-text-primary"
                   placeholder="Optional details such as reason or year"
                 />
               </div>
@@ -312,21 +312,21 @@ const MedicalHistory = () => {
 
             <section>
               <div className="flex items-center gap-3 mb-4">
-                <div className="size-8 rounded-lg bg-[#6143f4]/10 flex items-center justify-center">
-                  <Network className="text-[#6143f4]" size={18} />
+                <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Network className="text-primary" size={18} />
                 </div>
-                <h3 className="text-xl font-bold dark:text-white">Current Medications</h3>
+                <h3 className="text-xl font-bold dark:text-text-primary">Current Medications</h3>
               </div>
               <textarea
                 value={currentMedications}
                 onChange={(e) => setCurrentMedications(e.target.value)}
-                className="w-full min-h-28 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6143f4] dark:text-white"
+                className="w-full min-h-28 rounded-xl border border-slate-200 dark:border-stroke bg-slate-50 dark:bg-card px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[var(--color-primary)] dark:text-text-primary"
                 placeholder="List medications or leave blank"
               />
             </section>
 
             {/* Action Buttons */}
-            <div className="mt-12 pt-8 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-4 justify-between items-center">
+            <div className="mt-12 pt-8 border-t border-slate-100 dark:border-stroke flex flex-col sm:flex-row gap-4 justify-between items-center">
               <button
                 type="button"
                 onClick={(e) => {
@@ -334,7 +334,7 @@ const MedicalHistory = () => {
                   console.log("Navigating to step-1");
                   navigate(ROUTES.ONBOARDING_STEP_1);
                 }}
-                className="w-full sm:w-auto px-8 py-3 rounded-lg border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
+                className="w-full sm:w-auto px-8 py-3 rounded-lg border-2 border-slate-200 dark:border-stroke text-slate-600 dark:text-text-secondary font-bold hover:bg-slate-50 dark:hover:bg-card transition-all flex items-center justify-center gap-2"
               >
                 <ArrowLeft size={18} />
                 Back
@@ -342,7 +342,7 @@ const MedicalHistory = () => {
               <button
                 type="button"
                 onClick={handleContinue}
-                className="w-full sm:w-auto px-10 py-3 rounded-lg bg-[#6143f4] text-white font-bold hover:bg-[#6143f4]/90 shadow-lg shadow-[#6143f4]/25 transition-all flex items-center justify-center gap-2"
+                className="w-full sm:w-auto px-10 py-3 rounded-lg bg-primary text-white font-bold hover:bg-primary/90 shadow-lg shadow-primary/25 transition-all flex items-center justify-center gap-2"
               >
                 Continue to Step 3
                 <ArrowRight size={18} />
@@ -350,9 +350,9 @@ const MedicalHistory = () => {
             </div>
 
             {/* Informational Note */}
-            <div className="flex gap-4 p-4 rounded-lg bg-[#6143f4]/5 border border-[#6143f4]/10 items-start mt-4">
-              <ShieldCheck size={24} className="text-[#6143f4] shrink-0" />
-              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed font-medium">
+            <div className="flex gap-4 p-4 rounded-lg bg-primary/5 border border-primary/10 items-start mt-4">
+              <ShieldCheck size={24} className="text-primary shrink-0" />
+              <p className="text-xs text-slate-600 dark:text-text-muted leading-relaxed font-medium">
                 Your medical data is encrypted and used only to power the AI diagnostic engine. ArogyaAI only uses this information to provide clinical insights to your healthcare provider.
               </p>
             </div>
@@ -362,9 +362,10 @@ const MedicalHistory = () => {
       </main>
 
       {/* Footer Decoration */}
-      <div className="fixed bottom-0 left-0 w-full h-1 bg-gradient-to-r from-[#6143f4] via-[#009CDE] to-[#6143f4] opacity-50 z-50"></div>
+      <div className="fixed bottom-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-secondary to-primary opacity-50 z-50"></div>
     </div>
   );
 };
 
 export default MedicalHistory;
+

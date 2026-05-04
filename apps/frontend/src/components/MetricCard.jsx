@@ -49,9 +49,9 @@ const TONES = {
     spark: '#6366f1',
   },
   default: {
-    border: 'border-slate-200/80 dark:border-white/10',
+    border: 'border-slate-200/80 dark:border-stroke',
     wash: 'from-slate-50/80 to-white dark:from-white/10 dark:to-white/5',
-    icon: 'bg-slate-500/10 text-slate-600 dark:text-slate-300',
+    icon: 'bg-slate-500/10 text-slate-600 dark:text-text-secondary',
     spark: '#64748b',
   },
 };
@@ -80,18 +80,18 @@ const MetricCard = ({ metric, variants }) => {
   return (
     <Motion.article
       variants={variants}
-      className={`relative overflow-hidden rounded-[1.5rem] border ${tone.border} bg-white p-5 shadow-sm transition-transform duration-300 hover:-translate-y-0.5 dark:bg-[#131022]`}
+      className={`relative overflow-hidden rounded-[1.5rem] border ${tone.border} bg-white p-5 shadow-sm transition-transform duration-300 hover:-translate-y-0.5 dark:bg-card`}
     >
       <div className={`absolute inset-0 bg-gradient-to-br ${tone.wash} opacity-70 pointer-events-none`} />
       <div className="relative z-10">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.32em] text-slate-400">{metric.label}</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.32em] text-text-muted">{metric.label}</p>
             <div className="mt-4 flex items-end gap-2">
-              <span className="text-[34px] font-black leading-none tracking-tight text-[#13082a] dark:text-white">
+              <span className="text-[34px] font-black leading-none tracking-tight text-text-primary dark:text-text-primary">
                 {formatMetricValue(metric.value, metric.precision ?? 0)}
               </span>
-              <span className="pb-1 text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">
+              <span className="pb-1 text-[11px] font-black uppercase tracking-[0.22em] text-text-muted">
                 {metric.unit}
               </span>
             </div>
@@ -103,11 +103,11 @@ const MetricCard = ({ metric, variants }) => {
         </div>
 
         <div className="mt-4 flex items-center justify-between gap-3">
-          <p className="text-[12px] font-medium text-slate-500 dark:text-slate-400">
+          <p className="text-[12px] font-medium text-slate-500 dark:text-text-muted">
             {metric.caption}
           </p>
           {metric.trend?.label ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 shadow-sm dark:bg-white/5 dark:text-slate-300">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 shadow-sm dark:bg-white/5 dark:text-text-secondary">
               <TrendIndicator direction={metric.trend?.direction} />
               {metric.trend.label}
             </span>
@@ -131,7 +131,7 @@ const MetricCard = ({ metric, variants }) => {
               </LineChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex h-[46px] items-center rounded-2xl border border-dashed border-white/50 bg-white/40 px-4 text-[11px] font-semibold text-slate-400 dark:border-white/10 dark:bg-white/5">
+            <div className="flex h-[46px] items-center rounded-2xl border border-dashed border-stroke/500 bg-white/40 px-4 text-[11px] font-semibold text-text-muted dark:border-stroke dark:bg-white/5">
               Trend available on next sync
             </div>
           )}
@@ -142,3 +142,4 @@ const MetricCard = ({ metric, variants }) => {
 };
 
 export default MetricCard;
+

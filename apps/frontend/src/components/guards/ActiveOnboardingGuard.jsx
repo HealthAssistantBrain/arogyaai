@@ -88,3 +88,4 @@ export default function ActiveOnboardingGuard() {
     return <SafeNavigate to={ROUTES.DASHBOARD} replace />
   }
 }
+

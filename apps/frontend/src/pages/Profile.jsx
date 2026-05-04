@@ -145,9 +145,9 @@ const Profile = () => {
                 <CreditCard size={120} />
               </div>
               <div className="relative z-10 flex flex-col gap-1">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-white/60">ArogyaAI Pro</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-text-muted">ArogyaAI Pro</span>
                 <p className="text-lg font-bold">Annual Premium Plan</p>
-                <p className="text-xs text-white/70">Next billing on Jan 10, 2027</p>
+                <p className="text-xs text-text-primary/70">Next billing on Jan 10, 2027</p>
               </div>
               <Button variant="accent" size="sm" className="relative z-10">Manage</Button>
             </div>
@@ -179,3 +179,4 @@ const Profile = () => {
 };
 
 export default Profile;
+

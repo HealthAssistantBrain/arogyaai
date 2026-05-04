@@ -5,7 +5,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 from fastapi import BackgroundTasks
@@ -34,14 +34,13 @@ class FakeUploadFile:
         return self._content
 
 
-def test_upload_and_summarize_queues_background_lab_pipeline():
+def test_upload_and_summarize_returns_uploaded_report_and_queues_processing():
     db = MagicMock()
     current_user = SimpleNamespace(id=uuid4())
     report_id = uuid4()
     created_at = datetime(2026, 4, 30, 10, 0, tzinfo=timezone.utc)
     file = FakeUploadFile("cbc-report.pdf", "application/pdf", b"%PDF-1.4 fake")
     background_tasks = BackgroundTasks()
-    lab_runner = MagicMock()
     added: dict[str, object] = {}
 
     def add_side_effect(report):
@@ -50,41 +49,12 @@ def test_upload_and_summarize_queues_background_lab_pipeline():
         report.updated_at = created_at
         added["report"] = report
 
-    def persist_side_effect(db_session, persisted_report_id, parsed_text, summary_data):
-        report = added["report"]
-        report.parsed_text = parsed_text
-        report.summary_data = summary_data
-        report.status = ReportStatusEnum.COMPLETED
-        assert persisted_report_id == str(report_id)
-        assert parsed_text == "Hemoglobin 13.8 WBC 6.4"
-
     db.add.side_effect = add_side_effect
 
-    analysis = {
-        "title": "Cbc Report",
-        "summary": ["Report text extracted successfully."],
-        "full_text": "Hemoglobin 13.8 WBC 6.4",
-        "ocr_text": "Hemoglobin 13.8 WBC 6.4",
-        "markers": [{"name": "Hemoglobin", "value": "13.8", "unit": "g/dL", "flag": "captured"}],
-        "source": "local-pdf",
-    }
-    notification_trigger = AsyncMock()
-
-    with patch.object(ReportService, "_persist_file", return_value=("reports/user/cbc-report.pdf", "https://example.test/cbc-report.pdf")), patch.object(
+    with patch.object(
         ReportService,
-        "_analyze_report",
-        AsyncMock(return_value=analysis),
-    ), patch.object(
-        ReportService,
-        "persist_report",
-        side_effect=persist_side_effect,
-    ), patch.object(
-        ReportService,
-        "_load_lab_pipeline_runner",
-        return_value=lab_runner,
-    ), patch(
-        "services.report_service.trigger_notification",
-        notification_trigger,
+        "_persist_file",
+        return_value=("reports/user/cbc-report.pdf", "https://example.test/cbc-report.pdf"),
     ):
         result = asyncio.run(
             ReportService.upload_and_summarize(
@@ -97,12 +67,125 @@ def test_upload_and_summarize_queues_background_lab_pipeline():
         )
 
     assert result["success"] is True
+    assert result["status"] == "uploaded"
     assert result["data"]["id"] == str(report_id)
+    assert result["data"]["name"] == "cbc-report.pdf"
+    assert result["data"]["file_name"] == "cbc-report.pdf"
+    assert result["data"]["original_filename"] == "cbc-report.pdf"
+    assert result["data"]["stored_filename"] == "cbc-report.pdf"
+    assert result["data"]["status"] == ReportStatusEnum.PROCESSING.value
+    assert result["data"]["summary"] == [ReportService.PROCESSING_SUMMARY]
+    assert result["data"]["summary_view"]["key_findings"] == [ReportService.PROCESSING_SUMMARY]
+    assert added["report"].original_filename == "cbc-report.pdf"
+    assert added["report"].stored_filename == "cbc-report.pdf"
+    assert added["report"].summary_data["upload_metadata"]["original_filename"] == "cbc-report.pdf"
     assert len(background_tasks.tasks) == 1
     task = background_tasks.tasks[0]
-    assert task.func is lab_runner
-    assert task.args == (str(report_id),)
-    notification_trigger.assert_awaited_once()
+    assert task.func == ReportService.process_uploaded_report
+    assert task.args == (str(report_id), "cbc-report.pdf", "application/pdf", b"%PDF-1.4 fake")
+
+
+def test_serialize_report_prefers_original_filename_over_uuid_storage_name():
+    report_id = uuid4()
+    created_at = datetime(2026, 4, 30, 10, 0, tzinfo=timezone.utc)
+    report = SimpleNamespace(
+        id=report_id,
+        report_type=SimpleNamespace(value="BLOOD_TEST"),
+        status=ReportStatusEnum.COMPLETED,
+        file_url="https://example.test/storage/123e4567-e89b-12d3-a456-426614174000-blood_test_may.pdf",
+        original_filename="blood_test_may.pdf",
+        stored_filename="123e4567-e89b-12d3-a456-426614174000-blood_test_may.pdf",
+        storage_path="reports/user/123e4567-e89b-12d3-a456-426614174000-blood_test_may.pdf",
+        summary_data={"summary": ["Ready"], "upload_metadata": {"file_size": 128}},
+        parsed_text="",
+        created_at=created_at,
+        updated_at=created_at,
+    )
+
+    serialized = ReportService._serialize_report(report)
+
+    assert serialized["name"] == "blood_test_may.pdf"
+    assert serialized["file_name"] == "blood_test_may.pdf"
+    assert serialized["original_filename"] == "blood_test_may.pdf"
+    assert serialized["stored_filename"] == "123e4567-e89b-12d3-a456-426614174000-blood_test_may.pdf"
+
+
+def test_serialize_report_returns_saved_summary_payload_for_detail_view():
+    report_id = uuid4()
+    created_at = datetime(2026, 4, 30, 10, 0, tzinfo=timezone.utc)
+    report = SimpleNamespace(
+        id=report_id,
+        report_type=SimpleNamespace(value="BLOOD_TEST"),
+        status=ReportStatusEnum.COMPLETED,
+        file_url="https://example.test/storage/cbc.pdf",
+        original_filename="cbc.pdf",
+        stored_filename="cbc.pdf",
+        storage_path="reports/user/cbc.pdf",
+        summary_data={
+            "summary": "Parsed 2 key measurements from the uploaded report.",
+            "risks": ["No acute high-risk pattern was detected."],
+            "risk_level": "Low",
+            "recommendations": ["Continue routine follow-up."],
+            "abnormal_values": [{"name": "Hemoglobin", "value": "13.8", "status": "Optimal"}],
+            "summary_source": "prediction-service",
+            "upload_metadata": {"file_size": 128},
+        },
+        parsed_text="Hemoglobin 13.8 g/dL",
+        created_at=created_at,
+        updated_at=created_at,
+    )
+
+    serialized = ReportService._serialize_report(report)
+
+    assert serialized["summary"] == ["Parsed 2 key measurements from the uploaded report."]
+    assert serialized["summary_view"]["summary"] == "Parsed 2 key measurements from the uploaded report."
+    assert serialized["summary_view"]["key_findings"] == ["Parsed 2 key measurements from the uploaded report."]
+    assert serialized["risks"] == ["No acute high-risk pattern was detected."]
+    assert serialized["risk_level"] == "Low"
+    assert serialized["recommendations"] == ["Continue routine follow-up."]
+    assert serialized["abnormal_values"][0]["name"] == "Hemoglobin"
+
+
+def test_delete_report_removes_storage_before_db_record():
+    report_id = uuid4()
+    user_id = uuid4()
+    db = MagicMock()
+    current_user = SimpleNamespace(id=user_id)
+    report = SimpleNamespace(
+        id=report_id,
+        user_id=user_id,
+        is_deleted=False,
+        storage_path="reports/user/cbc.pdf",
+        storage_bucket=None,
+        file_url="https://example.test/storage/cbc.pdf",
+        summary_data={},
+    )
+    query = MagicMock()
+    query.filter.return_value.first.return_value = report
+    db.query.return_value = query
+
+    with patch.object(ReportService, "_delete_stored_file") as delete_stored_file:
+        result = ReportService.delete_report(db, current_user, str(report_id))
+
+    assert result["success"] is True
+    assert result["data"]["id"] == str(report_id)
+    delete_stored_file.assert_called_once_with(report)
+    db.delete.assert_called_once_with(report)
+    db.commit.assert_called_once()
+
+
+def test_delete_stored_file_removes_existing_local_file():
+    report = SimpleNamespace(
+        storage_path="uploads/reports/report.pdf",
+        storage_bucket=None,
+        file_url="",
+        summary_data={},
+    )
+
+    with patch.object(Path, "is_file", return_value=True), patch.object(Path, "unlink") as unlink_file:
+        ReportService._delete_stored_file(report)
+
+    unlink_file.assert_called_once()
 
 
 def test_run_lab_pipeline_can_resolve_report_from_report_id():

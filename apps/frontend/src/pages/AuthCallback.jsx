@@ -4,7 +4,9 @@ import { Activity, ShieldCheck, ArrowRight } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { ROUTES } from '../router/routes'
 import { getAuthenticatedHomeRoute } from '../router/authRedirects'
-import { completeSupabaseOAuthSession } from '../lib/supabaseOAuth'
+import { completeSupabaseOAuthSession, consumeSupabaseOAuthContext } from '../lib/supabaseOAuth'
+import { setAuthFlow } from '../lib/axios'
+import { lockSystem, unlockSystem } from '../lib/systemLock'
 import HeartLoader from '../components/ui/HeartLoader'
 import FullPageSkeleton from '../components/ui/FullPageSkeleton'
 
@@ -19,10 +21,13 @@ const AuthCallback = () => {
     const run = async () => {
       let didError = false
       const callbackUrl = new URL(window.location.href)
-      const flow = callbackUrl.searchParams.get('flow')
-      const wantsWelcome = callbackUrl.searchParams.get('welcome') === '1' || flow === 'signup'
+      const oauthContext = consumeSupabaseOAuthContext()
+      const flow = callbackUrl.searchParams.get('flow') || oauthContext.flow
+      const wantsWelcome = callbackUrl.searchParams.get('welcome') === '1' || oauthContext.welcome || flow === 'signup'
 
       try {
+        lockSystem()
+        setAuthFlow(true)
         const result = await completeSupabaseOAuthSession()
 
         if (!result?.id) {
@@ -39,6 +44,9 @@ const AuthCallback = () => {
           setError(err?.message || 'OAuth callback failed')
         }
         return
+      } finally {
+        unlockSystem()
+        setAuthFlow(false)
       }
 
       if (cancelled || didError) return
@@ -65,11 +73,11 @@ const AuthCallback = () => {
   // ── Loading state: show skeleton + heart animation while OAuth handshake runs ──
   if (status === 'checking') {
     return (
-      <div className="min-h-screen bg-[#f6f5f8] dark:bg-[#13082A] flex items-center justify-center transition-colors duration-500">
+      <div className="min-h-screen bg-background dark:bg-card flex items-center justify-center transition-colors duration-500">
         <FullPageSkeleton />
         <div className="relative z-10 flex flex-col items-center gap-5">
-          <HeartLoader size={180} color="#6143f4" />
-          <p className="text-xs uppercase tracking-[0.3em] font-black text-[#6143f4] animate-pulse">
+          <HeartLoader size={180} color="var(--color-primary)" />
+          <p className="text-xs uppercase tracking-[0.3em] font-black text-primary animate-pulse">
             Finalizing secure sign‑in…
           </p>
         </div>
@@ -78,25 +86,25 @@ const AuthCallback = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#f6f5f8] dark:bg-[#13082A] flex items-center justify-center p-6 font-display relative overflow-hidden transition-colors duration-500">
+    <div className="min-h-screen bg-background dark:bg-card flex items-center justify-center p-6 font-display relative overflow-hidden transition-colors duration-500">
       <div className="fixed inset-0 -z-10 overflow-hidden">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#6143f4]/10 rounded-full blur-[120px] animate-pulse"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-[#009CDE]/10 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '1s' }}></div>
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/10 rounded-full blur-[120px] animate-pulse"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-secondary/10 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '1s' }}></div>
       </div>
 
-      <div className="w-full max-w-[380px] bg-white/80 dark:bg-white/5 backdrop-blur-xl border border-white/40 dark:border-white/10 p-10 rounded-[2rem] shadow-2xl shadow-[#6143f4]/10 text-center">
-        <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-tr from-[#6143f4] to-[#009CDE] flex items-center justify-center shadow-xl shadow-[#6143f4]/25 mb-6">
+      <div className="w-full max-w-[380px] bg-white/80 dark:bg-white/5 backdrop-blur-xl border border-white/40 dark:border-stroke p-10 rounded-[2rem] shadow-2xl shadow-primary/10 text-center">
+        <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-tr from-primary to-secondary flex items-center justify-center shadow-xl shadow-primary/25 mb-6">
           <Activity size={36} color="white" />
         </div>
-        <h1 className="text-2xl font-bold text-[#13082A] dark:text-white">Finalizing secure sign-in</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-3 leading-relaxed">
+        <h1 className="text-2xl font-bold text-text-primary dark:text-text-primary">Finalizing secure sign-in</h1>
+        <p className="text-sm text-slate-500 dark:text-text-muted mt-3 leading-relaxed">
           We are restoring your verified Supabase session and preparing your ArogyaAI profile.
         </p>
-        <div className="mt-8 flex items-center justify-center gap-2 text-xs uppercase tracking-[0.3em] font-black text-[#6143f4]">
+        <div className="mt-8 flex items-center justify-center gap-2 text-xs uppercase tracking-[0.3em] font-black text-primary">
           <ShieldCheck size={14} />
           <span>Supabase session active</span>
         </div>
-        <div className="mt-6 flex items-center justify-center gap-2 text-sm text-slate-400">
+        <div className="mt-6 flex items-center justify-center gap-2 text-sm text-text-muted">
           <ArrowRight size={16} className="animate-pulse" />
           <span>{status === 'error' ? 'Sign-in failed' : 'Redirecting shortly'}</span>
         </div>
@@ -117,3 +125,4 @@ const AuthCallback = () => {
 }
 
 export default AuthCallback
+

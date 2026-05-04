@@ -253,6 +253,18 @@ components:
         report_type:
           type: string
           enum: [BLOOD_TEST, MRI, XRAY, PRESCRIPTION, CLINICAL_NOTE, GENETIC, OTHER]
+        name:
+          type: string
+          example: "blood_test_may.pdf"
+        file_name:
+          type: string
+          example: "blood_test_may.pdf"
+        original_filename:
+          type: string
+          example: "blood_test_may.pdf"
+        stored_filename:
+          type: string
+          example: "123e4567-e89b-12d3-a456-426614174000-blood_test_may.pdf"
         file_url:
           type: string
           format: uri
@@ -266,6 +278,38 @@ components:
         updated_at:
           type: string
           format: date-time
+        summary:
+          type: array
+          items:
+            type: string
+          example:
+            - "Parsed 2 key measurements from the uploaded report."
+        patient_summary:
+          type: string
+          example: "Parsed 2 key measurements from the uploaded report."
+        summary_view:
+          type: object
+          additionalProperties: true
+        risks:
+          type: array
+          items:
+            type: string
+        risk_level:
+          type: string
+          example: "Low"
+        recommendations:
+          type: array
+          items:
+            type: string
+        abnormal_values:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        ocr_text:
+          type: string
+        summary_source:
+          type: string
 
     # --- Risk Score ---
     RiskScoreResponse:
@@ -851,6 +895,38 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ReportResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [Medical Records]
+      summary: Delete a specific report by UUID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUIDField'
+      responses:
+        '200':
+          description: Report deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        $ref: '#/components/schemas/UUIDField'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':

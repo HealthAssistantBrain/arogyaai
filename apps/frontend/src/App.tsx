@@ -1,20 +1,28 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import AppErrorBoundary from './components/guards/AppErrorBoundary';
 import { INIT_RESOLVER } from './router/INIT_RESOLVER';
+import { ROUTES } from './router/routes';
 import AppRouter from './router';
 import { initializeAuthStateListener, useAuthStore } from './store/authStore';
+import { useSystemHealthStore } from './store/systemHealthStore';
 import { useThemeEffect } from './hooks/useThemeEffect';
 import { useThemeStore } from './store/themeStore';
 
 export default function App() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [initComplete, setInitComplete] = useState(false);
   const isHydrated = useAuthStore((state) => state.isHydrated);
   const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
+  const maintenance = useSystemHealthStore((state) => state.maintenance);
+  const healthStatus = useSystemHealthStore((state) => state.status);
+  const startHealthPolling = useSystemHealthStore((state) => state.startHealthPolling);
 
   useThemeEffect();
+
+  useEffect(() => startHealthPolling(), [startHealthPolling]);
 
   useEffect(() => {
     let isMounted = true;
@@ -51,9 +59,32 @@ export default function App() {
     };
   }, [navigate]);
 
+  useEffect(() => {
+    if (!initComplete || healthStatus === 'unknown' || healthStatus === 'checking') return;
+
+    if (maintenance && location.pathname !== ROUTES.MAINTENANCE) {
+      navigate(ROUTES.MAINTENANCE, { replace: true });
+      return;
+    }
+
+    if (!maintenance && location.pathname === ROUTES.MAINTENANCE) {
+      INIT_RESOLVER()
+        .then((result) => {
+          const nextRoute = result?.route || ROUTES.HOME;
+          if (nextRoute !== window.location.pathname) {
+            navigate(nextRoute, { replace: true });
+          }
+        })
+        .catch((err) => {
+          console.error('[MaintenanceRecovery] Route recovery failed:', err);
+          navigate(ROUTES.HOME, { replace: true });
+        });
+    }
+  }, [healthStatus, initComplete, location.pathname, maintenance, navigate]);
+
   if (!initComplete || !isHydrated) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background font-sans text-sm font-bold text-[#6143f4]">
+      <div className="flex min-h-screen items-center justify-center bg-background font-sans text-sm font-bold text-primary">
         Initializing ArogyaAI…
       </div>
     );

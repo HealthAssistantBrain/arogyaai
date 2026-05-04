@@ -35,7 +35,7 @@ const AIInsights = () => {
   }
 
   return (
-    <div className="relative bg-[#EAEAEA] font-display leading-normal text-[#13082A] antialiased dark:bg-[#13082A] dark:text-slate-100">
+    <div className="relative bg-background font-display leading-normal text-text-primary antialiased dark:bg-card dark:text-slate-100">
       {overlayVisible ? <SmartLoadingOverlay label="Refreshing insights" /> : null}
 
       <main className="container mx-auto px-6 py-8 lg:px-8">
@@ -44,20 +44,20 @@ const AIInsights = () => {
             variants={itemVariants}
             initial="initial"
             animate="animate"
-            className="rounded-3xl border border-dashed border-slate-300 bg-white/80 p-10 text-center shadow-sm dark:border-slate-700 dark:bg-slate-900/40"
+            className="rounded-3xl border border-dashed border-slate-300 bg-white/80 p-10 text-center shadow-sm dark:border-stroke dark:bg-background/40"
           >
-            <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-2xl bg-[#6043F4]/10 text-[#6043F4]">
+            <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-2xl bg-primary/10 text-primary">
               <ShieldCheck size={28} />
             </div>
-            <h2 className="text-2xl font-black tracking-tight text-[#13082A] dark:text-white">
+            <h2 className="text-2xl font-black tracking-tight text-text-primary dark:text-text-primary">
               Insights are temporarily unavailable
             </h2>
-            <p className="mx-auto mt-3 max-w-2xl text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">
+            <p className="mx-auto mt-3 max-w-2xl text-sm font-medium leading-relaxed text-slate-500 dark:text-text-muted">
               {error || 'We could not render the latest insights snapshot right now.'}
             </p>
             <button
               onClick={() => void refresh({ force: true })}
-              className="mt-8 inline-flex items-center gap-2 rounded-2xl bg-[#6143f4] px-5 py-3 text-sm font-black uppercase tracking-[0.2em] text-white transition-transform hover:scale-[1.02]"
+              className="mt-8 inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-black uppercase tracking-[0.2em] text-white transition-transform hover:scale-[1.02]"
             >
               <RefreshCcw size={16} />
               Retry
@@ -77,3 +77,4 @@ const AIInsights = () => {
 };
 
 export default AIInsights;
+

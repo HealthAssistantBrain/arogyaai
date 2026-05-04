@@ -88,23 +88,23 @@ const NotificationHistory = () => {
     };
 
     return (
-        <div className="bg-[#f6f5f8] dark:bg-[#0B0819] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased text-[14px]">
+        <div className="bg-background dark:bg-background text-text-primary dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased text-[14px]">
             <div className="flex flex-1 overflow-hidden">
-                <main className="flex-1 flex flex-col h-full relative overflow-y-auto no-scrollbar bg-[#f6f5f8] dark:bg-[#0B0819]">
+                <main className="flex-1 flex flex-col h-full relative overflow-y-auto no-scrollbar bg-background dark:bg-background">
                     <div className="flex-1 p-10 lg:p-12 custom-scrollbar overflow-y-auto">
                         <div className="max-w-6xl mx-auto space-y-10 pb-16">
 
                             {/* Header Section */}
                             <div className="space-y-6">
-                                <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">
-                                    <button onClick={() => navigate(ROUTES.DASHBOARD)} className="hover:text-[#6143f4] transition-colors">Home</button>
+                                <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.25em] text-text-muted">
+                                    <button onClick={() => navigate(ROUTES.DASHBOARD)} className="hover:text-primary transition-colors">Home</button>
                                     <ChevronRight size={12} strokeWidth={3} />
-                                    <span className="text-[#13082a] dark:text-white italic">Notification History</span>
+                                    <span className="text-text-primary dark:text-text-primary italic">Notification History</span>
                                 </div>
                                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                                     <div className="space-y-2">
-                                        <h1 className="text-5xl lg:text-6xl font-black text-[#13082a] dark:text-white tracking-tighter uppercase italic leading-none">Health Alerts & History</h1>
-                                        <p className="text-lg text-slate-500 dark:text-slate-400 font-bold uppercase tracking-tight opacity-80 leading-snug max-w-3xl">
+                                        <h1 className="text-5xl lg:text-6xl font-black text-text-primary dark:text-text-primary tracking-tighter uppercase italic leading-none">Health Alerts & History</h1>
+                                        <p className="text-lg text-slate-500 dark:text-text-muted font-bold uppercase tracking-tight opacity-80 leading-snug max-w-3xl">
                                             Real-time intelligence based on your biometric data and medical logs. Review past insights and system activity.
                                         </p>
                                     </div>
@@ -112,12 +112,12 @@ const NotificationHistory = () => {
                                         <button
                                             onClick={() => markAllAsRead()}
                                             disabled={unreadCount === 0 || loading}
-                                            className="px-6 py-4 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-[1.25rem] text-[10px] font-black uppercase tracking-[0.25em] text-slate-500 hover:text-[#6143f4] hover:bg-[#6143f4]/5 transition-all flex items-center gap-3 shadow-sm active:scale-95 group disabled:opacity-50"
+                                            className="px-6 py-4 bg-surface border border-slate-200 dark:border-stroke rounded-[1.25rem] text-[10px] font-black uppercase tracking-[0.25em] text-slate-500 hover:text-primary hover:bg-primary/5 transition-all flex items-center gap-3 shadow-sm active:scale-95 group disabled:opacity-50"
                                         >
                                             <CheckCircle2 size={18} />
                                             Mark all as read
                                         </button>
-                                        <button className="size-14 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-[1.25rem] flex items-center justify-center text-slate-500 hover:text-[#6143f4] transition-all shadow-sm group">
+                                        <button className="size-14 bg-surface border border-slate-200 dark:border-stroke rounded-[1.25rem] flex items-center justify-center text-slate-500 hover:text-primary transition-all shadow-sm group">
                                             <SlidersHorizontal size={20} />
                                         </button>
                                     </div>
@@ -134,8 +134,8 @@ const NotificationHistory = () => {
                                             setCurrentPage(1);
                                         }}
                                         className={`px-6 py-3.5 rounded-full text-[10px] font-black uppercase tracking-[0.2em] whitespace-nowrap transition-all flex items-center gap-3 border ${activeFilter === filter.name
-                                                ? 'bg-[#6143f4] text-white shadow-2xl shadow-[#6143f4]/30 border-transparent'
-                                                : 'bg-white dark:bg-white/5 text-slate-500 dark:text-slate-400 border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/10 hover:border-[#6143f4]/20'
+                                                ? 'bg-primary text-white shadow-2xl shadow-primary/30 border-transparent'
+                                                : 'bg-surface text-slate-500 dark:text-text-muted border-slate-100 dark:border-stroke/50 hover:bg-slate-50 dark:hover:bg-white/10 hover:border-primary/20'
                                             }`}
                                     >
                                         {filter.hasDot && <span className="size-2 rounded-full bg-red-500 animate-pulse"></span>}
@@ -166,13 +166,13 @@ const NotificationHistory = () => {
                                         ))}
                                     </AnimatePresence>
                                 ) : (
-                                    <div className="py-24 text-center space-y-8 bg-white/50 dark:bg-white/5 rounded-[4rem] border-2 border-dashed border-slate-200 dark:border-white/10">
-                                        <div className="size-24 bg-slate-100 dark:bg-white/5 rounded-[2.5rem] flex items-center justify-center mx-auto text-slate-300 dark:text-slate-700">
+                                    <div className="py-24 text-center space-y-8 bg-white/50 dark:bg-white/5 rounded-[4rem] border-2 border-dashed border-slate-200 dark:border-stroke">
+                                        <div className="size-24 bg-slate-100 dark:bg-white/5 rounded-[2.5rem] flex items-center justify-center mx-auto text-text-secondary dark:text-slate-700">
                                             <Bell size={48} strokeWidth={1} />
                                         </div>
                                         <div className="space-y-2">
-                                            <p className="text-xl font-black text-[#13082a] dark:text-white uppercase tracking-tighter italic">No notifications found</p>
-                                            <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-[0.2em]">Try adjusting your filters or check back later.</p>
+                                            <p className="text-xl font-black text-text-primary dark:text-text-primary uppercase tracking-tighter italic">No notifications found</p>
+                                            <p className="text-xs text-slate-500 dark:text-text-muted font-bold uppercase tracking-[0.2em]">Try adjusting your filters or check back later.</p>
                                         </div>
                                     </div>
                                 )}
@@ -181,14 +181,14 @@ const NotificationHistory = () => {
                             {/* Pagination */}
                             {totalPages > 1 && (
                                 <div className="mt-12 flex flex-col sm:flex-row items-center justify-between gap-6 px-4">
-                                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">
+                                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-text-muted">
                                         Showing {(currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, filteredNotifications.length)} of {filteredNotifications.length}
                                     </p>
                                     <div className="flex items-center gap-3">
                                         <button
                                             onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                                             disabled={currentPage === 1}
-                                            className="size-12 flex items-center justify-center rounded-[1.25rem] bg-white dark:bg-white/5 border border-slate-100 dark:border-white/5 text-slate-400 hover:text-[#6143f4] transition-all shadow-sm active:scale-95 disabled:opacity-30"
+                                            className="size-12 flex items-center justify-center rounded-[1.25rem] bg-surface border border-slate-100 dark:border-stroke/50 text-text-muted hover:text-primary transition-all shadow-sm active:scale-95 disabled:opacity-30"
                                         >
                                             <ChevronLeft size={20} />
                                         </button>
@@ -197,8 +197,8 @@ const NotificationHistory = () => {
                                                 key={i + 1}
                                                 onClick={() => setCurrentPage(i + 1)}
                                                 className={`size-12 rounded-[1.25rem] text-xs font-black transition-all ${currentPage === i + 1
-                                                        ? 'bg-[#6143f4] text-white shadow-2xl shadow-[#6143f4]/30 scale-110'
-                                                        : 'bg-white dark:bg-white/5 border border-slate-100 dark:border-white/5 text-slate-500 hover:border-[#6143f4]/50'
+                                                        ? 'bg-primary text-white shadow-2xl shadow-primary/30 scale-110'
+                                                        : 'bg-surface border border-slate-100 dark:border-stroke/50 text-slate-500 hover:border-primary/50'
                                                     }`}
                                             >
                                                 {i + 1}
@@ -207,7 +207,7 @@ const NotificationHistory = () => {
                                         <button
                                             onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                                             disabled={currentPage === totalPages}
-                                            className="size-12 flex items-center justify-center rounded-[1.25rem] bg-white dark:bg-white/5 border border-slate-100 dark:border-white/5 text-slate-400 hover:text-[#6143f4] transition-all shadow-sm active:scale-95 disabled:opacity-30"
+                                            className="size-12 flex items-center justify-center rounded-[1.25rem] bg-surface border border-slate-100 dark:border-stroke/50 text-text-muted hover:text-primary transition-all shadow-sm active:scale-95 disabled:opacity-30"
                                         >
                                             <ChevronRight size={20} />
                                         </button>
@@ -235,3 +235,4 @@ const NotificationHistory = () => {
 };
 
 export default NotificationHistory;
+

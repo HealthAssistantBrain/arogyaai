@@ -5,10 +5,11 @@ const SkeletonText = ({ lines = 3, className = '' }) => (
         {Array.from({ length: lines }).map((_, i) => (
             <div
                 key={i}
-                className={`h-3.5 animate-pulse bg-slate-200 dark:bg-slate-800 rounded ${widths[i % widths.length]}`}
+                className={`h-3.5 animate-pulse bg-slate-200 dark:bg-card rounded ${widths[i % widths.length]}`}
             />
         ))}
     </div>
 );
 
 export default SkeletonText;
+

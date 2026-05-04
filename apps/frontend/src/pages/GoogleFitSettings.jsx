@@ -77,12 +77,12 @@ function availabilityText(isAvailable, isMissingScope) {
 
 function StatCard({ label, value, helper, icon: Icon, accent }) {
   return (
-    <div className="rounded-3xl border border-slate-200/70 dark:border-white/10 bg-white dark:bg-white/[0.03] p-5 shadow-sm">
+    <div className="rounded-3xl border border-slate-200/70 dark:border-stroke bg-white dark:bg-white/[0.03] p-5 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">{label}</p>
-          <p className="text-[26px] font-black tracking-tight text-[#13082a] dark:text-white">{value}</p>
-          <p className="text-[12px] text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">{helper}</p>
+          <p className="text-[11px] font-black uppercase tracking-[0.2em] text-text-muted mb-2">{label}</p>
+          <p className="text-[26px] font-black tracking-tight text-text-primary dark:text-text-primary">{value}</p>
+          <p className="text-[12px] text-slate-500 dark:text-text-muted mt-2 leading-relaxed">{helper}</p>
         </div>
         <div
           className="flex h-12 w-12 items-center justify-center rounded-2xl border"
@@ -268,7 +268,7 @@ const GoogleFitSettings = () => {
   const latestDisplayDay = stats.latest_day;
 
   return (
-    <div className="min-h-screen bg-[#f6f5f8] text-[#13082a] dark:bg-[#0B0819] dark:text-slate-100">
+    <div className="min-h-screen bg-background text-text-primary dark:bg-background dark:text-slate-100">
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-6 py-8 md:px-10">
         
 
@@ -285,11 +285,11 @@ const GoogleFitSettings = () => {
         )}
 
         <section className="grid gap-4 lg:grid-cols-[1.45fr_0.95fr]">
-          <div className="rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.03]">
+          <div className="rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-sm dark:border-stroke dark:bg-white/[0.03]">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Actions</p>
-                <h2 className="mt-2 text-[22px] font-black tracking-tight text-[#13082a] dark:text-white">
+                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-text-muted">Actions</p>
+                <h2 className="mt-2 text-[22px] font-black tracking-tight text-text-primary dark:text-text-primary">
                   Sync and manage Google Fit
                 </h2>
               </div>
@@ -297,7 +297,7 @@ const GoogleFitSettings = () => {
                 <button
                   onClick={handleConnect}
                   disabled={isConnecting || isSyncing}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-[#6143f4] px-5 py-3 text-[12px] font-black uppercase tracking-[0.16em] text-white transition hover:bg-[#5235dc] disabled:cursor-not-allowed disabled:opacity-70"
+                  className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-[12px] font-black uppercase tracking-[0.16em] text-white transition hover:bg-[#5235dc] disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   <Link2 size={16} />
                   {isConnecting ? 'Opening Google...' : data?.connected ? 'Reconnect Google' : 'Connect Google'}
@@ -305,7 +305,7 @@ const GoogleFitSettings = () => {
                 <button
                   onClick={() => handleSync(true)}
                   disabled={!data?.connected || isSyncing || isConnecting}
-                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-3 text-[12px] font-black uppercase tracking-[0.16em] text-[#13082a] transition hover:border-[#6143f4]/30 hover:text-[#6143f4] disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-3 text-[12px] font-black uppercase tracking-[0.16em] text-text-primary transition hover:border-primary/30 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-stroke dark:bg-white/5 dark:text-text-primary"
                 >
                   <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
                   {isSyncing ? 'Syncing Steps...' : 'Sync Latest 7 Days'}
@@ -325,7 +325,7 @@ const GoogleFitSettings = () => {
               <div
                 role="status"
                 aria-live="polite"
-                className="mt-4 flex items-center gap-3 rounded-2xl border border-[#6143f4]/20 bg-[#6143f4]/10 px-4 py-3 text-[13px] font-semibold text-[#6143f4] dark:border-[#8b7cf6]/30 dark:bg-[#6143f4]/15 dark:text-[#c7c0ff]"
+                className="mt-4 flex items-center gap-3 rounded-2xl border border-primary/20 bg-primary/10 px-4 py-3 text-[13px] font-semibold text-primary dark:border-[#8b7cf6]/30 dark:bg-primary/15 dark:text-[#c7c0ff]"
               >
                 <RefreshCw size={16} className="shrink-0 animate-spin" />
                 <span>Syncing Google Fit data… this may take up to 30 seconds</span>
@@ -345,7 +345,7 @@ const GoogleFitSettings = () => {
                 value={formatNumber(stats.total_steps ?? null)}
                 helper={`Total across ${formatNumber(stats.valid_day_count ?? 0)} complete local days`}
                 icon={TrendingUp}
-                accent="#6143f4"
+                accent="var(--color-primary)"
               />
               <StatCard
                 label="Average Daily"
@@ -378,23 +378,23 @@ const GoogleFitSettings = () => {
             </div>
           </div>
 
-          <div className="rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.03]">
-            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Implementation notes</p>
-            <ul className="mt-4 space-y-3 text-[13px] leading-relaxed text-slate-600 dark:text-slate-400">
+          <div className="rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-sm dark:border-stroke dark:bg-white/[0.03]">
+            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-text-muted">Implementation notes</p>
+            <ul className="mt-4 space-y-3 text-[13px] leading-relaxed text-slate-600 dark:text-text-muted">
               <li>The server handles OAuth code exchange and token refresh so Google secrets stay server-side.</li>
               <li>Daily buckets are generated from local-midnight boundaries using your configured timezone.</li>
               <li>Fetched daily steps are normalized once and stored in backend-owned user vitals.</li>
               <li>The raw Google aggregate response is preserved for debugging in the panel below.</li>
             </ul>
 
-            <div className="mt-6 rounded-[1.5rem] border border-slate-200/70 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-[#131022]">
+            <div className="mt-6 rounded-[1.5rem] border border-slate-200/70 bg-slate-50/80 p-4 dark:border-stroke dark:bg-card">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="mt-0.5 text-amber-500" size={18} />
                 <div>
-                  <p className="text-[12px] font-black uppercase tracking-[0.14em] text-[#13082a] dark:text-white">
+                  <p className="text-[12px] font-black uppercase tracking-[0.14em] text-text-primary dark:text-text-primary">
                     Google Fit status
                   </p>
-                  <p className="mt-2 text-[13px] leading-relaxed text-slate-500 dark:text-slate-400">
+                  <p className="mt-2 text-[13px] leading-relaxed text-slate-500 dark:text-text-muted">
                     Google Fit APIs are being deprecated by Google in favor of Health Connect. This integration keeps
                     your current flow working, but future migration planning is recommended.
                   </p>
@@ -402,8 +402,8 @@ const GoogleFitSettings = () => {
               </div>
             </div>
 
-            <div className="mt-6 rounded-[1.5rem] border border-slate-200/70 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-[#131022]">
-              <p className="text-[12px] font-black uppercase tracking-[0.14em] text-[#13082a] dark:text-white">
+            <div className="mt-6 rounded-[1.5rem] border border-slate-200/70 bg-slate-50/80 p-4 dark:border-stroke dark:bg-card">
+              <p className="text-[12px] font-black uppercase tracking-[0.14em] text-text-primary dark:text-text-primary">
                 Data availability
               </p>
               <div className="mt-3 grid gap-3 md:grid-cols-3">
@@ -412,9 +412,9 @@ const GoogleFitSettings = () => {
                   { key: 'heart_rate', label: 'Heart Rate' },
                   { key: 'sleep', label: 'Sleep' },
                 ].map((item) => (
-                  <div key={item.key} className="rounded-2xl border border-slate-200/70 bg-white px-4 py-3 dark:border-white/10 dark:bg-white/5">
-                    <p className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">{item.label}</p>
-                    <p className="mt-2 text-[14px] font-semibold text-[#13082a] dark:text-white">
+                  <div key={item.key} className="rounded-2xl border border-slate-200/70 bg-white px-4 py-3 dark:border-stroke dark:bg-white/5">
+                    <p className="text-[11px] font-black uppercase tracking-[0.14em] text-text-muted">{item.label}</p>
+                    <p className="mt-2 text-[14px] font-semibold text-text-primary dark:text-text-primary">
                       {availabilityText(Boolean(availability[item.key]), missingScopes.includes(item.key))}
                     </p>
                   </div>
@@ -425,19 +425,19 @@ const GoogleFitSettings = () => {
         </section>
 
         <section className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
-          <div className="rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.03]">
+          <div className="rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-sm dark:border-stroke dark:bg-white/[0.03]">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Daily buckets</p>
-                <h2 className="mt-2 text-[22px] font-black tracking-tight text-[#13082a] dark:text-white">
+                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-text-muted">Daily buckets</p>
+                <h2 className="mt-2 text-[22px] font-black tracking-tight text-text-primary dark:text-text-primary">
                   Last {DEFAULT_WINDOW_DAYS} local days
                 </h2>
               </div>
-              {isLoading && <RefreshCw className="animate-spin text-slate-400" size={18} />}
+              {isLoading && <RefreshCw className="animate-spin text-text-muted" size={18} />}
             </div>
 
-            <div className="mt-6 overflow-hidden rounded-[1.5rem] border border-slate-200/70 dark:border-white/10">
-              <div className="grid grid-cols-[1.2fr_0.8fr] bg-slate-50 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400 dark:bg-white/5">
+            <div className="mt-6 overflow-hidden rounded-[1.5rem] border border-slate-200/70 dark:border-stroke">
+              <div className="grid grid-cols-[1.2fr_0.8fr] bg-slate-50 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-text-muted dark:bg-white/5">
                 <span>Date</span>
                 <span className="text-right">Steps</span>
               </div>
@@ -446,20 +446,20 @@ const GoogleFitSettings = () => {
                   {stats.daily_steps.map((item) => (
                       <div
                         key={item.date}
-                        className="grid grid-cols-[1.2fr_0.8fr] border-t border-slate-100 px-4 py-3 text-[13px] dark:border-white/5"
+                        className="grid grid-cols-[1.2fr_0.8fr] border-t border-slate-100 px-4 py-3 text-[13px] dark:border-stroke/50"
                       >
-                        <span className="font-semibold text-[#13082a] dark:text-white">
+                        <span className="font-semibold text-text-primary dark:text-text-primary">
                           {formatLocalDay(item.date)}
                           {item.is_partial ? <span className="ml-2 text-[10px] font-black uppercase tracking-[0.12em] text-amber-500">Partial</span> : null}
                         </span>
-                        <span className="text-right font-black text-[#6143f4]">{formatNumber(item.steps)}</span>
+                        <span className="text-right font-black text-primary">{formatNumber(item.steps)}</span>
                       </div>
                     ))}
                 </div>
               ) : (
                 <div className="flex min-h-[220px] flex-col items-center justify-center px-6 py-10 text-center">
-                  <Footprints size={28} className="text-slate-300 dark:text-slate-600" />
-                  <p className="mt-4 text-[14px] font-semibold text-slate-500 dark:text-slate-400">
+                  <Footprints size={28} className="text-text-secondary dark:text-slate-600" />
+                  <p className="mt-4 text-[14px] font-semibold text-slate-500 dark:text-text-muted">
                     Connect Google Fit and run a sync to populate local daily step buckets.
                   </p>
                 </div>
@@ -467,24 +467,24 @@ const GoogleFitSettings = () => {
             </div>
           </div>
 
-          <div className="rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.03]">
+          <div className="rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-sm dark:border-stroke dark:bg-white/[0.03]">
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-[#6143f4] dark:border-white/10 dark:bg-white/5">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-primary dark:border-stroke dark:bg-white/5">
                 <Bug size={20} />
               </div>
               <div>
-                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Developer Debug</p>
-                <h2 className="mt-1 text-[22px] font-black tracking-tight text-[#13082a] dark:text-white">
+                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-text-muted">Developer Debug</p>
+                <h2 className="mt-1 text-[22px] font-black tracking-tight text-text-primary dark:text-text-primary">
                   Raw aggregate response
                 </h2>
               </div>
             </div>
 
-            <details className="mt-5 rounded-[1.5rem] border border-slate-200/70 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-[#131022]" open={Boolean(data?.raw_json)}>
+            <details className="mt-5 rounded-[1.5rem] border border-slate-200/70 bg-slate-50/80 p-4 dark:border-stroke dark:bg-card" open={Boolean(data?.raw_json)}>
               <summary className="cursor-pointer list-none text-[12px] font-black uppercase tracking-[0.16em] text-slate-500">
                 {data?.raw_json ? 'Show cached Google Fit JSON' : 'No raw JSON cached yet'}
               </summary>
-              <pre className="mt-4 max-h-[460px] overflow-auto rounded-2xl bg-[#13082a] p-4 text-[11px] leading-relaxed text-slate-100">
+              <pre className="mt-4 max-h-[460px] overflow-auto rounded-2xl bg-card p-4 text-[11px] leading-relaxed text-slate-100">
                 {JSON.stringify(data?.raw_json || { message: 'Connect and sync Google Fit to inspect the raw payload.' }, null, 2)}
               </pre>
             </details>
@@ -496,3 +496,4 @@ const GoogleFitSettings = () => {
 };
 
 export default GoogleFitSettings;
+

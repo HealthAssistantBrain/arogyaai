@@ -142,8 +142,7 @@ const ReportProcessing = () => {
 
                 setTimeout(() => {
                     if (!isMounted) return;
-                    setProcessing(false);
-                    navigate(ROUTES.UPLOAD_SUCCESS);
+                    navigate(ROUTES.MEDICAL_REPORTS, { state: { refreshReports: true, reportId: reportData.id } });
                 }, 900);
             } catch (err) {
                 if (!isMounted) return;
@@ -182,9 +181,9 @@ const ReportProcessing = () => {
     };
 
     return (
-        <div className="bg-[#f6f5f8] dark:bg-[#0B0819] text-[#13082a] dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased text-[14px]">
+        <div className="bg-background dark:bg-background text-text-primary dark:text-slate-100 min-h-screen font-display flex flex-col h-screen overflow-hidden antialiased text-[14px]">
             <div className="flex flex-1 overflow-hidden">
-                <main className="flex-1 flex flex-col h-full relative overflow-y-auto custom-scrollbar bg-[#f6f5f8] dark:bg-[#0B0819]">
+                <main className="flex-1 flex flex-col h-full relative overflow-y-auto custom-scrollbar bg-background dark:bg-background">
 
 
                     <div className="flex-1 flex flex-col items-center justify-center p-10 max-w-4xl mx-auto w-full relative z-10 pb-20">
@@ -192,21 +191,21 @@ const ReportProcessing = () => {
                             <ReportLoader />
 
                             <div className="text-center z-10 flex flex-col items-center mt-6">
-                                <div className="px-4 py-1.5 bg-[#6143f4]/10 text-[#6143f4] text-[10px] font-black uppercase tracking-[0.25em] rounded-full border border-[#6143f4]/20 shadow-sm leading-none">
+                                <div className="px-4 py-1.5 bg-primary/10 text-primary text-[10px] font-black uppercase tracking-[0.25em] rounded-full border border-primary/20 shadow-sm leading-none">
                                     {errorMessage ? 'Processing Failed' : activeStage.label}
                                 </div>
                             </div>
                         </div>
 
                         <div className="text-center mb-12 space-y-4">
-                            <h2 className="text-5xl font-black tracking-tighter text-[#13082a] dark:text-white leading-none uppercase italic">Analyzing your medical report</h2>
-                            <p className="text-slate-400 font-bold uppercase tracking-widest text-[11px] opacity-80 leading-relaxed max-w-xl mx-auto">
+                            <h2 className="text-5xl font-black tracking-tighter text-text-primary dark:text-text-primary leading-none uppercase italic">Analyzing your medical report</h2>
+                            <p className="text-text-muted font-bold uppercase tracking-widest text-[11px] opacity-80 leading-relaxed max-w-xl mx-auto">
                                 {errorMessage || activeStage.detail}
                             </p>
-                            <p className="text-[12px] font-semibold text-slate-500 dark:text-slate-300">{uploadedFileName || pendingFile?.name}</p>
+                            <p className="text-[12px] font-semibold text-slate-500 dark:text-text-secondary">{uploadedFileName || pendingFile?.name}</p>
                         </div>
 
-                        <div className="w-full max-w-2xl bg-white dark:bg-[#131022] border border-slate-100 dark:border-white/10 rounded-[2.5rem] p-10 shadow-2xl">
+                        <div className="w-full max-w-2xl bg-surface border border-slate-100 dark:border-stroke rounded-[2.5rem] p-10 shadow-2xl">
                             <div className="space-y-8">
                                 {[
                                     { icon: RotateCw, text: 'Uploading file', trigger: 20 },
@@ -221,16 +220,16 @@ const ReportProcessing = () => {
                                             <div className={`size-14 rounded-2xl flex items-center justify-center shrink-0 border-2 transition-all ${status === 'done'
                                                 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
                                                 : status === 'active'
-                                                    ? 'bg-[#6143f4]/10 border-[#6143f4]/20 text-[#6143f4]'
-                                                    : 'bg-slate-50 dark:bg-white/5 border-slate-100 dark:border-white/5 text-slate-400'
+                                                    ? 'bg-primary/10 border-primary/20 text-primary'
+                                                    : 'bg-slate-50 dark:bg-white/5 border-slate-100 dark:border-stroke/50 text-text-muted'
                                                 }`}>
                                                 {status === 'done' ? <CheckCircle2 size={24} strokeWidth={2.5} /> : <step.icon size={24} strokeWidth={1.5} />}
                                             </div>
                                             <div className="flex-1">
-                                                <span className={`text-[15px] font-black uppercase tracking-tight block ${status === 'pending' ? 'text-slate-400' : 'text-[#13082a] dark:text-white'}`}>
+                                                <span className={`text-[15px] font-black uppercase tracking-tight block ${status === 'pending' ? 'text-text-muted' : 'text-text-primary dark:text-text-primary'}`}>
                                                     {step.text}
                                                 </span>
-                                                <span className={`text-[9px] font-bold uppercase tracking-[0.2em] ${status === 'done' ? 'text-emerald-500' : status === 'active' ? 'text-[#6143f4]' : 'text-slate-400'}`}>
+                                                <span className={`text-[9px] font-bold uppercase tracking-[0.2em] ${status === 'done' ? 'text-emerald-500' : status === 'active' ? 'text-primary' : 'text-text-muted'}`}>
                                                     {errorMessage ? (status === 'done' ? 'Completed' : 'Stopped') : status === 'done' ? 'Completed' : status === 'active' ? 'Active Pipeline' : 'Queued'}
                                                 </span>
                                             </div>
@@ -239,16 +238,16 @@ const ReportProcessing = () => {
                                 })}
                             </div>
 
-                            <div className="mt-12 pt-8 border-t border-slate-50 dark:border-white/5 space-y-4">
+                            <div className="mt-12 pt-8 border-t border-slate-50 dark:border-stroke/50 space-y-4">
                                 <div className="flex justify-between items-end mb-2">
                                     <div className="flex flex-col gap-1">
-                                        <span className="text-[10px] font-black tracking-[0.3em] uppercase text-slate-400 leading-none">Analysis Status</span>
-                                        <p className="text-[9px] font-bold text-[#6143f4] uppercase tracking-widest opacity-60">{errorMessage ? 'Processing failed' : activeStage.label}</p>
+                                        <span className="text-[10px] font-black tracking-[0.3em] uppercase text-text-muted leading-none">Analysis Status</span>
+                                        <p className="text-[9px] font-bold text-primary uppercase tracking-widest opacity-60">{errorMessage ? 'Processing failed' : activeStage.label}</p>
                                     </div>
-                                    <span className="text-2xl font-black text-[#6143f4] italic tracking-tighter leading-none">PROCESSING...</span>
+                                    <span className="text-2xl font-black text-primary italic tracking-tighter leading-none">PROCESSING...</span>
                                 </div>
-                                <div className="h-5 w-full bg-slate-100 dark:bg-white/5 rounded-full p-1 border border-slate-200/50 dark:border-white/5 shadow-inner">
-                                    <div className="h-full bg-gradient-to-r from-[#6143f4] to-[#009cde] rounded-full transition-all duration-700" style={{ width: `${progress}%` }} />
+                                <div className="h-5 w-full bg-slate-100 dark:bg-white/5 rounded-full p-1 border border-slate-200/50 dark:border-stroke/50 shadow-inner">
+                                    <div className="h-full bg-gradient-to-r from-primary to-secondary rounded-full transition-all duration-700" style={{ width: `${progress}%` }} />
                                 </div>
                             </div>
                         </div>
@@ -261,16 +260,16 @@ const ReportProcessing = () => {
                                 </div>
                                 <button
                                     onClick={() => navigate(ROUTES.UPLOAD)}
-                                    className="px-5 py-3 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] transition-all"
+                                    className="px-5 py-3 bg-red-600 hover:bg-red-700 text-text-primary rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] transition-all"
                                 >
                                     Try Again
                                 </button>
                             </div>
                         )}
 
-                        <div className="mt-12 inline-flex items-center gap-3 px-6 py-2.5 bg-white/50 dark:bg-white/5 backdrop-blur-3xl rounded-full border border-slate-100 dark:border-white/10 shadow-sm">
+                        <div className="mt-12 inline-flex items-center gap-3 px-6 py-2.5 bg-white/50 dark:bg-white/5 backdrop-blur-3xl rounded-full border border-slate-100 dark:border-stroke shadow-sm">
                             <Lock size={14} className="text-emerald-500" />
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] leading-none">Secure encrypted inference pipeline</p>
+                            <p className="text-[10px] font-black text-text-muted uppercase tracking-[0.25em] leading-none">Secure encrypted inference pipeline</p>
                         </div>
                     </div>
                 </main>
@@ -280,3 +279,4 @@ const ReportProcessing = () => {
 };
 
 export default ReportProcessing;
+

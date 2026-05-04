@@ -71,15 +71,15 @@ const getTestIcon = (testName = '') => {
 };
 
 const priorityStyles = {
-  high: 'bg-red-500 text-white',
-  medium: 'bg-[#009CDE] text-white',
-  low: 'bg-slate-100 dark:bg-slate-800 text-slate-500',
+  high: 'bg-red-500 text-text-primary',
+  medium: 'bg-secondary text-white',
+  low: 'bg-slate-100 dark:bg-card text-slate-500',
 };
 
 const iconStyles = {
   high: 'text-red-500 bg-red-50 dark:bg-red-500/10',
-  medium: 'text-[#009CDE] bg-[#009CDE]/10',
-  low: 'text-[#6143f4] bg-[#6143f4]/10',
+  medium: 'text-secondary bg-secondary/10',
+  low: 'text-primary bg-primary/10',
 };
 
 const normalizePriority = (priority) => {
@@ -584,26 +584,26 @@ const Dashboard = () => {
 
   if (hasAttemptedDashboardLoad && hasDashboardSnapshot && !isFetching && !error && !hasDashboardData) {
     return (
-      <div className="bg-[#f6f5f8] dark:bg-[#131022] font-display text-[#13082A] dark:text-slate-100 min-h-screen flex items-center justify-center antialiased p-8">
-        <div className="w-full max-w-2xl rounded-[2rem] border border-slate-200 bg-white p-8 shadow-xl dark:border-white/5 dark:bg-slate-900">
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#6143f4] mb-3">Dashboard Sync</p>
-          <h1 className="text-3xl font-black tracking-tight text-[#13082A] dark:text-white">
+      <div className="bg-background dark:bg-card font-display text-text-primary dark:text-slate-100 min-h-screen flex items-center justify-center antialiased p-8">
+        <div className="w-full max-w-2xl rounded-[2rem] border border-slate-200 bg-white p-8 shadow-xl dark:border-stroke/50 dark:bg-background">
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-primary mb-3">Dashboard Sync</p>
+          <h1 className="text-3xl font-black tracking-tight text-text-primary dark:text-text-primary">
             No dashboard data yet
           </h1>
-          <p className="mt-4 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+          <p className="mt-4 text-sm leading-relaxed text-slate-500 dark:text-text-muted">
             We did not receive a dashboard bundle for this account. You can retry the fetch or sync your wearable
             data to repopulate the page safely.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <button
               onClick={() => void refreshDashboard({ silent: false })}
-              className="rounded-xl bg-[#6143f4] px-5 py-3 text-xs font-black uppercase tracking-[0.2em] text-white"
+              className="rounded-xl bg-primary px-5 py-3 text-xs font-black uppercase tracking-[0.2em] text-white"
             >
               Retry Fetch
             </button>
             <button
               onClick={handleSync}
-              className="rounded-xl bg-slate-100 px-5 py-3 text-xs font-black uppercase tracking-[0.2em] text-slate-700 dark:bg-white/5 dark:text-slate-300"
+              className="rounded-xl bg-slate-100 px-5 py-3 text-xs font-black uppercase tracking-[0.2em] text-slate-700 dark:bg-white/5 dark:text-text-secondary"
             >
               Sync Data
             </button>
@@ -624,7 +624,7 @@ const Dashboard = () => {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.3 }}
-          className="relative isolate overflow-hidden bg-[#f6f5f8] dark:bg-[#131022] font-display text-[#13082A] dark:text-slate-100 min-h-screen flex antialiased"
+          className="relative isolate overflow-hidden bg-background dark:bg-card font-display text-text-primary dark:text-slate-100 min-h-screen flex antialiased"
         >    
           {showRefreshOverlay ? <SmartLoadingOverlay label="Refreshing dashboard" /> : null}
 
@@ -647,12 +647,12 @@ const Dashboard = () => {
               >
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-2">
                   <div>
-                    <h2 className="text-3xl font-black text-[#13082A] dark:text-white tracking-tight">Overview</h2>
+                    <h2 className="text-3xl font-black text-text-primary dark:text-text-primary tracking-tight">Overview</h2>
                   </div>
                   <button
                     onClick={handleSync}
                     disabled={isSyncing}
-                    className="flex items-center gap-2 bg-[#6143f4] text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-[#6143f4]/20 hover:shadow-xl transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+                    className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:shadow-xl transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
                   >
                     <Plus size={16} strokeWidth={3} className={isSyncing ? 'animate-spin' : ''} />
                     {isSyncing ? 'Syncing...' : 'Sync Data'}
@@ -674,7 +674,7 @@ const Dashboard = () => {
                       </div>
                       <button
                         onClick={() => void refreshDashboard({ silent: true })}
-                        className="bg-red-500 text-white px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-red-600 transition-colors"
+                        className="bg-red-500 text-text-primary px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-red-600 transition-colors"
                       >
                         Retry Now
                       </button>
@@ -683,18 +683,18 @@ const Dashboard = () => {
                 </AnimatePresence>
 
                 <Motion.section variants={itemVariants} className="mt-10 mb-10">
-                  <div className="relative overflow-hidden rounded-[2rem] border border-white/70 bg-white/40 p-6 shadow-[0_18px_58px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.035]">
+                  <div className="relative overflow-hidden rounded-[2rem] border border-white/70 bg-white/40 p-6 shadow-[0_18px_58px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-stroke dark:bg-white/[0.035]">
                     <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white to-transparent dark:via-white/30" />
                     <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
                       <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.26em] text-[#6143f4]">
+                        <p className="text-[10px] font-black uppercase tracking-[0.26em] text-primary">
                           Live Health Metrics
                         </p>
-                        <h3 className="mt-2 text-[22px] font-black tracking-tight text-[#13082A] dark:text-white">
+                        <h3 className="mt-2 text-[22px] font-black tracking-tight text-text-primary dark:text-text-primary">
                           Premium vitals cockpit
                         </h3>
                       </div>
-                      <span className="rounded-full bg-white/75 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 shadow-sm dark:bg-white/10 dark:text-slate-300">
+                      <span className="rounded-full bg-white/75 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 shadow-sm dark:bg-white/10 dark:text-text-secondary">
                         {metricsLoading && !healthMetrics ? 'Syncing' : metricsUpdatedAt}
                       </span>
                     </div>
@@ -715,9 +715,9 @@ const Dashboard = () => {
                 {/* Section 3: Secondary Stats Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-                  <Motion.div variants={itemVariants} className="bg-white dark:bg-slate-900 p-8 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col items-center justify-center text-center relative overflow-hidden group">
+                  <Motion.div variants={itemVariants} className="bg-white dark:bg-background p-8 rounded-xl shadow-sm border border-slate-100 dark:border-stroke flex flex-col items-center justify-center text-center relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                      <BarChart2 size={120} className="text-[#6143f4]" />
+                      <BarChart2 size={120} className="text-primary" />
                     </div>
                     <h3 className="text-slate-500 font-bold text-xs uppercase tracking-[0.2em] mb-8">Health Risk Score</h3>
 
@@ -736,21 +736,21 @@ const Dashboard = () => {
                             dataKey="value"
                             stroke="none"
                           >
-                            <Cell fill="#6143f4" strokeLinecap="round" />
+                            <Cell fill="var(--color-primary)" strokeLinecap="round" />
                             <Cell fill="rgba(0,0,0,0.05)" />
                           </Pie>
                         </PieChart>
                       </ResponsiveContainer>
                       <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-5xl font-black text-[#13082A] dark:text-white leading-none">
+                        <span className="text-5xl font-black text-text-primary dark:text-text-primary leading-none">
                           {Number.isFinite(Number(score)) ? Math.round(Number(score)) : '--'}
                         </span>
-                        <span className="text-slate-400 font-bold text-sm tracking-tight mt-1">{scoreLabel}</span>
+                        <span className="text-text-muted font-bold text-sm tracking-tight mt-1">{scoreLabel}</span>
                       </div>
                     </div>
 
                     <p className="mt-8 text-slate-500 font-medium text-sm">
-                      Metrics sync: <span className="font-bold text-[#6143f4]">{metricsUpdatedAt}</span>
+                      Metrics sync: <span className="font-bold text-primary">{metricsUpdatedAt}</span>
                     </p>
                   </Motion.div>
 
@@ -763,12 +763,12 @@ const Dashboard = () => {
                 <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] gap-8 items-start pb-12">
 
                   {/* Alerts Panel — dynamic from backend */}
-                  <Motion.div variants={itemVariants} className="bg-white dark:bg-slate-900 p-8 rounded-xl shadow-sm border-l-4 border-red-500 border-slate-100 dark:border-slate-800 relative overflow-hidden group">
+                  <Motion.div variants={itemVariants} className="bg-white dark:bg-background p-8 rounded-xl shadow-sm border-l-4 border-red-500 border-slate-100 dark:border-stroke relative overflow-hidden group">
                     <div className="flex items-center justify-between mb-8">
                       <h3 className="text-red-500 font-black text-xs uppercase tracking-[0.3em] flex items-center gap-2">
                         <AlertCircle size={16} fill="currentColor" /> Critical Updates
                       </h3>
-                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-text-muted">
                         {alertsData.length > 0 ? `${alertsData.length} Active Alert${alertsData.length > 1 ? 's' : ''}` : 'No Active Alerts'}
                       </span>
                     </div>
@@ -788,7 +788,7 @@ const Dashboard = () => {
                           style={{ transform: 'translateY(var(--scroll-offset, 0px))' }}
                         >
                           {alertsData.length === 0 ? (
-                            <div className="flex items-center gap-3 text-slate-400 text-sm font-medium py-4">
+                            <div className="flex items-center gap-3 text-text-muted text-sm font-medium py-4">
                               <CheckCircle size={18} className="text-green-400" />
                               All health indicators are within normal range.
                             </div>
@@ -797,13 +797,13 @@ const Dashboard = () => {
                               key={i}
                               className={`alert-fade-up p-5 rounded-xl border flex items-start gap-4 transition-all duration-300 cursor-pointer hover:scale-[1.01] hover:shadow-lg ${alert.severity === 'critical'
                                 ? 'bg-red-50 dark:bg-red-900/10 border-red-100 dark:border-red-500/20 hover:bg-red-50/80 hover:shadow-red-900/10'
-                                : 'bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800 hover:bg-slate-100 hover:shadow-slate-900/10'
+                                : 'bg-slate-50 dark:bg-card/50 border-slate-100 dark:border-stroke hover:bg-slate-100 hover:shadow-slate-900/10'
                                 }`}
                               style={{ animationDelay: `${i * 50}ms` }}
                             >
                               <AlertTriangle className={`mt-0.5 shrink-0 ${alert.severity === 'critical' ? 'text-red-500' : 'text-slate-500'}`} size={20} />
                               <div>
-                                <p className={`text-sm font-bold ${alert.severity === 'critical' ? 'text-red-900 dark:text-red-200' : 'text-[#13082A] dark:text-white'}`}>{alert.title}</p>
+                                <p className={`text-sm font-bold ${alert.severity === 'critical' ? 'text-red-900 dark:text-red-200' : 'text-text-primary dark:text-text-primary'}`}>{alert.title}</p>
                                 <p className={`text-xs mt-1 font-medium leading-relaxed ${alert.severity === 'critical' ? 'text-red-700 dark:text-red-400/80' : 'text-slate-500'}`}>{alert.message}</p>
                                 {alert.action_label && (
                                   <button className="mt-3 text-xs font-bold underline text-red-600 hover:text-red-700 decoration-2">{alert.action_label}</button>
@@ -817,38 +817,38 @@ const Dashboard = () => {
                   </Motion.div>
 
                   {/* Recommended Tests - Matched Stitch */}
-                  <Motion.div variants={itemVariants} className="sticky top-6 self-start bg-white dark:bg-slate-900 p-8 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
+                  <Motion.div variants={itemVariants} className="sticky top-6 self-start bg-white dark:bg-background p-8 rounded-xl shadow-sm border border-slate-100 dark:border-stroke">
                     <h3 className="text-slate-500 font-bold text-xs uppercase tracking-[0.2em] mb-8">Recommended Tests</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {recommendedTests.length === 0 ? (
-                        <div className="md:col-span-2 flex items-center gap-3 rounded-xl border border-dashed border-slate-200 p-4 text-sm font-medium text-slate-400 dark:border-white/10 dark:text-slate-500">
+                        <div className="md:col-span-2 flex items-center gap-3 rounded-xl border border-dashed border-slate-200 p-4 text-sm font-medium text-text-muted dark:border-stroke dark:text-slate-500">
                           <ClipboardList size={18} />
                           Baseline preventive tests will appear after your next dashboard refresh.
                         </div>
                       ) : recommendedTests.map((test, i) => (
-                        <div key={`${test.testName}-${i}`} title={test.reason} className="p-4 border border-slate-100 dark:border-slate-800 rounded-xl hover:border-[#6143f4]/30 transition-all cursor-pointer group hover:shadow-lg hover:shadow-black/5 bg-white dark:bg-slate-900">
+                        <div key={`${test.testName}-${i}`} title={test.reason} className="p-4 border border-slate-100 dark:border-stroke rounded-xl hover:border-primary/30 transition-all cursor-pointer group hover:shadow-lg hover:shadow-black/5 bg-white dark:bg-background">
                           <div className="flex items-center justify-between mb-3">
-                            <div className={`${iconStyles[test.priority]} p-2 rounded-lg transition-transform group-hover:scale-110 shadow-sm border border-white dark:border-slate-800`}>
+                            <div className={`${iconStyles[test.priority]} p-2 rounded-lg transition-transform group-hover:scale-110 shadow-sm border border-white dark:border-stroke`}>
                               <test.Icon size={18} />
                             </div>
                             <div className="flex items-center gap-2">
-                              <Info size={14} className="text-slate-300" aria-label={test.reason} />
+                              <Info size={14} className="text-text-secondary" aria-label={test.reason} />
                               <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full ${priorityStyles[test.priority]}`}>{test.priority}</span>
                             </div>
                           </div>
-                          <p className="text-sm font-bold text-[#13082A] dark:text-white leading-tight truncate">{test.testName}</p>
+                          <p className="text-sm font-bold text-text-primary dark:text-text-primary leading-tight truncate">{test.testName}</p>
                           <p className="text-xs text-slate-500 font-medium mt-1 uppercase tracking-wider">{test.timeline}</p>
                           {test.confidence > 0 ? (
-                            <p className="text-[10px] text-slate-400 font-black mt-3 uppercase tracking-widest">
+                            <p className="text-[10px] text-text-muted font-black mt-3 uppercase tracking-widest">
                               {Math.round(test.confidence * 100)}% confidence
                             </p>
                           ) : null}
                         </div>
                       ))}
                     </div>
-                    <div className="mt-6 rounded-xl border border-slate-100 bg-slate-50/80 p-5 dark:border-slate-800 dark:bg-white/[0.03]">
-                      <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Why this matters</p>
-                      <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-600 dark:text-slate-300">
+                    <div className="mt-6 rounded-xl border border-slate-100 bg-slate-50/80 p-5 dark:border-stroke dark:bg-white/[0.03]">
+                      <p className="text-[10px] font-black uppercase tracking-[0.24em] text-text-muted">Why this matters</p>
+                      <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-600 dark:text-text-secondary">
                         Recommendations stay pinned beside active alerts so priority follow-ups remain visible while you review changing risk signals.
                       </p>
                     </div>
@@ -856,7 +856,7 @@ const Dashboard = () => {
                 </div>
               </Motion.div>
 
-              <footer className="py-8 px-10 text-center text-slate-400 dark:text-slate-600 text-[10px] font-bold uppercase tracking-[0.3em] mt-auto border-t border-slate-100 dark:border-slate-800 bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm relative z-20">
+              <footer className="py-8 px-10 text-center text-text-muted dark:text-slate-600 text-[10px] font-bold uppercase tracking-[0.3em] mt-auto border-t border-slate-100 dark:border-stroke bg-white/40 dark:bg-background/40 backdrop-blur-sm relative z-20">
                 © 2024 ArogyaAI Neural Systems • Clinical Grade Intelligence • HIPAA Certified
               </footer>
             </main>
@@ -874,8 +874,8 @@ const Dashboard = () => {
             __html: `
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #6143f422; border-radius: 20px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #6143f444; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: var(--color-primary)22; border-radius: 20px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--color-primary)44; }
         .alert-fade-up {
           animation: alertFadeUp 420ms ease-out both;
         }
@@ -891,3 +891,4 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
+

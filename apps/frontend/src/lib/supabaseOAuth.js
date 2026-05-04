@@ -1,11 +1,38 @@
-import { useAuthStore } from '../store/authStore'
 import { triggerAuthRevalidation } from './authRevalidator'
 import { syncUser } from './authSync'
 import { getSupabaseClient, supabase } from './supabaseClient'
 
+const OAUTH_CONTEXT_KEY = 'arogyaai-oauth-context'
+
 const getRedirectUrl = () => {
   if (typeof window === 'undefined') return '/auth/callback'
+
+  if (['localhost', '127.0.0.1'].includes(window.location.hostname) && window.location.port === '5173') {
+    return 'http://localhost:5173/auth/callback'
+  }
+
   return `${window.location.origin}/auth/callback`
+}
+
+const getCallbackCode = (href) => {
+  try {
+    return new URL(href).searchParams.get('code')
+  } catch {
+    return null
+  }
+}
+
+export const consumeSupabaseOAuthContext = () => {
+  if (typeof window === 'undefined') return {}
+
+  try {
+    const raw = window.localStorage.getItem(OAUTH_CONTEXT_KEY)
+    window.localStorage.removeItem(OAUTH_CONTEXT_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    window.localStorage.removeItem(OAUTH_CONTEXT_KEY)
+    return {}
+  }
 }
 
 export async function startSupabaseOAuth(provider, options = {}) {
@@ -18,11 +45,12 @@ export async function startSupabaseOAuth(provider, options = {}) {
     ? new URL('http://localhost/auth/callback')
     : new URL(getRedirectUrl())
 
-  if (options.flow) {
-    redirectUrl.searchParams.set('flow', options.flow)
-  }
-  if (options.welcome) {
-    redirectUrl.searchParams.set('welcome', '1')
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(OAUTH_CONTEXT_KEY, JSON.stringify({
+      flow: options.flow ?? null,
+      welcome: !!options.welcome,
+      provider,
+    }))
   }
 
   const { data, error } = await client.auth.signInWithOAuth({
@@ -53,9 +81,9 @@ export async function startSupabaseOAuth(provider, options = {}) {
 /**
  * Complete the Supabase OAuth flow and mirror the Supabase session into app state.
  *
- * @param {object|null} sessionOverride - Pass an already-fetched Supabase session to
- *   avoid a second getSession() call (prevents PKCE race condition). If omitted the
- *   function fetches the session itself.
+ * @param {object|null} sessionOverride - Pass an already-fetched Supabase session
+ *   when the caller has one. If omitted, the callback resolves the stored PKCE
+ *   session and falls back to exchanging the auth code.
  */
 export async function completeSupabaseOAuthSession(sessionOverride = null) {
   const client = getSupabaseClient() ?? supabase
@@ -64,34 +92,35 @@ export async function completeSupabaseOAuthSession(sessionOverride = null) {
   }
   if (typeof window === 'undefined') return null
 
-  const authStore = useAuthStore.getState()
-  const callbackUrl = new URL(window.location.href)
+  const callbackHref = window.location.href
 
   // ── 1. Resolve the active Supabase session ────────────────────────────────
   let session = sessionOverride ?? null
-  const code = callbackUrl.searchParams.get('code')
+  const code = getCallbackCode(callbackHref)
+
+  if (!session) {
+    const sessionResult = await client.auth.getSession()
+    if (sessionResult.error) {
+      console.warn('[Supabase OAuth] getSession failed before callback exchange:', sessionResult.error)
+    }
+    session = sessionResult?.data?.session ?? null
+    console.debug('[Supabase OAuth] getSession completed', {
+      hasSession: Boolean(session?.access_token),
+      hasUser: Boolean(session?.user?.id),
+    })
+  }
 
   if (!session && code) {
     const { data, error } = await client.auth.exchangeCodeForSession(code)
     if (error) throw error
     session = data?.session ?? null
 
+    const sessionResult = await client.auth.getSession()
+    session = sessionResult?.data?.session ?? session
+
     console.debug('[Supabase OAuth] PKCE code exchange completed', {
       hasSession: Boolean(session?.access_token),
     })
-  }
-
-  if (!session) {
-    try {
-      const sessionResult = await client.auth.getSession()
-      session = sessionResult?.data?.session ?? null
-      console.debug('[Supabase OAuth] getSession completed', {
-        hasSession: Boolean(session?.access_token),
-        hasUser: Boolean(session?.user?.id),
-      })
-    } catch (err) {
-      console.warn('[Supabase OAuth] getSession failed, attempting code exchange:', err)
-    }
   }
 
   if (!session?.access_token) {

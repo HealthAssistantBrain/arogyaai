@@ -231,8 +231,8 @@ const Simulate = () => {
   if (loadingBaseline) {
     return (
       <div className="flex flex-col items-center justify-center p-12">
-        <div className="flex flex-col items-center gap-4 text-sm font-semibold tracking-wide text-slate-500 dark:text-white/80">
-          <HeartLoader size={48} color="#6143f4" />
+        <div className="flex flex-col items-center gap-4 text-sm font-semibold tracking-wide text-slate-500 dark:text-text-secondary">
+          <HeartLoader size={48} color="var(--color-primary)" />
           Loading disease simulator...
         </div>
       </div>
@@ -259,7 +259,7 @@ const Simulate = () => {
                   </div>
                   <div>
                     <h2 className="text-base font-bold text-gray-900">Simulation Controls</h2>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400">Scenario Inputs</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">Scenario Inputs</p>
                   </div>
                 </div>
                 <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${isSimulating ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
@@ -302,7 +302,7 @@ const Simulate = () => {
                 <div className="rounded-2xl border border-gray-200 bg-slate-50 p-3 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-sm">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-gray-500">Existing Records</p>
-                    <p className="text-xs font-semibold text-gray-400">{medicalConditions.length || 0} tracked</p>
+                    <p className="text-xs font-semibold text-text-muted">{medicalConditions.length || 0} tracked</p>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {medicalConditions.length > 0 ? (
@@ -312,7 +312,7 @@ const Simulate = () => {
                         </span>
                       ))
                     ) : (
-                      <span className="text-xs italic text-gray-400">No chronic condition saved.</span>
+                      <span className="text-xs italic text-text-muted">No chronic condition saved.</span>
                     )}
                   </div>
                 </div>
@@ -320,7 +320,7 @@ const Simulate = () => {
                 <div className="rounded-2xl border border-gray-200 p-3 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-sm">
                   <div className="flex items-center justify-between border-b border-gray-200 pb-2">
                     <h3 className="text-sm font-bold text-gray-900">{FOCUS_LABELS[focusCondition] || metricLabel(focusCondition)} Inputs</h3>
-                    <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">{activeInputKeys.length} controls</span>
+                    <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-text-muted">{activeInputKeys.length} controls</span>
                   </div>
 
                   <div className="mt-3 grid grid-cols-1 gap-3">
@@ -381,7 +381,7 @@ const Simulate = () => {
                 <button
                   onClick={() => void executeSimulation()}
                   disabled={isSimulating}
-                  className="w-full rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 py-3 text-sm font-bold uppercase tracking-[0.16em] text-white shadow-lg shadow-indigo-900/20 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="w-full rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 py-3 text-sm font-bold uppercase tracking-[0.16em] text-text-primary shadow-lg shadow-indigo-900/20 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isSimulating ? 'Recomputing…' : 'Recalculate'}
                 </button>
@@ -390,7 +390,7 @@ const Simulate = () => {
           </div>
 
           <div className="space-y-4 md:col-span-3 lg:col-span-5">
-            <section className={`relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-600 p-6 text-white shadow-xl shadow-indigo-950/15 ring-1 ring-white/10 transition-all duration-300 hover:scale-[1.01] ${isSimulating ? 'opacity-70 blur-[1px] animate-pulse' : ''}`}>
+            <section className={`relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-600 p-6 text-text-primary shadow-xl shadow-indigo-950/15 ring-1 ring-white/10 transition-all duration-300 hover:scale-[1.01] ${isSimulating ? 'opacity-70 blur-[1px] animate-pulse' : ''}`}>
               <div className="absolute -right-4 -top-4 opacity-10">
                 <Sparkles size={110} />
               </div>
@@ -403,14 +403,14 @@ const Simulate = () => {
                   </div>
                   <div className="rounded-2xl border border-white/15 bg-white/10 px-3 py-2 text-right backdrop-blur-sm">
                     <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-purple-100">Current Profile</p>
-                    <p className="mt-1 text-sm font-semibold text-white/95">
-                      Age <span className="font-bold text-white">{age || '--'}</span> • BMI <span className="font-bold text-white">{userBmi}</span> •{' '}
-                      <span className="font-bold text-white">{user?.weight || '--'}kg</span>
+                    <p className="mt-1 text-sm font-semibold text-text-primary/95">
+                      Age <span className="font-bold text-text-primary">{age || '--'}</span> • BMI <span className="font-bold text-text-primary">{userBmi}</span> •{' '}
+                      <span className="font-bold text-text-primary">{user?.weight || '--'}kg</span>
                     </p>
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm sm:flex-row sm:items-end sm:justify-between">
+                <div className="flex flex-col gap-4 rounded-2xl border border-stroke bg-white/10 p-4 backdrop-blur-sm sm:flex-row sm:items-end sm:justify-between">
                   <div>
                     <div className="font-number text-5xl font-bold leading-none tabular-nums">{Math.round(animatedProgress)}%</div>
                     <p className="mt-2 text-sm opacity-80">
@@ -420,7 +420,7 @@ const Simulate = () => {
                   <div className="w-full max-w-sm space-y-2">
                     <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[0.14em] text-purple-100">
                       <span>Low-risk progress</span>
-                      <span className="font-number text-white tabular-nums">{Math.round(animatedProgress)}%</span>
+                      <span className="font-number text-text-primary tabular-nums">{Math.round(animatedProgress)}%</span>
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-white/20">
                       <div className="h-full rounded-full bg-white transition-all duration-700" style={{ width: `${animatedProgress}%` }} />
@@ -428,14 +428,14 @@ const Simulate = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 border-t border-white/10 pt-4">
+                <div className="grid grid-cols-2 gap-4 border-t border-stroke pt-4">
                   <div className="rounded-xl bg-white/10 p-3 backdrop-blur-sm">
                     <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-purple-100">Likelihood</p>
-                    <p className="mt-1 text-base font-bold text-white">{result?.normalization?.likelihood || '--'}</p>
+                    <p className="mt-1 text-base font-bold text-text-primary">{result?.normalization?.likelihood || '--'}</p>
                   </div>
                   <div className="rounded-xl bg-white/10 p-3 backdrop-blur-sm">
                     <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-purple-100">Reduction</p>
-                    <p className="mt-1 text-base font-bold text-white">
+                    <p className="mt-1 text-base font-bold text-text-primary">
                       {Number.isFinite(Number(result?.normalization?.risk_reduction_points))
                         ? `${Number(result.normalization.risk_reduction_points).toFixed(1)} pts`
                         : '--'}
@@ -443,10 +443,10 @@ const Simulate = () => {
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-white/10 bg-black/10 p-4">
+                <div className="rounded-2xl border border-stroke bg-black/10 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-purple-100">Simulation Outcome</p>
-                    <span className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-white/90">
+                    <span className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-text-primary/90">
                       {conciseClinicalCopy(result?.outcome?.headline, 'Outcome pending')}
                     </span>
                   </div>
@@ -465,7 +465,7 @@ const Simulate = () => {
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-gray-900">Risk Comparison</h3>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400">Baseline vs Simulated</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">Baseline vs Simulated</p>
                   </div>
                 </div>
               </div>
@@ -484,7 +484,7 @@ const Simulate = () => {
                       <div className="mt-3 grid gap-3 sm:grid-cols-2">
                         <div className="space-y-2">
                           <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[0.12em]">
-                            <span className="text-gray-400">Current Risk</span>
+                            <span className="text-text-muted">Current Risk</span>
                             <span className="text-gray-600">{risk.current_risk}%</span>
                           </div>
                           <div className="h-2 overflow-hidden rounded-full bg-gray-200">
@@ -518,9 +518,9 @@ const Simulate = () => {
 
           <div className="md:col-span-6 lg:col-span-3">
             <section className="sticky top-6 h-fit">
-              <div className="max-h-[80vh] overflow-y-auto rounded-2xl bg-gray-900 p-4 text-white shadow-xl transition-all duration-300 hover:-translate-y-0.5 hover:shadow-2xl">
-                <div className="flex items-center gap-3 border-b border-gray-700 pb-3">
-                  <div className="flex size-10 items-center justify-center rounded-2xl bg-gray-800 text-indigo-300">
+              <div className="max-h-[80vh] overflow-y-auto rounded-2xl bg-background p-4 text-text-primary shadow-xl transition-all duration-300 hover:-translate-y-0.5 hover:shadow-2xl">
+                <div className="flex items-center gap-3 border-b border-stroke pb-3">
+                  <div className="flex size-10 items-center justify-center rounded-2xl bg-card text-indigo-300">
                     <Brain size={18} />
                   </div>
                   <div>
@@ -530,25 +530,25 @@ const Simulate = () => {
                 </div>
 
                 <div className="mt-4 space-y-4">
-                  <div className="rounded-xl bg-gray-800 p-3 transition-all duration-300 hover:-translate-y-0.5">
+                  <div className="rounded-xl bg-card p-3 transition-all duration-300 hover:-translate-y-0.5">
                     <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-indigo-300">
                       {conciseClinicalCopy(result?.outcome?.headline, 'Outcome pending')}
                     </p>
-                    <p className="mt-2 text-sm leading-relaxed text-gray-200">
+                    <p className="mt-2 text-sm leading-relaxed text-text-primary">
                       {conciseClinicalCopy(result?.summary, 'Clinical scenario summary will appear here.')}
                     </p>
                   </div>
 
-                  <div className="space-y-2 border-t border-gray-700 pt-3">
+                  <div className="space-y-2 border-t border-stroke pt-3">
                     <h4 className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-500">Key Drivers</h4>
                     {keyDrivers.length > 0 ? (
                       keyDrivers.map((driver) => (
-                        <div key={`${driver.feature_name}-${driver.source || 'driver'}`} className="rounded-xl bg-gray-800 p-3 text-xs text-gray-300 transition-all duration-300 hover:-translate-y-0.5">
+                        <div key={`${driver.feature_name}-${driver.source || 'driver'}`} className="rounded-xl bg-card p-3 text-xs text-text-secondary transition-all duration-300 hover:-translate-y-0.5">
                           <div className="flex items-start gap-2.5">
                             <Info size={14} className="mt-0.5 shrink-0 text-sky-400" />
                             <div>
-                              <p className="font-bold text-white">{driver.title || metricLabel(driver.feature_name)}</p>
-                              <p className="mt-1 leading-relaxed text-gray-300">
+                              <p className="font-bold text-text-primary">{driver.title || metricLabel(driver.feature_name)}</p>
+                              <p className="mt-1 leading-relaxed text-text-secondary">
                                 {conciseClinicalCopy(driver.description, 'Contributes to the simulated risk.')}
                               </p>
                             </div>
@@ -556,74 +556,74 @@ const Simulate = () => {
                         </div>
                       ))
                     ) : (
-                      <div className="rounded-xl bg-gray-800 p-3 text-xs italic text-gray-500">No key drivers were returned by the simulator.</div>
+                      <div className="rounded-xl bg-card p-3 text-xs italic text-gray-500">No key drivers were returned by the simulator.</div>
                     )}
                   </div>
 
-                  <div className="space-y-2 border-t border-gray-700 pt-3">
+                  <div className="space-y-2 border-t border-stroke pt-3">
                     <h4 className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-500">Possible Diseases</h4>
                     {possibleConditions.length > 0 ? (
                       possibleConditions.map((condition) => (
-                        <div key={condition} className="rounded-xl bg-gray-800 p-3 text-sm font-semibold text-amber-100 transition-all duration-300 hover:-translate-y-0.5">
+                        <div key={condition} className="rounded-xl bg-card p-3 text-sm font-semibold text-amber-100 transition-all duration-300 hover:-translate-y-0.5">
                           {condition}
                         </div>
                       ))
                     ) : (
-                      <div className="rounded-xl bg-gray-800 p-3 text-xs italic text-gray-500">No condition signals detected.</div>
+                      <div className="rounded-xl bg-card p-3 text-xs italic text-gray-500">No condition signals detected.</div>
                     )}
                   </div>
 
-                  <div className="space-y-2 border-t border-gray-700 pt-3">
+                  <div className="space-y-2 border-t border-stroke pt-3">
                     <h4 className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-500">Symptoms</h4>
                     {symptoms.length > 0 ? (
                       symptoms.map((symptom) => (
-                        <div key={symptom} className="rounded-xl bg-gray-800 p-3 text-sm font-semibold text-sky-100 transition-all duration-300 hover:-translate-y-0.5">
+                        <div key={symptom} className="rounded-xl bg-card p-3 text-sm font-semibold text-sky-100 transition-all duration-300 hover:-translate-y-0.5">
                           {symptom}
                         </div>
                       ))
                     ) : (
-                      <div className="rounded-xl bg-gray-800 p-3 text-xs italic text-gray-500">No symptom signal detected.</div>
+                      <div className="rounded-xl bg-card p-3 text-xs italic text-gray-500">No symptom signal detected.</div>
                     )}
                   </div>
 
-                  <div className="space-y-2 border-t border-gray-700 pt-3">
+                  <div className="space-y-2 border-t border-stroke pt-3">
                     <h4 className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-500">Recommendations</h4>
                     {recommendations.length > 0 ? (
                       recommendations.map((recommendation) => (
-                        <div key={`${recommendation.feature}-${recommendation.title}`} className="rounded-xl bg-gray-800 p-3 text-xs text-gray-200 transition-all duration-300 hover:-translate-y-0.5">
+                        <div key={`${recommendation.feature}-${recommendation.title}`} className="rounded-xl bg-card p-3 text-xs text-text-primary transition-all duration-300 hover:-translate-y-0.5">
                           <div className="flex items-start gap-2.5">
                             <TrendingUp size={14} className="mt-0.5 shrink-0 text-emerald-400" />
                             <div>
-                              <p className="font-bold text-white">{recommendation.title}</p>
-                              <p className="mt-1 leading-relaxed text-gray-300">{conciseClinicalCopy(recommendation.description, 'Clinical action recommended.')}</p>
+                              <p className="font-bold text-text-primary">{recommendation.title}</p>
+                              <p className="mt-1 leading-relaxed text-text-secondary">{conciseClinicalCopy(recommendation.description, 'Clinical action recommended.')}</p>
                             </div>
                           </div>
                         </div>
                       ))
                     ) : (
-                      <div className="rounded-xl bg-gray-800 p-3 text-xs italic text-gray-500">No recommendations returned.</div>
+                      <div className="rounded-xl bg-card p-3 text-xs italic text-gray-500">No recommendations returned.</div>
                     )}
                   </div>
 
-                  <div className="space-y-2 border-t border-gray-700 pt-3">
-                    <div className="rounded-xl bg-gray-800 p-3 transition-all duration-300 hover:-translate-y-0.5">
+                  <div className="space-y-2 border-t border-stroke pt-3">
+                    <div className="rounded-xl bg-card p-3 transition-all duration-300 hover:-translate-y-0.5">
                       <div className="flex items-center gap-2.5">
                         <Stethoscope size={16} className="text-indigo-300" />
-                        <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-300">
+                        <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-text-secondary">
                           {simulationResponse?.source === 'hybrid_ml_plus_rules' ? 'Hybrid ML + Rule Engine' : 'Deterministic Rule Engine'}
                         </span>
                       </div>
-                      <p className="mt-2 text-[11px] leading-relaxed text-gray-400">
+                      <p className="mt-2 text-[11px] leading-relaxed text-text-muted">
                         {conciseClinicalCopy(result?.outcome?.summary, 'Based on the latest scenario analysis.')}
                       </p>
                     </div>
 
-                    <div className="rounded-xl bg-gray-800 p-3 transition-all duration-300 hover:-translate-y-0.5">
+                    <div className="rounded-xl bg-card p-3 transition-all duration-300 hover:-translate-y-0.5">
                       <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-500">Engine Assumptions</p>
                       <div className="mt-2 space-y-2">
                         {assumptions.length > 0 ? (
                           assumptions.map((item) => (
-                            <div key={item} className="flex items-start gap-2 text-[11px] text-gray-400">
+                            <div key={item} className="flex items-start gap-2 text-[11px] text-text-muted">
                               <div className="mt-1 size-1.5 shrink-0 rounded-full bg-indigo-400" />
                               <span>{item}</span>
                             </div>
@@ -645,3 +645,4 @@ const Simulate = () => {
 };
 
 export default Simulate;
+

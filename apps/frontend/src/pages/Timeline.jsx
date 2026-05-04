@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import {
   Activity,
   AlertCircle,
@@ -16,23 +17,19 @@ import {
 
 import MedicalHistoryPanel from '../components/timeline/MedicalHistoryPanel';
 import { useFetchLock } from '../hooks/useFetchLock';
-import { getApiUrl } from '../lib/apiBaseUrl';
-import { safeFetch } from '../lib/safeApi';
+import api from '../lib/axios';
+import { ROUTES } from '../router/routes';
 import { useAuthStore } from '../store/authStore';
 import { safeArray, safeText } from '../utils/safeData';
 
-const API_BASE_URL = getApiUrl(
-  import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
-);
-
 const TIMELINE_CARD_CLASS =
-  'rounded-xl border border-gray-200 bg-white/80 p-5 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-950/35';
+  'rounded-xl border border-gray-200 bg-white/80 p-5 shadow-sm backdrop-blur dark:border-stroke dark:bg-background/35';
 
 const TIMELINE_CONTAINER_CLASS =
-  'rounded-xl border border-gray-200 bg-white/80 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-[#110d21]/80';
+  'rounded-xl border border-gray-200 bg-white/80 shadow-sm backdrop-blur dark:border-stroke dark:bg-[#110d21]/80';
 
 const TIMELINE_YEAR_CLASS =
-  'shrink-0 snap-center rounded-xl border border-gray-200 bg-white/80 p-5 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-950/35';
+  'shrink-0 snap-center rounded-xl border border-gray-200 bg-white/80 p-5 shadow-sm backdrop-blur dark:border-stroke dark:bg-background/35';
 
 const MotionDiv = motion.div;
 
@@ -86,7 +83,7 @@ const getSeverityTone = (value) => {
   const normalized = safeText(value).toLowerCase();
 
   if (!normalized) {
-    return 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300';
+    return 'border-slate-200 bg-slate-50 text-slate-600 dark:border-stroke dark:bg-background/60 dark:text-text-secondary';
   }
   if (
     normalized.includes('critical') ||
@@ -109,41 +106,66 @@ const getSeverityTone = (value) => {
   return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300';
 };
 
+const getTimelineKind = (event) => {
+  const type = safeText(event?.type).toLowerCase();
+  const category = safeText(event?.category).toLowerCase();
+
+  if (type === 'report' || type === 'reports' || category === 'report') return 'report';
+  if (type === 'alerts' || type === 'alert') return 'alert';
+  if (type === 'tests' || type === 'test') return 'test';
+  if (type === 'clinical history' || type === 'symptom' || category === 'symptom') return 'symptom';
+  if (type === 'device') return 'device';
+  if (type === 'vitals') return 'vitals';
+  return type || category || 'event';
+};
+
+const getDisplayType = (event) => {
+  const kind = getTimelineKind(event);
+  if (kind === 'report') return 'Report';
+  if (kind === 'alert') return 'Alerts';
+  if (kind === 'test') return 'Tests';
+  if (kind === 'symptom') return safeText(event?.type) || 'Clinical History';
+  if (kind === 'vitals') return 'Vitals';
+  if (kind === 'device') return 'Device';
+  return safeText(event?.type) || 'Event';
+};
+
 const decorateTimelineEvent = (event) => {
   let icon = Activity;
-  let iconColor = 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300';
+  let iconColor = 'bg-slate-100 text-slate-500 dark:bg-card dark:text-text-secondary';
   let dotColor = 'bg-slate-400';
+  const kind = getTimelineKind(event);
 
-  switch (event.type) {
-    case 'Alerts':
+  switch (kind) {
+    case 'alert':
       icon = AlertCircle;
       iconColor = 'bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-300';
       dotColor = 'bg-red-500';
       break;
-    case 'Tests':
+    case 'test':
       icon = Stethoscope;
-      iconColor = 'bg-[#6143f4]/10 text-[#6143f4] dark:bg-[#6143f4]/15 dark:text-[#c1b6ff]';
-      dotColor = 'bg-[#6143f4]';
+      iconColor = 'bg-primary/10 text-primary dark:bg-primary/15 dark:text-[#c1b6ff]';
+      dotColor = 'bg-primary';
       break;
-    case 'Reports':
+    case 'report':
       icon = FileText;
       iconColor = 'bg-amber-100 text-amber-600 dark:bg-amber-500/10 dark:text-amber-300';
       dotColor = 'bg-amber-500';
       break;
-    case 'Clinical History':
+    case 'symptom':
       icon = ClipboardPlus;
-      iconColor = 'bg-[#009cde]/10 text-[#009cde] dark:bg-[#009cde]/15 dark:text-[#8ad6ff]';
-      dotColor = 'bg-[#009cde]';
+      iconColor = 'bg-secondary/10 text-secondary dark:bg-secondary/15 dark:text-[#8ad6ff]';
+      dotColor = 'bg-secondary';
       break;
-    case 'Device':
+    case 'device':
       icon = Watch;
-      iconColor = 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300';
+      iconColor = 'bg-slate-100 text-slate-500 dark:bg-card dark:text-text-secondary';
       dotColor = 'bg-slate-400';
       break;
-    case 'Vitals':
+    case 'vitals':
       icon = Activity;
-      iconColor = 'bg-[#009cde]/10 text-[#009cde] dark:bg-[#009cde]/15 dark:text-[#8ad6ff]';
-      dotColor = 'bg-[#009cde]';
+      iconColor = 'bg-secondary/10 text-secondary dark:bg-secondary/15 dark:text-[#8ad6ff]';
+      dotColor = 'bg-secondary';
       break;
     default:
       break;
@@ -161,6 +183,8 @@ const decorateTimelineEvent = (event) => {
     icon,
     iconColor,
     dotColor,
+    kind,
+    displayType: getDisplayType(event),
     event_date: eventDateValue,
     date: formatEventDate(eventDateValue, 'full'),
     compactDate: formatEventDate(eventDateValue, 'compact'),
@@ -170,7 +194,47 @@ const decorateTimelineEvent = (event) => {
   };
 };
 
-function TimelineDetailCard({ event }) {
+function ReportTimelineCard({ event, onOpenReport }) {
+  const metadata = event.metadata || {};
+  const filename =
+    metadata.filename ||
+    metadata.original_filename ||
+    safeArray(event.metrics).find((metric) => safeText(metric?.label).toLowerCase() === 'file name')?.value ||
+    event.title ||
+    'Medical report';
+
+  return (
+    <div className="rounded-[1.6rem] border border-amber-200/70 bg-amber-50/75 p-5 dark:border-amber-500/20 dark:bg-amber-500/10">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-4">
+          <div className="flex size-12 shrink-0 items-center justify-center rounded-[1.1rem] bg-white text-amber-600 shadow-inner dark:bg-background/50 dark:text-amber-300">
+            <FileText size={22} />
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-amber-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-amber-700 dark:border-amber-500/20 dark:bg-background/40 dark:text-amber-200">
+                Report
+              </span>
+              <span className="text-xs font-bold text-amber-700/80 dark:text-amber-200/80">{event.date}</span>
+            </div>
+            <p className="mt-2 truncate text-sm font-black text-slate-950 dark:text-text-primary">{filename}</p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onOpenReport(event)}
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-background px-4 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-text-primary transition hover:bg-card dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
+        >
+          <FileText size={14} />
+          Open Summary
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TimelineDetailCard({ event, onOpenReport }) {
   if (!event) return null;
 
   const possibleConditions = safeArray(event.possible_conditions);
@@ -179,13 +243,14 @@ function TimelineDetailCard({ event }) {
   const labData = safeArray(event.labData);
   const summaryLines = safeArray(event.metadata?.summary);
   const detailTone = getSeverityTone(event.severity);
+  const isReport = event.kind === 'report';
 
   return (
     <MotionDiv
       initial={{ opacity: 0, y: 22, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 18, scale: 0.98 }}
-      className="mt-8 rounded-[2rem] border border-slate-200/80 bg-white/95 p-6 shadow-[0_28px_80px_-42px_rgba(15,23,42,0.35)] backdrop-blur dark:border-slate-800 dark:bg-[#120d24]/92"
+      className="mt-8 rounded-[2rem] border border-slate-200/80 bg-white/95 p-6 shadow-[0_28px_80px_-42px_rgba(15,23,42,0.35)] backdrop-blur dark:border-stroke dark:bg-[#120d24]/92"
     >
       <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
         <div className="flex items-start gap-4">
@@ -195,8 +260,8 @@ function TimelineDetailCard({ event }) {
 
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] text-slate-500 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
-                {event.type}
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] text-slate-500 dark:border-stroke dark:bg-background/60 dark:text-text-secondary">
+                {event.displayType}
               </span>
               {event.severity ? (
                 <span className={`rounded-full border px-3 py-1 text-xs font-bold ${detailTone}`}>
@@ -205,8 +270,8 @@ function TimelineDetailCard({ event }) {
               ) : null}
             </div>
 
-            <h3 className="mt-4 text-2xl font-black tracking-tight text-slate-950 dark:text-white">{event.title}</h3>
-            <p className="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
+            <h3 className="mt-4 text-2xl font-black tracking-tight text-slate-950 dark:text-text-primary">{event.title}</h3>
+            <p className="mt-2 text-sm font-medium text-slate-500 dark:text-text-muted">
               {event.date}
               <span className="mx-2">•</span>
               {event.source}
@@ -214,47 +279,49 @@ function TimelineDetailCard({ event }) {
           </div>
         </div>
 
-        <div className="rounded-[1.4rem] border border-[#6143f4]/10 bg-[linear-gradient(180deg,rgba(97,67,244,0.08),rgba(0,156,222,0.06))] px-4 py-3 dark:border-[#6143f4]/20 dark:bg-[linear-gradient(180deg,rgba(97,67,244,0.12),rgba(15,23,42,0.12))]">
-          <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#6143f4]">Selected Event</p>
-          <p className="mt-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
-            {event.type === 'Reports' ? 'Historical report review' : 'Clinical timeline detail'}
+        <div className="rounded-[1.4rem] border border-primary/10 bg-[linear-gradient(180deg,rgba(97,67,244,0.08),rgba(0,156,222,0.06))] px-4 py-3 dark:border-primary/20 dark:bg-[linear-gradient(180deg,rgba(97,67,244,0.12),rgba(15,23,42,0.12))]">
+          <p className="text-[11px] font-black uppercase tracking-[0.24em] text-primary">Selected Event</p>
+          <p className="mt-2 text-sm font-semibold text-slate-700 dark:text-text-primary">
+            {isReport ? 'Historical report review' : 'Clinical timeline detail'}
           </p>
         </div>
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
         <div className="space-y-5">
-          <div className="rounded-[1.6rem] border border-slate-200/80 bg-slate-50/80 p-5 dark:border-slate-800 dark:bg-slate-900/45">
-            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Event Summary</p>
-            <p className="mt-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300">{event.description}</p>
+          {isReport ? <ReportTimelineCard event={event} onOpenReport={onOpenReport} /> : null}
+
+          <div className="rounded-[1.6rem] border border-slate-200/80 bg-slate-50/80 p-5 dark:border-stroke dark:bg-background/45">
+            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-text-muted">Event Summary</p>
+            <p className="mt-3 text-sm leading-relaxed text-slate-600 dark:text-text-secondary">{event.description}</p>
           </div>
 
           {event.insights ? (
-            <div className="rounded-[1.6rem] border border-[#6143f4]/10 bg-[#6143f4]/5 p-5 dark:border-[#6143f4]/20 dark:bg-[#6143f4]/10">
-              <div className="flex items-center gap-2 text-[#6143f4]">
+            <div className="rounded-[1.6rem] border border-primary/10 bg-primary/5 p-5 dark:border-primary/20 dark:bg-primary/10">
+              <div className="flex items-center gap-2 text-primary">
                 <Sparkles size={15} />
                 <p className="text-[11px] font-black uppercase tracking-[0.24em]">AI Summary</p>
               </div>
-              <p className="mt-3 text-sm leading-relaxed text-slate-700 dark:text-slate-200">{event.insights}</p>
+              <p className="mt-3 text-sm leading-relaxed text-slate-700 dark:text-text-primary">{event.insights}</p>
             </div>
           ) : summaryLines.length > 1 ? (
-            <div className="rounded-[1.6rem] border border-[#6143f4]/10 bg-[#6143f4]/5 p-5 dark:border-[#6143f4]/20 dark:bg-[#6143f4]/10">
-              <div className="flex items-center gap-2 text-[#6143f4]">
+            <div className="rounded-[1.6rem] border border-primary/10 bg-primary/5 p-5 dark:border-primary/20 dark:bg-primary/10">
+              <div className="flex items-center gap-2 text-primary">
                 <Sparkles size={15} />
                 <p className="text-[11px] font-black uppercase tracking-[0.24em]">AI Summary</p>
               </div>
-              <p className="mt-3 text-sm leading-relaxed text-slate-700 dark:text-slate-200">{summaryLines[1]}</p>
+              <p className="mt-3 text-sm leading-relaxed text-slate-700 dark:text-text-primary">{summaryLines[1]}</p>
             </div>
           ) : null}
 
           {possibleConditions.length > 0 ? (
-            <div className="rounded-[1.6rem] border border-slate-200/80 bg-white/80 p-5 dark:border-slate-800 dark:bg-slate-950/30">
-              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Possible Conditions</p>
+            <div className="rounded-[1.6rem] border border-slate-200/80 bg-white/80 p-5 dark:border-stroke dark:bg-background/30">
+              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-text-muted">Possible Conditions</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {possibleConditions.map((condition) => (
                   <span
                     key={`${event.id}:${condition}`}
-                    className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold text-slate-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200"
+                    className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold text-slate-600 dark:border-stroke dark:bg-background/60 dark:text-text-primary"
                   >
                     {condition}
                   </span>
@@ -264,13 +331,13 @@ function TimelineDetailCard({ event }) {
           ) : null}
 
           {recommendations.length > 0 ? (
-            <div className="rounded-[1.6rem] border border-slate-200/80 bg-white/80 p-5 dark:border-slate-800 dark:bg-slate-950/30">
-              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Recommended Next Steps</p>
+            <div className="rounded-[1.6rem] border border-slate-200/80 bg-white/80 p-5 dark:border-stroke dark:bg-background/30">
+              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-text-muted">Recommended Next Steps</p>
               <div className="mt-3 space-y-3">
                 {recommendations.map((recommendation) => (
                   <div
                     key={`${event.id}:${recommendation}`}
-                    className="rounded-[1.1rem] border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm leading-relaxed text-slate-600 dark:border-slate-700 dark:bg-slate-900/55 dark:text-slate-200"
+                    className="rounded-[1.1rem] border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm leading-relaxed text-slate-600 dark:border-stroke dark:bg-background/55 dark:text-text-primary"
                   >
                     {recommendation}
                   </div>
@@ -282,16 +349,16 @@ function TimelineDetailCard({ event }) {
 
         <div className="space-y-5">
           {metrics.length > 0 ? (
-            <div className="rounded-[1.6rem] border border-slate-200/80 bg-white/85 p-5 dark:border-slate-800 dark:bg-slate-950/35">
-              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Event Details</p>
+            <div className="rounded-[1.6rem] border border-slate-200/80 bg-white/85 p-5 dark:border-stroke dark:bg-background/35">
+              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-text-muted">Event Details</p>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 {metrics.map((metric) => (
                   <div
                     key={`${event.id}:${metric.label}`}
-                    className="rounded-[1.1rem] border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-900/60"
+                    className="rounded-[1.1rem] border border-slate-200 bg-slate-50/80 p-3 dark:border-stroke dark:bg-background/60"
                   >
-                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">{metric.label}</p>
-                    <p className={`mt-2 text-sm font-bold ${metric.color || 'text-slate-900 dark:text-white'}`}>
+                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-text-muted">{metric.label}</p>
+                    <p className={`mt-2 text-sm font-bold ${metric.color || 'text-slate-900 dark:text-text-primary'}`}>
                       {metric.value}
                     </p>
                   </div>
@@ -301,28 +368,28 @@ function TimelineDetailCard({ event }) {
           ) : null}
 
           {labData.length > 0 ? (
-            <div className="rounded-[1.6rem] border border-slate-200/80 bg-white/85 p-5 dark:border-slate-800 dark:bg-slate-950/35">
-              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Measurements</p>
+            <div className="rounded-[1.6rem] border border-slate-200/80 bg-white/85 p-5 dark:border-stroke dark:bg-background/35">
+              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-text-muted">Measurements</p>
               <div className="mt-4 grid gap-3">
                 {labData.map((lab) => (
                   <div
                     key={`${event.id}:${lab.label}`}
-                    className="rounded-[1.1rem] border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/60"
+                    className="rounded-[1.1rem] border border-slate-200 bg-slate-50/80 p-4 dark:border-stroke dark:bg-background/60"
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">{lab.label}</p>
-                        <p className={`mt-2 text-sm font-bold ${lab.valueColor || 'text-slate-900 dark:text-white'}`}>
+                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-text-muted">{lab.label}</p>
+                        <p className={`mt-2 text-sm font-bold ${lab.valueColor || 'text-slate-900 dark:text-text-primary'}`}>
                           {lab.value}
                         </p>
                       </div>
                     </div>
-                    <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                    <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-card">
                       <MotionDiv
                         initial={{ width: 0 }}
                         animate={{ width: `${lab.progress ?? 50}%` }}
                         transition={{ duration: 0.9, ease: 'easeOut' }}
-                        className={`${lab.color || 'bg-[#6143f4]'} h-full rounded-full`}
+                        className={`${lab.color || 'bg-primary'} h-full rounded-full`}
                       />
                     </div>
                   </div>
@@ -337,6 +404,7 @@ function TimelineDetailCard({ event }) {
 }
 
 const Timeline = () => {
+  const navigate = useNavigate();
   const profileLoading = useAuthStore((state) => state.profileLoading);
   const [activeFilter, setActiveFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
@@ -358,18 +426,23 @@ const Timeline = () => {
       setLoading(false);
       return;
     }
-    if (!acquireLock('timeline_fetch')) return;
+    if (!acquireLock('timeline_fetch')) {
+      console.debug('[Timeline] fetch skipped because an existing request is active');
+      setLoading(false);
+      return;
+    }
 
     try {
       setLoading(true);
-      const json = await safeFetch(`${API_BASE_URL}/health/timeline`, {
-        headers: { Authorization: `Bearer ${currentToken}` },
-      });
+      console.debug('[Timeline] requesting /health/timeline');
+      const response = await api.get('/health/timeline');
+      const json = response.data;
 
       const mappedEvents = safeArray(json?.data ?? json).map(decorateTimelineEvent);
       setTimelineEvents(mappedEvents);
       setSelectedEventId(mappedEvents.length > 0 ? mappedEvents[mappedEvents.length - 1].id : null);
       setError(null);
+      console.debug('[Timeline] loaded', { count: mappedEvents.length });
     } catch (fetchError) {
       console.error('fetch timeline error:', fetchError);
       setError(fetchError?.message || 'Unable to load timeline.');
@@ -412,13 +485,13 @@ const Timeline = () => {
 
     if (activeFilter !== 'All') {
       if (activeFilter === 'Reports') {
-        matchesFilter = event.type === 'Reports' || event.category === 'report';
+        matchesFilter = event.kind === 'report';
       } else if (activeFilter === 'Tests') {
-        matchesFilter = event.type === 'Tests' || event.category === 'hematology';
+        matchesFilter = event.kind === 'test' || event.category === 'hematology';
       } else if (activeFilter === 'Alerts') {
-        matchesFilter = event.type === 'Alerts';
+        matchesFilter = event.kind === 'alert';
       } else if (activeFilter === 'Symptoms') {
-        matchesFilter = event.category === 'symptom' || event.type === 'Clinical History' || event.type === 'Symptom';
+        matchesFilter = event.kind === 'symptom';
       } else {
         matchesFilter = false;
       }
@@ -430,6 +503,7 @@ const Timeline = () => {
     const query = searchQuery.toLowerCase();
     return [
       event.type,
+      event.displayType,
       event.title,
       event.name,
       event.category,
@@ -493,6 +567,16 @@ const Timeline = () => {
     });
   };
 
+  const handleOpenReport = (event) => {
+    const reportId = event?.metadata?.report_id || event?.reference_id || null;
+    navigate(ROUTES.MEDICAL_REPORTS, {
+      state: {
+        refreshReports: true,
+        reportId,
+      },
+    });
+  };
+
   useLayoutEffect(() => {
     if (viewMode !== 'timeline') return;
 
@@ -505,9 +589,9 @@ const Timeline = () => {
 
   if (profileLoading || loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f6f5f8] text-sm font-bold text-slate-500 dark:bg-[#131022]">
+      <div className="flex min-h-screen items-center justify-center bg-background text-sm font-bold text-slate-500 dark:bg-card">
         <MotionDiv animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}>
-          <Activity className="mx-auto mb-4 size-8 text-[#6143f4]" />
+          <Activity className="mx-auto mb-4 size-8 text-primary" />
         </MotionDiv>
         <span className="ml-3">Loading Timeline...</span>
       </div>
@@ -515,28 +599,28 @@ const Timeline = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#f6f5f8_0%,#eef4fb_100%)] font-display text-[#13082a] antialiased dark:bg-[linear-gradient(180deg,#131022_0%,#090612_100%)] dark:text-slate-100">
+    <div className="min-h-screen bg-[linear-gradient(180deg,#f6f5f8_0%,#eef4fb_100%)] font-display text-text-primary antialiased dark:bg-[linear-gradient(180deg,#131022_0%,#090612_100%)] dark:text-slate-100">
       <main className="mx-auto max-w-[1480px] p-5 sm:p-8">
-        <section className="overflow-hidden rounded-[2.25rem] border border-slate-200/80 bg-white/80 shadow-[0_28px_90px_-44px_rgba(15,23,42,0.4)] backdrop-blur dark:border-slate-800 dark:bg-[#110d21]/88">
-          <div className="border-b border-slate-200/80 bg-[radial-gradient(circle_at_top_left,rgba(97,67,244,0.12),transparent_45%),radial-gradient(circle_at_top_right,rgba(0,156,222,0.12),transparent_38%)] px-6 py-7 dark:border-slate-800">
+        <section className="overflow-hidden rounded-[2.25rem] border border-slate-200/80 bg-white/80 shadow-[0_28px_90px_-44px_rgba(15,23,42,0.4)] backdrop-blur dark:border-stroke dark:bg-[#110d21]/88">
+          <div className="border-b border-slate-200/80 bg-[radial-gradient(circle_at_top_left,rgba(97,67,244,0.12),transparent_45%),radial-gradient(circle_at_top_right,rgba(0,156,222,0.12),transparent_38%)] px-6 py-7 dark:border-stroke">
             <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
               <div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-[#6143f4]/10 bg-[#6143f4]/5 px-3 py-1 text-[10px] font-black uppercase tracking-[0.28em] text-[#6143f4]">
+                <div className="inline-flex items-center gap-2 rounded-full border border-primary/10 bg-primary/5 px-3 py-1 text-[10px] font-black uppercase tracking-[0.28em] text-primary">
                   <Sparkles size={12} />
                   Longitudinal Record
                 </div>
-                <h1 className="mt-4 text-4xl font-black tracking-tight text-slate-950 dark:text-white">Health Timeline</h1>
-                <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                <h1 className="mt-4 text-4xl font-black tracking-tight text-slate-950 dark:text-text-primary">Health Timeline</h1>
+                <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-text-muted">
                   Review health events in true clinical order, then switch into intake mode when you want to add new medical history.
                 </p>
               </div>
 
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
-                  <CalendarDays size={15} className="text-slate-400" />
+                <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 dark:border-stroke dark:bg-background/60 dark:text-text-secondary">
+                  <CalendarDays size={15} className="text-text-muted" />
                   <span>Year-based Clinical View</span>
                 </div>
-                <button className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-bold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200">
+                <button className="inline-flex items-center justify-center gap-2 rounded-2xl bg-background px-5 py-3 text-sm font-bold text-text-primary transition hover:bg-card dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200">
                   <Download size={15} />
                   <span>Export Summary</span>
                 </button>
@@ -551,8 +635,8 @@ const Timeline = () => {
                     onClick={() => setActiveFilter(filter)}
                     className={`rounded-full px-5 py-2 text-sm font-bold whitespace-nowrap transition-all ${
                       activeFilter === filter
-                        ? 'bg-slate-950 text-white shadow-xl shadow-slate-950/10 dark:bg-white dark:text-slate-950'
-                        : 'border border-slate-200 bg-white text-slate-600 hover:border-[#6143f4]/30 hover:text-[#6143f4] dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300'
+                        ? 'bg-background text-text-primary shadow-xl shadow-slate-950/10 dark:bg-white dark:text-slate-950'
+                        : 'border border-slate-200 bg-white text-slate-600 hover:border-primary/30 hover:text-primary dark:border-stroke dark:bg-background/60 dark:text-text-secondary'
                     }`}
                   >
                     {filter === 'All' ? 'All Events' : filter}
@@ -561,18 +645,18 @@ const Timeline = () => {
               </div>
 
               <div className="relative w-full max-w-md">
-                <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
                 <input
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
                   placeholder="Search complaints, reports, conditions..."
-                  className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 text-sm text-slate-700 outline-none transition focus:border-[#6143f4] focus:ring-4 focus:ring-[#6143f4]/10 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100"
+                  className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 text-sm text-slate-700 outline-none transition focus:border-primary focus:ring-4 focus:ring-[var(--color-primary)]/10 dark:border-stroke dark:bg-background/60 dark:text-slate-100"
                 />
               </div>
             </div>
 
             <div className="mt-6 flex justify-center">
-              <div className="inline-flex items-center rounded-full border border-slate-200/80 bg-white/70 p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900/60">
+              <div className="inline-flex items-center rounded-full border border-slate-200/80 bg-white/70 p-1 shadow-sm dark:border-stroke dark:bg-background/60">
                 {[
                   { key: 'timeline', label: 'Health Timeline' },
                   { key: 'intake', label: 'Add Medical History' },
@@ -583,8 +667,8 @@ const Timeline = () => {
                     onClick={() => setViewMode(mode.key)}
                     className={`rounded-full px-5 py-2.5 text-sm font-bold transition-all ${
                       viewMode === mode.key
-                        ? 'bg-[linear-gradient(135deg,#6143f4_0%,#8f67ff_56%,#009cde_100%)] text-white shadow-[0_16px_34px_-18px_rgba(97,67,244,0.8)]'
-                        : 'text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
+                        ? 'bg-[linear-gradient(135deg,var(--color-primary)_0%,#8f67ff_56%,#009cde_100%)] text-text-primary shadow-[0_16px_34px_-18px_rgba(97,67,244,0.8)]'
+                        : 'text-slate-500 hover:text-slate-900 dark:text-text-secondary dark:hover:text-text-primary'
                     }`}
                   >
                     {mode.label}
@@ -605,18 +689,18 @@ const Timeline = () => {
 
                 <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
                   <div className={TIMELINE_CARD_CLASS}>
-                    <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Timeline Window</p>
+                    <p className="text-[11px] font-black uppercase tracking-[0.24em] text-text-muted">Timeline Window</p>
                     <div className="mt-3 flex flex-wrap items-center gap-3">
-                      <p className="text-xl font-black text-slate-950 dark:text-white">
+                      <p className="text-xl font-black text-slate-950 dark:text-text-primary">
                         {visibleEvents.length} event{visibleEvents.length === 1 ? '' : 's'}
                       </p>
-                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
+                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-500 dark:border-stroke dark:bg-background/60 dark:text-text-secondary">
                         {firstVisibleEvent && lastVisibleEvent
                           ? `${firstVisibleEvent.date} to ${lastVisibleEvent.date}`
                           : 'No matching date range'}
                       </span>
                     </div>
-                    <p className="mt-3 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                    <p className="mt-3 text-sm leading-relaxed text-slate-500 dark:text-text-muted">
                       {visibleEvents.length > 0
                         ? 'Scroll across the rail to move year by year through reports, alerts, labs, and structured symptom history.'
                         : cleanedData.length > 0 && searchQuery
@@ -626,9 +710,9 @@ const Timeline = () => {
                   </div>
 
                   <div className={TIMELINE_CARD_CLASS}>
-                    <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Current Year</p>
-                    <p className="mt-3 text-3xl font-black tracking-tight text-slate-950 dark:text-white">{currentYear}</p>
-                    <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                    <p className="text-[11px] font-black uppercase tracking-[0.24em] text-text-muted">Current Year</p>
+                    <p className="mt-3 text-3xl font-black tracking-tight text-slate-950 dark:text-text-primary">{currentYear}</p>
+                    <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-text-secondary">
                       The current year marker stays neutral while filtered timeline content updates inside the rail.
                     </p>
                   </div>
@@ -637,12 +721,12 @@ const Timeline = () => {
                 <div className={`timeline-container mt-6 p-4 ${TIMELINE_CONTAINER_CLASS}`}>
                   <div className="mb-4 flex flex-wrap items-center justify-between gap-3 px-2">
                     <div>
-                      <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Horizontal Timeline</p>
-                      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                      <p className="text-[11px] font-black uppercase tracking-[0.24em] text-text-muted">Horizontal Timeline</p>
+                      <p className="mt-1 text-sm text-slate-500 dark:text-text-muted">
                         Events are grouped by year and ordered by their real clinical date.
                       </p>
                     </div>
-                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
+                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-500 dark:border-stroke dark:bg-background/60 dark:text-text-secondary">
                       Snap scroll enabled
                     </span>
                   </div>
@@ -656,7 +740,7 @@ const Timeline = () => {
                     style={{ scrollBehavior: 'smooth', scrollSnapType: 'x mandatory', scrollbarWidth: 'thin' }}
                   >
                     {visibleEvents.length === 0 ? (
-                      <div className="flex min-h-[280px] min-w-full flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 bg-white/60 px-6 py-12 text-center text-slate-400 dark:border-slate-800 dark:bg-slate-950/35">
+                      <div className="flex min-h-[280px] min-w-full flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 bg-white/60 px-6 py-12 text-center text-text-muted dark:border-stroke dark:bg-background/35">
                         <History size={48} className="mb-4 opacity-20" />
                         <p className="text-lg font-semibold">
                           {cleanedData.length > 0 && searchQuery ? 'No matching results found' : 'No recent health events'}
@@ -682,13 +766,13 @@ const Timeline = () => {
                             >
                               <div className="flex items-center justify-between gap-3">
                                 <div>
-                                  <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">
+                                  <p className="text-[11px] font-black uppercase tracking-[0.24em] text-text-muted">
                                     {isCurrentYear ? 'Current Year' : 'Timeline Year'}
                                   </p>
-                                  <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950 dark:text-white">{year}</h2>
+                                  <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950 dark:text-text-primary">{year}</h2>
                                 </div>
 
-                                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
+                                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-500 dark:border-stroke dark:bg-background/60 dark:text-text-secondary">
                                   {events.length} event{events.length === 1 ? '' : 's'}
                                 </span>
                               </div>
@@ -714,8 +798,8 @@ const Timeline = () => {
                                       <div
                                         className={`w-full rounded-[1.4rem] border p-4 transition-all duration-300 ${
                                           isSelected
-                                            ? 'border-[#6143f4]/20 bg-white shadow-[0_22px_44px_-24px_rgba(97,67,244,0.6)] dark:bg-[#15102a]'
-                                            : 'border-slate-200 bg-white/85 hover:-translate-y-1 hover:border-[#6143f4]/20 hover:shadow-[0_18px_36px_-26px_rgba(15,23,42,0.45)] dark:border-slate-800 dark:bg-slate-950/55'
+                                            ? 'border-primary/20 bg-white shadow-[0_22px_44px_-24px_rgba(97,67,244,0.6)] dark:bg-[#15102a]'
+                                            : 'border-slate-200 bg-white/85 hover:-translate-y-1 hover:border-primary/20 hover:shadow-[0_18px_36px_-26px_rgba(15,23,42,0.45)] dark:border-stroke dark:bg-background/55'
                                         }`}
                                       >
                                         <div className="flex items-start gap-3">
@@ -723,15 +807,15 @@ const Timeline = () => {
                                             <event.icon size={18} />
                                           </div>
                                           <div className="min-w-0">
-                                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">{event.type}</p>
-                                            <h3 className="mt-1 line-clamp-2 text-sm font-black leading-tight text-slate-900 dark:text-white">
+                                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-text-muted">{event.displayType}</p>
+                                            <h3 className="mt-1 line-clamp-2 text-sm font-black leading-tight text-slate-900 dark:text-text-primary">
                                               {event.title}
                                             </h3>
                                           </div>
                                         </div>
 
-                                        <p className="mt-3 text-xs font-semibold text-slate-500 dark:text-slate-400">{event.compactDate}</p>
-                                        <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                                        <p className="mt-3 text-xs font-semibold text-slate-500 dark:text-text-muted">{event.compactDate}</p>
+                                        <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-slate-600 dark:text-text-secondary">
                                           {event.description}
                                         </p>
                                       </div>
@@ -755,7 +839,7 @@ const Timeline = () => {
                 </div>
 
                 <AnimatePresence mode="wait">
-                  {selectedEvent ? <TimelineDetailCard key={selectedEvent.id} event={selectedEvent} /> : null}
+                  {selectedEvent ? <TimelineDetailCard key={selectedEvent.id} event={selectedEvent} onOpenReport={handleOpenReport} /> : null}
                 </AnimatePresence>
               </>
             ) : (
@@ -771,3 +855,4 @@ const Timeline = () => {
 };
 
 export default Timeline;
+

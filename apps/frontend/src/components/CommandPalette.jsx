@@ -27,7 +27,7 @@ function Highlight({ text, query }) {
     return (
         <>
             {text.slice(0, idx)}
-            <mark className="bg-[#6143f4]/20 text-[#6143f4] rounded-sm px-0.5 not-italic font-bold">
+            <mark className="bg-primary/20 text-primary rounded-sm px-0.5 not-italic font-bold">
                 {text.slice(idx, idx + query.length)}
             </mark>
             {text.slice(idx + query.length)}
@@ -108,21 +108,21 @@ export default function CommandPalette() {
             aria-label="Command palette"
         >
             {/* Panel */}
-            <div className="w-full max-w-[560px] mx-4 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+            <div className="w-full max-w-[560px] mx-4 bg-white dark:bg-background rounded-2xl shadow-2xl border border-slate-200 dark:border-stroke overflow-hidden">
 
                 {/* Search input */}
-                <div className="flex items-center gap-3 px-4 py-3.5 border-b border-slate-100 dark:border-slate-800">
-                    <Search size={18} className="text-slate-400 shrink-0" />
+                <div className="flex items-center gap-3 px-4 py-3.5 border-b border-slate-100 dark:border-stroke">
+                    <Search size={18} className="text-text-muted shrink-0" />
                     <input
                         ref={inputRef}
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={handleKeyDown}
                         placeholder="Search pages, actions, records..."
-                        className="flex-1 bg-transparent text-[#13082A] dark:text-slate-100 text-sm font-medium placeholder:text-slate-400 focus:outline-none"
+                        className="flex-1 bg-transparent text-text-primary dark:text-slate-100 text-sm font-medium placeholder:text-text-muted focus:outline-none"
                         autoComplete="off"
                     />
-                    <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] font-black text-slate-500 tracking-widest">
+                    <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-100 dark:bg-card text-[10px] font-black text-slate-500 tracking-widest">
                         ESC
                     </kbd>
                 </div>
@@ -140,36 +140,36 @@ export default function CommandPalette() {
                                 onMouseDown={() => commit(item)}
                                 onMouseEnter={() => setActiveIndex(idx)}
                                 className={`flex items-center gap-3 px-4 py-2.5 mx-2 rounded-xl cursor-pointer transition-colors ${active
-                                    ? 'bg-[#6143f4] text-white'
-                                    : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
+                                    ? 'bg-primary text-white'
+                                    : 'text-slate-700 dark:text-text-primary hover:bg-slate-50 dark:hover:bg-card'
                                     }`}
                             >
-                                <div className={`flex items-center justify-center size-8 rounded-lg shrink-0 ${active ? 'bg-white/20' : 'bg-slate-100 dark:bg-slate-800'
+                                <div className={`flex items-center justify-center size-8 rounded-lg shrink-0 ${active ? 'bg-white/20' : 'bg-slate-100 dark:bg-card'
                                     }`}>
-                                    <Icon size={15} className={active ? 'text-white' : 'text-[#6143f4]'} />
+                                    <Icon size={15} className={active ? 'text-text-primary' : 'text-primary'} />
                                 </div>
                                 <span className="text-sm font-semibold flex-1">
                                     <Highlight text={item.name} query={query} />
                                 </span>
-                                <span className={`text-[10px] font-black tracking-widest ${active ? 'text-white/50' : 'text-slate-400'
+                                <span className={`text-[10px] font-black tracking-widest ${active ? 'text-text-primary/50' : 'text-text-muted'
                                     }`}>
                                     {item.path}
                                 </span>
                             </li>
                         );
                     }) : (
-                        <li className="px-4 py-6 text-center text-sm text-slate-400">
+                        <li className="px-4 py-6 text-center text-sm text-text-muted">
                             No results for{' '}
-                            <span className="font-bold text-slate-600 dark:text-slate-300">"{query}"</span>
+                            <span className="font-bold text-slate-600 dark:text-text-secondary">"{query}"</span>
                         </li>
                     )}
                 </ul>
 
                 {/* Footer hint */}
-                <div className="px-4 py-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center gap-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                    <span className="flex items-center gap-1"><kbd className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-400">↑↓</kbd> Navigate</span>
-                    <span className="flex items-center gap-1"><kbd className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-400">↵</kbd> Open</span>
-                    <span className="flex items-center gap-1"><kbd className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-400">Esc</kbd> Close</span>
+                <div className="px-4 py-2.5 border-t border-slate-100 dark:border-stroke flex items-center gap-4 text-[10px] font-black text-text-muted uppercase tracking-widest">
+                    <span className="flex items-center gap-1"><kbd className="bg-slate-100 dark:bg-card px-1.5 py-0.5 rounded text-text-muted">↑↓</kbd> Navigate</span>
+                    <span className="flex items-center gap-1"><kbd className="bg-slate-100 dark:bg-card px-1.5 py-0.5 rounded text-text-muted">↵</kbd> Open</span>
+                    <span className="flex items-center gap-1"><kbd className="bg-slate-100 dark:bg-card px-1.5 py-0.5 rounded text-text-muted">Esc</kbd> Close</span>
                 </div>
             </div>
         </div>
@@ -187,13 +187,14 @@ export function CommandPaletteTrigger({ onClick }) {
         <button
             onClick={onClick}
             type="button"
-            className="flex items-center gap-2.5 px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl text-sm font-medium text-slate-500 dark:text-slate-400 transition-colors group"
+            className="flex items-center gap-2.5 px-3 py-2 bg-slate-100 dark:bg-card hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl text-sm font-medium text-slate-500 dark:text-text-muted transition-colors group"
         >
-            <Search size={15} className="group-hover:text-[#6143f4] transition-colors" />
+            <Search size={15} className="group-hover:text-primary transition-colors" />
             <span className="hidden sm:inline text-[13px]">Search...</span>
-            <kbd className="hidden sm:inline-flex items-center gap-0.5 ml-1 px-1.5 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[10px] font-black tracking-wider text-slate-400">
+            <kbd className="hidden sm:inline-flex items-center gap-0.5 ml-1 px-1.5 py-0.5 rounded bg-white dark:bg-background border border-slate-200 dark:border-stroke text-[10px] font-black tracking-wider text-text-muted">
                 Ctrl K
             </kbd>
         </button>
     );
 }
+

@@ -99,12 +99,12 @@ const MetricMiniCard = ({ metric }: { metric: DashboardMetric }) => {
 
   return (
     <article
-      className={`group relative min-h-[240px] w-full overflow-hidden rounded-2xl border border-white/70 bg-white/80 p-6 shadow-md backdrop-blur transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.02] hover:shadow-xl dark:border-white/10 dark:bg-white/[0.065] ${metric.theme.tint}`}
+      className={`group relative min-h-[240px] w-full overflow-hidden rounded-2xl border border-white/70 bg-white/80 p-6 shadow-md backdrop-blur transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.02] hover:shadow-xl dark:border-stroke dark:bg-white/[0.065] ${metric.theme.tint}`}
     >
       <div className="pointer-events-none absolute -right-10 -top-12 size-28 rounded-full opacity-40 blur-2xl" style={{ backgroundColor: metric.theme.chart }} />
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent dark:via-white/30" />
       <div
-        className="absolute right-4 top-4 flex size-11 items-center justify-center rounded-2xl border border-white/80 bg-white/75 opacity-80 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_8px_18px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-white/10"
+        className="absolute right-4 top-4 flex size-11 items-center justify-center rounded-2xl border border-white/80 bg-white/75 opacity-80 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_8px_18px_rgba(15,23,42,0.08)] dark:border-stroke dark:bg-white/10"
         style={{ color: metric.theme.accent }}
       >
         <Icon size={18} strokeWidth={2.6} />
@@ -112,18 +112,18 @@ const MetricMiniCard = ({ metric }: { metric: DashboardMetric }) => {
 
       <div className="relative z-10 flex h-full flex-col justify-between">
         <div className="pr-14">
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+          <p className="text-xs font-bold uppercase tracking-wide text-text-muted dark:text-slate-500">
             {metric.title}
           </p>
         </div>
 
         <div className="mt-5 flex flex-wrap items-end gap-3">
           <div className="flex items-end gap-2">
-            <span className="truncate text-3xl font-semibold leading-none tracking-tight text-[#13082a] dark:text-white">
+            <span className="truncate text-3xl font-semibold leading-none tracking-tight text-text-primary dark:text-text-primary">
               {metric.value}
             </span>
             {metric.unit ? (
-              <span className="mb-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
+              <span className="mb-1 text-[10px] font-black uppercase tracking-[0.14em] text-text-muted dark:text-slate-500">
                 {metric.unit}
               </span>
             ) : null}
@@ -132,7 +132,7 @@ const MetricMiniCard = ({ metric }: { metric: DashboardMetric }) => {
             {metric.status}
           </span>
           <span
-            className="inline-flex size-7 items-center justify-center rounded-full bg-white/60 text-slate-500 shadow-sm dark:bg-white/10 dark:text-slate-300"
+            className="inline-flex size-7 items-center justify-center rounded-full bg-white/60 text-slate-500 shadow-sm dark:bg-white/10 dark:text-text-secondary"
             title={metric.trendLabel ?? 'Stable'}
             style={{ color: metric.trend === 'down' ? '#0284c7' : metric.trend === 'up' ? metric.theme.accent : undefined }}
           >

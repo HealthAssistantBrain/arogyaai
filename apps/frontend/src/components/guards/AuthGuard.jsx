@@ -7,18 +7,29 @@ export default function AuthGuard() {
   const authState = useAuthStore();
   const { isAuthenticated, isHydrated, isHydratingAuth } = authState;
   const location = useLocation();
+  const hasToken = !!authState.token;
   const hasAuthUser = !!authState.user?.id;
 
   if (!isHydrated || isHydratingAuth) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f6f5f8] dark:bg-[#0B0819] text-sm font-bold text-slate-500">
+      <div className="flex min-h-screen items-center justify-center bg-background dark:bg-background text-sm font-bold text-slate-500">
         Restoring your session...
       </div>
     );
   }
 
-  if (!isAuthenticated || !hasAuthUser) {
+  if (!hasToken || !isAuthenticated) {
+    console.debug('[AuthGuard] no token; redirecting to home', { path: location.pathname });
     return <Navigate to={ROUTES.HOME} replace />;
+  }
+
+  if (!hasAuthUser) {
+    console.debug('[AuthGuard] token present; waiting for /users/me', { path: location.pathname });
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background dark:bg-background text-sm font-bold text-slate-500">
+        Loading your clinical workspace...
+      </div>
+    );
   }
 
   const redirect = getProtectedRouteRedirect(location.pathname, authState);
@@ -26,5 +37,7 @@ export default function AuthGuard() {
     return <Navigate to={redirect} replace />;
   }
 
+  console.debug('[AuthGuard] route allowed', { path: location.pathname });
   return <Outlet />;
 }
+

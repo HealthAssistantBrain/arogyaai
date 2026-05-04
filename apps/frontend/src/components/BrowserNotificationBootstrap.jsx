@@ -33,3 +33,4 @@ const BrowserNotificationBootstrap = () => {
 };
 
 export default BrowserNotificationBootstrap;
+

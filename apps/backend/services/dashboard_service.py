@@ -29,6 +29,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from models import User, UserVital, UserVitalTypeEnum, WearableMetric
+from services.recommendation_engine import generate_recommendation_plan
 from services.recommendation_service import generate_test_recommendations
 
 
@@ -300,6 +301,12 @@ async def get_recommended_tests(user: User, db: Session) -> dict:
     recommendations = generate_test_recommendations(user.id, db=db)
     status = "ready" if recommendations else "fallback"
     return _envelope(recommendations, status=status, source="clinical_recommendation_engine")
+
+
+async def get_recommendation_plan(user: User, db: Session) -> dict:
+    plan = generate_recommendation_plan(user.id, db=db)
+    status = "ready" if plan else "fallback"
+    return _envelope(plan, status=status, source="recommendation_plan_engine")
 
 
 async def get_health_metrics(user: User, db: Session) -> dict:
