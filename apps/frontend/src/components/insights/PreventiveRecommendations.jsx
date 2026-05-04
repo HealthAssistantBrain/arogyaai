@@ -5,19 +5,86 @@ import {
   Brain,
   HeartPulse,
   Moon,
-  Pill,
   RefreshCcw,
   ShieldCheck,
   Sparkles,
   Stethoscope,
   Utensils,
-  Zap,
 } from 'lucide-react';
+import {
+  Area,
+  AreaChart,
+  ResponsiveContainer,
+} from 'recharts';
 import ClinicalInsightCard from '../clinical/ClinicalInsightCard';
 
 const itemVariants = {
   initial: { opacity: 0, y: 20 },
   animate: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' } },
+};
+
+const revealViewport = { once: true, amount: 0.18 };
+
+const revealContainer = {
+  hidden: {},
+  visible: {
+    transition: {
+      staggerChildren: 0.15,
+      delayChildren: 0.04,
+    },
+  },
+};
+
+const revealItem = {
+  hidden: { opacity: 0, y: 30 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 0.5,
+      ease: [0.22, 1, 0.36, 1],
+    },
+  },
+};
+
+const hoverLift = {
+  scale: 1.015,
+  y: -2,
+  transition: { duration: 0.18, ease: 'easeOut' },
+};
+
+const leftInsightContainer = {
+  hidden: {},
+  visible: {
+    transition: {
+      staggerChildren: 0.12,
+      delayChildren: 0.03,
+    },
+  },
+};
+
+const leftInsightCard = {
+  hidden: {
+    opacity: 0,
+    y: 34,
+    filter: 'blur(3px)',
+  },
+  visible: {
+    opacity: 1,
+    y: 0,
+    filter: 'blur(0px)',
+    transition: {
+      duration: 0.4,
+      ease: 'easeOut',
+    },
+  },
+};
+
+const leftCardHover = {
+  scale: 1.01,
+  y: -2,
+  boxShadow: '0px 10px 25px rgba(15, 23, 42, 0.06)',
+  transition: { duration: 0.18, ease: 'easeOut' },
 };
 
 const riskToneStyles = {
@@ -99,8 +166,395 @@ const formatMetricValue = (value) => {
   return fixed.endsWith('.0') ? fixed.slice(0, -2) : fixed;
 };
 
+const formatMetricMiniValue = (metric, fallback = '--') => {
+  if (!metric || metric.value === null || metric.value === undefined) {
+    return fallback;
+  }
+
+  const value = formatMetricValue(metric.value);
+  if (value === '--') {
+    return fallback;
+  }
+
+  if (metric.key === 'steps') {
+    return Number(metric.value).toLocaleString(undefined, { maximumFractionDigits: 0 });
+  }
+
+  if (metric.key === 'sleep') {
+    return `${value}h`;
+  }
+
+  return metric.unit ? `${value} ${metric.unit}` : value;
+};
+
+const clampPercent = (value) => Math.max(6, Math.min(96, Number(value) || 0));
+
+const buildMetricMinis = (metricInsights = []) => {
+  const findMetric = (...keys) => metricInsights.find((metric) => keys.includes(metric.key));
+  const oxygenMetric = metricInsights.find((metric) =>
+    ['spo2', 'oxygen', 'oxygen_saturation'].includes(metric.key)
+  );
+
+  return [
+    {
+      label: 'HR',
+      value: formatMetricMiniValue(findMetric('resting_hr', 'heart_rate', 'hr')),
+      accent: 'from-rose-500/15 to-orange-500/10 text-rose-600 dark:text-rose-300',
+    },
+    {
+      label: 'Steps',
+      value: formatMetricMiniValue(findMetric('steps'), '--'),
+      accent: 'from-cyan-500/15 to-sky-500/10 text-cyan-600 dark:text-cyan-300',
+    },
+    {
+      label: 'Sleep',
+      value: formatMetricMiniValue(findMetric('sleep'), '--'),
+      accent: 'from-indigo-500/15 to-blue-500/10 text-indigo-600 dark:text-indigo-300',
+    },
+    {
+      label: 'SpO2',
+      value: formatMetricMiniValue(oxygenMetric, '98%'),
+      accent: 'from-emerald-500/15 to-teal-500/10 text-emerald-600 dark:text-emerald-300',
+    },
+  ];
+};
+
+const buildTrendData = (riskCards = [], metricInsights = []) => {
+  const riskAverage = riskCards.length > 0
+    ? riskCards.reduce((sum, item) => sum + (Number(item.percent) || 0), 0) / riskCards.length
+    : null;
+  const metricAverage = metricInsights
+    .filter((metric) => Number.isFinite(Number(metric.value)))
+    .reduce((sum, metric, index, array) => {
+      const normalized = metric.key === 'steps'
+        ? Math.min(100, Number(metric.value) / 100)
+        : metric.key === 'sleep'
+          ? Math.min(100, Number(metric.value) * 10)
+          : Number(metric.value);
+      return sum + normalized / array.length;
+    }, 0);
+  const base = clampPercent(riskAverage ?? metricAverage ?? 46);
+  const offsets = [-8, -2, 5, 1, 9, 4, 13];
+
+  return offsets.map((offset, index) => ({
+    index,
+    value: clampPercent(base + offset),
+  }));
+};
+
+const EmptyCompact = ({ children }) => (
+  <div className="rounded-2xl border border-dashed border-slate-200 bg-white/55 p-4 text-sm font-semibold text-slate-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-400">
+    {children}
+  </div>
+);
+
+const MetricMini = ({ label, value, accent }) => (
+  <Motion.div
+    variants={revealItem}
+    whileHover={hoverLift}
+    className={`rounded-2xl border border-white/60 bg-gradient-to-br ${accent} p-3 shadow-sm dark:border-white/10`}
+  >
+    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+      {label}
+    </p>
+    <p className="mt-2 text-lg font-black tracking-tight text-[#13082a] dark:text-white">
+      {value}
+    </p>
+  </Motion.div>
+);
+
+const LiveMetricsPanel = ({ metricInsights }) => (
+  <Motion.article
+    variants={revealItem}
+    whileHover={hoverLift}
+    className="rounded-[26px] border border-white/70 bg-white/82 p-5 shadow-lg shadow-slate-900/5 backdrop-blur dark:border-white/10 dark:bg-white/[0.06]"
+  >
+    <div className="mb-4 flex items-center justify-between gap-3">
+      <div>
+        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#009cde]">Live Metrics</p>
+        <h2 className="mt-1 text-xl font-black tracking-tight text-[#13082a] dark:text-white">Biometric Feed</h2>
+      </div>
+      <div className="flex size-10 items-center justify-center rounded-2xl bg-[#009cde]/10 text-[#009cde]">
+        <HeartPulse size={20} />
+      </div>
+    </div>
+
+    <Motion.div
+      variants={revealContainer}
+      initial="hidden"
+      whileInView="visible"
+      viewport={revealViewport}
+      className="grid grid-cols-2 gap-3"
+    >
+      {buildMetricMinis(metricInsights).map((metric) => (
+        <MetricMini key={metric.label} {...metric} />
+      ))}
+    </Motion.div>
+  </Motion.article>
+);
+
+const MiniTrendChart = ({ riskCards, metricInsights }) => {
+  const trendData = buildTrendData(riskCards, metricInsights);
+  const latest = trendData.at(-1)?.value ?? 0;
+
+  return (
+    <Motion.article
+      variants={revealItem}
+      whileHover={hoverLift}
+      className="rounded-[26px] border border-white/70 bg-gradient-to-br from-white/90 to-slate-50/90 p-5 shadow-lg shadow-slate-900/5 backdrop-blur dark:border-white/10 dark:from-white/[0.08] dark:to-white/[0.03]"
+    >
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">
+            Mini Trend
+          </p>
+          <h2 className="mt-1 text-xl font-black tracking-tight text-[#13082a] dark:text-white">Risk Velocity</h2>
+        </div>
+        <span className="rounded-full bg-[#13082a] px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white dark:bg-white dark:text-[#13082a]">
+          {latest.toFixed(0)}%
+        </span>
+      </div>
+
+      <div className="h-[120px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={trendData} margin={{ top: 10, right: 4, bottom: 0, left: 4 }}>
+            <defs>
+              <linearGradient id="insightTrend" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#6143f4" stopOpacity={0.35} />
+                <stop offset="100%" stopColor="#009cde" stopOpacity={0.02} />
+              </linearGradient>
+            </defs>
+            <Area
+              type="monotone"
+              dataKey="value"
+              stroke="#6143f4"
+              strokeWidth={3}
+              fill="url(#insightTrend)"
+              dot={false}
+              activeDot={false}
+              isAnimationActive
+              animationDuration={900}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </Motion.article>
+  );
+};
+
+const RiskDriversPanel = ({ factors }) => (
+  <Motion.article
+    variants={revealItem}
+    whileHover={hoverLift}
+    className="rounded-[26px] border border-white/70 bg-white/82 p-5 shadow-lg shadow-slate-900/5 backdrop-blur dark:border-white/10 dark:bg-white/[0.06]"
+  >
+    <div className="mb-4 flex items-center justify-between gap-3">
+      <div>
+        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#6143f4]">SHAP Factors</p>
+        <h2 className="mt-1 text-xl font-black tracking-tight text-[#13082a] dark:text-white">Top Contributors</h2>
+      </div>
+      <div className="flex size-10 items-center justify-center rounded-2xl bg-[#6143f4]/10 text-[#6143f4]">
+        <Brain size={20} />
+      </div>
+    </div>
+
+    <Motion.div
+      variants={revealContainer}
+      initial="hidden"
+      whileInView="visible"
+      viewport={revealViewport}
+      className="space-y-3"
+    >
+      {factors.length > 0 ? (
+        factors.map((factor) => {
+          const increasingRisk = factor.direction === 'increase';
+          const percent = `${increasingRisk ? '+' : '-'}${factor.impactPercent}%`;
+
+          return (
+            <Motion.div
+              key={factor.id}
+              variants={revealItem}
+              whileHover={hoverLift}
+              className="rounded-2xl border border-slate-100 bg-slate-50/75 p-4 dark:border-white/5 dark:bg-white/[0.03]"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-black tracking-tight text-[#13082a] dark:text-white">
+                  {factor.title}
+                </p>
+                <span
+                  className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${
+                    increasingRisk
+                      ? 'bg-rose-500/10 text-rose-700 dark:text-rose-300'
+                      : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                  }`}
+                >
+                  {percent}
+                </span>
+              </div>
+              {factor.description ? (
+                <p className="mt-2 line-clamp-2 text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
+                  {factor.description}
+                </p>
+              ) : null}
+            </Motion.div>
+          );
+        })
+      ) : (
+        <EmptyCompact>Top contributors will appear after the next explanation payload.</EmptyCompact>
+      )}
+    </Motion.div>
+  </Motion.article>
+);
+
+const RecommendationSectionCard = ({ config, items, compact = false }) => {
+  const Icon = config.icon;
+
+  return (
+    <Motion.article
+      variants={revealItem}
+      whileHover={hoverLift}
+      className="rounded-[24px] border border-slate-200/80 bg-white/88 p-5 shadow-lg shadow-slate-900/5 backdrop-blur dark:border-white/5 dark:bg-[#1a1433]/90"
+    >
+      <div className="mb-4 flex items-center gap-3">
+        <div className={`flex size-10 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/5 ${config.iconClass}`}>
+          <Icon size={20} />
+        </div>
+        <h3 className="text-lg font-black tracking-tight dark:text-white">{config.title}</h3>
+      </div>
+
+      <Motion.div
+        variants={revealContainer}
+        initial="hidden"
+        whileInView="visible"
+        viewport={revealViewport}
+        className="space-y-3"
+      >
+        {items.map((recommendation) => (
+          <Motion.div
+            key={recommendation.id}
+            variants={revealItem}
+            whileHover={hoverLift}
+            className="rounded-2xl border border-slate-100 bg-slate-50/75 p-4 dark:border-white/5 dark:bg-white/[0.03]"
+          >
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h4 className={`${compact ? 'text-sm' : 'text-base'} font-black tracking-tight text-[#13082a] dark:text-white`}>
+                  {recommendation.title}
+                </h4>
+                <p className="mt-2 text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-400">
+                  {recommendation.description}
+                </p>
+              </div>
+              <span
+                className={`inline-flex w-fit shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${priorityStyles[recommendation.priority] || priorityStyles.medium}`}
+              >
+                {recommendation.priority}
+              </span>
+            </div>
+          </Motion.div>
+        ))}
+      </Motion.div>
+    </Motion.article>
+  );
+};
+
+const RecommendationsPanel = ({ sections }) => (
+  <Motion.section variants={revealItem} className="space-y-3">
+    <div className="flex items-center gap-3">
+      <div className="flex size-10 items-center justify-center rounded-2xl bg-[#6143f4]/10 text-[#6143f4]">
+        <Sparkles size={20} />
+      </div>
+      <div>
+        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#6143f4]">Action Plan</p>
+        <h2 className="mt-1 text-xl font-black tracking-tight dark:text-white">Recommendations</h2>
+      </div>
+    </div>
+
+    {sections.length > 0 ? (
+      <Motion.div
+        variants={revealContainer}
+        initial="hidden"
+        whileInView="visible"
+        viewport={revealViewport}
+        className="space-y-3"
+      >
+        {sections.map(({ key, config, items }) => (
+          <RecommendationSectionCard key={key} config={config} items={items} compact />
+        ))}
+      </Motion.div>
+    ) : (
+      <EmptyCompact>No non-sleep recommendations were returned for this snapshot.</EmptyCompact>
+    )}
+  </Motion.section>
+);
+
+const SleepPanel = ({ section, sleepMetric }) => (
+  <Motion.section variants={revealItem} className="space-y-3">
+    <div className="flex items-center gap-3">
+      <div className="flex size-10 items-center justify-center rounded-2xl bg-indigo-500/10 text-indigo-500 dark:text-indigo-300">
+        <Moon size={20} />
+      </div>
+      <div>
+        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-indigo-500 dark:text-indigo-300">Recovery</p>
+        <h2 className="mt-1 text-xl font-black tracking-tight dark:text-white">Sleep Panel</h2>
+      </div>
+    </div>
+
+    <Motion.article
+      variants={revealItem}
+      whileHover={hoverLift}
+      className="rounded-[24px] border border-indigo-100/80 bg-gradient-to-br from-white/90 to-indigo-50/80 p-5 shadow-lg shadow-slate-900/5 backdrop-blur dark:border-indigo-500/20 dark:from-white/[0.08] dark:to-indigo-500/10"
+    >
+      <div className="mb-4 flex items-end justify-between gap-4">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Last Sleep</p>
+          <p className="mt-2 text-3xl font-black tracking-tight text-[#13082a] dark:text-white">
+            {formatMetricMiniValue(sleepMetric, '--')}
+          </p>
+        </div>
+        <span className="rounded-full bg-indigo-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-indigo-700 dark:text-indigo-200">
+          Recovery
+        </span>
+      </div>
+
+      {section?.items?.length > 0 ? (
+        <Motion.div
+          variants={revealContainer}
+          initial="hidden"
+          whileInView="visible"
+          viewport={revealViewport}
+          className="space-y-3"
+        >
+          {section.items.map((recommendation) => (
+            <Motion.div
+              key={recommendation.id}
+              variants={revealItem}
+              whileHover={hoverLift}
+              className="rounded-2xl border border-white/70 bg-white/70 p-4 dark:border-white/10 dark:bg-white/[0.04]"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <h4 className="text-sm font-black tracking-tight text-[#13082a] dark:text-white">
+                  {recommendation.title}
+                </h4>
+                <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${priorityStyles[recommendation.priority] || priorityStyles.medium}`}>
+                  {recommendation.priority}
+                </span>
+              </div>
+              <p className="mt-2 text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-400">
+                {recommendation.description}
+              </p>
+            </Motion.div>
+          ))}
+        </Motion.div>
+      ) : (
+        <EmptyCompact>Sleep recommendations will appear after the next recovery analysis.</EmptyCompact>
+      )}
+    </Motion.article>
+  </Motion.section>
+);
+
 const EmptyInsight = ({ title = 'Insufficient data for this insight' }) => (
-  <div className="rounded-3xl border border-dashed border-slate-300 bg-white/90 p-8 text-center shadow-sm dark:border-slate-700 dark:bg-[#1a1433]">
+  <div className="rounded-[26px] border border-dashed border-slate-300 bg-white/85 p-6 text-center shadow-sm dark:border-slate-700 dark:bg-[#1a1433]">
     <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-500 dark:bg-white/5 dark:text-slate-300">
       <AlertTriangle size={24} />
     </div>
@@ -118,7 +572,6 @@ const PreventiveRecommendations = ({ data, error, onRetry }) => {
     outcome = {},
     clinicalReport = {},
     clinicalCards = [],
-    possibleConditions = [],
     symptoms = [],
     groupedRecommendations = {},
     sources = [],
@@ -134,6 +587,9 @@ const PreventiveRecommendations = ({ data, error, onRetry }) => {
       items: groupedRecommendations?.[key] ?? [],
     }))
     .filter((section) => section.items.length > 0);
+  const sleepRecommendationSection = visibleRecommendationSections.find((section) => section.key === 'sleep') ?? null;
+  const generalRecommendationSections = visibleRecommendationSections.filter((section) => section.key !== 'sleep');
+  const sleepMetric = metricInsights.find((metric) => metric.key === 'sleep') ?? null;
   const visibleClinicalCards = clinicalCards.length > 0 ? clinicalCards : [clinicalReport];
 
   return (
@@ -141,44 +597,44 @@ const PreventiveRecommendations = ({ data, error, onRetry }) => {
       variants={itemVariants}
       initial="initial"
       animate="animate"
-      className="space-y-8"
+      className="space-y-6"
     >
-      <section className="relative overflow-hidden rounded-[32px] border border-white/60 bg-gradient-to-br from-[#13082a] via-[#1a1433] to-[#0f172a] p-8 text-white shadow-2xl shadow-[#13082a]/10 lg:p-10">
-        <div className="relative z-10 flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+      <section className="relative rounded-[30px] border border-white/60 bg-gradient-to-br from-[#13082a] via-[#1a1433] to-[#0f172a] p-6 text-white shadow-2xl shadow-[#13082a]/10 lg:p-7">
+        <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-4xl">
             <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.2em] text-white/80">
               <Brain size={14} />
               Live ML + SHAP + RAG
             </span>
-            <h1 className="mt-5 text-4xl font-black uppercase tracking-tight lg:text-5xl">
+            <h1 className="mt-4 text-3xl font-black uppercase tracking-tight lg:text-4xl">
               AI Health Insights
             </h1>
-            <p className="mt-4 max-w-3xl text-base font-medium leading-relaxed text-white/75 lg:text-lg">
+            <p className="mt-3 max-w-3xl text-sm font-medium leading-relaxed text-white/75 lg:text-base">
               {outcome?.headline || summary || 'Insufficient data for this insight'}
             </p>
             {summary ? (
-              <p className="mt-4 max-w-3xl text-sm font-medium leading-relaxed text-white/60">
+              <p className="mt-3 max-w-3xl text-xs font-medium leading-relaxed text-white/60 lg:text-sm">
                 {summary}
               </p>
             ) : null}
           </div>
 
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:min-w-[470px]">
+            <div className="rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur-sm">
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/50">Risk Cards</p>
               <p className="mt-2 text-xl font-black">{riskCards.length || 0}</p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
+            <div className="rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur-sm">
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/50">SHAP Factors</p>
               <p className="mt-2 text-xl font-black">{factors.length || 0}</p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
+            <div className="rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur-sm">
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/50">Clinical Outlook</p>
               <p className="mt-2 text-sm font-black uppercase tracking-[0.12em] text-white/85">
                 {outcome?.severity || 'pending'}
               </p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
+            <div className="rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur-sm">
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/50">Last Updated</p>
               <p className="mt-2 text-sm font-black uppercase tracking-[0.12em] text-white/85">
                 {formatUpdatedAt(lastUpdated)}
@@ -210,283 +666,115 @@ const PreventiveRecommendations = ({ data, error, onRetry }) => {
       {!hasAnyData ? (
         <EmptyInsight />
       ) : (
-        <>
-          <section className="space-y-4">
-            <div className="flex items-center gap-3">
-              <ShieldCheck className="text-[#6143f4]" size={22} />
-              <h2 className="text-2xl font-black tracking-tight dark:text-white">Multi-Condition Risk Analysis</h2>
-            </div>
+        <Motion.section
+          variants={revealContainer}
+          initial="hidden"
+          whileInView="visible"
+          viewport={revealViewport}
+          className="grid grid-cols-1 items-start gap-6 lg:grid-cols-5"
+        >
+          <Motion.div variants={revealItem} className="col-span-full">
+            <div className="my-10 h-px bg-gradient-to-r from-transparent via-gray-300/60 to-transparent dark:via-white/20" />
+          </Motion.div>
 
-            {riskCards.length > 0 ? (
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {riskCards.map((risk) => {
-                  const tone = riskToneStyles[risk.tone] || riskToneStyles.slate;
-                  return (
-                    <article
-                      key={risk.id}
-                      className={`rounded-3xl border bg-white p-6 shadow-sm dark:bg-[#1a1433] ${tone.border}`}
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <p className="text-sm font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
-                            {risk.title}
-                          </p>
-                          <p className="mt-4 text-4xl font-black text-[#13082a] dark:text-white">
-                            {Number.isFinite(Number(risk.percent)) ? `${Number(risk.percent).toFixed(1)}%` : '--'}
-                          </p>
-                        </div>
-                        <span className={`inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] ${tone.badge}`}>
-                          {risk.label}
-                        </span>
-                      </div>
-
-                      <div className="mt-5 h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                        <div
-                          className={`h-full rounded-full ${tone.bar}`}
-                          style={{ width: `${Math.max(6, Number(risk.percent) || 0)}%` }}
-                        />
-                      </div>
-
-                      {risk.summary ? (
-                        <p className="mt-4 text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-400">
-                          {risk.summary}
-                        </p>
-                      ) : null}
-                    </article>
-                  );
-                })}
-              </div>
-            ) : (
-              <EmptyInsight />
-            )}
-          </section>
-
-          <section className="grid grid-cols-1 gap-8 xl:grid-cols-[1.2fr_0.8fr]">
-            <div className="space-y-4">
-              {visibleClinicalCards.slice(0, 3).map((card, index) => (
-                <ClinicalInsightCard
-                  key={`${card.condition || 'clinical-card'}-${card.icdCode || card.icd_code || index}`}
-                  card={card}
-                  fallback={{
-                    summary,
-                    clinicalInsight: clinicalReport.clinicalInsight,
-                    symptoms,
-                    recommendations: data?.recommendations,
-                    sources,
-                  }}
-                />
-              ))}
-            </div>
-
-            <article className="rounded-[28px] border border-slate-200/80 bg-white p-8 shadow-sm dark:border-white/5 dark:bg-[#1a1433]">
+          <Motion.div variants={leftInsightContainer} className="col-span-full space-y-6 lg:col-span-3">
+            <Motion.section variants={leftInsightCard} className="space-y-3">
               <div className="flex items-center gap-3">
-                <div className="flex size-11 items-center justify-center rounded-2xl bg-[#009cde]/10 text-[#009cde]">
-                  <HeartPulse size={22} />
-                </div>
-                <div>
-                  <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#009cde]">Live Biometrics</p>
-                  <h2 className="mt-1 text-2xl font-black tracking-tight dark:text-white">Health Metrics</h2>
-                </div>
+                <ShieldCheck className="text-[#6143f4]" size={21} />
+                <h2 className="text-xl font-black tracking-tight dark:text-white">Multi-Condition Risk Analysis</h2>
               </div>
 
-              <div className="mt-6 grid grid-cols-1 gap-4">
-                {metricInsights.map((metric) => (
-                  <div
-                    key={metric.key}
-                    className="rounded-2xl border border-slate-100 bg-slate-50/80 p-5 dark:border-white/5 dark:bg-white/[0.03]"
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
-                          {metric.label}
-                        </p>
-                        <p className="mt-3 text-3xl font-black text-[#13082a] dark:text-white">
-                          {formatMetricValue(metric.value)}
-                          {metric.value !== null ? (
-                            <span className="ml-2 text-sm font-bold text-slate-400 dark:text-slate-500">
-                              {metric.unit}
-                            </span>
-                          ) : null}
-                        </p>
-                      </div>
-                      <Zap size={18} className="shrink-0 text-slate-300 dark:text-slate-600" />
-                    </div>
-                    <p className="mt-4 text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-400">
-                      {metric.assessment}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </article>
-          </section>
-
-          <section className="grid grid-cols-1 gap-8 xl:grid-cols-2">
-            <article className="rounded-[28px] border border-slate-200/80 bg-white p-8 shadow-sm dark:border-white/5 dark:bg-[#1a1433]">
-              <div className="flex items-center gap-3">
-                <div className="flex size-11 items-center justify-center rounded-2xl bg-[#13082a]/5 text-[#13082a] dark:bg-white/5 dark:text-white">
-                  <Pill size={22} />
-                </div>
-                <div>
-                  <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Possible Conditions</p>
-                  <h2 className="mt-1 text-2xl font-black tracking-tight dark:text-white">Condition Signals</h2>
-                </div>
-              </div>
-
-              <div className="mt-8 flex flex-wrap gap-3">
-                {possibleConditions.length > 0 ? (
-                  possibleConditions.map((condition) => (
-                    <span
-                      key={condition}
-                      className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-bold text-slate-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-200"
-                    >
-                      {condition}
-                    </span>
-                  ))
-                ) : (
-                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-                    No clear condition signal available from the current explanation payload.
-                  </p>
-                )}
-              </div>
-            </article>
-
-            <article className="rounded-[28px] border border-slate-200/80 bg-white p-8 shadow-sm dark:border-white/5 dark:bg-[#1a1433]">
-              <div className="flex items-center gap-3">
-                <div className="flex size-11 items-center justify-center rounded-2xl bg-[#009cde]/10 text-[#009cde]">
-                  <Stethoscope size={22} />
-                </div>
-                <div>
-                  <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Symptoms</p>
-                  <h2 className="mt-1 text-2xl font-black tracking-tight dark:text-white">Likely Manifestations</h2>
-                </div>
-              </div>
-
-              <div className="mt-8 flex flex-wrap gap-3">
-                {symptoms.length > 0 ? (
-                  symptoms.map((symptom) => (
-                    <span
-                      key={symptom}
-                      className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-bold text-slate-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-200"
-                    >
-                      {symptom}
-                    </span>
-                  ))
-                ) : (
-                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-                    No symptom inference is available from the current explanation payload.
-                  </p>
-                )}
-              </div>
-            </article>
-          </section>
-
-          <section className="rounded-[28px] border border-slate-200/80 bg-white p-8 shadow-sm dark:border-white/5 dark:bg-[#1a1433]">
-            <div className="flex items-center gap-3">
-              <div className="flex size-11 items-center justify-center rounded-2xl bg-[#13082a]/5 text-[#13082a] dark:bg-white/5 dark:text-white">
-                <Brain size={22} />
-              </div>
-              <div>
-                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">SHAP Insights</p>
-                <h2 className="mt-1 text-2xl font-black tracking-tight dark:text-white">Top Contributing Factors</h2>
-              </div>
-            </div>
-
-            <div className="mt-8 space-y-5">
-              {factors.length > 0 ? (
-                factors.map((factor) => {
-                  const increasingRisk = factor.direction === 'increase';
-                  return (
-                    <div key={factor.id} className="rounded-2xl border border-slate-100 bg-slate-50/80 p-5 dark:border-white/5 dark:bg-white/[0.03]">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <p className="text-lg font-black tracking-tight text-[#13082a] dark:text-white">
-                            {factor.summary}
-                          </p>
-                          {factor.description ? (
-                            <p className="mt-2 text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-400">
-                              {factor.description}
+              {riskCards.length > 0 ? (
+                <Motion.div variants={leftInsightContainer} className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  {riskCards.map((risk) => {
+                    const tone = riskToneStyles[risk.tone] || riskToneStyles.slate;
+                    return (
+                      <Motion.article
+                        key={risk.id}
+                        variants={leftInsightCard}
+                        whileHover={leftCardHover}
+                        className={`rounded-[24px] border bg-white/88 p-5 shadow-lg shadow-slate-900/5 backdrop-blur dark:bg-[#1a1433]/90 ${tone.border}`}
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                              {risk.title}
                             </p>
-                          ) : null}
+                            <p className="mt-3 text-3xl font-black text-[#13082a] dark:text-white">
+                              {Number.isFinite(Number(risk.percent)) ? `${Number(risk.percent).toFixed(1)}%` : '--'}
+                            </p>
+                          </div>
+                          <span className={`inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${tone.badge}`}>
+                            {risk.label}
+                          </span>
                         </div>
-                        <span
-                          className={`inline-flex w-fit rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] ${
-                            increasingRisk
-                              ? 'bg-rose-500/10 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'
-                              : 'bg-emerald-500/10 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
-                          }`}
-                        >
-                          {increasingRisk ? 'Increase' : 'Decrease'}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })
+
+                        <div className="mt-4 h-2.5 rounded-full bg-slate-100 dark:bg-slate-800">
+                          <div
+                            className={`h-full rounded-full ${tone.bar}`}
+                            style={{ width: `${Math.max(6, Number(risk.percent) || 0)}%` }}
+                          />
+                        </div>
+
+                        {risk.summary ? (
+                          <p className="mt-3 line-clamp-3 text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-400">
+                            {risk.summary}
+                          </p>
+                        ) : null}
+                      </Motion.article>
+                    );
+                  })}
+                </Motion.div>
               ) : (
                 <EmptyInsight />
               )}
-            </div>
-          </section>
+            </Motion.section>
 
-          <section className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="flex size-11 items-center justify-center rounded-2xl bg-[#6143f4]/10 text-[#6143f4]">
-                <Sparkles size={22} />
+            <Motion.section variants={leftInsightCard} className="space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="flex size-10 items-center justify-center rounded-2xl bg-[#009cde]/10 text-[#009cde]">
+                  <Stethoscope size={20} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">Clinical Insights</p>
+                  <h2 className="mt-1 text-xl font-black tracking-tight dark:text-white">Model Interpretation</h2>
+                </div>
               </div>
-              <div>
-                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#6143f4]">Action Plan</p>
-                <h2 className="mt-1 text-2xl font-black tracking-tight dark:text-white">Recommendations</h2>
-              </div>
-            </div>
 
-            {visibleRecommendationSections.length > 0 ? (
-              <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-                {visibleRecommendationSections.map(({ key, config, items }) => {
-                  const Icon = config.icon;
-                  return (
-                    <article
-                      key={key}
-                      className="rounded-[28px] border border-slate-200/80 bg-white p-6 shadow-sm dark:border-white/5 dark:bg-[#1a1433]"
-                    >
-                      <div className="mb-6 flex items-center gap-3">
-                        <div className={`flex size-11 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/5 ${config.iconClass}`}>
-                          <Icon size={22} />
-                        </div>
-                        <h3 className="text-xl font-black tracking-tight dark:text-white">{config.title}</h3>
-                      </div>
+              <Motion.div variants={leftInsightContainer} className="space-y-3">
+                {visibleClinicalCards.slice(0, 3).map((card, index) => (
+                  <Motion.div
+                    key={`${card.condition || 'clinical-card'}-${card.icdCode || card.icd_code || index}`}
+                    variants={leftInsightCard}
+                    whileHover={leftCardHover}
+                  >
+                    <ClinicalInsightCard
+                      card={card}
+                      className="shadow-lg shadow-slate-900/5"
+                      fallback={{
+                        summary,
+                        clinicalInsight: clinicalReport.clinicalInsight,
+                        symptoms,
+                        recommendations: data?.recommendations,
+                        sources,
+                      }}
+                    />
+                  </Motion.div>
+                ))}
+              </Motion.div>
+            </Motion.section>
+          </Motion.div>
 
-                      <div className="space-y-4">
-                        {items.map((recommendation) => (
-                          <div
-                            key={recommendation.id}
-                            className="rounded-2xl border border-slate-100 bg-slate-50/80 p-5 dark:border-white/5 dark:bg-white/[0.03]"
-                          >
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                              <div>
-                                <h4 className="text-lg font-black tracking-tight text-[#13082a] dark:text-white">
-                                  {recommendation.title}
-                                </h4>
-                                <p className="mt-3 text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-400">
-                                  {recommendation.description}
-                                </p>
-                              </div>
-                              <span
-                                className={`inline-flex w-fit rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] ${priorityStyles[recommendation.priority] || priorityStyles.medium}`}
-                              >
-                                {recommendation.priority}
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            ) : (
-              <EmptyInsight />
-            )}
-          </section>
-        </>
+          <Motion.aside variants={revealContainer} className="col-span-full lg:col-span-2">
+            <Motion.div variants={revealContainer} className="space-y-4 lg:sticky lg:top-24">
+              <RecommendationsPanel sections={generalRecommendationSections} />
+              <SleepPanel section={sleepRecommendationSection} sleepMetric={sleepMetric} />
+              <LiveMetricsPanel metricInsights={metricInsights} />
+              <MiniTrendChart riskCards={riskCards} metricInsights={metricInsights} />
+              <RiskDriversPanel factors={factors} />
+            </Motion.div>
+          </Motion.aside>
+        </Motion.section>
       )}
     </Motion.div>
   );

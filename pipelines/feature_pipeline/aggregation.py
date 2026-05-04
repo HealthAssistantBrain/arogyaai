@@ -3,14 +3,21 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from statistics import mean
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
-from models import UserVital, UserVitalTypeEnum
+from models import GoogleFitConnection, UserVital, UserVitalTypeEnum
+from pipelines.ingestion_pipeline.service import compute_daily_steps
 
 
 def _window_start(days: int = 7) -> datetime:
     return datetime.now(timezone.utc) - timedelta(days=max(1, days))
+
+
+def _timezone_for_user(db: Session, user_id: UUID) -> str:
+    connection = db.query(GoogleFitConnection).filter(GoogleFitConnection.user_id == user_id).first()
+    return str(getattr(connection, "default_timezone", None) or "UTC")
 
 
 def _recent_vital_rows(
@@ -49,6 +56,10 @@ def _sleep_minutes_value(row: UserVital) -> float | None:
 
 
 def _daily_totals(rows: list[UserVital], *, sleep_minutes: bool = False, days: int = 7) -> list[float]:
+    if not sleep_minutes:
+        daily_steps = compute_daily_steps(rows, "UTC")
+        return [float(item["steps"]) for item in reversed(daily_steps)]
+
     totals_by_day: dict[str, float] = {}
     for row in rows:
         if row.timestamp is None:
@@ -78,9 +89,27 @@ def _daily_totals(rows: list[UserVital], *, sleep_minutes: bool = False, days: i
     return series
 
 
+def _daily_step_totals(db: Session, user_id: UUID, rows: list[UserVital], *, days: int = 7) -> list[float]:
+    timezone_name = _timezone_for_user(db, user_id)
+    daily_steps = compute_daily_steps(rows, timezone_name)
+    totals_by_day = {str(item["date"]): float(item["steps"]) for item in daily_steps}
+    try:
+        tzinfo = ZoneInfo(timezone_name)
+    except Exception:
+        tzinfo = ZoneInfo("UTC")
+    end_date = datetime.now(tzinfo).date()
+    start_date = end_date - timedelta(days=max(1, days) - 1)
+    series: list[float] = []
+    cursor = start_date
+    while cursor <= end_date:
+        series.append(totals_by_day.get(cursor.isoformat(), 0.0))
+        cursor += timedelta(days=1)
+    return series
+
+
 def avg_steps_7d(db: Session, user_id: UUID) -> float:
     rows = _recent_vital_rows(db, user_id, UserVitalTypeEnum.STEPS, days=7)
-    daily_totals = _daily_totals(rows, days=7)
+    daily_totals = _daily_step_totals(db, user_id, rows, days=7)
     return round(float(mean(daily_totals)), 2) if daily_totals else 0.0
 
 

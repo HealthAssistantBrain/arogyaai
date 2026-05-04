@@ -20,7 +20,7 @@ def _phrase_hits(query: str, document: RetrievedDocument) -> float:
     query_text = " ".join(tokenize(query))
     if not query_text:
         return 0.0
-    document_text = " ".join(tokenize(f"{document.title} {document.topic} {document.disease_type} {document.text}"))
+    document_text = " ".join(tokenize(f"{document.title} {document.topic} {document.disease_type} {' '.join(document.tags)} {document.text}"))
     query_tokens = query_text.split()
     if len(query_tokens) < 2:
         return 0.0
@@ -30,7 +30,7 @@ def _phrase_hits(query: str, document: RetrievedDocument) -> float:
 
 def _metadata_overlap(query: str, document: RetrievedDocument) -> float:
     query_tokens = set(tokenize(query))
-    metadata_tokens = set(tokenize(f"{document.title} {document.topic} {document.disease_type} {document.category} {document.severity}"))
+    metadata_tokens = set(tokenize(f"{document.title} {document.topic} {document.disease_type} {document.category} {document.severity} {' '.join(document.tags)}"))
     if not query_tokens or not metadata_tokens:
         return 0.0
     return len(query_tokens & metadata_tokens) / len(query_tokens)
@@ -46,7 +46,7 @@ def _token_overlap(query: str, document: RetrievedDocument) -> float:
 
 def _domain_boost(query: str, document: RetrievedDocument) -> float:
     query_text = query.lower()
-    metadata_text = f"{document.title} {document.topic} {document.disease_type} {document.category} {document.severity}".lower()
+    metadata_text = f"{document.title} {document.topic} {document.disease_type} {document.category} {document.severity} {' '.join(document.tags)}".lower()
     domain_rules = (
         (("blood pressure", "hypertension", "systolic", "diastolic"), ("hypertension", "blood pressure")),
         (("sleep", "insomnia", "snoring", "apnea"), ("sleep",)),
@@ -54,6 +54,10 @@ def _domain_boost(query: str, document: RetrievedDocument) -> float:
         (("cholesterol", "ldl", "hdl", "triglyceride", "lipid"), ("cholesterol", "triglyceride", "cardiovascular")),
         (("bmi", "weight", "obesity", "overweight", "waist"), ("obesity", "body weight", "bmi")),
         (("activity", "steps", "exercise", "sedentary", "walking"), ("activity", "lifestyle", "physical")),
+        (("fever", "cough", "infection", "flu", "chills"), ("infection", "influenza", "respiratory")),
+        (("urine", "urination", "burning", "uti", "flank"), ("urinary", "urinary tract infection")),
+        (("fatigue", "weakness", "hemoglobin", "iron", "anemia"), ("anemia", "hematology")),
+        (("kidney", "egfr", "albumin", "urine protein"), ("kidney", "chronic kidney")),
     )
     has_explicit_domain = False
     for query_terms, metadata_terms in domain_rules:

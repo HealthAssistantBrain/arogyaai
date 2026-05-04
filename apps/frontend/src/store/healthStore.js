@@ -3,8 +3,7 @@ import { persist, devtools } from 'zustand/middleware';
 import api from '../lib/axios';
 import { normalizeClinicalCards } from '../lib/clinicalCards';
 import useDashboardStore from './dashboardStore';
-import useSleepStore from './sleepStore';
-import { buildHealthMetricsSnapshot } from '../lib/healthMetrics';
+import { normalizeHealthMetricsResponse } from '../lib/healthMetrics';
 import { safeArray, safeObject, safeText } from '../utils/safeData';
 
 const METRICS_STALE_MS = 45_000;
@@ -13,11 +12,6 @@ let metricsRequestSeq = 0;
 let metricsInFlight = null;
 let explanationRequestSeq = 0;
 let explanationInFlight = null;
-
-const normalizeLabResults = (payload) => {
-  const items = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
-  return items;
-};
 
 const toFiniteNumber = (value) => {
   const parsed = Number(value);
@@ -151,6 +145,7 @@ export const useHealthStore = create(
         metricsLoading: false,
         metricsError: null,
         metricsLastFetched: null,
+        lastUpdated: null,
 
         // --- Smart Sync Engine State ---
         googleFitConnected: false,
@@ -270,74 +265,46 @@ export const useHealthStore = create(
           }
 
           const requestId = ++metricsRequestSeq;
-          const dashboardStore = useDashboardStore.getState();
-          const sleepStore = useSleepStore.getState();
 
           metricsInFlight = (async () => {
-            let apiPayload = null;
-
             try {
               const response = await api.get('/health/metrics');
-              apiPayload = response.data?.data ?? response.data ?? null;
-            } catch (error) {
-              if (error?.response?.status !== 404) {
-                console.warn('[healthStore] /health/metrics fetch failed, using composed fallback:', error?.message || error);
+              const snapshot = normalizeHealthMetricsResponse(response.data);
+
+              if (requestId !== metricsRequestSeq) {
+                return snapshot;
               }
-            }
 
-            let snapshot;
-            if (apiPayload) {
-              snapshot = buildHealthMetricsSnapshot({
-                apiPayload,
-                dashboardData: dashboardStore.dashboardData,
-                spo2Records: dashboardStore.vitals?.['spo2:24h']?.data ?? [],
-                sleepSummary: sleepStore.summary,
-              });
-            } else {
-              const [spo2Slice, sleepSummary, labResultsResponse] = await Promise.all([
-                dashboardStore.fetchVitals('spo2', '24h', { force, silent: true }),
-                sleepStore.fetchSleepSummary({ range: '24h', force }),
-                api.get('/lab-results').catch(() => null),
-              ]);
-
-              snapshot = buildHealthMetricsSnapshot({
-                dashboardData: dashboardStore.dashboardData,
-                spo2Records: spo2Slice?.data ?? dashboardStore.vitals?.['spo2:24h']?.data ?? [],
-                sleepSummary: sleepSummary ?? sleepStore.summary,
-                labResults: normalizeLabResults(labResultsResponse?.data),
-              });
-            }
-
-            if (requestId !== metricsRequestSeq) {
+              set(
+                {
+                  metrics: snapshot,
+                  metricsLoading: false,
+                  metricsError: null,
+                  metricsLastFetched: Date.now(),
+                  lastUpdated: snapshot.lastUpdated,
+                },
+                false,
+                'healthMetrics/fetchSuccess'
+              );
               return snapshot;
+            } catch (error) {
+              const message = error?.response?.data?.detail || error?.response?.data?.message || error?.message || 'Unable to load health metrics.';
+              if (requestId === metricsRequestSeq) {
+                set(
+                  {
+                    metricsLoading: false,
+                    metricsError: message,
+                  },
+                  false,
+                  'healthMetrics/fetchError'
+                );
+              }
+              return get().metrics;
             }
-
-            set(
-              {
-                metrics: snapshot,
-                metricsLoading: false,
-                metricsError: null,
-                metricsLastFetched: Date.now(),
-              },
-              false,
-              'healthMetrics/fetchSuccess'
-            );
-            return snapshot;
           })();
 
           try {
             return await metricsInFlight;
-          } catch (error) {
-            const message = error?.response?.data?.detail || error?.response?.data?.message || error?.message || 'Unable to load health metrics.';
-            set(
-              {
-                metricsLoading: false,
-                metricsError: message,
-              },
-              false,
-              'healthMetrics/fetchError'
-            );
-            return get().metrics;
           } finally {
             metricsInFlight = null;
           }

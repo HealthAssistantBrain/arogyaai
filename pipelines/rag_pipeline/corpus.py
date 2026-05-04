@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .config import RagSettings
+from .generated_corpus import iter_generated_documents
 from .schemas import CorpusChunk
 from .text_cleaning import clean_rag_text, clean_text_list, extract_clinical_fields
 
@@ -149,6 +150,7 @@ class CorpusDocument:
     condition: str = ""
     symptoms: tuple[str, ...] = ()
     risk_factors: tuple[str, ...] = ()
+    tags: tuple[str, ...] = ()
     severity: str = "routine"
 
 
@@ -305,6 +307,14 @@ def _clean_text(value: Any, default: str = "") -> str:
     return text or default
 
 
+def _metadata_list(value: Any, *, limit: int = 16) -> tuple[str, ...]:
+    if isinstance(value, str):
+        items = [part.strip() for part in value.split(",")]
+    else:
+        items = clean_text_list(value, limit=limit, item_limit=80)
+    return tuple(dict.fromkeys(item for item in items if item))[:limit]
+
+
 def _normalize_paragraphs(text: str) -> list[str]:
     return [part.strip() for part in text.split("\n\n") if part.strip()]
 
@@ -386,6 +396,7 @@ def _load_markdown_documents(corpus_dir: Path) -> list[CorpusDocument]:
                 condition=clinical_fields["condition"],
                 symptoms=tuple(clinical_fields["symptoms"]),
                 risk_factors=tuple(clinical_fields["risk_factors"]),
+                tags=_metadata_list(metadata.get("tags") or metadata.get("keywords")),
                 severity=normalize_severity(metadata.get("severity"), text=body),
             )
         )
@@ -456,6 +467,7 @@ def _load_json_documents(corpus_dir: Path) -> list[CorpusDocument]:
                     condition=_clean_text(record.get("condition"), title),
                     symptoms=tuple(clean_text_list(record.get("symptoms"), limit=8, item_limit=120)),
                     risk_factors=tuple(clean_text_list(record.get("risk_factors") or record.get("riskFactors"), limit=8, item_limit=120)),
+                    tags=_metadata_list(record.get("tags") or record.get("keywords")),
                     severity=normalize_severity(record.get("severity"), text=text),
                 )
             )
@@ -484,6 +496,7 @@ def _load_json_documents(corpus_dir: Path) -> list[CorpusDocument]:
                     condition=_clean_text(record.get("condition"), _clean_text(record.get("title"), f"{file_path.stem} document {line_number}")),
                     symptoms=tuple(clean_text_list(record.get("symptoms"), limit=8, item_limit=120)),
                     risk_factors=tuple(clean_text_list(record.get("risk_factors") or record.get("riskFactors"), limit=8, item_limit=120)),
+                    tags=_metadata_list(record.get("tags") or record.get("keywords")),
                     severity=normalize_severity(record.get("severity"), text=text),
                 )
             )
@@ -491,11 +504,38 @@ def _load_json_documents(corpus_dir: Path) -> list[CorpusDocument]:
     return documents
 
 
+def _load_generated_documents() -> list[CorpusDocument]:
+    documents: list[CorpusDocument] = []
+    for record in iter_generated_documents():
+        text = _clean_text(record.get("text"))
+        title = _clean_text(record.get("title"), _clean_text(record.get("condition"), "Medical guidance"))
+        if not text:
+            continue
+        documents.append(
+            CorpusDocument(
+                document_id=_clean_text(record.get("document_id"), title.lower().replace(" ", "_")),
+                source=_clean_text(record.get("source"), "ArogyaAI Clinical Knowledge Base"),
+                source_url=_clean_text(record.get("source_url")),
+                source_org=_clean_text(record.get("source_org"), "ArogyaAI"),
+                topic=_clean_text(record.get("topic"), "clinical guidance"),
+                disease_type=_clean_text(record.get("disease_type"), "general"),
+                title=title,
+                text=clean_rag_text(text),
+                condition=_clean_text(record.get("condition"), title),
+                symptoms=tuple(clean_text_list(record.get("symptoms"), limit=10, item_limit=120)),
+                risk_factors=tuple(clean_text_list(record.get("risk_factors") or record.get("riskFactors"), limit=10, item_limit=120)),
+                tags=_metadata_list(record.get("tags") or record.get("keywords")),
+                severity=normalize_severity(record.get("severity"), text=text),
+            )
+        )
+    return documents
+
+
 def load_corpus_documents(settings: RagSettings | None = None) -> list[CorpusDocument]:
     cfg = settings or RagSettings()
     corpus_dir = ensure_corpus_seeded(cfg.corpus_dir)
 
-    documents = [*_load_markdown_documents(corpus_dir), *_load_json_documents(corpus_dir)]
+    documents = [*_load_markdown_documents(corpus_dir), *_load_json_documents(corpus_dir), *_load_generated_documents()]
     documents.sort(key=lambda item: (item.source_org, item.source, item.disease_type, item.topic, item.document_id))
     return documents
 
@@ -530,6 +570,7 @@ def _build_chunk(
         condition=first.condition,
         symptoms=tuple(item for document in documents for item in document.symptoms),
         risk_factors=tuple(item for document in documents for item in document.risk_factors),
+        tags=tuple(dict.fromkeys(item for document in documents for item in document.tags)),
         severity=highest_severity(document.severity for document in documents),
     )
 
@@ -558,6 +599,7 @@ def load_corpus_chunks(settings: RagSettings | None = None) -> list[CorpusChunk]
                         condition=document.condition,
                         symptoms=document.symptoms,
                         risk_factors=document.risk_factors,
+                        tags=document.tags,
                         severity=document.severity,
                     )
                 )

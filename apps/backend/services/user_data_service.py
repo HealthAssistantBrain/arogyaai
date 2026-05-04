@@ -19,7 +19,9 @@ from models import (
     UserVital,
     UserVitalSourceEnum,
     UserVitalTypeEnum,
+    WearableMetric,
 )
+from pipelines.ingestion_pipeline.service import IngestionPipelineService
 from services.onboarding_service import OnboardingService
 from services.user_service import UserService
 
@@ -347,8 +349,12 @@ class UserDataService:
     ) -> list[UserVital]:
         saved: list[UserVital] = []
         normalized_records: dict[tuple[UserVitalTypeEnum, datetime, UserVitalSourceEnum], dict[str, Any]] = {}
+        record_payloads = list(records or [])
+        validated_payloads = IngestionPipelineService.normalize_vital_records(record_payloads)
+        if validated_payloads:
+            record_payloads = validated_payloads
 
-        for record in records:
+        for record in record_payloads:
             vital_type = record.get("type")
             if not vital_type:
                 continue
@@ -371,7 +377,10 @@ class UserDataService:
                 value = float(value_raw)
             except (TypeError, ValueError):
                 continue
-            if value < 0 or (value == 0 and vital_enum != UserVitalTypeEnum.STEPS):
+            if value < 0 or (
+                value == 0
+                and vital_enum not in {UserVitalTypeEnum.STEPS, UserVitalTypeEnum.CALORIES_BURNED}
+            ):
                 continue
             unit = str(record.get("unit") or "")
             if not unit:
@@ -451,6 +460,88 @@ class UserDataService:
             saved.append(vital)
 
         if saved or (overwrite_window and delete_types):
+            db.commit()
+            for item in saved:
+                db.refresh(item)
+
+        return saved
+
+    @staticmethod
+    def store_wearable_metrics(db: Session, user: User, records: Iterable[dict]) -> list[WearableMetric]:
+        saved: list[WearableMetric] = []
+        normalized_records: dict[tuple[str, datetime, str], dict[str, Any]] = {}
+
+        for record in records or []:
+            metric_type = str(record.get("metric_type") or record.get("type") or "").strip().lower()
+            if not metric_type:
+                continue
+
+            value_raw = record.get("value")
+            if value_raw is None:
+                continue
+            try:
+                numeric_value = float(value_raw)
+            except (TypeError, ValueError):
+                continue
+            if numeric_value < 0 and metric_type != "location":
+                continue
+
+            unit = str(record.get("unit") or "").strip()
+            if not unit:
+                continue
+
+            timestamp = _parse_timestamp(record.get("timestamp"))
+            source = str(record.get("source") or "google_fit").strip().lower() or "google_fit"
+            metadata = record.get("metadata") if isinstance(record.get("metadata"), dict) else {}
+            extra_metadata = {
+                key: value
+                for key, value in record.items()
+                if key not in {"type", "metric_type", "value", "unit", "timestamp", "source", "timezone", "metadata"}
+            }
+            if record.get("timezone"):
+                metadata = {**metadata, "timezone": record.get("timezone")}
+            metadata = {**metadata, **extra_metadata}
+
+            normalized_records[(metric_type, timestamp, source)] = {
+                "metric_type": metric_type,
+                "value": numeric_value,
+                "unit": unit,
+                "timestamp": timestamp,
+                "source": source,
+                "metadata": metadata,
+            }
+
+        for item in normalized_records.values():
+            existing = (
+                db.query(WearableMetric)
+                .filter(
+                    WearableMetric.user_id == user.id,
+                    WearableMetric.metric_type == item["metric_type"],
+                    WearableMetric.timestamp == item["timestamp"],
+                    WearableMetric.source == item["source"],
+                )
+                .first()
+            )
+
+            if existing:
+                existing.value = item["value"]
+                existing.unit = item["unit"]
+                existing.metric_metadata = item["metadata"]
+                wearable_metric = existing
+            else:
+                wearable_metric = WearableMetric(
+                    user_id=user.id,
+                    metric_type=item["metric_type"],
+                    value=item["value"],
+                    unit=item["unit"],
+                    timestamp=item["timestamp"],
+                    source=item["source"],
+                    metric_metadata=item["metadata"],
+                )
+                db.add(wearable_metric)
+            saved.append(wearable_metric)
+
+        if saved:
             db.commit()
             for item in saved:
                 db.refresh(item)

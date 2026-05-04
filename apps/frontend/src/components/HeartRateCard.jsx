@@ -1,56 +1,109 @@
-import { Heart, Activity, Link2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Activity, RefreshCcw } from 'lucide-react';
 
 import HeartRateChart from './charts/HeartRateChart';
-import { ROUTES } from '../router/routes';
-import useDashboardStore from '../store/dashboardStore';
+import useHealthStore from '../store/healthStore';
 import { safeArray } from '../utils/safeData';
 
-const HeartRateCard = () => {
-  const navigate = useNavigate();
-  const heartRateSlice = useDashboardStore((s) => s.vitals?.['heart_rate:24h']);
-  const googleFitSlice = useDashboardStore((s) => s.googleFit);
+const isToday = (timestamp, now = new Date()) => {
+  const date = new Date(timestamp);
 
+  if (Number.isNaN(date.getTime())) return false;
 
-  const heartRateData = safeArray(heartRateSlice?.data);
-  const loading = heartRateSlice?.status === 'processing';
-  const error = heartRateSlice?.error ?? null;
-  const message = heartRateSlice?.message ?? null;
-  const connected = Boolean(googleFitSlice?.data?.connected);
-  const heartRateAvailable = googleFitSlice?.data?.data_availability?.heart_rate;
-  const missingScopes = Array.isArray(googleFitSlice?.data?.missing_scopes) ? googleFitSlice.data.missing_scopes : [];
-  const latestReading = heartRateData.length > 0 ? heartRateData[heartRateData.length - 1] : null;
-  const chartData = heartRateData.map((item) => ({
-    t: new Date(item.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-    v: item.value,
+  return (
+    date.getDate() === now.getDate() &&
+    date.getMonth() === now.getMonth() &&
+    date.getFullYear() === now.getFullYear()
+  );
+};
+
+const normalizeToTodayTimeline = (data, now = new Date()) => {
+  const currentHour = now.getHours();
+  const hourlyValues = {};
+  const hourlyAnomalies = {};
+
+  safeArray(data).forEach((item) => {
+    if (!item?.timestamp) return;
+
+    const timestamp = new Date(item.timestamp);
+    const value = Number(item.value);
+
+    if (Number.isNaN(timestamp.getTime()) || !Number.isFinite(value)) return;
+
+    const hour = timestamp.getHours();
+
+    hourlyValues[hour] = value;
+    hourlyAnomalies[hour] = Boolean(item.is_anomaly);
+  });
+
+  return Array.from({ length: 24 }, (_, hour) => ({
+    hour,
+    value: hour > currentHour ? null : hourlyValues[hour] ?? null,
+    is_anomaly: hour <= currentHour && hourlyValues[hour] !== undefined
+      ? hourlyAnomalies[hour] || hourlyValues[hour] < 60 || hourlyValues[hour] > 100
+      : false,
+    isFuture: hour > currentHour,
   }));
-  const emptyMessage = connected && heartRateAvailable === false
-    ? missingScopes.includes('heart_rate')
-      ? 'Heart rate permission is missing. Reconnect Google Fit to grant access.'
-      : 'Heart rate data not available.'
-    : 'No data yet. Connect your device or wait for sync.';
+};
+
+const HeartRateCard = () => {
+  const [now, setNow] = useState(() => new Date());
+  const metrics = useHealthStore((s) => s.metrics);
+  const loading = useHealthStore((s) => s.metricsLoading);
+  const error = useHealthStore((s) => s.metricsError);
+  const fetchHealthMetrics = useHealthStore((s) => s.fetchHealthMetrics);
+
+  const heartRateMetric = metrics?.metrics?.heart_rate ?? metrics?.cards?.find((metric) => metric.key === 'heart_rate') ?? null;
+  const heartRateData = safeArray(heartRateMetric?.series);
+  const todayData = heartRateData.filter((item) => isToday(item?.timestamp, now));
+  const latestReading = todayData.length > 0
+    ? todayData[todayData.length - 1]
+    : (heartRateMetric?.value !== null && heartRateMetric?.value !== undefined
+      ? { value: heartRateMetric.value, timestamp: heartRateMetric.lastUpdated }
+      : null);
+  const chartData = normalizeToTodayTimeline(todayData, now);
+  const currentDayKey = now.toDateString();
+  const emptyMessage = 'Waiting for sync';
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setNow(new Date());
+    }, 60_000);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const currentTime = new Date();
+    const nextMidnight = new Date(currentTime);
+    nextMidnight.setHours(24, 0, 0, 0);
+
+    const timeout = window.setTimeout(() => {
+      setNow(new Date());
+    }, nextMidnight.getTime() - currentTime.getTime());
+
+    return () => window.clearTimeout(timeout);
+  }, [currentDayKey]);
 
   return (
     <section className="rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.03]">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-[24px] font-black tracking-tight text-[#13082a] dark:text-white">
-            Heart  Rate
+            Heart Rate
           </h2>
           <p className="mt-2 max-w-2xl text-[14px] leading-relaxed text-slate-500 dark:text-slate-400">
-            Hourly heart rate buckets are fetched from Google Fit, normalized by the backend, and stored in PostgreSQL before rendering here.
+            Live wearable readings from the health metrics pipeline, refreshed automatically for near-real-time monitoring.
           </p>
         </div>
 
-        {!connected && (
-          <button
-            onClick={() => navigate(ROUTES.GOOGLE_FIT_SETTINGS)}
-            className="inline-flex items-center gap-2 rounded-2xl bg-[#6143f4] px-4 py-3 text-[12px] font-black uppercase tracking-[0.16em] text-white transition hover:bg-[#5235dc]"
-          >
-            <Link2 size={16} />
-            Connect Google Fit
-          </button>
-        )}
+        <button
+          onClick={() => void fetchHealthMetrics({ force: true })}
+          className="inline-flex items-center gap-2 rounded-xl bg-[#6143f4] px-4 py-3 text-[12px] font-black uppercase tracking-[0.16em] text-white transition hover:bg-[#5235dc]"
+        >
+          <RefreshCcw size={16} />
+          Refresh
+        </button>
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
@@ -80,11 +133,6 @@ const HeartRateCard = () => {
             </div>
           )}
 
-          {!error && message && (
-            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] font-medium text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
-              {message}
-            </div>
-          )}
         </div>
 
         <div className="rounded-[1.5rem] border border-slate-200/70 bg-white p-5 dark:border-white/10 dark:bg-[#131022]">
@@ -105,18 +153,15 @@ const HeartRateCard = () => {
               <div className="flex h-[220px] items-center justify-center rounded-2xl border border-dashed border-slate-200 text-[13px] font-semibold text-slate-400 dark:border-white/10 dark:text-slate-500">
                 Syncing latest Google Fit heart rate...
               </div>
-            ) : chartData.length > 0 ? (
-              <HeartRateChart data={chartData} height={220} />
             ) : (
-              <div className="flex h-[220px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 px-6 text-center dark:border-white/10">
-                <Heart size={26} className="text-slate-300 dark:text-slate-600" />
-                <p className="mt-4 text-[14px] font-semibold text-slate-500 dark:text-slate-400">
-                  No data yet
-                </p>
-                <p className="mt-2 text-[13px] leading-relaxed text-slate-400 dark:text-slate-500">
-                  {error || emptyMessage}
-                </p>
-              </div>
+              <>
+                <HeartRateChart data={chartData} height={220} />
+                {todayData.length === 0 && (
+                  <p className="mt-3 text-center text-[13px] font-semibold text-slate-400 dark:text-slate-500">
+                    {error || emptyMessage}
+                  </p>
+                )}
+              </>
             )}
           </div>
         </div>

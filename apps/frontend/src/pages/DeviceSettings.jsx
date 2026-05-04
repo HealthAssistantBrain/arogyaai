@@ -345,21 +345,21 @@ const DeviceSettings = () => {
 
                 <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                   <StatCard
-                    label="Daily Steps"
+                    label={stats.latest_day?.is_partial ? 'Today So Far' : 'Daily Steps'}
                     value={formatNumber(stats.latest_day?.steps)}
-                    helper={stats.latest_day?.date ? `Latest local day: ${stats.latest_day.date}` : 'No synced data yet'}
+                    helper={stats.latest_day?.date ? `Local day: ${stats.latest_day.date}` : 'No synced data yet'}
                     icon={Watch}
                   />
                   <StatCard
                     label="Total Steps"
                     value={formatNumber(stats.total_steps)}
-                    helper="Backend-calculated total for the synced window"
+                    helper={`Backend total across ${formatNumber(stats.valid_day_count ?? 0)} complete days`}
                     icon={RefreshCw}
                   />
                   <StatCard
                     label="Average Daily"
                     value={formatNumber(stats.average_daily_steps)}
-                    helper="Average across all synced buckets"
+                    helper="Average across complete local days"
                     icon={Clock}
                   />
                   <StatCard

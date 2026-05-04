@@ -207,6 +207,9 @@ class StoragePipelineService:
                 record = LabResult(user_id=user.id, report_id=report_id, name=name)
                 db.add(record)
 
+            loinc_code = str(item.get("loinc_code") or item.get("loinc") or "").strip()
+            if loinc_code:
+                record.loinc_code = loinc_code
             record.value = float(item.get("value") or item.get("raw_value") or 0.0)
             record.unit = item.get("unit")
             record.reference_range = item.get("reference_range")
@@ -364,7 +367,8 @@ class StoragePipelineService:
             if not feature_name:
                 continue
 
-            value = _as_float(item.get("shap_value") or item.get("contribution"), default=0.0) or 0.0
+            raw_value = item.get("shap_value") if item.get("shap_value") is not None else item.get("contribution")
+            value = _as_float(raw_value, default=0.0) or 0.0
             if feature_name not in normalized_entries:
                 ordered_feature_names.append(feature_name)
 

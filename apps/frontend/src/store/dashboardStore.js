@@ -159,9 +159,13 @@ const buildDashboardState = (currentState, payload = {}, replace = false) => {
     const canonicalInsights = safeArray(payload.insights ?? payload.prediction?.data?.recommendations ?? nextDashboardData.insights)
         .map((item) => safeText(item))
         .filter(Boolean);
-    const canonicalStepData = safeArray(canonicalStepsSlice.data);
-    const latestStepEntry = canonicalStepData.length > 0 ? canonicalStepData[canonicalStepData.length - 1] : null;
-    const latestStepValue = Number(latestStepEntry?.value);
+    const googleFitStats = safeObject(
+        payload.googleFit?.data?.stats ??
+        nextDashboardData.googleFit?.data?.stats
+    );
+    const latestStepValue = Number(
+        googleFitStats.latest_day?.steps
+    );
 
     const nextState = {
         ...currentState,

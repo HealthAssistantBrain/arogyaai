@@ -187,11 +187,16 @@ const GoogleFitSettings = () => {
         stats: {
           daily_steps: [],
           total_steps: 0,
+          average_steps: 0,
           average_daily_steps: 0,
           average_steps_on_active_days: 0,
           best_day: null,
           latest_day: null,
+          latest_complete_day: null,
+          current_day: null,
           active_day_count: 0,
+          valid_day_count: 0,
+          partial_day_count: 0,
         },
         raw_json: null,
         google_email: null,
@@ -247,14 +252,20 @@ const GoogleFitSettings = () => {
   const stats = data?.stats || {
     daily_steps: [],
     total_steps: 0,
+    average_steps: 0,
     average_daily_steps: 0,
     average_steps_on_active_days: 0,
     best_day: null,
     latest_day: null,
+    latest_complete_day: null,
+    current_day: null,
     active_day_count: 0,
+    valid_day_count: 0,
+    partial_day_count: 0,
   };
   const availability = data?.data_availability || { steps: false, heart_rate: false, sleep: false };
   const missingScopes = Array.isArray(data?.missing_scopes) ? data.missing_scopes : [];
+  const latestDisplayDay = stats.latest_day;
 
   return (
     <div className="min-h-screen bg-[#f6f5f8] text-[#13082a] dark:bg-[#0B0819] dark:text-slate-100">
@@ -323,23 +334,23 @@ const GoogleFitSettings = () => {
 
             <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <StatCard
-                label="Daily Steps"
-                value={formatNumber(stats.latest_day?.steps ?? null)}
-                helper={`Latest local day: ${stats.latest_day?.date ? formatLocalDay(stats.latest_day.date) : 'No sync yet'}`}
+                label={latestDisplayDay?.is_partial ? 'Today So Far' : 'Daily Steps'}
+                value={formatNumber(latestDisplayDay?.steps ?? null)}
+                helper={latestDisplayDay?.date ? formatLocalDay(latestDisplayDay.date) : 'No sync yet'}
                 icon={Footprints}
                 accent="#22c55e"
               />
               <StatCard
                 label="Total Steps"
                 value={formatNumber(stats.total_steps ?? null)}
-                helper={`Total across the last ${DEFAULT_WINDOW_DAYS} local days`}
+                helper={`Total across ${formatNumber(stats.valid_day_count ?? 0)} complete local days`}
                 icon={TrendingUp}
                 accent="#6143f4"
               />
               <StatCard
                 label="Average Daily"
-                value={formatNumber(stats.average_daily_steps ?? null)}
-                helper="Average across every bucket in the synced window"
+                value={formatNumber(stats.average_steps ?? stats.average_daily_steps ?? null)}
+                helper="Backend-computed average across synced local days"
                 icon={CalendarDays}
                 accent="#009cde"
               />
@@ -360,7 +371,7 @@ const GoogleFitSettings = () => {
               <StatCard
                 label="Latest Day"
                 value={formatNumber(stats.latest_day?.steps ?? null)}
-                helper={stats.latest_day?.date ? formatLocalDay(stats.latest_day.date) : 'No synced history yet'}
+                helper={stats.latest_day?.date ? `Latest local day: ${formatLocalDay(stats.latest_day.date)}` : 'No synced history yet'}
                 icon={CalendarDays}
                 accent="#14b8a6"
               />
@@ -372,7 +383,7 @@ const GoogleFitSettings = () => {
             <ul className="mt-4 space-y-3 text-[13px] leading-relaxed text-slate-600 dark:text-slate-400">
               <li>The server handles OAuth code exchange and token refresh so Google secrets stay server-side.</li>
               <li>Daily buckets are generated from local-midnight boundaries using your configured timezone.</li>
-              <li>Fetched daily steps are cached in the existing wearable data model, tied to the Google Fit device record.</li>
+              <li>Fetched daily steps are normalized once and stored in backend-owned user vitals.</li>
               <li>The raw Google aggregate response is preserved for debugging in the panel below.</li>
             </ul>
 
@@ -432,15 +443,15 @@ const GoogleFitSettings = () => {
               </div>
               {stats.daily_steps.length > 0 ? (
                 <div className="max-h-[420px] overflow-y-auto">
-                  {stats.daily_steps
-                    .slice()
-                    .reverse()
-                    .map((item) => (
+                  {stats.daily_steps.map((item) => (
                       <div
                         key={item.date}
                         className="grid grid-cols-[1.2fr_0.8fr] border-t border-slate-100 px-4 py-3 text-[13px] dark:border-white/5"
                       >
-                        <span className="font-semibold text-[#13082a] dark:text-white">{formatLocalDay(item.date)}</span>
+                        <span className="font-semibold text-[#13082a] dark:text-white">
+                          {formatLocalDay(item.date)}
+                          {item.is_partial ? <span className="ml-2 text-[10px] font-black uppercase tracking-[0.12em] text-amber-500">Partial</span> : null}
+                        </span>
                         <span className="text-right font-black text-[#6143f4]">{formatNumber(item.steps)}</span>
                       </div>
                     ))}

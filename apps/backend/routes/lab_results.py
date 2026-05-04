@@ -131,11 +131,19 @@ def get_lab_results(
         lab_results.append(
             {
                 "name": latest.name,
+                "loinc_code": latest.loinc_code,
                 "value": round(latest.value, 1),
                 "unit": latest.unit or "",
                 "reference_range": latest.reference_range or "",
                 "status": latest.status or _classify_status(latest.value, latest.reference_range or ""),
                 "category": latest.category or "other",
+                "confidence_score": latest.confidence_score,
+                "source_text": latest.source_text or latest.source_span,
+                "source_span": latest.source_span,
+                "source_type": latest.source_type or "PDF",
+                "page_number": latest.page_number or 1,
+                "extraction_method": latest.extraction_method or "structured_line",
+                "bbox": latest.bbox,
                 "trend": trend,
             }
         )

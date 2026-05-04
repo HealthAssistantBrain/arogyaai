@@ -50,9 +50,9 @@ MAX_RAG_DOCUMENTS = 4
 RISK_LEVEL_ORDER = {"LOW": 0, "MEDIUM": 1, "MODERATE": 1, "HIGH": 2, "CRITICAL": 3}
 OUTPUT_RISK_LEVELS = {"LOW", "MEDIUM", "HIGH"}
 CLINICAL_ASSISTANT_INSTRUCTION = (
-    "You are a clinical AI assistant. You behave like a careful, responsible doctor. "
-    "You listen first, reason step-by-step, avoid overconfidence, ask follow-up questions, "
-    "explain clearly in simple language, and prioritize patient safety. Never give a final diagnosis."
+    "You are a clinical AI assistant speaking like a calm, careful doctor. "
+    "You listen first, reason privately, avoid overconfidence, ask at most one or two focused questions, "
+    "explain in simple language, and prioritize patient safety. Never give a final diagnosis."
 )
 REQUIRED_RESPONSE_KEYS = (
     "understanding",
@@ -72,6 +72,25 @@ STRUCTURED_RESPONSE_FORMAT = (
     "Recommendations",
     "Safety Note",
 )
+PATIENT_FACING_SAFETY_NOTE = "If this feels severe, unusual, or is getting worse, it is best to get checked in person."
+PATIENT_ARTIFACT_HEADINGS = {
+    "acknowledge",
+    "clinical interpretation",
+    "clinical insight",
+    "clinical response",
+    "combine data and medical context",
+    "follow-up questions",
+    "interpret symptoms/data",
+    "knowledge sources",
+    "recommendations",
+    "risk data",
+    "safety",
+    "safety note",
+    "symptoms considered",
+    "understanding",
+    "what to monitor",
+    "possible causes",
+}
 CHAT_TRAINING_LOG_PATH = "data/chat_training_logs.json"
 CHAT_LORA_DATASET_PATH = "data/chat_lora_training.json"
 LORA_ADAPTER_PATH = "models/lora_adapter"
@@ -342,85 +361,237 @@ def _build_contributing_factors(
 
 def _section_content(value: Any) -> list[str]:
     if isinstance(value, list):
-        return [_soften_text(item) for item in _coerce_list(value)]
-    text = _soften_text(value)
+        return [_patient_text(item) for item in _coerce_list(value)]
+    text = _patient_text(value)
     return [text] if text else []
 
 
 def _format_response_sections(sections: list[dict[str, Any]]) -> str:
     chunks: list[str] = []
     for section in sections:
-        number = section.get("number")
-        title = _clean_text(section.get("title"))
         content = _section_content(section.get("content"))
-        body = "\n".join(f"- {item}" for item in content) if content else "- Not enough data available yet."
-        chunks.append(f"{number}. {title}\n{body}")
+        chunks.extend(content)
     return "\n\n".join(chunks)
 
 
 def _build_response_sections(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    safety_notes = _coerce_list(payload.get("safety_notes"))
-    safety_note = _clean_text(payload.get("safety_note") or (safety_notes[0] if safety_notes else ""))
-    risk_summary = _clean_text(payload.get("risk_summary")) or "Based on the available information, I am treating this as a health pattern that needs context rather than a diagnosis."
-
-    return [
-        {"number": 1, "title": STRUCTURED_RESPONSE_FORMAT[0], "content": payload.get("acknowledgement")},
-        {"number": 2, "title": STRUCTURED_RESPONSE_FORMAT[1], "content": payload.get("interpretation") or payload.get("summary")},
-        {"number": 3, "title": STRUCTURED_RESPONSE_FORMAT[2], "content": [risk_summary]},
-        {"number": 4, "title": STRUCTURED_RESPONSE_FORMAT[3], "content": payload.get("clinical_insight") or payload.get("insight")},
-        {"number": 5, "title": STRUCTURED_RESPONSE_FORMAT[4], "content": payload.get("follow_up_questions")},
-        {"number": 6, "title": STRUCTURED_RESPONSE_FORMAT[5], "content": payload.get("recommendations")},
-        {"number": 7, "title": STRUCTURED_RESPONSE_FORMAT[6], "content": [safety_note] if safety_note else safety_notes},
+    message = _clean_text(payload.get("message")) or _build_patient_message(payload)
+    paragraphs = [
+        paragraph
+        for paragraph in re.split(r"\n{2,}", message)
+        if _clean_text(paragraph)
     ]
+    return [
+        {"number": None, "title": "", "content": paragraph}
+        for paragraph in paragraphs
+    ]
+
+
+def _natural_join(items: list[str]) -> str:
+    cleaned = [_clean_text(item) for item in items if _clean_text(item)]
+    if not cleaned:
+        return ""
+    if len(cleaned) == 1:
+        return cleaned[0]
+    if len(cleaned) == 2:
+        return f"{cleaned[0]} and {cleaned[1]}"
+    return f"{', '.join(cleaned[:-1])}, and {cleaned[-1]}"
+
+
+def _strip_patient_artifacts(value: Any) -> str:
+    text = _clean_text(value)
+    if not text:
+        return ""
+
+    cleaned_lines: list[str] = []
+    for line in text.splitlines():
+        stripped = re.sub(r"^\s*(?:[-*•]\s+|\d+[\).]\s*)", "", line).strip()
+        heading_key = stripped.lower().rstrip(":")
+        if heading_key in PATIENT_ARTIFACT_HEADINGS:
+            continue
+        stripped = re.sub(
+            r"^(?:"
+            r"acknowledge|clinical interpretation|clinical insight|clinical response|"
+            r"combine data and medical context|follow-up questions|interpret symptoms/data|"
+            r"knowledge sources|recommendations|risk data|safety|safety note|"
+            r"symptoms considered|understanding|what to monitor|possible causes"
+            r")\s*[:\-]\s*",
+            "",
+            stripped,
+            flags=re.IGNORECASE,
+        )
+        if stripped:
+            cleaned_lines.append(stripped)
+
+    text = "\n".join(cleaned_lines)
+    replacements = (
+        (r"\bThe user is asking\b[^.]*\.", "I understand your concern."),
+        (r"\bThe safest reasoning path is\b[^.]*\.", "It is best to interpret this alongside your symptoms and any recent health data."),
+        (r"\bRetrieved\s+(?:RAG\s+)?medical knowledge[^.]*\.", ""),
+        (r"\bRetrieved guidance\b", "Medical guidance"),
+        (r"\bRecent prediction data suggests a higher-concern pattern\b", "Your recent health data deserves closer attention"),
+        (r"\bRecent prediction data suggests a moderate pattern\b", "Your recent health data looks somewhat watchful"),
+        (r"\bRecent prediction data is relatively reassuring\b", "Your recent health data looks generally stable"),
+        (r"\bNo current ML prediction was available[^.]*\.", "I do not have enough recent trend data for that part, so your symptoms and current readings matter most."),
+        (r"\bML risk score\b", "health data pattern"),
+        (r"\bML risk\b", "health data"),
+        (r"\bSHAP\b", "data pattern"),
+        (r"\bRAG\b", "medical context"),
+        (r"\bmodel drivers?\b", "health data patterns"),
+        (r"\brisk predictions?\b", "recent health data"),
+        (r"\bThis assistant suggests possibilities and next steps, but it does not provide a diagnosis\.", PATIENT_FACING_SAFETY_NOTE),
+        (r"\bThis assistant does not provide a diagnosis\.", PATIENT_FACING_SAFETY_NOTE),
+        (r"\bI cannot diagnose the cause here\b", "It is not possible to be certain without more details"),
+        (r"\bI cannot diagnose\b", "It is not possible to be certain without more details"),
+        (r"\bThe current question centers on\b", "From what you are describing, the main concern is"),
+        (r"\bI am using your recent health data plus medical knowledge to reason about this question\b", "I can use your recent health data as context"),
+    )
+    for pattern, replacement in replacements:
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+
+    text = re.sub(r"\s+([,.;:!?])", r"\1", text)
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _soften_patient_language(text: str) -> str:
+    text = re.sub(r"\byou have\b", "this could indicate", text, flags=re.IGNORECASE)
+    text = re.sub(r"\byou are having\b", "this could reflect", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bthis is definitely\b", "this may be", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bdefinitely\b", "possibly", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bdiagnosed with\b", "possibly needs evaluation for", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bdiagnosis is\b", "possibility to consider is", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bwill have\b", "may have", text, flags=re.IGNORECASE)
+    return text
+
+
+def _clean_patient_paragraph(text: str, *, limit: int = 360) -> str:
+    sentences = [
+        sentence.strip()
+        for sentence in re.split(r"(?<=[.!?])\s+", text)
+        if sentence.strip()
+    ]
+    cleaned_sentences = [
+        clean_clinical_text(sentence, limit=limit)
+        for sentence in sentences
+        if clean_clinical_text(sentence, limit=limit)
+    ]
+    if not cleaned_sentences:
+        return ""
+
+    selected: list[str] = []
+    current_length = 0
+    for sentence in cleaned_sentences:
+        next_length = current_length + len(sentence) + (1 if selected else 0)
+        if limit and selected and next_length > limit:
+            break
+        if limit and not selected and len(sentence) > limit:
+            selected.append(clean_clinical_text(sentence, limit=limit))
+            break
+        selected.append(sentence)
+        current_length = next_length
+    return " ".join(selected)
+
+
+def _patient_text(value: Any, *, limit: int = 360) -> str:
+    text = _strip_patient_artifacts(value)
+    if not text:
+        return ""
+    text = _soften_patient_language(text)
+    text = _strip_patient_artifacts(text)
+    return _clean_patient_paragraph(text, limit=limit)
 
 
 def _build_patient_message(payload: dict[str, Any]) -> str:
     paragraphs: list[str] = []
 
-    acknowledgement = clean_clinical_text(
-        payload.get("acknowledgement")
-        or "I hear what you are asking, and I will look at it carefully with the information available.",
-        limit=220,
-    )
-    interpretation = clean_clinical_text(payload.get("interpretation") or payload.get("summary"), limit=320)
-    risk_summary = clean_clinical_text(payload.get("risk_summary"), limit=340)
-    clinical_insight = clean_clinical_text(payload.get("clinical_insight") or payload.get("insight"), limit=420)
+    symptoms = clean_text_list(payload.get("symptoms"), limit=3, item_limit=80)
+    if symptoms:
+        paragraphs.append(f"I understand your concern. From what you are describing, the main issue is {_natural_join(symptoms).lower()}.")
+    else:
+        acknowledgement = _patient_text(
+            payload.get("acknowledgement")
+            or "I understand your concern. Let us look at this carefully with the information available.",
+            limit=220,
+        )
+        if acknowledgement:
+            paragraphs.append(acknowledgement)
 
-    if acknowledgement:
-        paragraphs.append(acknowledgement)
-    if interpretation:
-        paragraphs.append(interpretation)
-    if risk_summary:
-        paragraphs.append(risk_summary)
-    if clinical_insight and clinical_insight.lower() not in {item.lower() for item in paragraphs}:
-        paragraphs.append(clinical_insight)
+    interpretation_sentences: list[str] = []
+    seen_sentences: set[str] = set()
+    for candidate in (
+        payload.get("risk_summary"),
+        payload.get("interpretation"),
+        payload.get("clinical_interpretation"),
+        payload.get("clinical_insight") or payload.get("insight"),
+        payload.get("summary"),
+    ):
+        text = _patient_text(candidate, limit=320)
+        for sentence in re.split(r"(?<=[.!?])\s+", text):
+            sentence = sentence.strip()
+            if symptoms and sentence.lower().startswith("from what you are describing"):
+                continue
+            key = sentence.lower()
+            if not sentence or key in seen_sentences:
+                continue
+            seen_sentences.add(key)
+            interpretation_sentences.append(sentence)
+            if len(interpretation_sentences) >= 3:
+                break
+        if len(interpretation_sentences) >= 3:
+            break
+    if interpretation_sentences:
+        paragraphs.append(" ".join(interpretation_sentences))
+
+    cause_sentences = []
+    for cause in _coerce_list(payload.get("possible_causes") or payload.get("possible_conditions"))[:2]:
+        text = _patient_text(cause, limit=220)
+        if text:
+            cause_sentences.append(text)
+    if cause_sentences:
+        paragraphs.append(" ".join(cause_sentences))
 
     questions = _coerce_list(payload.get("follow_up_questions"))[:2]
     if questions:
-        paragraphs.append(
-            "One thing I would like to understand better is "
-            + " Also, ".join(question.rstrip("?. ") + "?" for question in questions)
-        )
+        cleaned_questions = []
+        for question in questions:
+            question_text = _patient_text(question, limit=180).rstrip("?. ")
+            if question_text:
+                cleaned_questions.append(question_text + "?")
+        if cleaned_questions:
+            question_text = cleaned_questions[0]
+            if len(cleaned_questions) > 1 and cleaned_questions[1]:
+                question_text = f"{question_text} Also, {cleaned_questions[1][0].lower() + cleaned_questions[1][1:]}"
+            paragraphs.append(question_text)
 
     recommendations = _coerce_list(payload.get("recommendations"))[:2]
     if recommendations:
-        paragraphs.append("For now, " + " ".join(clean_clinical_text(item, limit=220) for item in recommendations))
+        guidance_items = []
+        for item in recommendations:
+            text = _patient_text(item, limit=220).rstrip(".")
+            if text:
+                guidance_items.append(text + ".")
+        guidance = " ".join(guidance_items)
+        if guidance:
+            guidance = guidance[0].lower() + guidance[1:]
+            paragraphs.append("For now, " + guidance)
 
-    safety_note = clean_clinical_text(payload.get("safety_note") or (payload.get("safety_notes") or [""])[0], limit=300)
+    safety_note = _patient_text(payload.get("safety_note") or (payload.get("safety_notes") or [""])[0], limit=260)
     if safety_note and payload.get("clinical_risk_level") == "HIGH":
         paragraphs.append(safety_note)
 
-    return "\n\n".join(_dedupe_texts([item for item in paragraphs if item], limit=7))
+    return "\n\n".join(_dedupe_texts([item for item in paragraphs if item], limit=6))
 
 
 def _clean_message_text(value: Any, *, fallback: str = "") -> str:
     raw = _clean_text(value) or fallback
     paragraphs = [
-        _soften_text(part)
+        _patient_text(part, limit=420)
         for part in re.split(r"\n{2,}", raw)
         if _clean_text(part)
     ]
-    return "\n\n".join(_dedupe_texts(paragraphs, limit=7))
+    return "\n\n".join(_dedupe_texts(paragraphs, limit=6))
 
 
 def _normalize_ml_risk_label(value: Any) -> str:
@@ -434,43 +605,43 @@ def _normalize_ml_risk_label(value: Any) -> str:
 
 def _apply_response_format(payload: dict[str, Any]) -> dict[str, Any]:
     formatted = dict(payload)
-    formatted["summary"] = clean_clinical_text(
+    formatted["summary"] = _patient_text(
         formatted.get("summary") or formatted.get("clinical_insight") or formatted.get("insight"),
         limit=320,
     )
-    formatted["acknowledgement"] = clean_clinical_text(
-        formatted.get("acknowledgement") or "I hear your concern and I am going to reason through it carefully.",
+    formatted["acknowledgement"] = _patient_text(
+        formatted.get("acknowledgement") or "I understand your concern, and we can look at this carefully.",
         limit=220,
     )
-    formatted["interpretation"] = clean_clinical_text(
+    formatted["interpretation"] = _patient_text(
         formatted.get("interpretation") or formatted["summary"],
         limit=320,
     )
-    formatted["clinical_insight"] = _soften_text(formatted.get("clinical_insight") or formatted.get("insight") or formatted["summary"])
+    formatted["clinical_insight"] = _patient_text(formatted.get("clinical_insight") or formatted.get("insight") or formatted["summary"])
     formatted["insight"] = formatted["clinical_insight"]
-    formatted["understanding"] = clean_clinical_text(
+    formatted["understanding"] = _patient_text(
         formatted.get("understanding") or formatted.get("acknowledgement") or formatted.get("summary"),
         limit=260,
     )
-    formatted["clinical_interpretation"] = _soften_text(
+    formatted["clinical_interpretation"] = _patient_text(
         formatted.get("clinical_interpretation") or formatted.get("interpretation") or formatted["clinical_insight"]
     )
-    formatted["clinical_summary"] = clean_clinical_text(
+    formatted["clinical_summary"] = _patient_text(
         formatted.get("clinical_summary") or formatted.get("summary") or formatted["clinical_interpretation"],
         limit=320,
     )
-    formatted["possible_causes"] = [_soften_text(item) for item in _coerce_list(formatted.get("possible_causes") or formatted.get("possible_conditions"))]
+    formatted["possible_causes"] = [_patient_text(item) for item in _coerce_list(formatted.get("possible_causes") or formatted.get("possible_conditions"))]
     formatted["possible_conditions"] = list(formatted["possible_causes"])
     formatted["contributing_factors"] = [
-        _soften_text(item)
+        _patient_text(item)
         for item in _build_contributing_factors(payload=formatted)
     ]
-    formatted["follow_up_questions"] = [clean_clinical_text(item, limit=180) for item in _coerce_list(formatted.get("follow_up_questions"))[:2]]
+    formatted["follow_up_questions"] = [_patient_text(item, limit=180) for item in _coerce_list(formatted.get("follow_up_questions"))[:2]]
     recommendations = formatted.get("recommendations")
     if not recommendations and formatted.get("recommendation"):
         recommendations = [formatted.get("recommendation")]
-    formatted["recommendations"] = [_soften_text(item) for item in _coerce_list(recommendations)[:4]]
-    formatted["recommendation"] = clean_clinical_text(
+    formatted["recommendations"] = [_patient_text(item) for item in _coerce_list(recommendations)[:4]]
+    formatted["recommendation"] = _patient_text(
         formatted.get("recommendation") or (formatted["recommendations"][0] if formatted["recommendations"] else ""),
         limit=280,
     )
@@ -478,9 +649,9 @@ def _apply_response_format(payload: dict[str, Any]) -> dict[str, Any]:
     safety_source = formatted.get("safety_notes")
     if not safety_source and formatted.get("safety_note"):
         safety_source = [formatted.get("safety_note")]
-    formatted["safety_notes"] = [_soften_text(item) for item in _coerce_list(safety_source)]
+    formatted["safety_notes"] = [_patient_text(item) for item in _coerce_list(safety_source)]
     if not formatted["safety_notes"]:
-        formatted["safety_notes"] = ["This assistant suggests possibilities and next steps, but it does not provide a diagnosis."]
+        formatted["safety_notes"] = [PATIENT_FACING_SAFETY_NOTE]
     formatted["safety_note"] = formatted["safety_notes"][0]
     formatted["risk_level_from_ml"] = _normalize_ml_risk_label(formatted.get("risk_level_from_ml") or formatted.get("ml_risk_level"))
     formatted["clinical_risk_level"] = _normalize_risk_level(formatted.get("clinical_risk_level") or formatted.get("risk_level"))
@@ -489,7 +660,7 @@ def _apply_response_format(payload: dict[str, Any]) -> dict[str, Any]:
         _normalize_probability(formatted.get("confidence_score"), _normalize_probability(formatted.get("confidence"), 0.5)) or 0.5,
         2,
     )
-    formatted["risk_summary"] = _soften_text(formatted.get("risk_summary") or "Based on your recent data, I would interpret this pattern cautiously and in context.")
+    formatted["risk_summary"] = _patient_text(formatted.get("risk_summary") or "Based on your recent data, I would interpret this pattern cautiously and in context.")
     clinical_card = build_clinical_card(
         {
             **formatted,
@@ -500,9 +671,9 @@ def _apply_response_format(payload: dict[str, Any]) -> dict[str, Any]:
     )
     for key in ("condition", "icd_code", "confidence", "confidence_label", "references"):
         formatted[key] = clinical_card[key]
-    formatted["response_sections"] = _build_response_sections(formatted)
-    formatted["formatted_response"] = _format_response_sections(formatted["response_sections"])
     formatted["message"] = _clean_message_text(formatted.get("message"), fallback=_build_patient_message(formatted))
+    formatted["response_sections"] = _build_response_sections(formatted)
+    formatted["formatted_response"] = formatted["message"]
     formatted["clinical_report"] = {
         "condition": formatted["condition"],
         "icd_code": formatted["icd_code"],
@@ -651,8 +822,8 @@ def _build_lora_example(query: str, context: dict[str, Any], output: dict[str, A
     return {
         "instruction": (
             f"{CLINICAL_ASSISTANT_INSTRUCTION} "
-            "Use patient vitals, risk predictions, model drivers, symptoms, labs, wearables, and RAG context. "
-            "Return JSON with message, follow_up_questions, recommendations, and risk_level."
+            "Use patient vitals, recent risk data, symptoms, labs, wearables, and medical context internally. "
+            "Return JSON with message, follow_up_questions, recommendations, and risk_level. The message must read like natural clinical conversation."
         ),
         "input": json.dumps({"query": query, "context": context}, indent=2, default=str),
         "output": json.dumps(
@@ -1122,7 +1293,7 @@ def _build_baseline_ml_output(
                 "available_health_context",
                 impact=0.02,
                 label="Available Health Context",
-                explanation="No fresh model drivers were available, so the response uses a low-risk baseline plus symptoms, vitals, labs, and RAG context.",
+                explanation="Recent symptoms, vitals, labs, and available health context are being used because fresh trend data is limited.",
             )
         )
 
@@ -2056,15 +2227,15 @@ User Question:
 {query}
 
 Instructions:
-1. Listen first, reason through triage step-by-step internally, then summarize the clinical reasoning clearly without exposing raw chain-of-thought.
-2. Respond in this exact order: acknowledge the user input, interpret symptoms/data, combine risk predictions + wearables + labs + RAG insights, give clinical insight, ask 1-2 follow-up questions when uncertainty remains, give recommendations, and add a safety note when risk is high.
-3. Suggest possible causes or conditions using cautious language, but never state a final diagnosis and never write that the user "has" a disease.
-4. Use natural doctor-like wording: "Based on your recent data", "Your current pattern suggests", and "One thing I would like to understand better is".
-5. Do not say "ML risk score", "SHAP", "model drivers", or expose raw numeric risk values to the user.
+1. Listen first, reason privately, then write like a calm doctor speaking directly to the patient.
+2. The patient-facing message must flow naturally: acknowledge the concern, briefly interpret the symptom/data pattern, mention at most one or two possible explanations, ask 1-2 focused follow-up questions when needed, then give simple guidance.
+3. Suggest possible causes using cautious language, but never state a final diagnosis and never write that the user "has" a disease.
+4. Use natural wording such as "I understand your concern", "From what you are describing", "This could be related to", and "Your recent health data looks generally stable" when supported.
+5. Do not say "The user is asking", "The safest reasoning path", "Retrieved medical knowledge", "prediction data suggests", "ML risk score", "SHAP", "RAG", "model drivers", or expose raw numeric risk values to the user.
 6. If the risk score is above 0.75, add urgency guidance. If symptoms include chest pain, chest pressure, severe breathlessness, fainting, stroke symptoms, severe bleeding, oxygen saturation below 90%, throat tightness with wheeze, or very abnormal vitals, include the exact phrase "Seek immediate medical care".
-7. Avoid hallucinations, do not invent missing values, and say when data is limited.
+7. Avoid hallucinations, do not invent missing values, and use soft uncertainty such as "It is not possible to be certain without more details, but..."
 8. Do not copy retrieved chunks verbatim. Use them only as background evidence.
-9. Do not include markdown headings, markdown bullets, raw citation blocks, or broken formatting.
+9. Do not include headings, section labels, markdown bullets, numbered lists, raw citation blocks, or broken formatting in the message.
 
 Return ONLY valid JSON in this exact format:
 {{
@@ -2155,8 +2326,8 @@ async def _call_openai_compatible(prompt: str, settings: RagSettings) -> dict[st
                         "role": "system",
                         "content": (
                             f"{CLINICAL_ASSISTANT_INSTRUCTION} "
-                            "Use only the provided patient, risk prediction, model driver, symptom, lab, wearable, and retrieved knowledge context. "
-                            "Return valid JSON only."
+                            "Use only the provided patient, symptom, lab, wearable, risk, and medical context internally. "
+                            "Return valid JSON only, with a natural patient-facing message and no headings or bullets."
                         ),
                     },
                     {"role": "user", "content": prompt},
@@ -2349,7 +2520,7 @@ def _build_possible_causes(
     if isinstance(clinical_history, dict):
         analysis = clinical_history.get("analysis", {}) if isinstance(clinical_history.get("analysis"), dict) else {}
         for item in _coerce_list(analysis.get("possible_conditions")):
-            causes.append(f"Possible causes include {item.lower()}.")
+            causes.append(f"This could be related to {item.lower()}.")
 
     for document in rag_context.get("summary") or []:
         if not isinstance(document, dict):
@@ -2360,7 +2531,7 @@ def _build_possible_causes(
             causes.append(f"Retrieved guidance on {title.lower()} suggests a {category or 'clinical'} explanation may be worth considering.")
 
     if not causes and symptoms:
-        causes.append(f"Possible causes include a {ClinicalAnalysisService.SYMPTOM_SYSTEM_MAP.get(symptoms[0].lower(), 'general medical')} pattern related to the reported symptoms.")
+        causes.append(f"This could be related to a {ClinicalAnalysisService.SYMPTOM_SYSTEM_MAP.get(symptoms[0].lower(), 'general medical')} pattern around the reported symptoms.")
     if not causes:
         causes.append("The current data is limited, so broad causes such as stress, infection, medication effects, dehydration, or an underlying cardiometabolic issue still need to be sorted out.")
     return _dedupe_texts(causes, limit=4)
@@ -2427,7 +2598,7 @@ def _build_safety_notes(query: str, risk_level: str, symptoms: list[str]) -> lis
         return [
             "Arrange prompt clinical review if these symptoms are recurrent, prolonged, or associated with exertion or light-headedness."
         ]
-    return ["This assistant suggests possibilities and next steps, but it does not provide a diagnosis."]
+    return [PATIENT_FACING_SAFETY_NOTE]
 
 
 def _build_fallback_response(
@@ -2487,7 +2658,7 @@ def _build_fallback_response(
 
     summary_clauses = []
     if symptoms:
-        summary_clauses.append(f"The current question centers on {', '.join(symptoms[:3])}.")
+        summary_clauses.append(f"From what you are describing, the main concern is {', '.join(symptoms[:3])}.")
     driver_sentence = _humanized_driver_sentence(ml_data)
     if driver_sentence:
         summary_clauses.append(driver_sentence)
@@ -2495,13 +2666,13 @@ def _build_fallback_response(
         lead_doc = next((item for item in rag_context.get("summary") or [] if isinstance(item, dict)), None)
         if lead_doc:
             summary_clauses.append(
-                f"Medical guidance on {_clean_text(lead_doc.get('title')).lower()} is relevant background, but it does not replace an exam."
+                f"Medical guidance on {_clean_text(lead_doc.get('title')).lower()} is useful background, but an in-person exam gives more certainty."
             )
-    insight = " ".join(summary_clauses) or "I am using your recent health data plus medical knowledge to reason about this question, but the available information is still limited."
+    insight = " ".join(summary_clauses) or "I can use your recent health data as context, but the available information is still limited."
 
     payload = {
         "summary": insight,
-        "understanding": f"I understand that you are asking about {', '.join(symptoms[:3])}." if symptoms else "I understand that you want help interpreting your current health concern.",
+        "understanding": f"I understand you are noticing {', '.join(symptoms[:3])}." if symptoms else "I understand that you want help interpreting your current health concern.",
         "acknowledgement": "I hear your concern, and it is reasonable to look at this carefully.",
         "interpretation": insight,
         "clinical_interpretation": insight,

@@ -18,6 +18,7 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency
 from sqlalchemy.orm import Session
 
 from core.pipeline_logger import log_pipeline
+from integrations.ocr_service import OCRInput, OCRResult, OCRService
 from integrations.supabase_storage import upload_report as _supabase_upload_report
 from models import Report, ReportStatusEnum, ReportTypeEnum, User
 from services.notification_service import trigger_notification
@@ -126,6 +127,9 @@ class ReportService:
                 "ocr_text": analysis["ocr_text"],
                 "markers": analysis["markers"],
                 "summary_source": analysis["source"],
+                "text_source": analysis.get("text_source"),
+                "ocr_provider": analysis.get("ocr_provider"),
+                "ocr_confidence": analysis.get("ocr_confidence"),
                 "date_of_report": normalized_report_date,
                 "summary_view": cls._build_summary_view(
                     analysis["ocr_text"],
@@ -234,57 +238,221 @@ class ReportService:
         title = Path(filename).stem.replace("_", " ").replace("-", " ").strip().title() or "Medical Report"
 
         if mime_type == "application/pdf":
-            extracted_text = cls._extract_pdf_text(file_bytes)
-            return cls._build_local_analysis(title, extracted_text)
+            pdf_pages: list[dict[str, Any]] = []
+            pdf_warnings: list[str] = []
+            try:
+                pdf_pages = cls._extract_pdf_pages(file_bytes)
+            except Exception as exc:
+                logger.info("PDF text extraction unavailable; continuing with OCR: %s", exc)
+                pdf_warnings.append(f"pdf_text: {exc}")
+            ocr_result = OCRService().extract_text(
+                OCRInput(filename=filename, content=file_bytes, content_type=mime_type)
+            )
+            merged_text, text_pages, text_source = cls._merge_pdf_and_ocr_text(pdf_pages, ocr_result)
+            return cls._build_local_analysis(
+                title,
+                merged_text,
+                source=f"ocr-{ocr_result.provider}" if ocr_result.usable else "pdf-ocr-fallback",
+                text_source=text_source,
+                ocr_provider=ocr_result.provider,
+                ocr_confidence=ocr_result.confidence,
+                ocr_warnings=[*pdf_warnings, *ocr_result.warnings],
+                text_pages=text_pages,
+            )
 
-        return {
-            "title": title,
-            "summary": [
-                "Image report uploaded and stored successfully.",
-                "Free mode currently supports direct text extraction from PDF reports.",
-                "For JPG or PNG reports, install Tesseract OCR and I can wire image reading too.",
-            ],
-            "full_text": "",
-            "ocr_text": "Image OCR is not configured on this machine yet.",
-            "markers": [],
-            "source": "local-fallback",
-        }
+        ocr_result = OCRService().extract_text(
+            OCRInput(filename=filename, content=file_bytes, content_type=mime_type)
+        )
+        return cls._build_ocr_analysis(title, ocr_result, fallback_kind="image")
 
     @staticmethod
     def _extract_pdf_text(file_bytes: bytes) -> str:
+        return "\n".join(page["text"] for page in ReportService._extract_pdf_pages(file_bytes)).strip()
+
+    @staticmethod
+    def _extract_pdf_pages(file_bytes: bytes) -> list[dict[str, Any]]:
         if PdfReader is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="PDF parsing is unavailable in this environment.",
             )
         reader = PdfReader(BytesIO(file_bytes))
-        text_parts = []
-        for page in reader.pages:
+        pages: list[dict[str, Any]] = []
+        for page_number, page in enumerate(reader.pages, start=1):
             page_text = page.extract_text() or ""
             if page_text.strip():
-                text_parts.append(page_text.strip())
-        return "\n".join(text_parts).strip()
+                pages.append(
+                    {
+                        "page_number": page_number,
+                        "text": page_text.strip(),
+                        "source_type": "PDF",
+                        "confidence": 1.0,
+                    }
+                )
+        return pages
+
+    @staticmethod
+    def _ocr_pages(ocr_result: OCRResult) -> list[dict[str, Any]]:
+        if ocr_result.pages:
+            return [
+                {
+                    "page_number": page.page_number,
+                    "text": page.text.strip(),
+                    "source_type": "OCR",
+                    "confidence": page.confidence if page.confidence is not None else ocr_result.confidence,
+                    "provider": ocr_result.provider,
+                    "width": page.width,
+                    "height": page.height,
+                    "words": [
+                        {
+                            "text": word.text,
+                            "bbox": word.bbox,
+                            "confidence": word.confidence,
+                            "page_number": word.page_number or page.page_number,
+                        }
+                        for word in page.words
+                        if word.text
+                    ],
+                    "lines": [
+                        {
+                            "text": line.text,
+                            "bbox": line.bbox,
+                            "confidence": line.confidence,
+                            "page_number": line.page_number or page.page_number,
+                            "words": [
+                                {
+                                    "text": word.text,
+                                    "bbox": word.bbox,
+                                    "confidence": word.confidence,
+                                    "page_number": word.page_number or page.page_number,
+                                }
+                                for word in line.words
+                                if word.text
+                            ],
+                        }
+                        for line in page.lines
+                        if line.text
+                    ],
+                }
+                for page in ocr_result.pages
+                if page.text and page.text.strip()
+            ]
+
+        if not ocr_result.usable:
+            return []
+
+        return [
+            {
+                "page_number": 1,
+                "text": ocr_result.text.strip(),
+                "source_type": "OCR",
+                "confidence": ocr_result.confidence,
+                "provider": ocr_result.provider,
+            }
+        ]
 
     @classmethod
-    def _build_local_analysis(cls, title: str, extracted_text: str) -> dict[str, Any]:
+    def _merge_pdf_and_ocr_text(
+        cls,
+        pdf_pages: list[dict[str, Any]],
+        ocr_result: OCRResult,
+    ) -> tuple[str, list[dict[str, Any]], str]:
+        ocr_pages = cls._ocr_pages(ocr_result)
+        if ocr_pages:
+            merged_pages = list(ocr_pages)
+            pdf_by_page = {page["page_number"]: page for page in pdf_pages}
+            for page in ocr_pages:
+                pdf_page = pdf_by_page.get(page["page_number"])
+                if not pdf_page:
+                    continue
+                pdf_text = str(pdf_page.get("text") or "").strip()
+                if pdf_text and not cls._text_is_substantially_included(pdf_text, page["text"]):
+                    merged_pages.append(
+                        {
+                            **pdf_page,
+                            "source_type": "PDF",
+                            "text": pdf_text,
+                            "supplemental": True,
+                        }
+                    )
+
+            return cls._join_text_pages(merged_pages), merged_pages, "OCR"
+
+        if pdf_pages:
+            return cls._join_text_pages(pdf_pages), pdf_pages, "PDF"
+
+        return "", [], ocr_result.source_type or "OCR"
+
+    @staticmethod
+    def _text_is_substantially_included(candidate: str, primary: str) -> bool:
+        candidate_words = set(re.findall(r"[A-Za-z0-9.%-]+", (candidate or "").lower()))
+        primary_words = set(re.findall(r"[A-Za-z0-9.%-]+", (primary or "").lower()))
+        if not candidate_words:
+            return True
+        overlap = len(candidate_words & primary_words) / max(len(candidate_words), 1)
+        return overlap >= 0.86
+
+    @staticmethod
+    def _join_text_pages(text_pages: list[dict[str, Any]]) -> str:
+        parts = []
+        for page in text_pages:
+            text = str(page.get("text") or "").strip()
+            if not text:
+                continue
+            source = page.get("source_type") or "OCR"
+            suffix = " supplemental" if page.get("supplemental") else ""
+            parts.append(f"--- Page {page.get('page_number') or 1} {source}{suffix} ---\n{text}")
+        return "\n\n".join(parts).strip()
+
+    @staticmethod
+    def _build_ocr_layout(text: str, text_pages: list[dict[str, Any]] | None) -> dict[str, Any] | None:
+        pages = [page for page in (text_pages or []) if isinstance(page, dict)]
+        if not pages or not any(page.get("words") or page.get("lines") for page in pages):
+            return None
+        return {
+            "text": text,
+            "words": [word for page in pages for word in page.get("words", []) if isinstance(word, dict)],
+            "lines": [line for page in pages for line in page.get("lines", []) if isinstance(line, dict)],
+            "pages": pages,
+        }
+
+    @classmethod
+    def _build_local_analysis(
+        cls,
+        title: str,
+        extracted_text: str,
+        source: str = "local-pdf",
+        text_source: str = "pdf_text",
+        ocr_provider: str | None = None,
+        ocr_confidence: float | None = None,
+        ocr_warnings: list[str] | None = None,
+        text_pages: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         normalized_text = re.sub(r"\s+", " ", extracted_text or "").strip()
 
         if not normalized_text:
             return {
                 "title": title,
                 "summary": [
-                    "PDF uploaded and stored successfully.",
-                    "No readable text was found in this PDF in free mode.",
-                    "If this is a scanned PDF, install Tesseract OCR and I can enable scanned-document extraction.",
+                    "Report uploaded and stored successfully.",
+                    "No readable text was found in this file.",
+                    "OCR providers returned no usable text for this upload.",
                 ],
                 "full_text": "",
-                "ocr_text": "No text could be extracted from this PDF.",
+                "ocr_text": "No text could be extracted from this report.",
                 "markers": [],
                 "source": "local-fallback",
+                "text_source": text_source,
+                "ocr_provider": ocr_provider,
+                "ocr_confidence": ocr_confidence,
+                "ocr_warnings": ocr_warnings or [],
+                "text_pages": text_pages or [],
+                "ocr_layout": None,
             }
 
         markers = cls._extract_markers(normalized_text)
         summary = cls._summarize_text(normalized_text, markers)
+        ocr_layout = cls._build_ocr_layout(normalized_text, text_pages)
 
         return {
             "title": title,
@@ -292,8 +460,47 @@ class ReportService:
             "full_text": normalized_text,
             "ocr_text": normalized_text[:1200],
             "markers": markers[:6],
-            "source": "local-pdf",
+            "source": source,
+            "text_source": text_source,
+            "ocr_provider": ocr_provider,
+            "ocr_confidence": ocr_confidence,
+            "ocr_warnings": ocr_warnings or [],
+            "text_pages": text_pages or [],
+            "ocr_layout": ocr_layout,
         }
+
+    @classmethod
+    def _build_ocr_analysis(cls, title: str, ocr_result: OCRResult, fallback_kind: str) -> dict[str, Any]:
+        if not ocr_result.usable:
+            return {
+                "title": title,
+                "summary": [
+                    f"{fallback_kind} report uploaded and stored successfully.",
+                    "No readable text was returned by the configured OCR providers.",
+                    "Check Google Vision credentials or local Tesseract installation before reprocessing.",
+                ],
+                "full_text": "",
+                "ocr_text": "No text could be extracted from this report.",
+                "markers": [],
+                "source": "local-fallback",
+                "text_source": ocr_result.source_type,
+                "ocr_provider": ocr_result.provider,
+                "ocr_confidence": ocr_result.confidence,
+                "ocr_warnings": ocr_result.warnings,
+                "text_pages": [],
+                "ocr_layout": None,
+            }
+
+        return cls._build_local_analysis(
+            title,
+            ocr_result.text,
+            source=f"ocr-{ocr_result.provider}",
+            text_source=ocr_result.source_type,
+            ocr_provider=ocr_result.provider,
+            ocr_confidence=ocr_result.confidence,
+            ocr_warnings=ocr_result.warnings,
+            text_pages=cls._ocr_pages(ocr_result),
+        )
 
     @staticmethod
     def _load_lab_pipeline_runner() -> Callable[[str], Any]:
@@ -404,7 +611,7 @@ class ReportService:
                 "summary": summary_lines,
                 "ocr_text": ocr_text,
                 "markers": summary_data.get("markers") or summary_data.get("biomarkers") or [],
-                "source": summary_data.get("summary_source", "prediction-service"),
+                "source": summary_data.get("summary_source") or summary_data.get("source", "prediction-service"),
             }
             summary_view = {
                 "title": analysis["title"],
@@ -468,6 +675,9 @@ class ReportService:
             "summary": analysis["summary"],
             "markers": analysis["markers"],
             "summary_source": analysis["source"],
+            "text_source": (report.summary_data or {}).get("text_source") if isinstance(report.summary_data, dict) else None,
+            "ocr_provider": (report.summary_data or {}).get("ocr_provider") if isinstance(report.summary_data, dict) else None,
+            "ocr_confidence": (report.summary_data or {}).get("ocr_confidence") if isinstance(report.summary_data, dict) else None,
             "summary_view": summary_view,
             "summary_data": report.summary_data or {},
             "date_of_report": date_of_report,

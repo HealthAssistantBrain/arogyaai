@@ -109,29 +109,13 @@ def _safe_dict(value: Any) -> dict[str, Any]:
 def _extract_latest_steps(bundle: dict[str, Any]) -> int:
     google_fit = _safe_dict(bundle.get("googleFit"))
     google_fit_data = _safe_dict(google_fit.get("data"))
-    latest_day = _safe_dict(_safe_dict(google_fit_data.get("stats")).get("latest_day"))
-    latest_steps = latest_day.get("steps")
+    stats = _safe_dict(google_fit_data.get("stats"))
+    day_payload = _safe_dict(stats.get("latest_day"))
+    latest_steps = day_payload.get("steps")
     try:
         return max(0, int(round(float(latest_steps))))
     except (TypeError, ValueError):
         pass
-
-    vitals = _safe_dict(bundle.get("vitals"))
-    steps_slice = _safe_dict(vitals.get("steps:24h"))
-    steps_data = _safe_list(steps_slice.get("data"))
-    for item in reversed(steps_data):
-        try:
-            return max(0, int(round(float(_safe_dict(item).get("value")))))
-        except (TypeError, ValueError):
-            continue
-
-    top_steps_slice = _safe_dict(bundle.get("steps"))
-    top_steps_data = _safe_list(top_steps_slice.get("data"))
-    for item in reversed(top_steps_data):
-        try:
-            return max(0, int(round(float(_safe_dict(item).get("value")))))
-        except (TypeError, ValueError):
-            continue
 
     return 0
 

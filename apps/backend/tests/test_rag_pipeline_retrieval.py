@@ -22,13 +22,13 @@ from pipelines.rag_pipeline.schemas import ShapSignal
 from pipelines.rag_pipeline.text_cleaning import clean_rag_text
 
 
-def test_medical_corpus_has_100_plus_source_backed_documents():
+def test_medical_corpus_has_400_plus_source_backed_chunks():
     settings = RagSettings()
     documents = load_corpus_documents(settings)
     chunks = load_corpus_chunks(settings)
 
-    assert len(documents) >= 100
-    assert len(chunks) >= 20
+    assert len(documents) >= 400
+    assert len(chunks) >= 400
     assert {"WHO", "CDC", "NIH"}.issubset({document.source_org for document in documents})
     assert all(chunk.word_count <= settings.chunk_max_words + 50 for chunk in chunks)
     assert any(chunk.source_url and chunk.topic and chunk.disease_type for chunk in chunks)

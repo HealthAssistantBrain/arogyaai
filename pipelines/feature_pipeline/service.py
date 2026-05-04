@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from models import ClinicalHistory, LabResult, MedicalHistory, User, UserProfile, UserVital, UserVitalTypeEnum, VitalsData, WearableData
 from services.sleep_service import SleepService
 from pipelines.feature_pipeline.aggregation import avg_steps_7d, data_availability_7d, hr_mean_7d, sleep_efficiency_7d
+from pipelines.ingestion_pipeline.service import compute_daily_steps
 from pipelines.storage_pipeline.service import StoragePipelineService
 
 LOOKBACK_DAYS = 30
@@ -346,23 +347,21 @@ def _recent_heart_rates(db: Session, user: User, days: int = VITAL_LOOKBACK_DAYS
 
 def _recent_steps(db: Session, user: User, days: int = LOOKBACK_DAYS) -> list[float]:
     cutoff = _now_utc() - timedelta(days=days)
-    values = _recent_user_vital_values(db, user, UserVitalTypeEnum.STEPS, cutoff)
-    if values:
-        return values
-
-    for row in (
-        db.query(WearableData)
+    rows = (
+        db.query(UserVital)
         .filter(
-            WearableData.user_id == user.id,
-            WearableData.recorded_at >= cutoff,
+            UserVital.user_id == user.id,
+            UserVital.vital_type == UserVitalTypeEnum.STEPS,
+            UserVital.timestamp >= cutoff,
         )
-        .order_by(WearableData.recorded_at.asc())
+        .order_by(UserVital.timestamp.asc())
         .all()
-    ):
-        if row.step_count is not None:
-            values.append(float(row.step_count))
-
-    return values
+    )
+    timezone_name = "UTC"
+    connection = getattr(user, "google_fit_connection", None)
+    if connection is not None and getattr(connection, "default_timezone", None):
+        timezone_name = str(connection.default_timezone)
+    return [float(item["steps"]) for item in reversed(compute_daily_steps(rows, timezone_name))]
 
 
 def _recent_sleep_rows(db: Session, user: User, days: int = SLEEP_LOOKBACK_DAYS) -> tuple[list[float], list[float], int]:

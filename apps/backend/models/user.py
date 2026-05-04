@@ -54,6 +54,7 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     baseline_metrics     = relationship("BaselineMetricRecord", back_populates="user")
     shap_values          = relationship("ShapValueRecord", back_populates="user")
     health_scores        = relationship("HealthScoreRecord", back_populates="user")
+    feedback             = relationship("Feedback", back_populates="user", cascade="all, delete-orphan")
 
     @property
     def health_profile(self):

@@ -36,14 +36,14 @@ const UploadReportUI = ({
             <div className="flex items-center gap-6">
                 <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-widest bg-gray-100 dark:bg-white/5 px-4 py-2 rounded-lg">
                     <FileText size={16} />
-                    PDF
+                    PDF / JPG / PNG
                 </div>
             </div>
 
             <input
                 type="file"
                 className="hidden"
-                accept=".pdf,application/pdf"
+                accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
                 onChange={(e) => {
                     const selectedFile = e.target.files?.[0];
                     if (selectedFile) {

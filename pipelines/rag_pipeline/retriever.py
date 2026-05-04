@@ -94,15 +94,50 @@ class MedicalKnowledgeRetriever:
     def _point_id(self, chunk_id: str) -> str:
         return str(uuid.uuid5(uuid.NAMESPACE_URL, f"arogyaai-rag:{chunk_id}"))
 
+    def _existing_index_state(self, client: Any) -> dict[str, Any]:
+        try:
+            count_result = client.count(collection_name=self.settings.collection_name, exact=True)
+            vector_count = int(getattr(count_result, "count", 0) or 0)
+        except Exception:
+            vector_count = 0
+
+        payload: dict[str, Any] = {}
+        if vector_count:
+            try:
+                scroll_result = client.scroll(
+                    collection_name=self.settings.collection_name,
+                    limit=1,
+                    with_payload=True,
+                    with_vectors=False,
+                )
+                points = scroll_result[0] if isinstance(scroll_result, tuple) else getattr(scroll_result, "points", [])
+                if points:
+                    payload = dict(getattr(points[0], "payload", {}) or {})
+            except Exception:
+                payload = {}
+
+        return {
+            "vector_count": vector_count,
+            "index_version": payload.get("index_version"),
+            "corpus_chunk_count": payload.get("corpus_chunk_count"),
+            "embedding_model": payload.get("embedding_model"),
+        }
+
     def ensure_corpus_indexed(self, *, force: bool = False) -> int:
         from qdrant_client.http import models as rest
 
         self.ensure_collection()
         client = self._client()
         chunks = load_corpus_chunks(self.settings)
-        count_result = client.count(collection_name=self.settings.collection_name, exact=True)
-        existing_count = int(getattr(count_result, "count", 0) or 0)
-        if existing_count == len(chunks) and not force:
+        existing_state = self._existing_index_state(client)
+        existing_count = int(existing_state["vector_count"])
+        index_is_current = (
+            existing_count == len(chunks)
+            and existing_state.get("index_version") == self.settings.index_version
+            and int(existing_state.get("corpus_chunk_count") or 0) == len(chunks)
+            and existing_state.get("embedding_model") == self.settings.embedding_model_name
+        )
+        if index_is_current and not force:
             logger.info(
                 "RAG ingestion skipped; Qdrant already populated | collection=%s vectors=%s",
                 self.settings.collection_name,
@@ -136,8 +171,10 @@ class MedicalKnowledgeRetriever:
                         "condition": chunk.condition,
                         "symptoms": list(chunk.symptoms),
                         "risk_factors": list(chunk.risk_factors),
+                        "tags": list(chunk.tags),
                         "severity": chunk.severity,
                         "document_ids": list(chunk.document_ids),
+                        "corpus_chunk_count": len(chunks),
                         "index_version": self.settings.index_version,
                         "embedding_model": self.settings.embedding_model_name,
                     },
@@ -153,6 +190,27 @@ class MedicalKnowledgeRetriever:
             len(points),
         )
         return len(points)
+
+    def assert_index_ready(self, *, minimum_vectors: int | None = None, auto_index: bool = True) -> dict[str, Any]:
+        expected_chunks = len(load_corpus_chunks(self.settings))
+        required_vectors = minimum_vectors or expected_chunks
+        if auto_index:
+            indexed_vectors = self.ensure_corpus_indexed()
+        else:
+            self.ensure_collection()
+            indexed_vectors = int(self._existing_index_state(self._client())["vector_count"])
+
+        if indexed_vectors < required_vectors:
+            raise RuntimeError(
+                f"RAG Qdrant index is not ready: collection={self.settings.collection_name!r} "
+                f"vectors={indexed_vectors} required={required_vectors}."
+            )
+        return {
+            "collection_name": self.settings.collection_name,
+            "indexed_vectors": indexed_vectors,
+            "expected_chunks": expected_chunks,
+            "index_version": self.settings.index_version,
+        }
 
     def _fallback_documents(self, query: str, *, limit: int) -> list[RetrievedDocument]:
         try:
@@ -188,6 +246,7 @@ class MedicalKnowledgeRetriever:
                     condition=chunk.condition,
                     symptoms=chunk.symptoms,
                     risk_factors=chunk.risk_factors,
+                    tags=chunk.tags,
                     severity=chunk.severity,
                 )
             )
@@ -237,6 +296,7 @@ class MedicalKnowledgeRetriever:
                     condition=clean_label_text(payload.get("condition") or "", limit=120),
                     symptoms=tuple(str(value) for value in (payload.get("symptoms") or [])),
                     risk_factors=tuple(str(value) for value in (payload.get("risk_factors") or [])),
+                    tags=tuple(str(value) for value in (payload.get("tags") or [])),
                     severity=clean_label_text(payload.get("severity") or "routine", limit=40),
                 )
             )

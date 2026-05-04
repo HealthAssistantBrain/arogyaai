@@ -145,7 +145,7 @@ class SafetyGuardAgent:
             ]
         else:
             safety_notes = [
-                "This assistant suggests possibilities and next steps, but it does not provide a diagnosis."
+                "If this feels severe, unusual, or is getting worse, it is best to get checked in person."
             ]
 
         recommendations = []

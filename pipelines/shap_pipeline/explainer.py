@@ -15,15 +15,25 @@ class ShapExplainer:
         drivers = risk_payload.get("drivers") or []
         entries: list[dict[str, Any]] = []
         for driver in drivers:
-            contribution = float(driver.get("contribution") or 0.0)
+            raw_contribution = (
+                driver.get("shap_value")
+                if driver.get("shap_value") is not None
+                else driver.get("contribution")
+                if driver.get("contribution") is not None
+                else driver.get("impact")
+            )
+            try:
+                contribution = float(raw_contribution or 0.0)
+            except (TypeError, ValueError):
+                contribution = 0.0
             entries.append(
                 {
-                    "feature_name": driver.get("label") or driver.get("key") or "feature",
+                    "feature_name": driver.get("feature_name") or driver.get("label") or driver.get("key") or "feature",
                     "shap_value": contribution,
                     "direction": driver.get("direction") or ("increasing" if contribution >= 0 else "decreasing"),
                     "explanation": driver.get("detail") or driver.get("label") or "",
                     "label": driver.get("label") or driver.get("key"),
-                    "value": driver.get("value"),
+                    "value": driver.get("feature_value") if driver.get("feature_value") is not None else driver.get("value"),
                     "domains": driver.get("domains") or [],
                     "source": "rule_fallback",
                 }

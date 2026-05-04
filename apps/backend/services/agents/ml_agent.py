@@ -130,13 +130,13 @@ class MLRiskInterpretationAgent:
         drivers = drivers[:5]
 
         if not ml_data:
-            interpretation = "No current ML prediction was available, so clinical reasoning should rely more heavily on symptoms, vitals, labs, and retrieved medical context."
+            interpretation = "I do not have enough recent trend data for that part, so your symptoms, vitals, and labs matter most."
         elif risk_level == "HIGH":
-            interpretation = "Recent prediction data suggests a higher-concern pattern that should be interpreted alongside the user's current symptoms."
+            interpretation = "Your recent health data shows a pattern that deserves closer attention alongside your current symptoms."
         elif risk_level == "MEDIUM":
-            interpretation = "Recent prediction data suggests a moderate pattern that needs symptom and context review."
+            interpretation = "Your recent health data looks somewhat watchful and should be interpreted with your symptoms."
         else:
-            interpretation = "Recent prediction data is relatively reassuring, but symptoms and abnormal vitals can still change the clinical priority."
+            interpretation = "Your recent health data looks generally stable, though symptoms and abnormal readings can still change the priority."
 
         if drivers:
             driver_labels = [driver["label"].lower() for driver in drivers[:2]]

@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion as Motion } from 'framer-motion';
 import { RefreshCcw, ShieldCheck } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useInsightsData } from '../hooks/useInsightsData';
@@ -35,12 +35,12 @@ const AIInsights = () => {
   }
 
   return (
-    <div className="relative min-h-screen bg-[#EAEAEA] font-display leading-normal text-[#13082A] antialiased dark:bg-[#13082A] dark:text-slate-100">
+    <div className="relative bg-[#EAEAEA] font-display leading-normal text-[#13082A] antialiased dark:bg-[#13082A] dark:text-slate-100">
       {overlayVisible ? <SmartLoadingOverlay label="Refreshing insights" /> : null}
 
-      <main className="mx-auto max-w-7xl px-6 py-8 lg:px-8">
+      <main className="container mx-auto px-6 py-8 lg:px-8">
         {!data ? (
-          <motion.div
+          <Motion.div
             variants={itemVariants}
             initial="initial"
             animate="animate"
@@ -62,7 +62,7 @@ const AIInsights = () => {
               <RefreshCcw size={16} />
               Retry
             </button>
-          </motion.div>
+          </Motion.div>
         ) : (
           <PreventiveRecommendations
             data={data}
@@ -72,16 +72,6 @@ const AIInsights = () => {
         )}
       </main>
 
-      <style
-        dangerouslySetInnerHTML={{
-          __html: `
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(96, 67, 244, 0.1); border-radius: 20px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(96, 67, 244, 0.2); }
-      `,
-        }}
-      />
     </div>
   );
 };

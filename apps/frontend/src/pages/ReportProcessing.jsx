@@ -11,8 +11,8 @@ import { resolveReportType, saveUploadedReportSession } from '../lib/reportUploa
 import ReportLoader from '../components/ui/ReportLoader';
 
 const PIPELINE_STAGES = [
-    { key: 'uploading', label: 'Uploading file', target: 20, detail: 'Sending the PDF securely to ArogyaAI.' },
-    { key: 'extracting', label: 'Extracting text', target: 40, detail: 'Parsing the document and extracting readable medical text.' },
+    { key: 'uploading', label: 'Uploading file', target: 20, detail: 'Sending the report securely to ArogyaAI.' },
+    { key: 'extracting', label: 'Extracting text', target: 40, detail: 'Running OCR and extracting readable medical text.' },
     { key: 'processing', label: 'AI processing', target: 70, detail: 'Prediction service is analysing clinical markers and patterns.' },
     { key: 'insights', label: 'Generating insights', target: 100, detail: 'Preparing the final summary, risks, and recommendations.' },
 ];
@@ -100,7 +100,7 @@ const ReportProcessing = () => {
                     setProgress((prev) => Math.max(prev, 45));
                 }, 1400);
 
-                const response = await apiClient.post('/reports/analyze', formData, {
+                const response = await apiClient.post('/reports/upload', formData, {
                     signal: controller.signal,
                     headers: {
                         'Content-Type': 'multipart/form-data',

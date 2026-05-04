@@ -89,6 +89,7 @@ class BM25Index:
                 chunk.disease_type,
                 chunk.category,
                 chunk.severity,
+                " ".join(chunk.tags),
             )
             if part
         )
@@ -160,6 +161,7 @@ def keyword_retrieve(query: str, chunks: list[CorpusChunk], *, limit: int = 10) 
             condition=result.chunk.condition,
             symptoms=result.chunk.symptoms,
             risk_factors=result.chunk.risk_factors,
+            tags=result.chunk.tags,
             severity=result.chunk.severity,
         )
         for result in results

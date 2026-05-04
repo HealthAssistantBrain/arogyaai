@@ -19,6 +19,7 @@ for path in (REPO_ROOT, BACKEND_ROOT):
         sys.path.insert(0, resolved)
 
 from models import ReportStatusEnum
+from integrations.ocr_service import OCRLine, OCRPage, OCRResult, OCRWord
 from services import lab_pipeline_service
 from services.report_service import ReportService
 
@@ -129,3 +130,140 @@ def test_run_lab_pipeline_can_resolve_report_from_report_id():
     assert result == [{"name": "Hemoglobin", "value": 13.8}]
     run_pipeline.assert_called_once_with("Hemoglobin 13.8 WBC 6.4", user_id, report_id, db)
     db.close.assert_called_once()
+
+
+def test_analyze_report_always_runs_ocr_for_pdf_even_when_pdf_text_exists():
+    word = OCRWord(
+        text="Hemoglobin",
+        bbox={"x_min": 10, "y_min": 20, "x_max": 90, "y_max": 34},
+        confidence=0.91,
+        page_number=1,
+    )
+    ocr_result = OCRResult(
+        text="Hemoglobin 14.1 g/dL",
+        provider="tesseract",
+        source_type="ocr_tesseract",
+        confidence=0.88,
+        page_count=1,
+        pages=[
+            OCRPage(
+                page_number=1,
+                text="Hemoglobin 14.1 g/dL",
+                confidence=0.88,
+                words=[word],
+                lines=[OCRLine(text="Hemoglobin 14.1 g/dL", words=[word], confidence=0.88, page_number=1)],
+            )
+        ],
+    )
+
+    with patch.object(
+        ReportService,
+        "_extract_pdf_pages",
+        return_value=[{"page_number": 1, "text": "Hemoglobin 13.9 g/dL", "source_type": "PDF", "confidence": 1.0}],
+    ), patch("services.report_service.OCRService") as ocr_service:
+        ocr_service.return_value.extract_text.return_value = ocr_result
+
+        analysis = asyncio.run(
+            ReportService._analyze_report("cbc-report.pdf", "application/pdf", b"%PDF-1.4 fake")
+        )
+
+    ocr_service.return_value.extract_text.assert_called_once()
+    assert analysis["text_source"] == "OCR"
+    assert analysis["ocr_provider"] == "tesseract"
+    assert analysis["text_pages"][0]["source_type"] == "OCR"
+    assert analysis["text_pages"][0]["words"][0]["bbox"]["x_min"] == 10
+
+
+def test_extract_lab_values_adds_confidence_and_source_span_for_scanned_text():
+    text = """
+    Complete Blood Count
+    Haemoglobin Result 13.8 g/dL Reference 13.5 - 17.5
+    Total Leukocyte Count 6.4 10^3/uL 4.0 - 11.0
+    Platelet Count 210 10^3/uL
+    """
+
+    raw = lab_pipeline_service.extract_lab_values(
+        text,
+        source_type="ocr_tesseract",
+        source_confidence=0.82,
+    )
+    normalized = lab_pipeline_service.normalize_lab_values(raw)
+    by_name = {item["name"]: item for item in normalized}
+
+    assert by_name["Hemoglobin"]["value"] == 13.8
+    assert by_name["Hemoglobin"]["confidence_score"] > 0.7
+    assert by_name["Hemoglobin"]["source_type"] == "OCR"
+    assert by_name["Hemoglobin"]["source_text"]
+    assert by_name["Hemoglobin"]["page_number"] == 1
+    assert "Haemoglobin" in by_name["Hemoglobin"]["source_span"]
+    assert by_name["WBC"]["value"] == 6.4
+    assert by_name["Platelets"]["value"] == 210.0
+
+
+def test_extract_lab_values_uses_layout_words_and_attaches_bbox():
+    words = [
+        {"text": "Haemoglobin", "bbox": {"x_min": 10, "y_min": 20, "x_max": 95, "y_max": 34}, "confidence": 0.93},
+        {"text": "13.8", "bbox": {"x_min": 210, "y_min": 20, "x_max": 245, "y_max": 34}, "confidence": 0.95},
+        {"text": "g/dL", "bbox": {"x_min": 260, "y_min": 20, "x_max": 295, "y_max": 34}, "confidence": 0.92},
+        {"text": "13.5", "bbox": {"x_min": 360, "y_min": 20, "x_max": 395, "y_max": 34}, "confidence": 0.91},
+        {"text": "-", "bbox": {"x_min": 401, "y_min": 20, "x_max": 408, "y_max": 34}, "confidence": 0.9},
+        {"text": "17.5", "bbox": {"x_min": 415, "y_min": 20, "x_max": 450, "y_max": 34}, "confidence": 0.91},
+        {"text": "WBC", "bbox": {"x_min": 10, "y_min": 48, "x_max": 45, "y_max": 62}, "confidence": 0.88},
+        {"text": "6.4", "bbox": {"x_min": 210, "y_min": 48, "x_max": 238, "y_max": 62}, "confidence": 0.9},
+        {"text": "10^3/uL", "bbox": {"x_min": 260, "y_min": 48, "x_max": 325, "y_max": 62}, "confidence": 0.86},
+    ]
+
+    raw = lab_pipeline_service.extract_lab_values(
+        "Haemoglobin 13.8 g/dL 13.5 - 17.5\nWBC 6.4 10^3/uL",
+        source_type="ocr_google_vision",
+        source_confidence=0.9,
+        page_metadata=[
+            {
+                "page_number": 1,
+                "text": "Haemoglobin 13.8 g/dL 13.5 - 17.5\nWBC 6.4 10^3/uL",
+                "source_type": "OCR",
+                "confidence": 0.9,
+                "words": words,
+            }
+        ],
+    )
+    normalized = lab_pipeline_service.normalize_lab_values(raw)
+    by_name = {item["name"]: item for item in normalized}
+
+    assert by_name["Hemoglobin"]["value"] == 13.8
+    assert by_name["Hemoglobin"]["extraction_method"] == "layout_row"
+    assert by_name["Hemoglobin"]["bbox"]["x_min"] == 210
+    assert by_name["Hemoglobin"]["confidence_score"] >= 0.85
+    assert by_name["WBC"]["bbox"]["x_min"] == 210
+
+
+def test_run_lab_pipeline_passes_ocr_provenance_from_report_summary():
+    report_id = uuid4()
+    user_id = uuid4()
+    db = MagicMock()
+    report = SimpleNamespace(
+        id=report_id,
+        user_id=user_id,
+        parsed_text="Hemoglobin 13.8 g/dL",
+        summary_data={"text_source": "ocr_google_vision", "ocr_confidence": 0.91},
+        is_deleted=False,
+    )
+    query = MagicMock()
+    query.filter.return_value.first.return_value = report
+    db.query.return_value = query
+
+    with patch.object(lab_pipeline_service, "SessionLocal", return_value=db), patch.object(
+        lab_pipeline_service,
+        "_run_pipeline",
+        return_value=[],
+    ) as run_pipeline:
+        lab_pipeline_service.run_lab_pipeline(str(report_id))
+
+    run_pipeline.assert_called_once_with(
+        "Hemoglobin 13.8 g/dL",
+        user_id,
+        report_id,
+        db,
+        source_type="OCR",
+        source_confidence=0.91,
+    )

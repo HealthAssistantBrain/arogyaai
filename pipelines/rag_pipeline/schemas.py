@@ -43,6 +43,7 @@ class CorpusChunk:
     condition: str = ""
     symptoms: tuple[str, ...] = ()
     risk_factors: tuple[str, ...] = ()
+    tags: tuple[str, ...] = ()
     severity: str = "routine"
 
     @property
@@ -70,6 +71,7 @@ class RetrievedDocument:
     condition: str = ""
     symptoms: tuple[str, ...] = ()
     risk_factors: tuple[str, ...] = ()
+    tags: tuple[str, ...] = ()
     severity: str = "routine"
 
     def as_dict(self) -> dict[str, Any]:
@@ -94,6 +96,7 @@ class RetrievedDocument:
             "condition": self.condition,
             "symptoms": list(self.symptoms),
             "risk_factors": list(self.risk_factors),
+            "tags": list(self.tags),
             "severity": self.severity,
             "citation": {
                 "source": self.source,
@@ -110,6 +113,7 @@ class RetrievedDocument:
                 "disease_type": self.disease_type,
                 "source_org": self.source_org,
                 "retrieval_method": self.retrieval_method,
+                "tags": list(self.tags),
                 "severity": self.severity,
                 "citation": {
                     "source": self.source,

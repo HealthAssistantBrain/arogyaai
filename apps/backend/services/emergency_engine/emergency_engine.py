@@ -14,6 +14,7 @@ from models import (
     Alert,
     ChatSession,
     ClinicalHistory,
+    GoogleFitConnection,
     LabResult,
     Notification,
     NotificationSeverityEnum,
@@ -25,6 +26,7 @@ from models import (
     UserVitalTypeEnum,
     WearableData,
 )
+from pipelines.ingestion_pipeline.service import compute_daily_steps
 from services import notification_service
 
 logger = logging.getLogger("emergency_engine")
@@ -188,22 +190,10 @@ def _collect_activity(db: Session, user_id: uuid.UUID, missing: list[str]) -> di
         missing.append("activity")
         step_rows = []
 
-    values = [_safe_float(row.value) for row in step_rows]
-    values = [value for value in values if value is not None]
-
-    if not values:
-        try:
-            legacy_rows = (
-                db.query(WearableData)
-                .filter(WearableData.user_id == user_id, WearableData.step_count.isnot(None))
-                .order_by(WearableData.recorded_at.desc())
-                .limit(8)
-                .all()
-            )
-            values = [_safe_float(row.step_count) for row in legacy_rows]
-            values = [value for value in values if value is not None]
-        except Exception as exc:
-            logger.exception("[Emergency] Failed to load legacy activity signal for user=%s: %s", user_id, exc)
+    connection = db.query(GoogleFitConnection).filter(GoogleFitConnection.user_id == user_id).first()
+    timezone_name = str(getattr(connection, "default_timezone", None) or "UTC")
+    daily_steps = compute_daily_steps(step_rows, timezone_name)
+    values = [float(item["steps"]) for item in daily_steps]
 
     if not values:
         if "activity" not in missing:
@@ -534,7 +524,7 @@ def _score_signals(signals: dict[str, Any]) -> dict[str, Any]:
         scores["ml_risk"] = min(1.0, max(0.0, ml_risk))
         if ml_risk > ML_CRITICAL_THRESHOLD:
             triggers.append("ML risk > 0.85")
-            evidence.append(f"ML risk score is {ml_risk:.2f}.")
+            evidence.append(f"Recent health risk signal is {ml_risk:.2f}.")
 
     symptoms = signals.get("symptoms", {})
     if symptoms.get("has_chest_pain") or symptoms.get("has_fainting"):

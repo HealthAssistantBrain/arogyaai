@@ -24,13 +24,12 @@ from models import (
     GoogleFitConnection,
     PROVIDER_GOOGLE_FIT,
     User,
-    VitalsData,
-    WearableData,
     UserDevice,
     UserVital,
     UserVitalSourceEnum,
     UserVitalTypeEnum,
 )
+from pipelines.ingestion_pipeline.service import compute_daily_step_summary, compute_daily_steps
 from pipelines.orchestrator import run_pipeline
 from services.alert_service import generate_health_alerts
 from services.user_data_service import UserDataService
@@ -39,7 +38,11 @@ from services.event_service import emit_event
 GOOGLE_FIT_ACTIVITY_SCOPE = "https://www.googleapis.com/auth/fitness.activity.read"
 GOOGLE_FIT_BODY_SCOPE = "https://www.googleapis.com/auth/fitness.body.read"
 GOOGLE_FIT_HEART_RATE_SCOPE = "https://www.googleapis.com/auth/fitness.heart_rate.read"
+GOOGLE_FIT_LOCATION_SCOPE = "https://www.googleapis.com/auth/fitness.location.read"
 GOOGLE_FIT_SLEEP_SCOPE = "https://www.googleapis.com/auth/fitness.sleep.read"
+GOOGLE_FIT_BLOOD_GLUCOSE_SCOPE = "https://www.googleapis.com/auth/fitness.blood_glucose.read"
+GOOGLE_FIT_BLOOD_PRESSURE_SCOPE = "https://www.googleapis.com/auth/fitness.blood_pressure.read"
+GOOGLE_FIT_BODY_TEMPERATURE_SCOPE = "https://www.googleapis.com/auth/fitness.body_temperature.read"
 GOOGLE_FIT_OXYGEN_SCOPE = "https://www.googleapis.com/auth/fitness.oxygen_saturation.read"
 GOOGLE_FIT_SCOPE_SET = [
     "openid",
@@ -48,10 +51,25 @@ GOOGLE_FIT_SCOPE_SET = [
     GOOGLE_FIT_ACTIVITY_SCOPE,
     GOOGLE_FIT_BODY_SCOPE,
     GOOGLE_FIT_HEART_RATE_SCOPE,
+    GOOGLE_FIT_LOCATION_SCOPE,
     GOOGLE_FIT_SLEEP_SCOPE,
+    GOOGLE_FIT_BLOOD_GLUCOSE_SCOPE,
+    GOOGLE_FIT_BLOOD_PRESSURE_SCOPE,
+    GOOGLE_FIT_BODY_TEMPERATURE_SCOPE,
     GOOGLE_FIT_OXYGEN_SCOPE,
 ]
 GOOGLE_FIT_STEP_DATA_TYPE = "com.google.step_count.delta"
+GOOGLE_FIT_HEART_RATE_DATA_TYPE = "com.google.heart_rate.bpm"
+GOOGLE_FIT_SLEEP_DATA_TYPE = "com.google.sleep.segment"
+GOOGLE_FIT_SPO2_DATA_TYPE = "com.google.oxygen_saturation"
+GOOGLE_FIT_SPO2_SUMMARY_DATA_TYPE = "com.google.oxygen_saturation.summary"
+GOOGLE_FIT_GLUCOSE_DATA_TYPE = "com.google.blood_glucose"
+GOOGLE_FIT_GLUCOSE_SUMMARY_DATA_TYPE = "com.google.blood_glucose.summary"
+GOOGLE_FIT_BLOOD_PRESSURE_DATA_TYPE = "com.google.blood_pressure"
+GOOGLE_FIT_BLOOD_PRESSURE_SUMMARY_DATA_TYPE = "com.google.blood_pressure.summary"
+GOOGLE_FIT_BODY_TEMPERATURE_DATA_TYPE = "com.google.body.temperature"
+GOOGLE_FIT_BODY_TEMPERATURE_SUMMARY_DATA_TYPE = "com.google.body.temperature.summary"
+GOOGLE_FIT_LOCATION_DATA_TYPE = "com.google.location.sample"
 GOOGLE_FIT_DATASOURCE_ID = "derived:com.google.step_count.delta:com.google.android.gms:estimated_steps"
 GOOGLE_FIT_MERGED_HEART_RATE_DATASOURCE_ID = "derived:com.google.heart_rate.bpm:com.google.android.gms:merge_heart_rate_bpm"
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -68,9 +86,14 @@ GOOGLE_FIT_PAGE_SIZE_DAYS = 7
 GOOGLE_FIT_MAX_SYNC_RETRIES = 2
 GOOGLE_FIT_DAILY_BUCKET_MILLIS = 24 * 60 * 60 * 1000
 GOOGLE_FIT_METRIC_DATA_TYPES = {
-    "heart_rate": "com.google.heart_rate.bpm",
+    "heart_rate": GOOGLE_FIT_HEART_RATE_DATA_TYPE,
     "steps": GOOGLE_FIT_STEP_DATA_TYPE,
-    "sleep": "com.google.sleep.segment",
+    "sleep": GOOGLE_FIT_SLEEP_DATA_TYPE,
+    "spo2": GOOGLE_FIT_SPO2_DATA_TYPE,
+    "glucose": GOOGLE_FIT_GLUCOSE_DATA_TYPE,
+    "blood_pressure": GOOGLE_FIT_BLOOD_PRESSURE_DATA_TYPE,
+    "body_temperature": GOOGLE_FIT_BODY_TEMPERATURE_DATA_TYPE,
+    "location": GOOGLE_FIT_LOCATION_DATA_TYPE,
 }
 GOOGLE_FIT_HEART_RATE_SOURCE_PRIORITY = (
     "com.coveiot.android.boat",
@@ -80,6 +103,8 @@ GOOGLE_FIT_HEART_RATE_SOURCE_PRIORITY = (
 GOOGLE_FIT_STEP_SOURCE_PRIORITY = (
     "estimated_steps",
 )
+GOOGLE_FIT_OPTIONAL_SYNC_METRICS = {"sleep", "spo2", "location"}
+GOOGLE_FIT_RECONSENT_METRICS = {"glucose", "blood_pressure", "body_temperature"}
 logger = logging.getLogger("google_fit_service")
 
 
@@ -88,11 +113,23 @@ class GoogleFitService:
         "steps": (GOOGLE_FIT_ACTIVITY_SCOPE,),
         "heart_rate": (GOOGLE_FIT_BODY_SCOPE, GOOGLE_FIT_HEART_RATE_SCOPE),
         "sleep": (GOOGLE_FIT_SLEEP_SCOPE,),
+        "spo2": (GOOGLE_FIT_OXYGEN_SCOPE,),
+        "glucose": (GOOGLE_FIT_BLOOD_GLUCOSE_SCOPE,),
+        "blood_pressure": (GOOGLE_FIT_BLOOD_PRESSURE_SCOPE,),
+        "body_temperature": (GOOGLE_FIT_BODY_TEMPERATURE_SCOPE,),
+        "location": (GOOGLE_FIT_LOCATION_SCOPE,),
     }
-    METRIC_VITAL_TYPE_MAP: dict[str, UserVitalTypeEnum] = {
-        "steps": UserVitalTypeEnum.STEPS,
-        "heart_rate": UserVitalTypeEnum.HEART_RATE,
-        "sleep": UserVitalTypeEnum.SLEEP,
+    METRIC_VITAL_TYPE_MAP: dict[str, tuple[UserVitalTypeEnum, ...]] = {
+        "steps": (UserVitalTypeEnum.STEPS,),
+        "heart_rate": (UserVitalTypeEnum.HEART_RATE,),
+        "sleep": (UserVitalTypeEnum.SLEEP,),
+        "spo2": (UserVitalTypeEnum.SPO2,),
+        "glucose": (UserVitalTypeEnum.GLUCOSE,),
+        "blood_pressure": (
+            UserVitalTypeEnum.BLOOD_PRESSURE_SYSTOLIC,
+            UserVitalTypeEnum.BLOOD_PRESSURE_DIASTOLIC,
+        ),
+        "body_temperature": (UserVitalTypeEnum.BODY_TEMPERATURE,),
     }
 
     @staticmethod
@@ -658,6 +695,45 @@ class GoogleFitService:
         return series
 
     @staticmethod
+    def _local_day_bounds_millis(timezone_name: str, day_value: str) -> tuple[int, int]:
+        tzinfo = GoogleFitService._safe_timezone_info(timezone_name)
+        try:
+            day = datetime.strptime(day_value, "%Y-%m-%d").date()
+        except (TypeError, ValueError):
+            day = datetime.now(tzinfo).date()
+        start_local = datetime(day.year, day.month, day.day, tzinfo=tzinfo)
+        end_local = start_local + timedelta(days=1)
+        return (
+            int(start_local.astimezone(timezone.utc).timestamp() * 1000),
+            int(end_local.astimezone(timezone.utc).timestamp() * 1000),
+        )
+
+    @staticmethod
+    def _local_day_metadata(
+        timezone_name: str,
+        start_millis: int,
+        end_millis: int,
+    ) -> list[dict[str, Any]]:
+        metadata: list[dict[str, Any]] = []
+        for day in GoogleFitService._build_local_day_series(timezone_name, start_millis, end_millis):
+            day_start_millis, day_end_millis = GoogleFitService._local_day_bounds_millis(timezone_name, day)
+            effective_start = max(start_millis, day_start_millis)
+            effective_end = min(end_millis, day_end_millis)
+            is_partial = effective_start > day_start_millis or effective_end < day_end_millis
+            metadata.append(
+                {
+                    "date": day,
+                    "start_millis": day_start_millis,
+                    "end_millis": day_end_millis,
+                    "effective_start_millis": effective_start,
+                    "effective_end_millis": effective_end,
+                    "is_partial": is_partial,
+                    "included_in_averages": not is_partial,
+                }
+            )
+        return metadata
+
+    @staticmethod
     def _extract_step_count(bucket: dict[str, Any]) -> int | None:
         total = 0.0
         found_value = False
@@ -902,8 +978,60 @@ class GoogleFitService:
             if end_millis is not None
             else None
         )
+        tzinfo = GoogleFitService._safe_timezone_info(timezone_name)
+        bucket_trace: list[dict[str, Any]] = []
+        omitted_buckets = 0
+        if isinstance(response_json, dict):
+            buckets = response_json.get("bucket", [])
+            if isinstance(buckets, list):
+                omitted_buckets = max(0, len(buckets) - 12)
+                for index, bucket in enumerate(buckets[:12]):
+                    if not isinstance(bucket, dict):
+                        continue
+                    bucket_start = GoogleFitService._extract_bucket_start_millis(bucket)
+                    bucket_end = GoogleFitService._extract_bucket_end_millis(bucket)
+                    raw_values: list[float | int] = []
+                    point_count = 0
+                    for dataset in bucket.get("dataset", []):
+                        if not isinstance(dataset, dict):
+                            continue
+                        points = dataset.get("point") or []
+                        if not isinstance(points, list):
+                            continue
+                        point_count += len(points)
+                        for point in points[:10]:
+                            if isinstance(point, dict):
+                                raw_values.extend(GoogleFitService._extract_point_values(point))
+                    bucket_trace.append(
+                        {
+                            "index": index,
+                            "start_millis": bucket_start,
+                            "end_millis": bucket_end,
+                            "start_utc": datetime.fromtimestamp(bucket_start / 1000, tz=timezone.utc).isoformat()
+                            if bucket_start is not None
+                            else None,
+                            "end_utc": datetime.fromtimestamp(bucket_end / 1000, tz=timezone.utc).isoformat()
+                            if bucket_end is not None
+                            else None,
+                            "start_local": datetime.fromtimestamp(bucket_start / 1000, tz=timezone.utc)
+                            .astimezone(tzinfo)
+                            .isoformat()
+                            if bucket_start is not None
+                            else None,
+                            "end_local": datetime.fromtimestamp(bucket_end / 1000, tz=timezone.utc)
+                            .astimezone(tzinfo)
+                            .isoformat()
+                            if bucket_end is not None
+                            else None,
+                            "point_count": point_count,
+                            "values": raw_values[:20],
+                            "step_count": GoogleFitService._extract_step_count(bucket)
+                            if "step" in metric_name.lower()
+                            else None,
+                        }
+                    )
         logger.info(
-            "[GFit] Raw response received | metric=%s | data_source_id=%s | dataset_size=%s | buckets=%s | points=%s | bytes=%s | start=%s | end=%s | timezone=%s",
+            "[GFit] Raw response received | metric=%s | data_source_id=%s | dataset_size=%s | buckets=%s | points=%s | bytes=%s | start=%s | end=%s | timezone=%s | bucket_trace=%s | omitted_buckets=%s",
             metric_name,
             data_source_id or "all_sources",
             GoogleFitService._response_point_count(response_json) if isinstance(response_json, dict) else "unknown",
@@ -913,6 +1041,8 @@ class GoogleFitService:
             start_iso,
             end_iso,
             timezone_name,
+            bucket_trace,
+            omitted_buckets,
         )
 
     @staticmethod
@@ -934,7 +1064,14 @@ class GoogleFitService:
 
     @staticmethod
     def _empty_data_availability() -> dict[str, bool]:
-        return {"steps": False, "heart_rate": False, "sleep": False}
+        return {metric_name: False for metric_name in GoogleFitService.CORE_METRIC_SCOPE_REQUIREMENTS}
+
+    @staticmethod
+    def _metric_vital_types() -> list[UserVitalTypeEnum]:
+        vital_types: list[UserVitalTypeEnum] = []
+        for mapped_types in GoogleFitService.METRIC_VITAL_TYPE_MAP.values():
+            vital_types.extend(mapped_types)
+        return vital_types
 
     @staticmethod
     def _data_availability_from_user_vitals(db: Session, user: User, days: int = GOOGLE_FIT_DEFAULT_FETCH_WINDOW_DAYS) -> dict[str, bool]:
@@ -945,13 +1082,13 @@ class GoogleFitService:
             .filter(
                 UserVital.user_id == user.id,
                 UserVital.timestamp >= cutoff,
-                UserVital.vital_type.in_(list(GoogleFitService.METRIC_VITAL_TYPE_MAP.values())),
+                UserVital.vital_type.in_(GoogleFitService._metric_vital_types()),
             )
             .all()
         )
         for row in rows:
-            for metric_name, vital_type in GoogleFitService.METRIC_VITAL_TYPE_MAP.items():
-                if row.vital_type == vital_type and row.value is not None:
+            for metric_name, vital_types in GoogleFitService.METRIC_VITAL_TYPE_MAP.items():
+                if row.vital_type in vital_types and row.value is not None:
                     availability[metric_name] = True
         return availability
 
@@ -964,13 +1101,13 @@ class GoogleFitService:
             .filter(
                 UserVital.user_id == user.id,
                 UserVital.timestamp >= cutoff,
-                UserVital.vital_type.in_(list(GoogleFitService.METRIC_VITAL_TYPE_MAP.values())),
+                UserVital.vital_type.in_(GoogleFitService._metric_vital_types()),
             )
             .all()
         )
         for row in rows:
-            for metric_name, vital_type in GoogleFitService.METRIC_VITAL_TYPE_MAP.items():
-                if row.vital_type == vital_type:
+            for metric_name, vital_types in GoogleFitService.METRIC_VITAL_TYPE_MAP.items():
+                if row.vital_type in vital_types:
                     counts[metric_name] += 1
         return counts
 
@@ -1222,10 +1359,8 @@ class GoogleFitService:
                     filtered[metric_name].append(source)
 
         logger.info(
-            "[GFit] Filtered data sources | heart_rate=%s | steps=%s | sleep=%s",
-            len(filtered["heart_rate"]),
-            len(filtered["steps"]),
-            len(filtered["sleep"]),
+            "[GFit] Filtered data sources | counts=%s",
+            {metric_name: len(metric_sources) for metric_name, metric_sources in filtered.items()},
         )
         for metric_name, metric_sources in filtered.items():
             logger.info(
@@ -1243,15 +1378,21 @@ class GoogleFitService:
         end_millis: int,
         bucket_duration_millis: int,
         data_source_id: str | None = None,
+        bucket_period: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         aggregate_by: list[dict[str, str]] = []
         aggregate_item = {"dataTypeName": data_type_name}
         if data_source_id:
             aggregate_item["dataSourceId"] = data_source_id
         aggregate_by.append(aggregate_item)
+        bucket_by_time: dict[str, Any] = (
+            {"period": bucket_period}
+            if bucket_period
+            else {"durationMillis": bucket_duration_millis}
+        )
 
         logger.info(
-            "[GFit] Aggregate request | data_type=%s | data_source_id=%s | start_ms=%s | end_ms=%s | start_ns=%s | end_ns=%s | bucket_ms=%s",
+            "[GFit] Aggregate request | data_type=%s | data_source_id=%s | start_ms=%s | end_ms=%s | start_ns=%s | end_ns=%s | bucket_ms=%s | bucket_period=%s",
             data_type_name,
             data_source_id,
             start_millis,
@@ -1259,6 +1400,7 @@ class GoogleFitService:
             GoogleFitService._millis_to_nanos(start_millis),
             GoogleFitService._millis_to_nanos(end_millis),
             bucket_duration_millis,
+            bucket_period,
         )
 
         response = await GoogleFitService._google_api_request(
@@ -1272,7 +1414,7 @@ class GoogleFitService:
             },
             json={
                 "aggregateBy": aggregate_by,
-                "bucketByTime": {"durationMillis": bucket_duration_millis},
+                "bucketByTime": bucket_by_time,
                 "startTimeMillis": start_millis,
                 "endTimeMillis": end_millis,
             },
@@ -1561,158 +1703,37 @@ class GoogleFitService:
         return response.json()
 
     @staticmethod
-    def save_heart_rate(db: Session, user_id: uuid.UUID, data_list: list[dict[str, Any]]) -> list[VitalsData]:
-        if not data_list:
-            return []
-
-        timestamps: list[datetime] = []
-        for item in data_list:
-            recorded_at = GoogleFitService._coerce_utc_datetime(item.get("timestamp"))
-            if recorded_at is None:
-                continue
-            timestamps.append(recorded_at)
-
-        if not timestamps:
-            return []
-
-        min_recorded_at = min(timestamps)
-        max_recorded_at = max(timestamps)
-        query_start = min_recorded_at.replace(minute=0, second=0, microsecond=0)
-
-        existing_rows = (
-            db.query(VitalsData)
-            .filter(
-                VitalsData.user_id == user_id,
-                VitalsData.recorded_at >= query_start,
-                VitalsData.recorded_at <= max_recorded_at,
-            )
-            .all()
-        )
-
-        rows_by_timestamp: dict[int, VitalsData] = {}
-        for row in existing_rows:
-            if row.recorded_at is None:
-                continue
-            row_timestamp = row.recorded_at.astimezone(timezone.utc)
-            exact_key = int(row_timestamp.timestamp() * 1000)
-            legacy_key = int(row_timestamp.replace(minute=0, second=0, microsecond=0).timestamp() * 1000)
-            rows_by_timestamp[exact_key] = row
-            rows_by_timestamp[legacy_key] = row
-
-        saved_rows: list[VitalsData] = []
-        for item in data_list:
-            recorded_at = GoogleFitService._coerce_utc_datetime(item.get("timestamp"))
-            if recorded_at is None:
-                continue
-            timestamp_key = int(recorded_at.timestamp() * 1000)
-            legacy_key = int(recorded_at.replace(minute=0, second=0, microsecond=0).timestamp() * 1000)
-            try:
-                heart_rate_bpm = int(round(float(item.get("heart_rate", item.get("value")))))
-            except (TypeError, ValueError):
-                continue
-
-            row = rows_by_timestamp.get(timestamp_key) or rows_by_timestamp.get(legacy_key)
-            if row:
-                if row.recorded_at is None or row.recorded_at != recorded_at:
-                    row.recorded_at = recorded_at
-                row.heart_rate_bpm = heart_rate_bpm
-            else:
-                row = VitalsData(
-                    user_id=user_id,
-                    recorded_at=recorded_at,
-                    heart_rate_bpm=heart_rate_bpm,
-                )
-                db.add(row)
-            rows_by_timestamp[timestamp_key] = row
-            rows_by_timestamp[legacy_key] = row
-
-            saved_rows.append(row)
-
-        db.commit()
-        return sorted(saved_rows, key=lambda item: item.recorded_at or datetime.now(timezone.utc))
-
-    @staticmethod
-    def _serialize_heart_rate(rows: list[VitalsData], timezone_name: str) -> list[dict[str, Any]]:
-        tzinfo = GoogleFitService._safe_timezone_info(timezone_name)
-        payload: list[dict[str, Any]] = []
-
-        for row in rows:
-            if row.recorded_at is None or row.heart_rate_bpm is None:
-                continue
-
-            local_timestamp = row.recorded_at.astimezone(tzinfo)
-            payload.append(
-                {
-                    "timestamp": row.recorded_at.isoformat(),
-                    "time": local_timestamp.strftime("%I %p").lstrip("0"),
-                    "bpm": int(row.heart_rate_bpm),
-                }
-            )
-
-        return payload
-
-    @staticmethod
-    def _daily_payload_from_rows(rows: list[WearableData], timezone_name: str) -> list[dict[str, Any]]:
-        tzinfo = GoogleFitService._safe_timezone_info(timezone_name)
-        payload = []
-        for row in sorted(rows, key=lambda item: item.recorded_at or datetime.now(timezone.utc)):
-            if row.recorded_at is None or row.step_count is None:
-                continue
-
-            local_date = row.recorded_at.astimezone(tzinfo).date().isoformat()
-            payload.append({"date": local_date, "steps": int(row.step_count)})
-        return payload
-
-    @staticmethod
     def _daily_payload_from_vital_rows(
         rows: list[UserVital],
         timezone_name: str,
         start_millis: int,
         end_millis: int,
     ) -> list[dict[str, Any]]:
-        tzinfo = GoogleFitService._safe_timezone_info(timezone_name)
-        totals: dict[str, int] = {
-            day: 0
-            for day in GoogleFitService._build_local_day_series(timezone_name, start_millis, end_millis)
-        }
-
-        for row in rows:
-            if row.timestamp is None or row.value is None:
-                continue
-            local_date = row.timestamp.astimezone(tzinfo).date().isoformat()
-            try:
-                totals[local_date] = totals.get(local_date, 0) + max(0, int(round(float(row.value))))
-            except (TypeError, ValueError):
-                continue
-
-        return [{"date": day, "steps": totals[day]} for day in sorted(totals)]
+        del start_millis, end_millis
+        return compute_daily_steps(rows, timezone_name)
 
     @staticmethod
-    def _build_stats(daily_steps: list[dict[str, Any]]) -> dict[str, Any]:
-        if not daily_steps:
-            return {
-                "daily_steps": [],
-                "total_steps": 0,
-                "average_daily_steps": 0,
-                "average_steps_on_active_days": 0,
-                "best_day": None,
-                "latest_day": None,
-                "active_day_count": 0,
-            }
-
-        total_steps = sum(item["steps"] for item in daily_steps)
-        active_days = [item for item in daily_steps if item["steps"] > 0]
-        best_day = max(daily_steps, key=lambda item: item["steps"])
-        latest_day = active_days[-1] if active_days else daily_steps[-1]
-
+    def _build_stats(daily_steps: list[dict[str, Any]], timezone_name: str | None = None) -> dict[str, Any]:
+        summary = compute_daily_step_summary(daily_steps or [], timezone_name)
+        active_days = [item for item in summary["daily_steps"] if int(item["steps"]) > 0]
+        today = None
+        if timezone_name:
+            today = datetime.now(GoogleFitService._safe_timezone_info(timezone_name)).date().isoformat()
+        current_day = next(
+            (item for item in summary["daily_steps"] if item["date"] == today),
+            summary["latest_day"],
+        )
         return {
-            "daily_steps": daily_steps,
-            "total_steps": total_steps,
-            "average_daily_steps": round(total_steps / len(daily_steps)),
-            "average_steps_on_active_days": round(sum(item["steps"] for item in active_days) / len(active_days)) if active_days else 0,
-            "best_day": best_day,
-            "latest_day": latest_day,
+            **summary,
+            "total_steps_including_partial": summary["total_steps"],
+            "average_daily_steps": summary["average_steps"],
+            "average_steps_on_active_days": round(sum(int(item["steps"]) for item in active_days) / len(active_days)) if active_days else 0,
+            "latest_complete_day": summary["latest_day"],
+            "current_day": current_day,
+            "partial_day": None,
             "active_day_count": len(active_days),
+            "valid_day_count": len(summary["daily_steps"]),
+            "partial_day_count": 0,
         }
 
     @staticmethod
@@ -1779,7 +1800,6 @@ class GoogleFitService:
             }
 
         effective_timezone = GoogleFitService._resolve_timezone(connection.default_timezone or timezone_name)
-        device = db.query(Device).filter(Device.id == connection.device_id).first() if connection.device_id else None
         start_millis, end_millis = GoogleFitService._build_recent_local_day_series_window(effective_timezone)
         step_rows = (
             db.query(UserVital)
@@ -1792,31 +1812,12 @@ class GoogleFitService:
             .order_by(UserVital.timestamp.asc())
             .all()
         )
-        rows = []
-        if step_rows:
-            daily_steps = GoogleFitService._daily_payload_from_vital_rows(step_rows, effective_timezone, start_millis, end_millis)
-        elif device:
-            start_dt_utc = datetime.fromtimestamp(start_millis / 1000, tz=timezone.utc)
-            rows = (
-                db.query(WearableData)
-                .filter(
-                    WearableData.user_id == user.id,
-                    WearableData.device_id == device.id,
-                    WearableData.step_count.isnot(None),
-                    WearableData.recorded_at >= start_dt_utc,
-                    WearableData.recorded_at < datetime.fromtimestamp(end_millis / 1000, tz=timezone.utc),
-                )
-                .order_by(WearableData.recorded_at.asc())
-                .all()
-            )
-            daily_steps = GoogleFitService._daily_payload_from_rows(rows, effective_timezone)
-        else:
-            daily_steps = []
+        daily_steps = compute_daily_steps(step_rows, effective_timezone)
         return {
             "connected": True,
             "timezone": effective_timezone,
             "last_synced_at": connection.last_synced_at.isoformat() if connection.last_synced_at else None,
-            "stats": GoogleFitService._build_stats(daily_steps),
+            "stats": GoogleFitService._build_stats(daily_steps, effective_timezone),
             "raw_json": connection.raw_last_response,
             "google_email": connection.google_email,
             "last_sync_status": connection.last_sync_status,
@@ -1862,6 +1863,7 @@ class GoogleFitService:
             end_millis,
             GOOGLE_FIT_DAILY_BUCKET_MILLIS,
             data_source_id=GOOGLE_FIT_DATASOURCE_ID,
+            bucket_period={"type": "day", "value": 1, "timeZoneId": resolved_timezone},
         )
         step_summary = GoogleFitService._summarize_step_response(raw_api_response, start_millis, end_millis)
         stored_values = GoogleFitService._stored_step_values_payload(
@@ -2071,18 +2073,6 @@ class GoogleFitService:
             .order_by(UserVital.timestamp.asc())
             .all()
         )
-        wearable_rows = (
-            db.query(WearableData)
-            .filter(
-                WearableData.user_id == user.id,
-                WearableData.step_count.isnot(None),
-                WearableData.recorded_at >= start_dt_utc,
-                WearableData.recorded_at < end_dt_utc,
-            )
-            .order_by(WearableData.recorded_at.asc())
-            .all()
-        )
-
         def _safe_int(value: Any) -> int:
             try:
                 return max(0, int(round(float(value))))
@@ -2098,21 +2088,10 @@ class GoogleFitService:
             }
             for row in vital_rows
         ]
-        wearable_data = [
-            {
-                "recorded_at": row.recorded_at.isoformat() if row.recorded_at else None,
-                "local_day": row.recorded_at.astimezone(tzinfo).date().isoformat() if row.recorded_at else None,
-                "step_count": _safe_int(row.step_count),
-            }
-            for row in wearable_rows
-        ]
         return {
             "user_vitals_total": sum(item["value"] for item in user_vitals),
             "user_vitals_count": len(user_vitals),
             "user_vitals": user_vitals,
-            "wearable_data_total": sum(item["step_count"] for item in wearable_data),
-            "wearable_data_count": len(wearable_data),
-            "wearable_data": wearable_data,
         }
 
     @staticmethod
@@ -2371,6 +2350,7 @@ class GoogleFitService:
                     end_millis,
                     GOOGLE_FIT_DAILY_BUCKET_MILLIS,
                     data_source_id=source_id,
+                    bucket_period={"type": "day", "value": 1, "timeZoneId": timezone_name},
                 )
             except HTTPException as exc:
                 if exc.status_code == status.HTTP_401_UNAUTHORIZED:
@@ -2614,6 +2594,7 @@ class GoogleFitService:
                     end_millis,
                     GOOGLE_FIT_DAILY_BUCKET_MILLIS,
                     data_source_id=source_id,
+                    bucket_period={"type": "day", "value": 1, "timeZoneId": timezone_name},
                 )
             except HTTPException as exc:
                 if exc.status_code == status.HTTP_401_UNAUTHORIZED:
@@ -2645,6 +2626,8 @@ class GoogleFitService:
                 )
                 continue
 
+            buckets_by_day: dict[str, dict[str, Any]] = {}
+            tzinfo = GoogleFitService._safe_timezone_info(timezone_name)
             for bucket in step_summary["buckets"]:
                 bucket_start = bucket.get("start_millis")
                 bucket_end = bucket.get("end_millis")
@@ -2653,13 +2636,58 @@ class GoogleFitService:
                 if bucket_end is None:
                     bucket_end = min(end_millis, int(bucket_start) + GOOGLE_FIT_DAILY_BUCKET_MILLIS)
 
-                local_day = datetime.fromtimestamp(int(bucket_start) / 1000, tz=timezone.utc).astimezone(
-                    GoogleFitService._safe_timezone_info(timezone_name)
-                ).date().isoformat()
+                local_day = datetime.fromtimestamp(int(bucket_start) / 1000, tz=timezone.utc).astimezone(tzinfo).date().isoformat()
                 processed_steps = max(0, int(bucket.get("steps") or 0))
+                day_bucket = buckets_by_day.setdefault(
+                    local_day,
+                    {
+                        "steps": 0,
+                        "datapoints": 0,
+                        "raw_values": [],
+                        "buckets": [],
+                        "bucket_count": 0,
+                        "start_millis": None,
+                        "end_millis": None,
+                    },
+                )
+                day_bucket["steps"] += processed_steps
+                day_bucket["datapoints"] += int(bucket.get("datapoints") or 0)
+                day_bucket["raw_values"].extend(bucket.get("raw_values", []))
+                day_bucket["buckets"].append(bucket)
+                day_bucket["bucket_count"] += 1
+                day_bucket["start_millis"] = (
+                    int(bucket_start)
+                    if day_bucket["start_millis"] is None
+                    else min(int(day_bucket["start_millis"]), int(bucket_start))
+                )
+                day_bucket["end_millis"] = (
+                    int(bucket_end)
+                    if day_bucket["end_millis"] is None
+                    else max(int(day_bucket["end_millis"]), int(bucket_end))
+                )
+
+            for day_meta in GoogleFitService._local_day_metadata(timezone_name, start_millis, end_millis):
+                local_day = day_meta["date"]
+                day_start = int(day_meta["start_millis"])
+                day_end = int(day_meta["end_millis"])
+                effective_start = int(day_meta["effective_start_millis"])
+                effective_end = int(day_meta["effective_end_millis"])
+                day_bucket = buckets_by_day.get(
+                    local_day,
+                    {
+                        "steps": 0,
+                        "datapoints": 0,
+                        "raw_values": [],
+                        "buckets": [],
+                        "bucket_count": 0,
+                        "start_millis": effective_start,
+                        "end_millis": effective_end,
+                    },
+                )
+                processed_steps = max(0, int(day_bucket.get("steps") or 0))
                 record = GoogleFitService._normalize_google_fit_record(
                     UserVitalTypeEnum.STEPS.value,
-                    int(bucket_start),
+                    day_start,
                     processed_steps,
                     timezone_name=timezone_name,
                     unit="count",
@@ -2669,19 +2697,25 @@ class GoogleFitService:
                         "source_used": source_id,
                         "raw_google_fit_steps": processed_steps,
                         "processed_steps": processed_steps,
-                        "datapoints": int(bucket.get("datapoints") or 0),
-                        "bucket_count": 1,
+                        "datapoints": int(day_bucket.get("datapoints") or 0),
+                        "bucket_count": int(day_bucket.get("bucket_count") or 0),
                         "duplicate_or_overlapping_buckets": step_summary["duplicate_or_overlapping_buckets"],
                         "local_day": local_day,
+                        "is_partial": bool(day_meta["is_partial"]),
+                        "included_in_averages": bool(day_meta["included_in_averages"]),
                         "time_range": {
-                            "start_millis": int(bucket_start),
-                            "end_millis": int(bucket_end),
-                            "start": datetime.fromtimestamp(int(bucket_start) / 1000, tz=timezone.utc).isoformat(),
-                            "end": datetime.fromtimestamp(int(bucket_end) / 1000, tz=timezone.utc).isoformat(),
+                            "start_millis": effective_start,
+                            "end_millis": effective_end,
+                            "day_start_millis": day_start,
+                            "day_end_millis": day_end,
+                            "start": datetime.fromtimestamp(effective_start / 1000, tz=timezone.utc).isoformat(),
+                            "end": datetime.fromtimestamp(effective_end / 1000, tz=timezone.utc).isoformat(),
+                            "day_start": datetime.fromtimestamp(day_start / 1000, tz=timezone.utc).isoformat(),
+                            "day_end": datetime.fromtimestamp(day_end / 1000, tz=timezone.utc).isoformat(),
                             "timezone": timezone_name,
                         },
-                        "raw_values": bucket.get("raw_values", []),
-                        "buckets": [bucket],
+                        "raw_values": day_bucket.get("raw_values", []),
+                        "buckets": day_bucket.get("buckets", []),
                     }
                 )
                 records.append(record)
@@ -2975,57 +3009,463 @@ class GoogleFitService:
         return records
 
     @staticmethod
-    async def fetch_spo2(
+    def _aggregate_scalar_value(bucket: dict[str, Any], value_index: int = 0) -> float | None:
+        values: list[float] = []
+        for dataset in bucket.get("dataset", []):
+            for point in dataset.get("point", []):
+                extracted_values = GoogleFitService._extract_point_values(point)
+                if len(extracted_values) > value_index:
+                    values.append(float(extracted_values[value_index]))
+
+        if not values:
+            return None
+
+        return round(sum(values) / len(values), 2)
+
+    @staticmethod
+    def _normalize_glucose_mmol_to_mg_dl(value: float) -> float:
+        return round(float(value) * 18.0182, 1)
+
+    @staticmethod
+    def _normalize_body_temperature_celsius(value: float) -> float:
+        # Google Fit body temperature is documented as Celsius. This guard keeps
+        # manually imported Fahrenheit-like values from being stored as 98 C.
+        numeric = float(value)
+        if numeric > 80:
+            return round((numeric - 32.0) * 5.0 / 9.0, 1)
+        return round(numeric, 1)
+
+    @staticmethod
+    def _normalize_scalar_bucket_records(
+        response_json: dict[str, Any],
+        *,
+        metric_type: str,
+        unit: str,
+        timezone_name: str,
+        value_index: int = 0,
+        value_transform: Any = None,
+    ) -> list[dict[str, Any]]:
+        records: list[dict[str, Any]] = []
+        for bucket in response_json.get("bucket", []):
+            timestamp = GoogleFitService._extract_bucket_start_millis(bucket)
+            value = GoogleFitService._aggregate_scalar_value(bucket, value_index=value_index)
+            if timestamp is None or value is None:
+                continue
+            if value_transform is not None:
+                value = value_transform(value)
+            records.append(
+                GoogleFitService._normalize_google_fit_record(
+                    metric_type,
+                    timestamp,
+                    value,
+                    timezone_name=timezone_name,
+                    unit=unit,
+                )
+            )
+        return records
+
+    @staticmethod
+    async def _fetch_scalar_metric(
         user: User,
         access_token: str,
-        days: int = 1,
-        timezone_name: str | None = None,
+        *,
+        metric_name: str,
+        vital_type: UserVitalTypeEnum,
+        data_type_name: str,
+        summary_data_type_name: str | None,
+        unit: str,
+        days: int,
+        timezone_name: str,
         start_ts: Any = None,
         end_ts: Any = None,
-    ) -> list[dict[str, Any]] | None:
-        timezone_name = timezone_name or settings.GOOGLE_FIT_DEFAULT_TIMEZONE
-        start_millis, end_millis = GoogleFitService._resolve_fetch_window(
+        data_sources: list[dict[str, Any]] | None = None,
+        value_transform: Any = None,
+    ) -> list[dict[str, Any]]:
+        for start_millis, end_millis, window_days in GoogleFitService._build_candidate_windows(
             timezone_name,
             start_ts=start_ts,
             end_ts=end_ts,
             days=days,
-        )
-        response_json = await GoogleFitService._aggregate_fit_data(
+        ):
+            metric_sources = [
+                source
+                for source in GoogleFitService._prioritize_data_sources(metric_name, data_sources)
+                if GoogleFitService._data_source_id(source)
+            ]
+            records: list[dict[str, Any]] = []
+
+            for source in metric_sources:
+                source_id = GoogleFitService._data_source_id(source)
+                if not source_id:
+                    continue
+                try:
+                    response_json = await GoogleFitService._fetch_source_dataset_with_raw_fallback(
+                        access_token,
+                        data_type_name,
+                        start_millis,
+                        end_millis,
+                        60 * 60 * 1000,
+                        data_source_id=source_id,
+                        metric_name=f"{metric_name}_source",
+                        timezone_name=timezone_name,
+                    )
+                except HTTPException as exc:
+                    if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+                        raise
+                    logger.warning("[GFit] %s source fetch failed | source=%s | error=%s", metric_name, source_id, exc.detail)
+                    continue
+                except (httpx.TimeoutException, httpx.TransportError):
+                    raise
+                except Exception as exc:
+                    logger.warning("[GFit] %s source fetch failed | source=%s | error=%s", metric_name, source_id, exc)
+                    continue
+
+                GoogleFitService._log_raw_google_fit_response(
+                    f"{metric_name}_source",
+                    response_json,
+                    start_millis=start_millis,
+                    end_millis=end_millis,
+                    timezone_name=timezone_name,
+                    data_source_id=source_id,
+                )
+                if metric_name == "glucose":
+                    logger.info("GLUCOSE RAW: %s", response_json)
+                elif metric_name == "body_temperature":
+                    logger.info("TEMP RAW: %s", response_json)
+                records = GoogleFitService._normalize_scalar_bucket_records(
+                    response_json,
+                    metric_type=vital_type.value,
+                    unit=unit,
+                    timezone_name=timezone_name,
+                    value_transform=value_transform,
+                )
+                if records:
+                    break
+
+            data_types_to_try = [data_type_name]
+            if summary_data_type_name and summary_data_type_name != data_type_name:
+                data_types_to_try.append(summary_data_type_name)
+            for candidate_data_type in data_types_to_try:
+                if records:
+                    break
+                response_json = await GoogleFitService._aggregate_fit_data(
+                    access_token,
+                    candidate_data_type,
+                    start_millis,
+                    end_millis,
+                    60 * 60 * 1000,
+                )
+                GoogleFitService._log_raw_google_fit_response(
+                    metric_name,
+                    response_json,
+                    start_millis=start_millis,
+                    end_millis=end_millis,
+                    timezone_name=timezone_name,
+                    data_source_id="all_sources",
+                )
+                if metric_name == "glucose":
+                    logger.info("GLUCOSE RAW: %s", response_json)
+                elif metric_name == "body_temperature":
+                    logger.info("TEMP RAW: %s", response_json)
+                records = GoogleFitService._normalize_scalar_bucket_records(
+                    response_json,
+                    metric_type=vital_type.value,
+                    unit=unit,
+                    timezone_name=timezone_name,
+                    value_transform=value_transform,
+                )
+
+            logger.info(
+                "[GFit] %s dataset count | user=%s | window_days=%s | records=%s | start_ms=%s | end_ms=%s",
+                metric_name,
+                getattr(user, "id", "unknown"),
+                window_days,
+                len(records),
+                start_millis,
+                end_millis,
+            )
+            if records:
+                return sorted(records, key=lambda item: item["timestamp"])
+
+        logger.warning("[GFit] %s data unavailable | user=%s", metric_name, getattr(user, "id", "unknown"))
+        return []
+
+    @staticmethod
+    async def fetch_spo2(
+        user: User,
+        access_token: str,
+        days: int = GOOGLE_FIT_DEFAULT_FETCH_WINDOW_DAYS,
+        timezone_name: str | None = None,
+        start_ts: Any = None,
+        end_ts: Any = None,
+        data_sources: list[dict[str, Any]] | None = None,
+    ) -> list[dict[str, Any]]:
+        timezone_name = timezone_name or settings.GOOGLE_FIT_DEFAULT_TIMEZONE
+        return await GoogleFitService._fetch_scalar_metric(
+            user,
             access_token,
-            "com.google.oxygen_saturation.summary",
-            start_millis,
-            end_millis,
-            24 * 60 * 60 * 1000,
-        )
-        GoogleFitService._log_raw_google_fit_response(
-            "spo2",
-            response_json,
-            start_millis=start_millis,
-            end_millis=end_millis,
+            metric_name="spo2",
+            vital_type=UserVitalTypeEnum.SPO2,
+            data_type_name=GOOGLE_FIT_SPO2_DATA_TYPE,
+            summary_data_type_name=GOOGLE_FIT_SPO2_SUMMARY_DATA_TYPE,
+            unit="%",
+            days=days,
             timezone_name=timezone_name,
+            start_ts=start_ts,
+            end_ts=end_ts,
+            data_sources=data_sources,
         )
 
+    @staticmethod
+    async def fetch_glucose(
+        user: User,
+        access_token: str,
+        days: int = GOOGLE_FIT_DEFAULT_FETCH_WINDOW_DAYS,
+        timezone_name: str | None = None,
+        start_ts: Any = None,
+        end_ts: Any = None,
+        data_sources: list[dict[str, Any]] | None = None,
+    ) -> list[dict[str, Any]]:
+        timezone_name = timezone_name or settings.GOOGLE_FIT_DEFAULT_TIMEZONE
+        return await GoogleFitService._fetch_scalar_metric(
+            user,
+            access_token,
+            metric_name="glucose",
+            vital_type=UserVitalTypeEnum.GLUCOSE,
+            data_type_name=GOOGLE_FIT_GLUCOSE_DATA_TYPE,
+            summary_data_type_name=GOOGLE_FIT_GLUCOSE_SUMMARY_DATA_TYPE,
+            unit="mg/dL",
+            days=days,
+            timezone_name=timezone_name,
+            start_ts=start_ts,
+            end_ts=end_ts,
+            data_sources=data_sources,
+            value_transform=GoogleFitService._normalize_glucose_mmol_to_mg_dl,
+        )
+
+    @staticmethod
+    async def fetch_body_temperature(
+        user: User,
+        access_token: str,
+        days: int = GOOGLE_FIT_DEFAULT_FETCH_WINDOW_DAYS,
+        timezone_name: str | None = None,
+        start_ts: Any = None,
+        end_ts: Any = None,
+        data_sources: list[dict[str, Any]] | None = None,
+    ) -> list[dict[str, Any]]:
+        timezone_name = timezone_name or settings.GOOGLE_FIT_DEFAULT_TIMEZONE
+        return await GoogleFitService._fetch_scalar_metric(
+            user,
+            access_token,
+            metric_name="body_temperature",
+            vital_type=UserVitalTypeEnum.BODY_TEMPERATURE,
+            data_type_name=GOOGLE_FIT_BODY_TEMPERATURE_DATA_TYPE,
+            summary_data_type_name=GOOGLE_FIT_BODY_TEMPERATURE_SUMMARY_DATA_TYPE,
+            unit="celsius",
+            days=days,
+            timezone_name=timezone_name,
+            start_ts=start_ts,
+            end_ts=end_ts,
+            data_sources=data_sources,
+            value_transform=GoogleFitService._normalize_body_temperature_celsius,
+        )
+
+    @staticmethod
+    async def fetch_blood_pressure(
+        user: User,
+        access_token: str,
+        days: int = GOOGLE_FIT_DEFAULT_FETCH_WINDOW_DAYS,
+        timezone_name: str | None = None,
+        start_ts: Any = None,
+        end_ts: Any = None,
+        data_sources: list[dict[str, Any]] | None = None,
+    ) -> list[dict[str, Any]]:
+        timezone_name = timezone_name or settings.GOOGLE_FIT_DEFAULT_TIMEZONE
         records: list[dict[str, Any]] = []
-        for bucket in response_json.get("bucket", []):
-            timestamp = GoogleFitService._extract_bucket_start_millis(bucket)
-            value = GoogleFitService._aggregate_oxygen_average(bucket)
-            if timestamp is None or value is None:
-                continue
-            records.append(
-                {
-                    "type": UserVitalTypeEnum.SPO2.value,
-                    "value": value,
-                    "unit": "%",
+        for start_millis, end_millis, window_days in GoogleFitService._build_candidate_windows(
+            timezone_name,
+            start_ts=start_ts,
+            end_ts=end_ts,
+            days=days,
+        ):
+            metric_sources = [
+                source
+                for source in GoogleFitService._prioritize_data_sources("blood_pressure", data_sources)
+                if GoogleFitService._data_source_id(source)
+            ]
+            response_json: dict[str, Any] | None = None
+
+            for source in metric_sources:
+                source_id = GoogleFitService._data_source_id(source)
+                if not source_id:
+                    continue
+                try:
+                    source_response = await GoogleFitService._fetch_source_dataset_with_raw_fallback(
+                        access_token,
+                        GOOGLE_FIT_BLOOD_PRESSURE_DATA_TYPE,
+                        start_millis,
+                        end_millis,
+                        60 * 60 * 1000,
+                        data_source_id=source_id,
+                        metric_name="blood_pressure_source",
+                        timezone_name=timezone_name,
+                    )
+                except HTTPException as exc:
+                    if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+                        raise
+                    logger.warning("[GFit] blood_pressure source fetch failed | source=%s | error=%s", source_id, exc.detail)
+                    continue
+                except (httpx.TimeoutException, httpx.TransportError):
+                    raise
+                except Exception as exc:
+                    logger.warning("[GFit] blood_pressure source fetch failed | source=%s | error=%s", source_id, exc)
+                    continue
+
+                GoogleFitService._log_raw_google_fit_response(
+                    "blood_pressure_source",
+                    source_response,
+                    start_millis=start_millis,
+                    end_millis=end_millis,
+                    timezone_name=timezone_name,
+                    data_source_id=source_id,
+                )
+                logger.info("BP RAW: %s", source_response)
+                if GoogleFitService._response_point_count(source_response) > 0:
+                    response_json = source_response
+                    break
+
+            if response_json is None:
+                response_json = await GoogleFitService._aggregate_fit_data(
+                    access_token,
+                    GOOGLE_FIT_BLOOD_PRESSURE_DATA_TYPE,
+                    start_millis,
+                    end_millis,
+                    60 * 60 * 1000,
+                )
+            if GoogleFitService._response_point_count(response_json) == 0:
+                response_json = await GoogleFitService._aggregate_fit_data(
+                    access_token,
+                    GOOGLE_FIT_BLOOD_PRESSURE_SUMMARY_DATA_TYPE,
+                    start_millis,
+                    end_millis,
+                    60 * 60 * 1000,
+                )
+            GoogleFitService._log_raw_google_fit_response(
+                "blood_pressure",
+                response_json,
+                start_millis=start_millis,
+                end_millis=end_millis,
+                timezone_name=timezone_name,
+                data_source_id="all_sources",
+            )
+            logger.info("BP RAW: %s", response_json)
+            records = []
+            for bucket in response_json.get("bucket", []):
+                timestamp = GoogleFitService._extract_bucket_start_millis(bucket)
+                systolic = GoogleFitService._aggregate_scalar_value(bucket, value_index=0)
+                diastolic = GoogleFitService._aggregate_scalar_value(bucket, value_index=1)
+                if timestamp is None or systolic is None or diastolic is None:
+                    continue
+                base = {
+                    "unit": "mmHg",
                     "timestamp": datetime.fromtimestamp(timestamp / 1000, tz=timezone.utc),
                     "source": "google_fit",
                     "timezone": timezone_name,
                 }
+                records.extend(
+                    [
+                        {
+                            **base,
+                            "type": "blood_pressure",
+                            "value": round(float(systolic), 1),
+                            "metadata": {"systolic": systolic, "diastolic": diastolic},
+                        },
+                        {**base, "type": UserVitalTypeEnum.BLOOD_PRESSURE_SYSTOLIC.value, "value": round(float(systolic), 1)},
+                        {**base, "type": UserVitalTypeEnum.BLOOD_PRESSURE_DIASTOLIC.value, "value": round(float(diastolic), 1)},
+                    ]
+                )
+            logger.info(
+                "[GFit] Blood pressure dataset count | user=%s | window_days=%s | records=%s",
+                getattr(user, "id", "unknown"),
+                window_days,
+                len(records),
             )
-        if not records:
-            logger.warning("[GFit] SPO2 DATA NOT AVAILABLE FROM GOOGLE FIT")
-            return None
+            if records:
+                return sorted(records, key=lambda item: item["timestamp"])
+        logger.warning("[GFit] Blood pressure data unavailable | user=%s", getattr(user, "id", "unknown"))
+        return []
 
-        return records
+    @staticmethod
+    async def fetch_location(
+        user: User,
+        access_token: str,
+        days: int = GOOGLE_FIT_DEFAULT_FETCH_WINDOW_DAYS,
+        timezone_name: str | None = None,
+        start_ts: Any = None,
+        end_ts: Any = None,
+        data_sources: list[dict[str, Any]] | None = None,
+    ) -> list[dict[str, Any]]:
+        timezone_name = timezone_name or settings.GOOGLE_FIT_DEFAULT_TIMEZONE
+        records: list[dict[str, Any]] = []
+        for start_millis, end_millis, window_days in GoogleFitService._build_candidate_windows(
+            timezone_name,
+            start_ts=start_ts,
+            end_ts=end_ts,
+            days=days,
+        ):
+            response_json = await GoogleFitService._aggregate_fit_data(
+                access_token,
+                GOOGLE_FIT_LOCATION_DATA_TYPE,
+                start_millis,
+                end_millis,
+                60 * 60 * 1000,
+            )
+            GoogleFitService._log_raw_google_fit_response(
+                "location",
+                response_json,
+                start_millis=start_millis,
+                end_millis=end_millis,
+                timezone_name=timezone_name,
+                data_source_id="all_sources",
+            )
+            records = []
+            for bucket in response_json.get("bucket", []):
+                timestamp = GoogleFitService._extract_bucket_end_millis(bucket) or GoogleFitService._extract_bucket_start_millis(bucket)
+                for dataset in bucket.get("dataset", []):
+                    for point in dataset.get("point", []):
+                        values = GoogleFitService._extract_point_values(point)
+                        if timestamp is None or len(values) < 2:
+                            continue
+                        latitude = float(values[0])
+                        longitude = float(values[1])
+                        if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+                            continue
+                        records.append(
+                            {
+                                "type": "location",
+                                "value": latitude,
+                                "unit": "degrees",
+                                "timestamp": datetime.fromtimestamp(timestamp / 1000, tz=timezone.utc),
+                                "source": "google_fit",
+                                "timezone": timezone_name,
+                                "metadata": {
+                                    "latitude": latitude,
+                                    "longitude": longitude,
+                                    "accuracy_meters": float(values[2]) if len(values) > 2 else None,
+                                    "altitude_meters": float(values[3]) if len(values) > 3 else None,
+                                },
+                            }
+                        )
+            logger.info(
+                "[GFit] Location dataset count | user=%s | window_days=%s | records=%s",
+                getattr(user, "id", "unknown"),
+                window_days,
+                len(records),
+            )
+            if records:
+                return sorted(records, key=lambda item: item["timestamp"])
+        logger.warning("[GFit] Location data unavailable | user=%s", getattr(user, "id", "unknown"))
+        return []
 
     @staticmethod
     def _serialize_vitals(records: list[Any]) -> list[dict[str, Any]]:
@@ -3178,7 +3618,7 @@ class GoogleFitService:
                 "data_availability": GoogleFitService._data_availability_from_user_vitals(db, user),
                 "scope_status": GoogleFitService._scope_status(connection),
                 "missing_scopes": GoogleFitService._missing_metric_scopes(connection),
-                "needs_reconsent": False,
+                "needs_reconsent": bool(GoogleFitService._missing_metric_scopes(connection)),
             }
 
         try:
@@ -3187,7 +3627,13 @@ class GoogleFitService:
             requested_days = GOOGLE_FIT_DEFAULT_FETCH_WINDOW_DAYS
         sync_days = max(1, min(requested_days, GOOGLE_FIT_MAX_FETCH_WINDOW_DAYS))
         if start_ts is None and end_ts is None:
-            local_sync_day, fetch_start_millis, fetch_end_millis = GoogleFitService._build_current_local_day_window(resolved_timezone)
+            fetch_start_millis, fetch_end_millis = GoogleFitService._build_recent_local_day_series_window(
+                resolved_timezone,
+                sync_days,
+            )
+            local_sync_day = datetime.fromtimestamp(fetch_end_millis / 1000, tz=timezone.utc).astimezone(
+                GoogleFitService._safe_timezone_info(resolved_timezone)
+            ).date().isoformat()
         else:
             fetch_start_millis, fetch_end_millis = GoogleFitService._resolve_fetch_window(
                 resolved_timezone,
@@ -3227,8 +3673,11 @@ class GoogleFitService:
         sleep_records: list[dict[str, Any]] = []
         fetched_metric_names: list[str] = []
         failed_metrics: list[str] = []
-        optional_metrics = {"sleep", "spo2"}
-        metric_statuses: dict[str, str] = {"steps": "pending", "heart_rate": "pending", "sleep": "pending", "spo2": "disabled"}
+        optional_metrics = GOOGLE_FIT_OPTIONAL_SYNC_METRICS
+        metric_statuses: dict[str, str] = {
+            metric_name: "pending"
+            for metric_name in GoogleFitService.CORE_METRIC_SCOPE_REQUIREMENTS
+        }
         scope_status = GoogleFitService._scope_status(connection)
         missing_scopes: list[str] = []
         logger.info(
@@ -3241,6 +3690,11 @@ class GoogleFitService:
             ("steps", GoogleFitService.fetch_steps),
             ("heart_rate", GoogleFitService.fetch_heart_rate),
             ("sleep", GoogleFitService.fetch_sleep),
+            ("spo2", GoogleFitService.fetch_spo2),
+            ("glucose", GoogleFitService.fetch_glucose),
+            ("blood_pressure", GoogleFitService.fetch_blood_pressure),
+            ("body_temperature", GoogleFitService.fetch_body_temperature),
+            ("location", GoogleFitService.fetch_location),
         ]
 
         for metric_name, fetcher in fetch_jobs:
@@ -3268,7 +3722,7 @@ class GoogleFitService:
                 logger.exception("[GFit] %s transport failed for user=%s", metric_name, user.id)
                 raise
             except Exception as exc:
-                metric_statuses[metric_name] = "not_available" if metric_name == "sleep" else "failed"
+                metric_statuses[metric_name] = "not_available" if metric_name in optional_metrics else "failed"
                 if metric_name not in optional_metrics:
                     failed_metrics.append(metric_name)
                 logger.warning(
@@ -3291,7 +3745,7 @@ class GoogleFitService:
                 elif metric_name == "sleep":
                     sleep_records = records
             else:
-                metric_statuses[metric_name] = "not_available" if metric_name == "sleep" else "empty"
+                metric_statuses[metric_name] = "not_available" if metric_name in optional_metrics else "empty"
                 logger.warning("[GFit] %s fetch returned empty dataset | user=%s", metric_name, user.id)
 
         realtime_today_steps = None
@@ -3382,6 +3836,10 @@ class GoogleFitService:
                 "heart_rate_records": 0,
                 "sleep_records": 0,
                 "spo2_records": 0,
+                "glucose_records": 0,
+                "blood_pressure_records": 0,
+                "body_temperature_records": 0,
+                "location_records": 0,
                 "successful_metrics": fetched_metric_names,
                 "failed_metrics": failed_metrics,
                 "empty_metrics": empty_metrics,
@@ -3453,17 +3911,23 @@ class GoogleFitService:
                 "missing_scopes": sorted(set(missing_scopes)),
                 "metric_statuses": metric_statuses,
                 "debug": step_debug,
-                "needs_reconsent": bool(required_missing_scopes),
+                "needs_reconsent": bool(missing_scopes),
                 "data": [],
             }
 
         overwrite_vital_types = [
-            GoogleFitService.METRIC_VITAL_TYPE_MAP[metric_name]
+            vital_type
             for metric_name in fetched_metric_names
-            if metric_name in GoogleFitService.METRIC_VITAL_TYPE_MAP
+            for vital_type in GoogleFitService.METRIC_VITAL_TYPE_MAP.get(metric_name, ())
         ]
-        saved_records = (
-            UserDataService.store_vitals(
+        if delayed_step_details:
+            overwrite_vital_types = [
+                vital_type
+                for vital_type in overwrite_vital_types
+                if vital_type != UserVitalTypeEnum.STEPS
+            ]
+        if all_records and overwrite_vital_types:
+            saved_records = UserDataService.store_vitals(
                 db,
                 user,
                 all_records,
@@ -3472,67 +3936,34 @@ class GoogleFitService:
                 window_start=fetch_start_millis,
                 window_end=fetch_end_millis,
             )
-            if all_records and overwrite_vital_types
-            else []
-        )
+        elif all_records:
+            saved_records = UserDataService.store_vitals(db, user, all_records)
+        else:
+            saved_records = []
+        try:
+            saved_wearable_metrics = UserDataService.store_wearable_metrics(db, user, all_records)
+        except Exception:
+            db.rollback()
+            saved_wearable_metrics = []
+            logger.exception("[GFit] Failed to persist wearable_metrics rows | user=%s", user.id)
 
         device = GoogleFitService._get_or_create_device(db, user)
         device.is_active = True
-
-        tzinfo = GoogleFitService._safe_timezone_info(resolved_timezone)
-        daily_steps_by_day: dict[str, int] = {}
-
-        if step_records:
-            for record in step_records:
-                timestamp = record.get("timestamp")
-                if not isinstance(timestamp, datetime):
-                    continue
-                raw_value = record.get("value")
-                if raw_value is None:
-                    continue
-                try:
-                    steps_value = int(round(float(raw_value)))
-                except (TypeError, ValueError):
-                    continue
-                steps_value = max(0, steps_value)
-                day = timestamp.astimezone(tzinfo).date().isoformat()
-                daily_steps_by_day[day] = daily_steps_by_day.get(day, 0) + steps_value
-
-        if daily_steps_by_day:
-            start_dt_utc = datetime.fromtimestamp(fetch_start_millis / 1000, tz=timezone.utc)
-            end_dt_utc = datetime.fromtimestamp(fetch_end_millis / 1000, tz=timezone.utc)
-            db.query(WearableData).filter(
-                WearableData.user_id == user.id,
-                WearableData.step_count.isnot(None),
-                WearableData.recorded_at >= start_dt_utc,
-                WearableData.recorded_at < end_dt_utc,
-            ).delete(synchronize_session=False)
-
-            for day, steps in sorted(daily_steps_by_day.items()):
-                local_day = datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=tzinfo)
-                db.add(
-                    WearableData(
-                        user_id=user.id,
-                        device_id=device.id,
-                        recorded_at=local_day.astimezone(timezone.utc),
-                        step_count=max(0, int(steps)),
-                    )
-                )
-        else:
-            logger.warning("[GFit] No step points fetched; keeping existing wearable_data rows | user=%s", user.id)
-
-        if daily_steps_by_day:
-            daily_steps_map = {
-                day: {"date": day, "steps": 0}
-                for day in GoogleFitService._build_local_day_series(resolved_timezone, fetch_start_millis, fetch_end_millis)
-            }
-            for day, steps in daily_steps_by_day.items():
-                daily_steps_map[day] = {"date": day, "steps": max(0, int(steps))}
-            daily_steps = [daily_steps_map[day] for day in sorted(daily_steps_map)]
-        else:
-            daily_steps = GoogleFitService.get_status(db, user, resolved_timezone).get("stats", {}).get("daily_steps", [])
-
         connection.device_id = device.id
+        step_rows_for_window = (
+            db.query(UserVital)
+            .filter(
+                UserVital.user_id == user.id,
+                UserVital.vital_type == UserVitalTypeEnum.STEPS,
+                UserVital.source == UserVitalSourceEnum.GOOGLE_FIT,
+                UserVital.timestamp >= datetime.fromtimestamp(fetch_start_millis / 1000, tz=timezone.utc),
+                UserVital.timestamp < datetime.fromtimestamp(fetch_end_millis / 1000, tz=timezone.utc),
+            )
+            .order_by(UserVital.timestamp.asc())
+            .all()
+        )
+        daily_steps = compute_daily_steps(step_rows_for_window, resolved_timezone)
+        daily_steps_by_day = {str(item["date"]): int(item["steps"]) for item in daily_steps}
         sync_timestamp = datetime.now(timezone.utc)
         data_availability = GoogleFitService._data_availability_from_user_vitals(db, user)
         vital_counts = GoogleFitService._count_user_vitals_by_metric(db, user)
@@ -3560,12 +3991,17 @@ class GoogleFitService:
             background_sync = None
         connection.raw_last_response = {
             "vitals_synced": len(saved_records),
+            "wearable_metrics_synced": len(saved_wearable_metrics),
             "data_points_fetched": len(all_records),
             "step_records": len(step_records),
             "realtime_today_steps": realtime_today_steps,
             "heart_rate_records": len(heart_rate_records),
             "sleep_records": len(sleep_records),
             "spo2_records": len([record for record in all_records if record.get("type") == UserVitalTypeEnum.SPO2.value]),
+            "glucose_records": len([record for record in all_records if record.get("type") == UserVitalTypeEnum.GLUCOSE.value]),
+            "blood_pressure_records": len([record for record in all_records if str(record.get("type")) == "blood_pressure"]),
+            "body_temperature_records": len([record for record in all_records if record.get("type") == UserVitalTypeEnum.BODY_TEMPERATURE.value]),
+            "location_records": len([record for record in all_records if str(record.get("type")) == "location"]),
             "successful_metrics": fetched_metric_names,
             "failed_metrics": failed_metrics,
             "empty_metrics": [
@@ -3601,6 +4037,11 @@ class GoogleFitService:
                 "steps": GOOGLE_FIT_STEP_DATA_TYPE,
                 "heart_rate": "com.google.heart_rate.bpm",
                 "sleep": "com.google.sleep.segment",
+                "spo2": GOOGLE_FIT_SPO2_DATA_TYPE,
+                "glucose": GOOGLE_FIT_GLUCOSE_DATA_TYPE,
+                "blood_pressure": GOOGLE_FIT_BLOOD_PRESSURE_DATA_TYPE,
+                "body_temperature": GOOGLE_FIT_BODY_TEMPERATURE_DATA_TYPE,
+                "location": GOOGLE_FIT_LOCATION_DATA_TYPE,
             },
             "data_sources": {
                 metric_name: [
@@ -3661,7 +4102,7 @@ class GoogleFitService:
             logger.exception("[GFit] Failed to emit sync notification events for user=%s", user.id)
 
         serialized_records = GoogleFitService._serialize_vitals(saved_records)
-        stats = GoogleFitService._build_stats(sorted(daily_steps, key=lambda item: item["date"]))
+        stats = GoogleFitService._build_stats(daily_steps, resolved_timezone)
         message = None
         warning_message = empty_data_warning
         missing_metrics = sorted(set(required_failed_metrics + required_missing_scopes))
@@ -3695,7 +4136,7 @@ class GoogleFitService:
             "scope_status": scope_status,
             "missing_scopes": sorted(set(missing_scopes)),
             "debug": step_debug,
-            "needs_reconsent": bool(required_missing_scopes),
+            "needs_reconsent": bool(missing_scopes),
             "data": serialized_records,
         }
 

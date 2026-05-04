@@ -20,11 +20,17 @@ for path in (REPO_ROOT, BACKEND_ROOT):
         sys.path.insert(0, resolved)
 
 from core.config import settings  # noqa: E402
+from pipelines.ingestion_pipeline.service import compute_daily_step_summary, compute_daily_steps  # noqa: E402
 from services.google_fit_service import (  # noqa: E402
     GOOGLE_FIT_ACTIVITY_SCOPE,
     GOOGLE_FIT_BODY_SCOPE,
+    GOOGLE_FIT_BLOOD_GLUCOSE_SCOPE,
+    GOOGLE_FIT_BLOOD_PRESSURE_SCOPE,
+    GOOGLE_FIT_BODY_TEMPERATURE_SCOPE,
     GOOGLE_FIT_DAILY_BUCKET_MILLIS,
     GOOGLE_FIT_DATASOURCE_ID,
+    GOOGLE_FIT_LOCATION_SCOPE,
+    GOOGLE_FIT_OXYGEN_SCOPE,
     GOOGLE_FIT_SLEEP_SCOPE,
     GOOGLE_FIT_STEP_DATA_TYPE,
     GoogleFitService,
@@ -54,6 +60,11 @@ def test_scope_status_accepts_required_google_fit_scopes():
                 GOOGLE_FIT_ACTIVITY_SCOPE,
                 GOOGLE_FIT_BODY_SCOPE,
                 GOOGLE_FIT_SLEEP_SCOPE,
+                GOOGLE_FIT_OXYGEN_SCOPE,
+                GOOGLE_FIT_BLOOD_GLUCOSE_SCOPE,
+                GOOGLE_FIT_BLOOD_PRESSURE_SCOPE,
+                GOOGLE_FIT_BODY_TEMPERATURE_SCOPE,
+                GOOGLE_FIT_LOCATION_SCOPE,
             ]
         )
     )
@@ -62,6 +73,11 @@ def test_scope_status_accepts_required_google_fit_scopes():
         "steps": True,
         "heart_rate": True,
         "sleep": True,
+        "spo2": True,
+        "glucose": True,
+        "blood_pressure": True,
+        "body_temperature": True,
+        "location": True,
     }
 
 
@@ -93,6 +109,7 @@ def test_fetch_steps_uses_estimated_step_source_only():
     assert aggregate.await_args.args[1] == GOOGLE_FIT_STEP_DATA_TYPE
     assert aggregate.await_args.args[4] == GOOGLE_FIT_DAILY_BUCKET_MILLIS
     assert aggregate.await_args.kwargs["data_source_id"] == GOOGLE_FIT_DATASOURCE_ID
+    assert aggregate.await_args.kwargs["bucket_period"] == {"type": "day", "value": 1, "timeZoneId": "UTC"}
     assert records[0]["type"] == "steps"
     assert records[0]["value"] == 3210
     assert records[0]["source_used"] == GOOGLE_FIT_DATASOURCE_ID
@@ -104,6 +121,11 @@ def test_filter_data_sources_by_metric():
         {"dataStreamId": GOOGLE_FIT_DATASOURCE_ID, "dataType": {"name": "com.google.step_count.delta"}},
         {"dataStreamId": "raw:com.google.step_count.delta:device_vendor:step-source", "dataType": {"name": "com.google.step_count.delta"}},
         {"dataStreamId": "sleep-source", "dataType": {"name": "com.google.sleep.segment"}},
+        {"dataStreamId": "spo2-source", "dataType": {"name": "com.google.oxygen_saturation"}},
+        {"dataStreamId": "glucose-source", "dataType": {"name": "com.google.blood_glucose"}},
+        {"dataStreamId": "bp-source", "dataType": {"name": "com.google.blood_pressure"}},
+        {"dataStreamId": "temperature-source", "dataType": {"name": "com.google.body.temperature"}},
+        {"dataStreamId": "location-source", "dataType": {"name": "com.google.location.sample"}},
         {"dataStreamId": "ignored-source", "dataType": {"name": "com.google.weight"}},
     ]
 
@@ -115,6 +137,11 @@ def test_filter_data_sources_by_metric():
         "raw:com.google.step_count.delta:device_vendor:step-source",
     ]
     assert [source["dataStreamId"] for source in filtered["sleep"]] == ["sleep-source"]
+    assert [source["dataStreamId"] for source in filtered["spo2"]] == ["spo2-source"]
+    assert [source["dataStreamId"] for source in filtered["glucose"]] == ["glucose-source"]
+    assert [source["dataStreamId"] for source in filtered["blood_pressure"]] == ["bp-source"]
+    assert [source["dataStreamId"] for source in filtered["body_temperature"]] == ["temperature-source"]
+    assert [source["dataStreamId"] for source in filtered["location"]] == ["location-source"]
 
 
 def test_aggregate_fit_data_sends_step_data_type_with_estimated_source():
@@ -146,6 +173,33 @@ def test_aggregate_fit_data_sends_step_data_type_with_estimated_source():
         }
     ]
     assert body["bucketByTime"] == {"durationMillis": GOOGLE_FIT_DAILY_BUCKET_MILLIS}
+
+
+def test_aggregate_fit_data_can_bucket_steps_by_local_day_period():
+    response = SimpleNamespace(
+        status_code=200,
+        is_error=False,
+        text='{"bucket":[]}',
+        json=lambda: {"bucket": []},
+    )
+
+    with patch.object(GoogleFitService, "_google_api_request", new=AsyncMock(return_value=response)) as request:
+        asyncio.run(
+            GoogleFitService._aggregate_fit_data(
+                "token",
+                GOOGLE_FIT_STEP_DATA_TYPE,
+                1_777_500_000_000,
+                1_777_586_400_000,
+                GOOGLE_FIT_DAILY_BUCKET_MILLIS,
+                data_source_id=GOOGLE_FIT_DATASOURCE_ID,
+                bucket_period={"type": "day", "value": 1, "timeZoneId": "Asia/Kolkata"},
+            )
+        )
+
+    body = request.await_args.kwargs["json"]
+    assert body["bucketByTime"] == {
+        "period": {"type": "day", "value": 1, "timeZoneId": "Asia/Kolkata"}
+    }
 
 
 def test_fetch_steps_ignores_duplicate_step_sources_and_uses_estimated_source():
@@ -188,7 +242,9 @@ def test_fetch_steps_ignores_duplicate_step_sources_and_uses_estimated_source():
 
     aggregate.assert_awaited_once()
     assert aggregate.await_args.kwargs["data_source_id"] == GOOGLE_FIT_DATASOURCE_ID
-    assert [record["value"] for record in records] == [3400]
+    assert aggregate.await_args.kwargs["bucket_period"] == {"type": "day", "value": 1, "timeZoneId": "UTC"}
+    assert [record["local_day"] for record in records] == ["2026-04-29", "2026-04-30"]
+    assert [record["value"] for record in records] == [0, 3400]
 
 
 def test_fetch_steps_does_not_use_raw_dataset_fallback_for_empty_estimated_aggregate():
@@ -305,6 +361,237 @@ def test_fetch_sleep_reads_sleep_segments_as_hours():
     assert records[0]["value"] == 2.0
 
 
+def test_fetch_spo2_reads_oxygen_saturation():
+    start_millis = int(datetime(2026, 4, 30, tzinfo=timezone.utc).timestamp() * 1000)
+    end_millis = int(datetime(2026, 5, 1, tzinfo=timezone.utc).timestamp() * 1000)
+    response = {
+        "bucket": [
+            {
+                "startTimeMillis": str(start_millis),
+                "dataset": [{"point": [{"value": [{"fpVal": 97.5}]}]}],
+            }
+        ]
+    }
+
+    with patch.object(GoogleFitService, "_aggregate_fit_data", new=AsyncMock(return_value=response)) as aggregate:
+        records = asyncio.run(
+            GoogleFitService.fetch_spo2(
+                SimpleNamespace(id="user-1"),
+                "token",
+                days=1,
+                timezone_name="UTC",
+                start_ts=start_millis,
+                end_ts=end_millis,
+            )
+        )
+
+    aggregate.assert_awaited_once()
+    assert aggregate.await_args.args[1] == "com.google.oxygen_saturation"
+    assert records[0]["type"] == "spo2"
+    assert records[0]["unit"] == "%"
+    assert records[0]["value"] == 97.5
+
+
+def test_fetch_glucose_normalizes_google_fit_mmol_to_mg_dl():
+    start_millis = int(datetime(2026, 4, 30, tzinfo=timezone.utc).timestamp() * 1000)
+    end_millis = int(datetime(2026, 5, 1, tzinfo=timezone.utc).timestamp() * 1000)
+    response = {
+        "bucket": [
+            {
+                "startTimeMillis": str(start_millis),
+                "dataset": [{"point": [{"value": [{"fpVal": 5.8}]}]}],
+            }
+        ]
+    }
+
+    with patch.object(GoogleFitService, "_aggregate_fit_data", new=AsyncMock(return_value=response)) as aggregate:
+        records = asyncio.run(
+            GoogleFitService.fetch_glucose(
+                SimpleNamespace(id="user-1"),
+                "token",
+                days=1,
+                timezone_name="UTC",
+                start_ts=start_millis,
+                end_ts=end_millis,
+            )
+        )
+
+    aggregate.assert_awaited_once()
+    assert aggregate.await_args.args[1] == "com.google.blood_glucose"
+    assert records[0]["type"] == "glucose"
+    assert records[0]["unit"] == "mg/dL"
+    assert records[0]["value"] == 104.5
+
+
+def test_fetch_blood_pressure_splits_systolic_and_diastolic_records():
+    start_millis = int(datetime(2026, 4, 30, tzinfo=timezone.utc).timestamp() * 1000)
+    end_millis = int(datetime(2026, 5, 1, tzinfo=timezone.utc).timestamp() * 1000)
+    response = {
+        "bucket": [
+            {
+                "startTimeMillis": str(start_millis),
+                "dataset": [{"point": [{"value": [{"fpVal": 122.0}, {"fpVal": 78.0}]}]}],
+            }
+        ]
+    }
+
+    with patch.object(GoogleFitService, "_aggregate_fit_data", new=AsyncMock(return_value=response)) as aggregate:
+        records = asyncio.run(
+            GoogleFitService.fetch_blood_pressure(
+                SimpleNamespace(id="user-1"),
+                "token",
+                days=1,
+                timezone_name="UTC",
+                start_ts=start_millis,
+                end_ts=end_millis,
+            )
+        )
+
+    aggregate.assert_awaited_once()
+    assert aggregate.await_args.args[1] == "com.google.blood_pressure"
+    assert [record["type"] for record in records] == [
+        "blood_pressure",
+        "blood_pressure_systolic",
+        "blood_pressure_diastolic",
+    ]
+    assert records[0]["metadata"] == {"systolic": 122.0, "diastolic": 78.0}
+
+
+def test_fetch_blood_pressure_uses_source_raw_fallback_for_manual_entries():
+    start_millis = int(datetime(2026, 4, 30, tzinfo=timezone.utc).timestamp() * 1000)
+    end_millis = int(datetime(2026, 5, 1, tzinfo=timezone.utc).timestamp() * 1000)
+    response = {
+        "bucket": [
+            {
+                "startTimeMillis": str(start_millis),
+                "dataset": [{"point": [{"value": [{"fpVal": 128.0}, {"fpVal": 82.0}]}]}],
+            }
+        ]
+    }
+
+    with (
+        patch.object(GoogleFitService, "_fetch_source_dataset_with_raw_fallback", new=AsyncMock(return_value=response)) as source_fetch,
+        patch.object(GoogleFitService, "_aggregate_fit_data", new=AsyncMock(return_value={"bucket": []})) as aggregate,
+    ):
+        records = asyncio.run(
+            GoogleFitService.fetch_blood_pressure(
+                SimpleNamespace(id="user-1"),
+                "token",
+                days=1,
+                timezone_name="UTC",
+                start_ts=start_millis,
+                end_ts=end_millis,
+                data_sources=[
+                    {
+                        "dataStreamId": "raw:com.google.blood_pressure:com.google.android.apps.fitness:user_input",
+                        "dataType": {"name": "com.google.blood_pressure"},
+                    }
+                ],
+            )
+        )
+
+    source_fetch.assert_awaited_once()
+    aggregate.assert_not_awaited()
+    assert [record["type"] for record in records] == [
+        "blood_pressure",
+        "blood_pressure_systolic",
+        "blood_pressure_diastolic",
+    ]
+    assert records[0]["metadata"] == {"systolic": 128.0, "diastolic": 82.0}
+
+
+def test_fetch_body_temperature_reads_celsius():
+    start_millis = int(datetime(2026, 4, 30, tzinfo=timezone.utc).timestamp() * 1000)
+    end_millis = int(datetime(2026, 5, 1, tzinfo=timezone.utc).timestamp() * 1000)
+    response = {
+        "bucket": [
+            {
+                "startTimeMillis": str(start_millis),
+                "dataset": [{"point": [{"value": [{"fpVal": 36.7}]}]}],
+            }
+        ]
+    }
+
+    with patch.object(GoogleFitService, "_aggregate_fit_data", new=AsyncMock(return_value=response)) as aggregate:
+        records = asyncio.run(
+            GoogleFitService.fetch_body_temperature(
+                SimpleNamespace(id="user-1"),
+                "token",
+                days=1,
+                timezone_name="UTC",
+                start_ts=start_millis,
+                end_ts=end_millis,
+            )
+        )
+
+    aggregate.assert_awaited_once()
+    assert aggregate.await_args.args[1] == "com.google.body.temperature"
+    assert records[0]["type"] == "body_temperature"
+    assert records[0]["unit"] == "celsius"
+    assert records[0]["value"] == 36.7
+
+
+def test_fetch_body_temperature_converts_fahrenheit_like_values_to_celsius():
+    start_millis = int(datetime(2026, 4, 30, tzinfo=timezone.utc).timestamp() * 1000)
+    end_millis = int(datetime(2026, 5, 1, tzinfo=timezone.utc).timestamp() * 1000)
+    response = {
+        "bucket": [
+            {
+                "startTimeMillis": str(start_millis),
+                "dataset": [{"point": [{"value": [{"fpVal": 98.6}]}]}],
+            }
+        ]
+    }
+
+    with patch.object(GoogleFitService, "_aggregate_fit_data", new=AsyncMock(return_value=response)):
+        records = asyncio.run(
+            GoogleFitService.fetch_body_temperature(
+                SimpleNamespace(id="user-1"),
+                "token",
+                days=1,
+                timezone_name="UTC",
+                start_ts=start_millis,
+                end_ts=end_millis,
+            )
+        )
+
+    assert records[0]["type"] == "body_temperature"
+    assert records[0]["unit"] == "celsius"
+    assert records[0]["value"] == 37.0
+
+
+def test_fetch_location_preserves_longitude_in_metadata():
+    start_millis = int(datetime(2026, 4, 30, tzinfo=timezone.utc).timestamp() * 1000)
+    end_millis = int(datetime(2026, 5, 1, tzinfo=timezone.utc).timestamp() * 1000)
+    response = {
+        "bucket": [
+            {
+                "endTimeMillis": str(end_millis),
+                "dataset": [{"point": [{"value": [{"fpVal": 12.97}, {"fpVal": 77.59}, {"fpVal": 8.0}]}]}],
+            }
+        ]
+    }
+
+    with patch.object(GoogleFitService, "_aggregate_fit_data", new=AsyncMock(return_value=response)) as aggregate:
+        records = asyncio.run(
+            GoogleFitService.fetch_location(
+                SimpleNamespace(id="user-1"),
+                "token",
+                days=1,
+                timezone_name="UTC",
+                start_ts=start_millis,
+                end_ts=end_millis,
+            )
+        )
+
+    aggregate.assert_awaited_once()
+    assert aggregate.await_args.args[1] == "com.google.location.sample"
+    assert records[0]["type"] == "location"
+    assert records[0]["value"] == 12.97
+    assert records[0]["metadata"]["longitude"] == 77.59
+    assert records[0]["metadata"]["accuracy_meters"] == 8.0
+
+
 def test_fetch_sleep_dedupes_overlapping_source_segments():
     start_millis = int(datetime(2026, 4, 30, tzinfo=timezone.utc).timestamp() * 1000)
     end_millis = int(datetime(2026, 5, 1, tzinfo=timezone.utc).timestamp() * 1000)
@@ -372,7 +659,38 @@ def test_paginated_fetch_windows_continue_to_previous_days_after_today():
     assert windows[2][1] == windows[1][0]
 
 
-def test_build_stats_uses_latest_active_day_for_latest_day():
+def test_compute_daily_steps_buckets_by_local_date_descending():
+    rows = [
+        {"type": "steps", "value": 1200, "timestamp": "2026-04-30T20:30:00+00:00"},
+        {"type": "steps", "value": 800, "timestamp": "2026-05-01T05:00:00+00:00"},
+        {"type": "steps", "value": 500, "timestamp": "2026-04-29T18:00:00+00:00"},
+    ]
+
+    assert compute_daily_steps(rows, "Asia/Kolkata") == [
+        {"date": "2026-05-01", "steps": 2000},
+        {"date": "2026-04-29", "steps": 500},
+    ]
+
+
+def test_daily_step_summary_latest_day_is_most_recent_date_and_best_day_is_highest_steps():
+    rows = [
+        {"type": "steps", "value": 4120, "timestamp": "2026-04-29T18:30:00+00:00"},
+        {"type": "steps", "value": 7739, "timestamp": "2026-04-30T18:30:00+00:00"},
+        {"type": "steps", "value": 6093, "timestamp": "2026-05-01T18:30:00+00:00"},
+    ]
+
+    summary = compute_daily_step_summary(rows, "Asia/Kolkata")
+
+    assert summary["daily_steps"] == [
+        {"date": "2026-05-02", "steps": 6093},
+        {"date": "2026-05-01", "steps": 7739},
+        {"date": "2026-04-30", "steps": 4120},
+    ]
+    assert summary["latest_day"] == {"date": "2026-05-02", "steps": 6093}
+    assert summary["best_day"] == {"date": "2026-05-01", "steps": 7739}
+
+
+def test_build_stats_uses_canonical_daily_steps_for_totals_and_average():
     stats = GoogleFitService._build_stats(
         [
             {"date": "2026-04-30", "steps": 6850},
@@ -380,9 +698,78 @@ def test_build_stats_uses_latest_active_day_for_latest_day():
         ]
     )
 
-    assert stats["latest_day"] == {"date": "2026-04-30", "steps": 6850}
+    assert stats["daily_steps"] == [
+        {"date": "2026-05-01", "steps": 0},
+        {"date": "2026-04-30", "steps": 6850},
+    ]
+    assert stats["latest_day"] == {"date": "2026-05-01", "steps": 0}
     assert stats["total_steps"] == 6850
+    assert stats["average_steps"] == 3425
+    assert stats["average_daily_steps"] == 3425
     assert stats["active_day_count"] == 1
+    assert stats["valid_day_count"] == 2
+
+
+def test_build_stats_includes_every_synced_day_in_rollups():
+    stats = GoogleFitService._build_stats(
+        [
+            {"date": "2026-04-29", "steps": 5200, "is_partial": False},
+            {"date": "2026-04-30", "steps": 6800, "is_partial": False},
+            {"date": "2026-05-01", "steps": 2400, "is_partial": True},
+        ],
+        "UTC",
+    )
+
+    assert stats["latest_day"]["date"] == "2026-05-01"
+    assert stats["latest_day"]["steps"] == 2400
+    assert stats["latest_complete_day"] == stats["latest_day"]
+    assert stats["total_steps"] == 14400
+    assert stats["total_steps_including_partial"] == 14400
+    assert stats["average_daily_steps"] == 4800
+    assert stats["average_steps"] == 4800
+    assert stats["best_day"]["date"] == "2026-04-30"
+    assert stats["valid_day_count"] == 3
+    assert stats["partial_day_count"] == 0
+
+
+def test_build_stats_latest_day_uses_most_recent_date_not_best_complete_day():
+    stats = GoogleFitService._build_stats(
+        [
+            {"date": "2026-04-30", "steps": 4120, "is_partial": False},
+            {"date": "2026-05-01", "steps": 7739, "is_partial": False},
+            {"date": "2026-05-02", "steps": 6093, "is_partial": True},
+        ],
+        "Asia/Kolkata",
+    )
+
+    assert stats["latest_day"] == {"date": "2026-05-02", "steps": 6093}
+    assert stats["latest_complete_day"] == stats["latest_day"]
+    assert stats["best_day"]["date"] == "2026-05-01"
+    assert stats["best_day"]["steps"] == 7739
+    assert stats["total_steps"] == 17952
+    assert stats["total_steps_including_partial"] == 17952
+
+
+def test_daily_payload_from_vital_rows_uses_canonical_local_date_buckets():
+    start_millis = int(datetime(2026, 4, 29, 18, 30, tzinfo=timezone.utc).timestamp() * 1000)
+    end_millis = int(datetime(2026, 5, 1, 6, 30, tzinfo=timezone.utc).timestamp() * 1000)
+    rows = [
+        SimpleNamespace(timestamp=datetime(2026, 4, 29, 19, 0, tzinfo=timezone.utc), value=1200, vital_type="steps"),
+        SimpleNamespace(timestamp=datetime(2026, 4, 30, 8, 0, tzinfo=timezone.utc), value=2300, vital_type="steps"),
+        SimpleNamespace(timestamp=datetime(2026, 5, 1, 5, 0, tzinfo=timezone.utc), value=900, vital_type="steps"),
+    ]
+
+    payload = GoogleFitService._daily_payload_from_vital_rows(
+        rows,
+        "Asia/Kolkata",
+        start_millis,
+        end_millis,
+    )
+
+    assert payload == [
+        {"date": "2026-05-01", "steps": 900},
+        {"date": "2026-04-30", "steps": 3500},
+    ]
 
 
 def test_filter_delayed_step_records_keeps_last_known_higher_steps():

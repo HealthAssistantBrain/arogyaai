@@ -15,6 +15,7 @@ from .user_profile    import UserProfile
 from .device          import Device, DeviceTypeEnum
 from .vitals_data     import VitalsData
 from .wearable_data   import WearableData
+from .wearable_metric import WearableMetric
 from .medical_history import MedicalHistory
 from .clinical_history import ClinicalHistory
 from .report          import Report, ReportTypeEnum, ReportStatusEnum
@@ -42,6 +43,7 @@ from .chat_session    import ChatSession
 from .log             import Log
 from .google_fit_connection import GoogleFitConnection
 from .lab_result          import LabResult
+from .feedback            import Feedback, FeedbackEntityType, FeedbackType
 
 __all__ = [
     # Core Base
@@ -54,6 +56,7 @@ __all__ = [
     "Device",
     "VitalsData",
     "WearableData",
+    "WearableMetric",
     "MedicalHistory",
     "ClinicalHistory",
     "Report",
@@ -75,6 +78,7 @@ __all__ = [
     "Log",
     "GoogleFitConnection",
     "LabResult",
+    "Feedback",
     # Enums
     "DeviceTypeEnum",
     "ReportTypeEnum",
@@ -92,4 +96,6 @@ __all__ = [
     "PROVIDER_FITBIT",
     "UserVitalTypeEnum",
     "UserVitalSourceEnum",
+    "FeedbackEntityType",
+    "FeedbackType",
 ]

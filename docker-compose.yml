@@ -9,13 +9,19 @@ x-gpu-reservation: &gpu-reservation
 x-service-build-args: &service-build-args
   HTTP_PROXY: ${HTTP_PROXY:-}
   HTTPS_PROXY: ${HTTPS_PROXY:-}
-  NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,backend,postgres,redis,qdrant,prediction-service,rag-service,wearable-service}
+  NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,backend,postgres,redis,qdrant,prediction-service,rag-service}
   CUSTOM_CA_CERT_B64: ${CUSTOM_CA_CERT_B64:-}
 
 x-backend-build: &backend-build
   context: ./
   dockerfile: apps/backend/Dockerfile
   args: *service-build-args
+
+x-backend-dev-volumes: &backend-dev-volumes
+  - ./apps/backend:/app/apps/backend
+  - ./pipelines:/app/pipelines
+  - ./data:/app/data
+  - ./models:/app/models
 
 services:
   frontend:
@@ -35,6 +41,15 @@ services:
       - VITE_GOOGLE_FIT_DEFAULT_TIMEZONE=Asia/Kolkata
     networks:
       - arogyaai_net
+    volumes:
+      - ./apps/frontend/src:/app/src
+      - ./apps/frontend/public:/app/public
+      - ./apps/frontend/index.html:/app/index.html
+      - ./apps/frontend/vite.config.js:/app/vite.config.js
+      - ./apps/frontend/tailwind.config.js:/app/tailwind.config.js
+      - ./apps/frontend/postcss.config.js:/app/postcss.config.js
+      - ./apps/frontend/eslint.config.js:/app/eslint.config.js
+      - ./apps/frontend/tsconfig.json:/app/tsconfig.json
 
   backend:
     image: arogyaai-backend:dev
@@ -49,8 +64,7 @@ services:
       ENABLE_GPU: ${ENABLE_GPU:-false}
     networks:
       arogyaai_net:
-    volumes:
-      - ./:/app
+    volumes: *backend-dev-volumes
     depends_on:
       postgres:
         condition: service_healthy
@@ -91,8 +105,7 @@ services:
       ENABLE_GPU: ${ENABLE_GPU:-false}
     networks:
       - arogyaai_net
-    volumes:
-      - ./:/app
+    volumes: *backend-dev-volumes
     depends_on:
       postgres:
         condition: service_healthy
@@ -115,6 +128,8 @@ services:
         required: false
     networks:
       - arogyaai_net
+    volumes:
+      - ./pipelines/prediction-service:/app
 
   rag-service:
     image: arogyaai-rag-service:dev
@@ -130,21 +145,8 @@ services:
         required: false
     networks:
       - arogyaai_net
-
-  wearable-service:
-    image: arogyaai-wearable-service:dev
-    build:
-      context: ./pipelines/wearable-service
-      dockerfile: Dockerfile
-      args: *service-build-args
-    container_name: wearable-service
-    ports:
-      - "8003:8000"
-    env_file:
-      - path: .env
-        required: false
-    networks:
-      - arogyaai_net
+    volumes:
+      - ./pipelines/rag-service:/app
 
   postgres:
     image: timescale/timescaledb:latest-pg15

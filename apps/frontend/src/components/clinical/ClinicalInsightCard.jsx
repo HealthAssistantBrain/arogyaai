@@ -24,7 +24,7 @@ const Section = ({ icon, title, children }) => {
   const iconNode = createElement(icon, { size: 16, className: 'text-slate-400 dark:text-slate-500' });
 
   return (
-    <section className="border-t border-slate-200 pt-5 dark:border-white/10">
+    <section className="pt-1">
       <div className="mb-3 flex items-center gap-2">
         {iconNode}
         <h3 className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">

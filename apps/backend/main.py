@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import sys
 import secrets
 from pathlib import Path
@@ -14,7 +15,7 @@ from fastapi.responses import JSONResponse
 from starlette.requests import Request
 
 # Import modular routers
-from routes import aqi, auth, intelligence, users, prediction, dashboard, google_fit, vitals, notifications, user_data, reports, sleep, insights, lab_results, timeline, dashboard_ws, clinical_history, settings as settings_routes, devices as devices_routes, chat, rag
+from routes import aqi, auth, intelligence, users, prediction, dashboard, google_fit, vitals, notifications, user_data, reports, sleep, insights, lab_results, timeline, dashboard_ws, clinical_history, settings as settings_routes, devices as devices_routes, chat, rag, feedback
 from api.v1 import doctor as doctor_routes
 from api.v1 import emergency as emergency_routes
 
@@ -212,6 +213,7 @@ app.include_router(timeline.router)
 app.include_router(clinical_history.router)
 app.include_router(chat.router)
 app.include_router(rag.router)
+app.include_router(feedback.router)
 app.include_router(doctor_routes.router)
 app.include_router(emergency_routes.router)
 
@@ -219,6 +221,8 @@ app.include_router(emergency_routes.router)
 @app.on_event("startup")
 async def _startup_scheduler():
     from sqlalchemy import text
+    from pipelines.rag_pipeline.config import RagSettings
+    from pipelines.rag_pipeline.retriever import MedicalKnowledgeRetriever
 
     def _check_db_connection():
         with engine.connect() as conn:
@@ -234,6 +238,16 @@ async def _startup_scheduler():
     except Exception as exc:
         logger.warning("DB Connected check failed during startup: %s", exc)
         log_pipeline("database", step="connection_check", status="unhealthy", data="failed")
+
+    if os.getenv("RAG_STARTUP_INDEX_CHECK", "true").lower() in {"1", "true", "yes", "on"}:
+        try:
+            rag_state = await asyncio.to_thread(MedicalKnowledgeRetriever(RagSettings()).assert_index_ready)
+            logger.info("RAG Qdrant index ready | %s", rag_state)
+            log_pipeline("rag", step="qdrant_index_check", status="healthy", data=str(rag_state))
+        except Exception as exc:
+            logger.critical("RAG Qdrant index check failed during startup: %s", exc)
+            log_pipeline("rag", step="qdrant_index_check", status="unhealthy", data="failed")
+            raise
 
     try:
         start_google_fit_worker()

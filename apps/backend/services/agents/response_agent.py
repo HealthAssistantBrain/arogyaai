@@ -129,9 +129,9 @@ def _build_message(
 ) -> str:
     paragraphs: list[str] = []
     if symptoms:
-        paragraphs.append(f"I hear that you are asking about {', '.join(symptoms[:3])}, and it is reasonable to look at this carefully.")
+        paragraphs.append(f"I understand your concern. From what you are describing, the main issue is {', '.join(symptoms[:3])}.")
     else:
-        paragraphs.append("I hear your concern, and I will reason through it using the information available.")
+        paragraphs.append("I understand your concern. Let us look at this carefully with the information available.")
 
     interpretation = _clean_text(reasoning.get("clinical_interpretation"))
     if interpretation:
@@ -171,8 +171,9 @@ def _build_response_prompt(context: dict[str, Any], fallback: dict[str, Any]) ->
     }
     return f"""
 You are the ArogyaAI response generator agent. Use the specialized agent outputs below.
-Write cautious, doctor-like patient-facing language. Do not diagnose. Do not expose raw model internals, SHAP, or raw risk numbers.
+Write cautious, doctor-like patient-facing language in natural paragraphs. Do not diagnose. Do not expose raw model internals, SHAP, RAG, model drivers, or raw risk numbers.
 If safety_guard_agent.requires_immediate_care is true, include the exact phrase "Seek immediate medical care".
+Do not use headings, section labels, bullets, numbered lists, or phrases like "The user is asking", "The safest reasoning path", "Retrieved medical knowledge", or "prediction data suggests".
 Return ONLY valid JSON with these keys:
 understanding, clinical_summary, clinical_interpretation, possible_causes, contributing_factors, follow_up_questions, recommendations, risk_level, confidence_score, message, acknowledgement, interpretation, clinical_insight, symptoms, what_to_monitor, safety_notes, references.
 
@@ -202,7 +203,7 @@ class ResponseGeneratorAgent:
         symptoms = _symptom_names(symptom_payload)
         follow_up_questions = _build_follow_up_questions(context)
         recommendations = _build_recommendations(context, risk_level=risk_level)
-        safety_notes = _coerce_list(safety.get("safety_notes")) or ["This assistant suggests possibilities and next steps, but it does not provide a diagnosis."]
+        safety_notes = _coerce_list(safety.get("safety_notes")) or ["If this feels severe, unusual, or is getting worse, it is best to get checked in person."]
         references = rag_data.get("summary") if isinstance(rag_data.get("summary"), list) else []
         clinical_interpretation = _clean_text(reasoning.get("clinical_interpretation"))
         possible_causes = _coerce_list(reasoning.get("possible_causes"))
@@ -229,7 +230,7 @@ class ResponseGeneratorAgent:
             "agent": self.name,
             "summary": clinical_interpretation,
             "clinical_summary": clinical_interpretation,
-            "understanding": f"I understand that you are asking about {', '.join(symptoms[:3])}." if symptoms else "I understand that you want help interpreting your current health concern.",
+            "understanding": f"I understand you are noticing {', '.join(symptoms[:3])}." if symptoms else "I understand that you want help interpreting your current health concern.",
             "acknowledgement": "I hear your concern, and it is reasonable to look at this carefully.",
             "interpretation": clinical_interpretation,
             "clinical_interpretation": clinical_interpretation,

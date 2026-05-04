@@ -132,10 +132,13 @@ def test_fallback_response_escalates_red_flags_safely():
     assert response["message"]
     assert any("urgent" in item.lower() for item in response["recommendations"])
     assert any("seek immediate medical care" in item.lower() for item in response["safety_notes"])
-    assert response["response_sections"][0]["title"] == "Acknowledge"
-    assert response["response_sections"][4]["title"] == "Follow-up Questions"
+    assert response["formatted_response"] == response["message"]
+    assert all(not section["title"] for section in response["response_sections"])
+    assert not any(line.lstrip().startswith(("-", "*")) for line in response["formatted_response"].splitlines())
+    assert not any(label in response["formatted_response"] for label in ("Clinical Interpretation", "Risk Data", "Knowledge Sources"))
     assert "ML risk" not in response["formatted_response"]
     assert "SHAP" not in response["formatted_response"]
+    assert "The user is asking" not in response["formatted_response"]
     assert all("you have" not in item.lower() for item in response["possible_causes"])
     assert response["structured_response"]["understanding"]
     assert response["structured_response"]["clinical_summary"]
@@ -164,6 +167,29 @@ def test_normalize_llm_response_softens_definitive_language():
     assert all("you have" not in item.lower() for item in normalized["possible_causes"])
 
 
+def test_normalize_llm_response_removes_system_artifacts_from_message():
+    fallback = _build_fallback_response(
+        query="I feel dizzy",
+        ml_data=_sample_ml_data(),
+        user_context=_sample_user_context(),
+        rag_context=_sample_rag_context(),
+    )
+    normalized = _normalize_llm_response(
+        {
+            "message": "Clinical Interpretation\nThe user is asking for health interpretation. The safest reasoning path is to use available risk predictions.\n\n- Retrieved medical knowledge most relevant to this turn includes dizziness guidance.",
+            "safety_notes": ["This assistant suggests possibilities and next steps, but it does not provide a diagnosis."],
+        },
+        fallback=fallback,
+    )
+
+    assert "Clinical Interpretation" not in normalized["message"]
+    assert "The user is asking" not in normalized["message"]
+    assert "safest reasoning path" not in normalized["message"]
+    assert "Retrieved medical knowledge" not in normalized["message"]
+    assert "This assistant" not in normalized["message"]
+    assert not any(line.lstrip().startswith("-") for line in normalized["message"].splitlines())
+
+
 def test_normalize_llm_response_cleans_compact_report_shape():
     fallback = _build_fallback_response(
         query="I have palpitations",
@@ -186,6 +212,7 @@ def test_normalize_llm_response_cleans_compact_report_shape():
     assert normalized["clinical_report"]["symptoms"] == ["Palpitations"]
     assert normalized["clinical_report"]["recommendation"].endswith(".")
     assert "###" not in normalized["formatted_response"]
+    assert normalized["formatted_response"] == normalized["message"]
 
 
 def test_normalize_llm_response_cannot_lower_red_flag_risk():

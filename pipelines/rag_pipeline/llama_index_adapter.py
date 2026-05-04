@@ -93,6 +93,7 @@ def _metadata_by_document_stem(settings: RagSettings) -> dict[str, dict[str, Any
             "condition": document.condition,
             "symptoms": list(document.symptoms),
             "risk_factors": list(document.risk_factors),
+            "tags": list(document.tags),
             "severity": document.severity,
         }
     return metadata
@@ -118,6 +119,7 @@ def _make_file_metadata(settings: RagSettings):
                 "condition": path.stem.replace("_", " ").title(),
                 "symptoms": [],
                 "risk_factors": [],
+                "tags": [],
                 "severity": infer_clinical_severity(text),
             }
         metadata.setdefault("document_id", path.stem)
@@ -125,6 +127,7 @@ def _make_file_metadata(settings: RagSettings):
         metadata.setdefault("title", path.stem.replace("_", " ").title())
         metadata.setdefault("disease_type", "general")
         metadata.setdefault("category", metadata.get("disease_type") or "general")
+        metadata.setdefault("tags", [])
         metadata.setdefault("severity", "routine")
         return metadata
 
@@ -267,6 +270,7 @@ class LlamaIndexMedicalRetriever:
             condition=clean_label_text(metadata.get("condition") or title, limit=120),
             symptoms=tuple(clean_text_list(metadata.get("symptoms"), limit=8, item_limit=120)),
             risk_factors=tuple(clean_text_list(metadata.get("risk_factors"), limit=8, item_limit=120)),
+            tags=tuple(clean_text_list(metadata.get("tags"), limit=16, item_limit=80)),
             severity=severity,
         )
 

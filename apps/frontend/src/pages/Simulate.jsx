@@ -21,20 +21,28 @@ const PERIODS = [
   { label: '12 Months', value: 12 },
 ];
 
-const SLIDERS = [
-  { key: 'sleep', label: 'Sleep', min: 4, max: 10, step: 0.5, unit: 'hrs' },
-  { key: 'steps', label: 'Daily Steps', min: 2000, max: 15000, step: 100, unit: '' },
-  { key: 'heart_rate', label: 'Heart Rate', min: 45, max: 120, step: 1, unit: 'bpm' },
-  { key: 'systolic_bp', label: 'Systolic BP', min: 90, max: 180, step: 1, unit: 'mmHg' },
-  { key: 'diastolic_bp', label: 'Diastolic BP', min: 55, max: 110, step: 1, unit: 'mmHg' },
-  { key: 'weight', label: 'Weight', min: 40, max: 140, step: 0.5, unit: 'kg' },
-];
+const conditionInputs = {
+  cardiovascular: ['heart_rate', 'systolic_bp', 'diastolic_bp', 'steps', 'sleep', 'bmi'],
+  diabetes: ['glucose', 'hba1c', 'bmi', 'steps', 'sleep', 'diet_score'],
+  respiratory: ['spo2', 'resp_rate', 'activity', 'air_quality', 'smoking', 'sleep'],
+};
 
-const SLIDER_SECTIONS = [
-  { title: 'Vitals', keys: ['heart_rate', 'systolic_bp', 'diastolic_bp'] },
-  { title: 'Activity', keys: ['steps'] },
-  { title: 'Lifestyle', keys: ['sleep', 'weight'] },
-];
+const INPUT_FIELDS = {
+  heart_rate: { label: 'Heart Rate', min: 45, max: 140, step: 1, unit: 'bpm', defaultValue: 72 },
+  systolic_bp: { label: 'Systolic BP', min: 90, max: 190, step: 1, unit: 'mmHg', defaultValue: 120 },
+  diastolic_bp: { label: 'Diastolic BP', min: 55, max: 120, step: 1, unit: 'mmHg', defaultValue: 80 },
+  steps: { label: 'Daily Steps', min: 1500, max: 20000, step: 100, unit: 'steps', defaultValue: 7000 },
+  sleep: { label: 'Sleep', min: 4, max: 10, step: 0.5, unit: 'hrs', defaultValue: 7 },
+  bmi: { label: 'BMI', min: 12, max: 60, step: 0.1, unit: 'kg/m2', defaultValue: 24 },
+  glucose: { label: 'Glucose', min: 60, max: 260, step: 1, unit: 'mg/dL', defaultValue: 90 },
+  hba1c: { label: 'HbA1c', min: 4, max: 14, step: 0.1, unit: '%', defaultValue: 5.4 },
+  diet_score: { label: 'Diet Score', min: 0, max: 100, step: 1, unit: '/100', defaultValue: 70 },
+  spo2: { label: 'SpO2', min: 70, max: 100, step: 1, unit: '%', defaultValue: 97 },
+  resp_rate: { label: 'Respiratory Rate', min: 6, max: 40, step: 1, unit: 'breaths/min', defaultValue: 16 },
+  activity: { label: 'Active Minutes', min: 0, max: 180, step: 5, unit: 'min/day', defaultValue: 70 },
+  air_quality: { label: 'Air Quality Index', min: 0, max: 500, step: 1, unit: 'AQI', defaultValue: 50 },
+  smoking: { label: 'Smoking', type: 'boolean', defaultValue: false },
+};
 
 const FOCUS_LABELS = {
   cardiovascular: 'Cardiovascular',
@@ -49,6 +57,20 @@ const formatValue = (value, unit) => {
   const numericValue = Number(value);
   const prettyValue = Number.isInteger(numericValue) ? numericValue.toLocaleString() : numericValue.toFixed(1);
   return unit ? `${prettyValue} ${unit}` : prettyValue;
+};
+
+const valueForField = (params, baseline, key) => {
+  const field = INPUT_FIELDS[key] || {};
+  const value = params?.[key] ?? baseline?.[key] ?? field.defaultValue;
+  if (field.type === 'boolean') return Boolean(value);
+  return value ?? '';
+};
+
+const normalizeControlValue = (key, value) => {
+  const field = INPUT_FIELDS[key] || {};
+  if (field.type === 'boolean') return Boolean(value);
+  if (value === '') return '';
+  return Number(value);
 };
 
 const metricLabel = (key) =>
@@ -92,6 +114,25 @@ const Simulate = () => {
   const timeframeMonths = useMemo(
     () => PERIODS.find((period) => period.label === selectedPeriod)?.value ?? 6,
     [selectedPeriod]
+  );
+  const activeInputKeys = useMemo(
+    () => conditionInputs[focusCondition] || conditionInputs.cardiovascular,
+    [focusCondition]
+  );
+  const activeSimulationParams = useMemo(
+    () =>
+      activeInputKeys.reduce((payload, key) => {
+        const value = valueForField(params, baseline, key);
+        if (value !== '') {
+          payload[key] = normalizeControlValue(key, value);
+        }
+        return payload;
+      }, {}),
+    [activeInputKeys, baseline, params]
+  );
+  const simulationSignature = useMemo(
+    () => JSON.stringify(activeSimulationParams),
+    [activeSimulationParams]
   );
 
   const result = simulationResponse?.data ?? null;
@@ -161,7 +202,7 @@ const Simulate = () => {
       const response = await api.post('prediction/simulator/run', {
         focus_condition: focusCondition,
         timeframe_months: timeframeMonths,
-        simulation: params,
+        simulation: activeSimulationParams,
       });
       setSimulationResponse(response.data ?? null);
     } catch (runError) {
@@ -184,12 +225,7 @@ const Simulate = () => {
     baseline,
     focusCondition,
     timeframeMonths,
-    params.sleep,
-    params.steps,
-    params.heart_rate,
-    params.systolic_bp,
-    params.diastolic_bp,
-    params.weight,
+    simulationSignature,
   ]);
 
   if (loadingBaseline) {
@@ -281,43 +317,63 @@ const Simulate = () => {
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  {SLIDER_SECTIONS.map((section) => (
-                    <div key={section.title} className="rounded-2xl border border-gray-200 p-3 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-sm">
-                      <div className="flex items-center justify-between border-b border-gray-200 pb-2">
-                        <h3 className="text-sm font-bold text-gray-900">{section.title}</h3>
-                        <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">{section.keys.length} controls</span>
-                      </div>
+                <div className="rounded-2xl border border-gray-200 p-3 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-sm">
+                  <div className="flex items-center justify-between border-b border-gray-200 pb-2">
+                    <h3 className="text-sm font-bold text-gray-900">{FOCUS_LABELS[focusCondition] || metricLabel(focusCondition)} Inputs</h3>
+                    <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">{activeInputKeys.length} controls</span>
+                  </div>
 
-                      <div className="mt-3 space-y-3">
-                        {SLIDERS.filter((slider) => section.keys.includes(slider.key)).map((slider) => (
-                          <div key={slider.key} className="space-y-2 rounded-xl bg-slate-50 px-3 py-2.5">
-                            <div className="flex items-center justify-between gap-2">
-                              <label className="text-sm font-semibold text-gray-700">{slider.label}</label>
-                              <span className="text-sm font-bold text-indigo-600">{formatValue(params?.[slider.key], slider.unit)}</span>
-                            </div>
+                  <div className="mt-3 grid grid-cols-1 gap-3">
+                    {activeInputKeys.map((key) => {
+                      const field = INPUT_FIELDS[key] || { label: metricLabel(key), defaultValue: '' };
+                      const currentValue = valueForField(params, baseline, key);
+
+                      if (field.type === 'boolean') {
+                        return (
+                          <label key={key} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-3">
+                            <span className="text-sm font-semibold text-gray-700">{field.label}</span>
                             <input
-                              className="simulator-range h-2 w-full cursor-pointer appearance-none rounded-full"
-                              type="range"
-                              min={slider.min}
-                              max={slider.max}
-                              step={slider.step}
-                              value={params?.[slider.key] ?? baseline?.[slider.key] ?? slider.min}
-                              style={{
-                                '--slider-percent': `${(((Number(params?.[slider.key] ?? baseline?.[slider.key] ?? slider.min) - slider.min) / (slider.max - slider.min)) * 100).toFixed(2)}%`,
-                              }}
+                              type="checkbox"
+                              checked={Boolean(currentValue)}
                               onChange={(event) =>
                                 setParams((current) => ({
                                   ...current,
-                                  [slider.key]: slider.step < 1 ? parseFloat(event.target.value) : Number(event.target.value),
+                                  [key]: event.target.checked,
                                 }))
                               }
+                              className="size-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                             />
+                          </label>
+                        );
+                      }
+
+                      return (
+                        <div key={key} className="space-y-2 rounded-xl bg-slate-50 px-3 py-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <label htmlFor={`simulation-${key}`} className="text-sm font-semibold text-gray-700">
+                              {field.label}
+                            </label>
+                            <span className="text-sm font-bold text-indigo-600">{formatValue(currentValue, field.unit)}</span>
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                          <input
+                            id={`simulation-${key}`}
+                            type="number"
+                            min={field.min}
+                            max={field.max}
+                            step={field.step}
+                            value={currentValue}
+                            onChange={(event) =>
+                              setParams((current) => ({
+                                ...current,
+                                [key]: normalizeControlValue(key, event.target.value),
+                              }))
+                            }
+                            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-semibold text-gray-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 

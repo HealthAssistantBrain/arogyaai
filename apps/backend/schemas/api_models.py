@@ -163,6 +163,15 @@ class SimulatorInput(BaseModel):
     systolic_bp: Optional[int] = None
     diastolic_bp: Optional[int] = None
     weight: Optional[float] = Field(default=None, validation_alias=AliasChoices("weight", "weight_kg"))
+    bmi: Optional[float] = None
+    glucose: Optional[float] = None
+    hba1c: Optional[float] = Field(default=None, validation_alias=AliasChoices("hba1c", "a1c"))
+    diet_score: Optional[float] = None
+    spo2: Optional[float] = Field(default=None, validation_alias=AliasChoices("spo2", "oxygen_saturation"))
+    resp_rate: Optional[int] = Field(default=None, validation_alias=AliasChoices("resp_rate", "respiratory_rate"))
+    activity: Optional[float] = None
+    air_quality: Optional[float] = Field(default=None, validation_alias=AliasChoices("air_quality", "aqi"))
+    smoking: Optional[bool] = None
 
 
 class DiseaseSimulationRequest(BaseModel):

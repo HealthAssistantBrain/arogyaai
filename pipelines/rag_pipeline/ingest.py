@@ -18,13 +18,17 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse, urlunparse
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from pipelines.rag_pipeline.config import RagSettings
-from pipelines.rag_pipeline.corpus import ensure_corpus_seeded, highest_severity, normalize_severity
+from pipelines.rag_pipeline.corpus import ensure_corpus_seeded, highest_severity, load_corpus_chunks, load_corpus_documents, normalize_severity
 from pipelines.rag_pipeline.embedder import EmbeddingService
+from pipelines.rag_pipeline.retriever import MedicalKnowledgeRetriever
 from pipelines.rag_pipeline.text_cleaning import clean_label_text, clean_rag_text, extract_clinical_fields
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROOT = REPO_ROOT / "apps" / "backend"
 CORPUS_DIR = BACKEND_ROOT / "data" / "medical_corpus"
 DEFAULT_MODEL_NAME = "BAAI/bge-small-en-v1.5"
@@ -388,26 +392,21 @@ def main() -> int:
     os.environ.setdefault("RAG_EMBEDDING_MODEL", DEFAULT_MODEL_NAME)
     os.environ.setdefault("QDRANT_COLLECTION_NAME", DEFAULT_COLLECTION_NAME)
     os.environ.setdefault("RAG_EMBEDDING_DIMENSIONS", "384")
-    settings = RagSettings(corpus_dir=CORPUS_DIR)
+    settings = RagSettings(qdrant_url=_qdrant_url())
 
-    documents = load_documents()
+    documents = load_corpus_documents(settings)
     if not documents:
-        raise RuntimeError(f"No markdown documents found in {CORPUS_DIR}")
-    print(f"\u2714 Documents loaded ({len(documents)} files)")
+        raise RuntimeError(f"No documents found in {settings.corpus_dir}")
+    print(f"\u2714 Documents loaded ({len(documents)} structured entries)")
 
-    chunks = create_chunks(documents)
+    chunks = load_corpus_chunks(settings)
     if not chunks:
         raise RuntimeError("No chunks were created from the medical corpus.")
     print(f"\u2714 Chunks created ({len(chunks)} chunks)")
 
-    model_name = settings.embedding_model_name
-    vectors = embed_chunks(chunks, settings)
-    vector_size = len(vectors[0]) if vectors else settings.embedding_dimensions
-    os.environ.setdefault("RAG_EMBEDDING_DIMENSIONS", str(vector_size))
-    print(f"\u2714 Embeddings created ({model_name}, {vector_size} dimensions)")
-
-    upload_to_qdrant(chunks, vectors, vector_size)
-    print(f"\u2714 Uploaded to Qdrant ({len(vectors)} vectors)")
+    retriever = MedicalKnowledgeRetriever(settings)
+    indexed_vectors = retriever.ensure_corpus_indexed(force=True)
+    print(f"\u2714 Rebuilt Qdrant index ({indexed_vectors} vectors)")
     return 0
 
 

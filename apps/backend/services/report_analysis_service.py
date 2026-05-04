@@ -1,19 +1,15 @@
 from __future__ import annotations
 
-from io import BytesIO
 from uuid import uuid4
 import logging
 from typing import Any
 
 from fastapi import HTTPException, UploadFile
 
-try:
-    from pypdf import PdfReader
-except ModuleNotFoundError:  # pragma: no cover - optional dependency
-    PdfReader = None
 from sqlalchemy.orm import Session
 
 from integrations.prediction_client import PredictionClient
+from integrations.ocr_service import OCRInput, OCRService
 from models import Report, ReportStatusEnum, ReportTypeEnum, User
 from services.report_service import ReportService
 
@@ -40,7 +36,7 @@ async def analyze_report_upload(
         len(file_bytes),
     )
 
-    extracted_text = _extract_text_from_pdf(file_bytes)
+    extracted_text, text_source, ocr_confidence, text_pages = _extract_text_from_pdf(file_bytes, file.filename or "report.pdf")
     logger.warning(
         "Medical report text extracted: request_id=%s name=%s chars=%s preview=%s",
         request_id,
@@ -90,6 +86,9 @@ async def analyze_report_upload(
             report_type=report_type or "OTHER",
             prediction_data=prediction_data,
             extracted_text=extracted_text,
+            text_source=text_source,
+            ocr_confidence=ocr_confidence,
+            text_pages=text_pages,
         )
 
     response_data = {
@@ -119,6 +118,9 @@ async def analyze_report_upload(
         "extracted_text_length": len(extracted_text),
         "ocr_text": extracted_text,
         "summary_source": prediction_data.get("summary_source") or "prediction-service",
+        "text_source": text_source,
+        "ocr_confidence": ocr_confidence,
+        "text_pages": text_pages,
     }
 
     return {
@@ -130,16 +132,18 @@ async def analyze_report_upload(
     }
 
 
-def _extract_text_from_pdf(file_bytes: bytes) -> str:
-    if PdfReader is None:
-        raise HTTPException(status_code=503, detail="PDF parsing is unavailable in this environment.")
+def _extract_text_from_pdf(file_bytes: bytes, filename: str = "report.pdf") -> tuple[str, str, float | None, list[dict[str, Any]]]:
+    pdf_pages: list[dict[str, Any]] = []
     try:
-        reader = PdfReader(BytesIO(file_bytes))
-        pages = [page.extract_text() or "" for page in reader.pages]
-        return "\n".join(page.strip() for page in pages if page and page.strip())
+        pdf_pages = ReportService._extract_pdf_pages(file_bytes)
     except Exception as exc:
-        logger.exception("PDF text extraction failed")
-        raise HTTPException(status_code=500, detail="Failed to extract text from the uploaded PDF.") from exc
+        logger.info("PDF text extraction unavailable; continuing with OCR: %s", exc)
+
+    ocr_result = OCRService().extract_text(
+        OCRInput(filename=filename, content=file_bytes, content_type="application/pdf")
+    )
+    extracted_text, text_pages, text_source = ReportService._merge_pdf_and_ocr_text(pdf_pages, ocr_result)
+    return extracted_text, text_source, ocr_result.confidence, text_pages
 
 
 def _is_supported_pdf(file: UploadFile) -> bool:
@@ -183,6 +187,9 @@ def _persist_analyzed_report(
     report_type: str,
     prediction_data: dict[str, Any],
     extracted_text: str,
+    text_source: str,
+    ocr_confidence: float | None,
+    text_pages: list[dict[str, Any]],
 ) -> dict[str, Any]:
     storage_path, public_url = ReportService._persist_file(current_user.id, file.filename or "report.pdf", file_bytes)
     normalized_type = _coerce_report_type(report_type, file.filename or "report.pdf")
@@ -192,6 +199,13 @@ def _persist_analyzed_report(
         report_type=normalized_type,
         file_url=public_url,
         parsed_text=extracted_text,
+        summary_data={
+            "full_text": extracted_text,
+            "ocr_text": extracted_text[:1200],
+            "text_source": text_source,
+            "ocr_confidence": ocr_confidence,
+            "text_pages": text_pages,
+        },
         status=ReportStatusEnum.COMPLETED,
     )
     db.add(report)
@@ -207,6 +221,9 @@ def _persist_analyzed_report(
             user_id=current_user.id,
             report_id=report.id,
             db=db,
+            source_type=text_source,
+            source_confidence=ocr_confidence,
+            page_metadata=text_pages,
         )
     except Exception:
         logger.exception(

@@ -23,7 +23,6 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0").strip()
 SERVICE_URLS = {
     "prediction_service": os.getenv("PREDICTION_SERVICE_URL", "http://prediction-service:8000").strip(),
     "rag_service": os.getenv("RAG_SERVICE_URL", "http://rag-service:8000").strip(),
-    "wearable_service": os.getenv("WEARABLE_SERVICE_URL", "http://wearable-service:8000").strip(),
 }
 
 

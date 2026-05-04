@@ -16,6 +16,11 @@ certifi
 cryptography
 APScheduler
 pypdf
+google-cloud-vision
+pytesseract
+Pillow
+pdf2image
+PyMuPDF
 python-multipart
 celery
 requests

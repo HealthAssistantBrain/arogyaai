@@ -506,6 +506,9 @@ class PredictionExplanationService:
         if explanation.get("cache_key") != cache_key:
             return None
         payload = explanation.get("payload") if isinstance(explanation.get("payload"), dict) else None
+        if isinstance(payload, dict):
+            payload.setdefault("prediction_id", str(risk_score.id))
+            payload.setdefault("explanation_id", str(risk_score.id))
         return sanitize_ai_insight_payload(payload)
 
     @staticmethod
@@ -718,6 +721,7 @@ class PredictionExplanationService:
             fallback_payload = sanitize_ai_insight_payload(
                 {
                     "prediction_id": str(risk_score.id),
+                    "explanation_id": str(risk_score.id),
                     "risk_score": risk_probability,
                     "confidence": risk_probability,
                     "risk_level": risk_score.risk_level.value if hasattr(risk_score.risk_level, "value") else str(risk_score.risk_level),
@@ -772,11 +776,12 @@ class PredictionExplanationService:
             fallback_payload = sanitize_ai_insight_payload(
                 {
                     "prediction_id": str(risk_score.id),
+                    "explanation_id": str(risk_score.id),
                     "risk_score": risk_probability,
                     "confidence": risk_probability,
                     "risk_level": risk_score.risk_level.value if hasattr(risk_score.risk_level, "value") else str(risk_score.risk_level),
-                    "summary": "Retrieved medical explanation is temporarily unavailable.",
-                    "clinical_insight": "The calibrated ML risk score is available, but the RAG explanation pipeline could not produce a validated evidence summary for this request.",
+                    "summary": "A detailed medical explanation is temporarily unavailable.",
+                    "clinical_insight": "Your recent risk result is available, but there is not enough validated evidence detail here to explain it fully.",
                     "symptoms": [],
                     "recommendations": [
                         "Use the risk score as a screening signal and review the result with a qualified clinician."
@@ -794,6 +799,7 @@ class PredictionExplanationService:
 
         explanation = {
             "prediction_id": str(risk_score.id),
+            "explanation_id": str(risk_score.id),
             "risk_score": float(risk_score.overall_score) if risk_score.overall_score is not None else None,
             "risk_percent": round((float(risk_score.overall_score) if risk_score.overall_score is not None else 0.0) * 100, 2),
             "confidence": float(risk_score.overall_score) if risk_score.overall_score is not None else None,

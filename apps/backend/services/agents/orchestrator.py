@@ -439,7 +439,7 @@ async def run_medical_pipeline(
             "red_flags": [],
             "vital_alerts": [],
             "lab_alerts": [],
-            "safety_notes": ["This assistant suggests possibilities and next steps, but it does not provide a diagnosis."],
+            "safety_notes": ["If this feels severe, unusual, or is getting worse, it is best to get checked in person."],
             "recommendations": [],
         },
         trace=trace,

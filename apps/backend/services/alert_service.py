@@ -16,6 +16,7 @@ from models import (
     UserVital,
     UserVitalTypeEnum,
 )
+from pipelines.anomaly_pipeline.service import AnomalyPipelineService
 from services.event_service import emit_event
 
 ALERT_DEDUPE_WINDOW = timedelta(hours=12)
@@ -179,6 +180,7 @@ def _severity_label(value: SeverityEnum | str | None) -> str:
 def _serialize_alert(alert: Alert) -> dict[str, Any]:
     return {
         "id": str(alert.id),
+        "anomaly_id": str(alert.id) if alert.alert_type == AlertTypeEnum.VITAL_ANOMALY else None,
         "user_id": str(alert.user_id),
         "alert_type": alert.alert_type.value if hasattr(alert.alert_type, "value") else str(alert.alert_type),
         "severity": _ui_severity(alert.severity),
@@ -245,6 +247,29 @@ def generate_health_alerts(user_id: Any, db: Session | None = None) -> list[dict
                 severity=SeverityEnum.CRITICAL,
                 title="Elevated health risk score detected",
                 message=f"Latest risk score was {normalized_risk_score:.2f}, above the 0.70 threshold.",
+            )
+            if created_alert is not None:
+                created_alerts.append(created_alert)
+                created_any = True
+
+        try:
+            anomaly_signals = AnomalyPipelineService.detect_recent_vital_anomalies(session, user)
+        except Exception:
+            anomaly_signals = []
+
+        for signal in anomaly_signals:
+            severity = (
+                SeverityEnum.CRITICAL
+                if str(signal.get("severity") or "").lower() == "critical"
+                else SeverityEnum.WARNING
+            )
+            created_alert = _store_alert(
+                session,
+                user_id=user_uuid,
+                alert_type=AlertTypeEnum.VITAL_ANOMALY,
+                severity=severity,
+                title=str(signal.get("title") or "Wearable anomaly detected"),
+                message=str(signal.get("message") or "A recent wearable metric differs from your usual baseline."),
             )
             if created_alert is not None:
                 created_alerts.append(created_alert)

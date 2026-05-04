@@ -54,7 +54,7 @@ The system works in a streamlined pipeline to ensure data integrity and real-tim
 ├── pipelines/
 │   ├── prediction-service/ # ML Inference and Clinical Rule Engine
 │   ├── rag-service/        # RAG-based Medical Explanation System
-│   └── wearable-service/   # IoT Ingestion & Normalization
+│   └── ingestion_pipeline/ # Backend-owned wearable ingestion normalization
 ├── infra/                # Nginx and Infrastructure configurations
 └── docker-compose.yml    # Service orchestration
 ```

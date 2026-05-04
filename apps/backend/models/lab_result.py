@@ -2,8 +2,8 @@
 LabResult model — maps to the `lab_results` table.
 Stores individual processed lab parameter values per user per report.
 """
-from sqlalchemy import Column, String, Float, DateTime, ForeignKey, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, Float, DateTime, ForeignKey, Integer, Text, func
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from .base import Base, UUIDPrimaryKeyMixin, TimestampMixin
@@ -25,11 +25,19 @@ class LabResult(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         index=True,
     )
     name = Column(String(255), nullable=False)
+    loinc_code = Column(String(20), nullable=True, index=True)
     value = Column(Float, nullable=False)
     unit = Column(String(50), nullable=True)
     reference_range = Column(String(100), nullable=True)
     category = Column(String(50), nullable=True, index=True)
     status = Column(String(20), nullable=True)
+    confidence_score = Column(Float, nullable=True)
+    source_text = Column(Text, nullable=True)
+    source_span = Column(Text, nullable=True)
+    source_type = Column(String(30), nullable=True)
+    page_number = Column(Integer, nullable=True)
+    extraction_method = Column(String(50), nullable=True)
+    bbox = Column(JSONB, nullable=True)
     # `timestamp` captures when the lab value was recorded (defaults to row
     # creation time so it participates in trend ordering out of the box).
     timestamp = Column(

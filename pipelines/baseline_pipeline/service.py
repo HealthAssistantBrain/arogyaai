@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from models import User, UserVital, UserVitalTypeEnum, VitalsData, WearableData
 from pipelines.contracts import PipelineContract
+from pipelines.ingestion_pipeline.service import compute_daily_steps
 from pipelines.schemas import BaselineMetricDTO
 from pipelines.storage_pipeline.service import StoragePipelineService
 
@@ -71,25 +72,21 @@ class BaselinePipelineService:
             return values
 
         if kind == "steps":
-            for row in (
+            rows = (
                 db.query(UserVital)
                 .filter(
                     UserVital.user_id == user.id,
                     UserVital.vital_type == UserVitalTypeEnum.STEPS,
                     UserVital.timestamp >= cutoff,
                 )
+                .order_by(UserVital.timestamp.asc())
                 .all()
-            ):
-                if row.value is not None:
-                    values.append(float(row.value))
-            for row in (
-                db.query(WearableData)
-                .filter(WearableData.user_id == user.id, WearableData.recorded_at >= cutoff)
-                .all()
-            ):
-                if row.step_count is not None:
-                    values.append(float(row.step_count))
-            return values
+            )
+            timezone_name = "UTC"
+            connection = getattr(user, "google_fit_connection", None)
+            if connection is not None and getattr(connection, "default_timezone", None):
+                timezone_name = str(connection.default_timezone)
+            return [float(item["steps"]) for item in reversed(compute_daily_steps(rows, timezone_name))]
 
         if kind == "sleep":
             for row in (

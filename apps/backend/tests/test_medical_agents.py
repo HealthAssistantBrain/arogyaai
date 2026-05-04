@@ -81,7 +81,7 @@ def test_ml_agent_interprets_high_numeric_risk_even_if_label_is_low():
     assert result["risk_level"] == "HIGH"
     assert result["available"] is True
     assert result["top_drivers"][0]["label"] == "Heart Rate"
-    assert "higher-concern" in result["interpretation"]
+    assert "closer attention" in result["interpretation"]
 
 
 def test_rag_agent_caches_retrieval_results():

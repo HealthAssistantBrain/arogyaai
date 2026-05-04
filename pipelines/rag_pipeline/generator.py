@@ -316,8 +316,8 @@ Context:
                     "title": signal.display_name,
                     "impact": "raises risk" if signal.shap_value >= 0 else "lowers risk",
                     "explanation": _clip_text(
-                        f"{signal.display_name} is one of the strongest model drivers in this prediction. "
-                        f"Retrieved guidance links this area to cardiometabolic risk: {supporting_doc.text}"
+                        f"{signal.display_name} is one of the stronger patterns in the available health data. "
+                        f"Medical guidance links this area to cardiometabolic risk: {supporting_doc.text}"
                     ),
                     "sources": [_source_reference(supporting_doc)],
                 }
@@ -341,12 +341,12 @@ Context:
             "confidence": round(max(0.0, min(1.0, risk_score / 100.0 if risk_score > 1 else risk_score)), 4),
             "risk_level": _confidence_risk_level(risk_score),
             "summary": _clip_text(
-                f"Risk score {risk_score:.2f} ({risk_level}) is being interpreted using retrieved medical guidance. "
-                f"The strongest model drivers are {factor_names}. The explanation is limited to evidence found in {', '.join(lead_sources) or 'the indexed corpus'}."
+                f"Your recent health data falls in a {risk_level.lower()} concern range. "
+                f"The strongest patterns are {factor_names}. This should be interpreted alongside symptoms and clinical review."
             ),
             "clinical_insight": _clip_text(
-                f"The calibrated model shows a {_confidence_risk_level(risk_score)} probability signal for {condition}. "
-                "This is a screening-oriented interpretation for clinical review, not a diagnosis."
+                f"This looks like a {_confidence_risk_level(risk_score)} screening signal for {condition}. "
+                "It is meant to guide clinical review, not replace it."
             ),
             "symptoms": [],
             "recommendation": recommendations[0]["detail"] if recommendations else "",

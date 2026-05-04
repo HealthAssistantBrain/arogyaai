@@ -115,7 +115,7 @@ class ClinicalReasoningAgent:
             evidence.append(ml_interpretation.get("interpretation"))
         if chunks:
             evidence.append(
-                f"Retrieved medical knowledge most relevant to this turn includes {chunks[0].get('title', 'medical guidance')}."
+                f"Relevant medical guidance for this turn includes {chunks[0].get('title', 'medical guidance')}."
             )
         if vitals:
             evidence.append("Recent vitals are available and should be interpreted with the symptom timeline.")
@@ -132,7 +132,7 @@ class ClinicalReasoningAgent:
             category = _clean_text(chunk.get("category"))
             if title:
                 possible_causes.append(
-                    f"Guidance on {title.lower()} supports considering a {category or 'clinical'} explanation."
+                    f"Guidance on {title.lower()} makes a {category or 'clinical'} explanation worth considering."
                 )
         if not possible_causes:
             possible_causes.append(
@@ -155,13 +155,13 @@ class ClinicalReasoningAgent:
 
         if symptoms:
             clinical_interpretation = (
-                f"The current question centers on {', '.join(symptoms[:3])}. "
-                "A careful interpretation should connect the symptom pattern with recent data, retrieved medical context, and red-flag screening without treating this as a diagnosis."
+                f"From what you are describing, the main concern is {', '.join(symptoms[:3])}. "
+                "This should be interpreted together with recent health data and red-flag symptoms, without treating it as a diagnosis."
             )
         else:
             clinical_interpretation = (
-                "The user is asking for health interpretation, but the symptom signal is broad. "
-                "The safest reasoning path is to use available risk predictions, vitals, labs, and retrieved medical context while asking for more detail."
+                "I need a little more detail to understand the health concern clearly. "
+                "It is best to interpret this alongside any recent vitals, labs, symptoms, and relevant medical context."
             )
 
         if risk_level == "HIGH":

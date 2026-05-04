@@ -23,12 +23,12 @@ from __future__ import annotations
 
 import math
 import random
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from models import User
+from models import User, UserVital, UserVitalTypeEnum, WearableMetric
 from services.recommendation_service import generate_test_recommendations
 
 
@@ -61,13 +61,9 @@ def _envelope(data: dict, status: str, source: str, error: Optional[str] = None)
 # Private data fetchers (swap these out for real ML calls)
 # ─────────────────────────────────────────────────────────────────────────────
 
-from integrations.wearable_client import WearableClient
 from integrations.rag_client import RAGClient
 from pipelines.storage_pipeline.service import StoragePipelineService
 from database.session import SessionLocal
-
-# Initialize clients
-wearable_client = WearableClient()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Private data fetchers (delegated to integrations)
@@ -94,11 +90,60 @@ async def _fetch_ml_health_score(user: User) -> Optional[dict]:
 
 
 async def _fetch_wearable_history(user: User) -> Optional[dict]:
-    """Delegates to WearableClient."""
-    response = await wearable_client.get_vitals(str(user.id))
-    if response.get("success") and response.get("status") == "ready":
-        return response.get("data")
-    return None
+    """Reads wearable history from canonical backend-owned vitals."""
+    db = SessionLocal()
+    try:
+        heart_rows = (
+            db.query(UserVital)
+            .filter(
+                UserVital.user_id == user.id,
+                UserVital.vital_type == UserVitalTypeEnum.HEART_RATE,
+            )
+            .order_by(UserVital.timestamp.desc())
+            .limit(7)
+            .all()
+        )
+        sleep_rows = (
+            db.query(UserVital)
+            .filter(
+                UserVital.user_id == user.id,
+                UserVital.vital_type == UserVitalTypeEnum.SLEEP,
+            )
+            .order_by(UserVital.timestamp.desc())
+            .limit(7)
+            .all()
+        )
+    finally:
+        db.close()
+
+    if not heart_rows and not sleep_rows:
+        return None
+
+    hrv = [
+        {
+            "time": row.timestamp.strftime("%I %p").lstrip("0") if row.timestamp else "",
+            "value": round(float(row.value), 1),
+        }
+        for row in reversed(heart_rows)
+        if row.value is not None
+    ]
+    sleep = [
+        {
+            "day": row.timestamp.strftime("%a").upper() if row.timestamp else "",
+            "hours": round(float(row.value), 1),
+        }
+        for row in reversed(sleep_rows)
+        if row.value is not None
+    ]
+    avg_sleep = round(sum(item["hours"] for item in sleep) / len(sleep), 1) if sleep else None
+    avg_hr = round(sum(item["value"] for item in hrv) / len(hrv), 1) if hrv else None
+
+    return {
+        "hrv": hrv,
+        "hrv_average_bpm": avg_hr,
+        "sleep": sleep,
+        "sleep_average_hours": avg_sleep,
+    }
 
 
 async def _fetch_ml_prediction(user: User) -> Optional[dict]:
@@ -261,7 +306,117 @@ async def get_health_metrics(user: User, db: Session) -> dict:
     latest_feature = StoragePipelineService.latest_feature_snapshot(db, user)
     latest_health = StoragePipelineService.latest_health_score(db, user)
 
-    metrics = {}
+    metric_specs = {
+        "steps": (UserVitalTypeEnum.STEPS, "count"),
+        "heart_rate": (UserVitalTypeEnum.HEART_RATE, "bpm"),
+        "sleep": (UserVitalTypeEnum.SLEEP, "hours"),
+        "spo2": (UserVitalTypeEnum.SPO2, "%"),
+        "glucose": (UserVitalTypeEnum.GLUCOSE, "mg/dL"),
+        "body_temperature": (UserVitalTypeEnum.BODY_TEMPERATURE, "celsius"),
+    }
+
+    def _normalize_metric_value(vital_type: UserVitalTypeEnum, value: float | None, unit: str | None) -> tuple[float | None, str | None]:
+        if value is None:
+            return None, unit
+
+        if vital_type == UserVitalTypeEnum.GLUCOSE and unit and unit.strip().lower() in {"mmol/l", "mmol"}:
+            return round(float(value) * 18.0182, 1), "mg/dL"
+
+        return float(value), unit
+
+    def _metric_payload(vital_type: UserVitalTypeEnum, default_unit: str) -> dict:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+        latest = (
+            db.query(UserVital)
+            .filter(
+                UserVital.user_id == user.id,
+                UserVital.vital_type == vital_type,
+            )
+            .order_by(UserVital.timestamp.desc())
+            .first()
+        )
+        rows = (
+            db.query(UserVital)
+            .filter(
+                UserVital.user_id == user.id,
+                UserVital.vital_type == vital_type,
+                UserVital.timestamp >= cutoff,
+            )
+            .order_by(UserVital.timestamp.asc())
+            .limit(100)
+            .all()
+        )
+        latest_value, latest_unit = _normalize_metric_value(
+            vital_type,
+            float(latest.value) if latest and latest.value is not None else None,
+            latest.unit if latest else default_unit,
+        )
+        return {
+            "value": latest_value,
+            "unit": latest_unit or default_unit,
+            "status": "ready" if latest else "no_data",
+            "source": latest.source.value if latest and latest.source else "google_fit",
+            "last_updated": latest.timestamp.isoformat() if latest and latest.timestamp else None,
+            "series": [
+                {
+                    "value": _normalize_metric_value(vital_type, float(row.value), row.unit)[0],
+                    "timestamp": row.timestamp.isoformat() if row.timestamp else None,
+                }
+                for row in rows
+                if row.value is not None
+            ],
+        }
+
+    metrics = {
+        metric_name: _metric_payload(vital_type, unit)
+        for metric_name, (vital_type, unit) in metric_specs.items()
+    }
+    metrics["temperature"] = metrics["body_temperature"]
+
+    systolic = _metric_payload(UserVitalTypeEnum.BLOOD_PRESSURE_SYSTOLIC, "mmHg")
+    diastolic = _metric_payload(UserVitalTypeEnum.BLOOD_PRESSURE_DIASTOLIC, "mmHg")
+    blood_pressure_value = (
+        {"systolic": systolic["value"], "diastolic": diastolic["value"]}
+        if systolic["value"] is not None and diastolic["value"] is not None
+        else None
+    )
+    metrics["blood_pressure"] = {
+        "value": blood_pressure_value,
+        "unit": "mmHg",
+        "status": "ready" if systolic["value"] is not None and diastolic["value"] is not None else "no_data",
+        "source": systolic["source"],
+        "last_updated": max(
+            [value for value in (systolic["last_updated"], diastolic["last_updated"]) if value],
+            default=None,
+        ),
+        "systolic": systolic["value"],
+        "diastolic": diastolic["value"],
+        "series": [
+            {
+                "timestamp": sys_point.get("timestamp"),
+                "systolic": sys_point.get("value"),
+                "diastolic": dia_point.get("value") if dia_point else None,
+            }
+            for sys_point, dia_point in zip(systolic["series"], diastolic["series"], strict=False)
+        ],
+    }
+
+    latest_location = (
+        db.query(WearableMetric)
+        .filter(WearableMetric.user_id == user.id, WearableMetric.metric_type == "location")
+        .order_by(WearableMetric.timestamp.desc())
+        .first()
+    )
+    if latest_location is not None:
+        metrics["location"] = {
+            "value": latest_location.value,
+            "unit": latest_location.unit,
+            "status": "ready",
+            "source": latest_location.source,
+            "last_updated": latest_location.timestamp.isoformat() if latest_location.timestamp else None,
+            "metadata": latest_location.metric_metadata or {},
+        }
+
     last_updated = None
 
     if latest_feature is not None:
@@ -287,4 +442,23 @@ async def get_health_metrics(user: User, db: Session) -> dict:
         if latest_health.calculated_at:
             last_updated = latest_health.calculated_at.isoformat()
 
-    return _envelope({"metrics": metrics}, status="ready" if metrics else "fallback", source="health_metrics", error=None if metrics else "No health metrics available yet")
+    latest_metric_update = max(
+        [
+            metric.get("last_updated")
+            for metric in metrics.values()
+            if isinstance(metric, dict) and metric.get("last_updated")
+        ],
+        default=None,
+    )
+    last_updated = latest_metric_update or last_updated
+    has_data = any(
+        isinstance(metric, dict) and metric.get("status") == "ready"
+        for metric in metrics.values()
+    )
+
+    return _envelope(
+        {"metrics": metrics, **metrics},
+        status="ready" if has_data else "fallback",
+        source="health_metrics",
+        error=None if has_data else "No health metrics available yet",
+    ) | {"last_updated": last_updated or _now()}

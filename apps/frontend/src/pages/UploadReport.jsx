@@ -13,9 +13,12 @@ const UploadReport = () => {
     const clearReportFlow = useReportUploadStore((state) => state.clearReportFlow);
 
     const processFile = (file) => {
-        const isPdf = file && (file.type === 'application/pdf' || file.name?.toLowerCase().endsWith('.pdf'));
-        if (!isPdf) {
-            window.alert('Please upload a valid PDF document.');
+        const supportedTypes = new Set(['application/pdf', 'image/jpeg', 'image/png']);
+        const supportedExtensions = ['.pdf', '.jpg', '.jpeg', '.png'];
+        const fileName = file?.name?.toLowerCase() || '';
+        const isSupported = file && (supportedTypes.has(file.type) || supportedExtensions.some((extension) => fileName.endsWith(extension)));
+        if (!isSupported) {
+            window.alert('Please upload a valid PDF, JPG, or PNG medical report.');
             return;
         }
 
@@ -48,7 +51,7 @@ const UploadReport = () => {
                     <div className="p-10 space-y-12 max-w-[1100px] mx-auto w-full relative z-10 pb-20">
                         <div className="flex flex-col gap-4">
                             <h2 className="text-5xl font-black tracking-tighter text-[#13082a] dark:text-white leading-none uppercase italic">Upload Medical Report</h2>
-                            <p className="text-slate-400 font-bold uppercase tracking-widest text-[11px] opacity-80 leading-none max-w-2xl">Upload a PDF report to extract text, run AI analysis, and generate structured medical insights.</p>
+                            <p className="text-slate-400 font-bold uppercase tracking-widest text-[11px] opacity-80 leading-none max-w-2xl">Upload a PDF or image report to extract OCR text, run AI analysis, and generate structured medical insights.</p>
                         </div>
 
                         <UploadReportUI

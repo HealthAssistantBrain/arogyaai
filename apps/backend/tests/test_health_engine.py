@@ -171,4 +171,37 @@ def test_health_insights_service_returns_safe_empty_contract_when_missing():
     assert payload["status"] == "fallback"
     assert payload["data"]["risk_scores"] == {}
     assert payload["data"]["drivers"] == []
+    assert payload["data"]["insights"] == []
     assert payload["data"]["recommendations"] == ["No data available yet"]
+
+
+def test_health_insights_service_builds_dashboard_insights():
+    with patch.object(
+        StoragePipelineService,
+        "fetch_health_insights",
+        return_value={
+            "risk": {"overall_risk_score": 31.5},
+            "drivers": [
+                {
+                    "label": "Elevated Resting Heart Rate",
+                    "value": 88,
+                    "detail": "Resting heart rate is above the recent recovery target.",
+                }
+            ],
+            "recommendations": ["Prioritize sleep, hydration, and a lighter training day."],
+            "availability": {"has_wearable": True, "has_lab": False, "has_baseline": True},
+            "last_updated": "2026-04-30T00:00:00+00:00",
+        },
+    ):
+        payload = InsightsService.get_health_insights(MagicMock(), SimpleNamespace(id="user-1"))
+
+    assert payload["success"] is True
+    assert payload["status"] == "ready"
+    assert payload["data"]["insights"] == [
+        {
+            "title": "Elevated Resting Heart Rate",
+            "value": "88",
+            "description": "Resting heart rate is above the recent recovery target.",
+            "recommendation": "Prioritize sleep, hydration, and a lighter training day.",
+        }
+    ]

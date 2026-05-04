@@ -39,6 +39,22 @@ def _safe_int(value: Any, default: int | None = None) -> int | None:
     return int(round(numeric))
 
 
+def _safe_bool(value: Any, default: bool | None = None) -> bool | None:
+    if value is None or value == "":
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "y", "smoker"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "non-smoker", "nonsmoker"}:
+        return False
+    return default
+
+
 def _clamp(value: float, minimum: float, maximum: float) -> float:
     return max(minimum, min(maximum, value))
 
@@ -76,6 +92,15 @@ class SimulatorInputs:
     systolic_bp: int
     diastolic_bp: int
     weight: float
+    bmi: float | None = None
+    glucose: float | None = None
+    hba1c: float | None = None
+    diet_score: float | None = None
+    spo2: float | None = None
+    resp_rate: int | None = None
+    activity: float | None = None
+    air_quality: float | None = None
+    smoking: bool | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -84,7 +109,15 @@ class SimulatorInputs:
             "heart_rate": int(self.heart_rate),
             "systolic_bp": int(self.systolic_bp),
             "diastolic_bp": int(self.diastolic_bp),
-            "weight": round(self.weight, 1),
+            "bmi": round(float(self.bmi), 1) if self.bmi is not None else None,
+            "glucose": round(float(self.glucose), 1) if self.glucose is not None else None,
+            "hba1c": round(float(self.hba1c), 1) if self.hba1c is not None else None,
+            "diet_score": round(float(self.diet_score), 1) if self.diet_score is not None else None,
+            "spo2": round(float(self.spo2), 1) if self.spo2 is not None else None,
+            "resp_rate": int(self.resp_rate) if self.resp_rate is not None else None,
+            "activity": round(float(self.activity), 1) if self.activity is not None else None,
+            "air_quality": round(float(self.air_quality), 1) if self.air_quality is not None else None,
+            "smoking": bool(self.smoking) if self.smoking is not None else None,
         }
 
 
@@ -96,6 +129,8 @@ class DiseaseSimulationService:
         "systolic_bp": (90.0, 180.0),
         "diastolic_bp": (55.0, 110.0),
         "weight": (40.0, 140.0),
+        "activity": (0.0, 120.0),
+        "air_quality": (0.0, 250.0),
     }
 
     @staticmethod
@@ -175,13 +210,62 @@ class DiseaseSimulationService:
         return _clamp((glucose - 100.0) / 40.0, 0.0, 1.0)
 
     @staticmethod
+    def _hba1c_risk(hba1c: float | None) -> float:
+        if hba1c is None:
+            return 0.0
+        if hba1c < 5.7:
+            return 0.0
+        return _clamp((hba1c - 5.7) / 1.8, 0.0, 1.0)
+
+    @staticmethod
+    def _spo2_risk(spo2: float | None) -> float:
+        if spo2 is None or spo2 >= 95:
+            return 0.0
+        return _clamp((95.0 - spo2) / 7.0, 0.0, 1.0)
+
+    @staticmethod
+    def _resp_rate_risk(resp_rate: float | None) -> float:
+        if resp_rate is None:
+            return 0.0
+        if 12 <= resp_rate <= 20:
+            return 0.0
+        if resp_rate > 20:
+            return _clamp((resp_rate - 20.0) / 12.0, 0.0, 1.0)
+        return _clamp((12.0 - resp_rate) / 6.0, 0.0, 1.0)
+
+    @staticmethod
+    def _diet_risk(diet_score: float | None) -> float:
+        if diet_score is None:
+            return 0.0
+        return 1.0 - _clamp(diet_score / 100.0, 0.0, 1.0)
+
+    @staticmethod
+    def _air_quality_risk(air_quality: float | None) -> float:
+        if air_quality is None:
+            return 0.0
+        if air_quality <= 50:
+            return 0.0
+        return _clamp((air_quality - 50.0) / 150.0, 0.0, 1.0)
+
+    @staticmethod
     def _build_inputs(
         feature_snapshot: FeatureSnapshot,
         profile: UserProfile | None,
         simulation: dict[str, Any] | None = None,
     ) -> SimulatorInputs:
         overrides = simulation or {}
-        weight = _safe_float(overrides.get("weight"), DiseaseSimulationService._weight_from_profile(profile)) or 72.0
+        height_cm = DiseaseSimulationService._height_from_profile(profile)
+        baseline_weight = DiseaseSimulationService._weight_from_profile(profile)
+        baseline_bmi = _safe_float(feature_snapshot.bmi)
+        if baseline_bmi is None:
+            baseline_bmi = DiseaseSimulationService._bmi(height_cm, baseline_weight)
+
+        bmi_override = _safe_float(overrides.get("bmi"))
+        weight_override = _safe_float(overrides.get("weight"))
+        weight = weight_override if weight_override is not None else baseline_weight
+        if bmi_override is not None and weight_override is None:
+            weight = bmi_override * ((max(height_cm, 120.0) / 100.0) ** 2)
+
         sleep = _safe_float(overrides.get("sleep"), feature_snapshot.sleep_duration) or 7.0
         steps = _safe_int(overrides.get("steps"), feature_snapshot.activity_level) or 7000
         heart_rate = _safe_int(
@@ -190,6 +274,20 @@ class DiseaseSimulationService:
         ) or 72
         systolic_bp = _safe_int(overrides.get("systolic_bp"), feature_snapshot.systolic_bp) or 120
         diastolic_bp = _safe_int(overrides.get("diastolic_bp"), feature_snapshot.diastolic_bp) or 80
+        if bmi_override is not None:
+            bmi = bmi_override
+        elif weight_override is not None:
+            bmi = DiseaseSimulationService._bmi(height_cm, weight)
+        else:
+            bmi = baseline_bmi
+        glucose = _safe_float(overrides.get("glucose"), feature_snapshot.glucose) or 90.0
+        hba1c = _safe_float(overrides.get("hba1c"), 5.4) or 5.4
+        diet_score = _safe_float(overrides.get("diet_score"), 70.0) or 70.0
+        spo2 = _safe_float(overrides.get("spo2"), 97.0) or 97.0
+        resp_rate = _safe_int(overrides.get("resp_rate"), 16) or 16
+        activity = _safe_float(overrides.get("activity"), round((float(steps) / 100.0), 1)) or 70.0
+        air_quality = _safe_float(overrides.get("air_quality"), 50.0) or 50.0
+        smoking = _safe_bool(overrides.get("smoking"), _safe_bool(getattr(profile, "smoking", None), False))
 
         return SimulatorInputs(
             sleep=_clamp(float(sleep), 4.0, 10.0),
@@ -198,6 +296,15 @@ class DiseaseSimulationService:
             systolic_bp=int(_clamp(float(systolic_bp), 90.0, 190.0)),
             diastolic_bp=int(_clamp(float(diastolic_bp), 55.0, 120.0)),
             weight=_clamp(float(weight), 35.0, 180.0),
+            bmi=_clamp(float(bmi), 12.0, 60.0),
+            glucose=_clamp(float(glucose), 60.0, 260.0),
+            hba1c=_clamp(float(hba1c), 4.0, 14.0),
+            diet_score=_clamp(float(diet_score), 0.0, 100.0),
+            spo2=_clamp(float(spo2), 70.0, 100.0),
+            resp_rate=int(_clamp(float(resp_rate), 6.0, 40.0)),
+            activity=_clamp(float(activity), 0.0, 180.0),
+            air_quality=_clamp(float(air_quality), 0.0, 500.0),
+            smoking=bool(smoking),
         )
 
     @staticmethod
@@ -208,7 +315,7 @@ class DiseaseSimulationService:
         inputs: SimulatorInputs,
     ) -> dict[str, Any]:
         height_cm = DiseaseSimulationService._height_from_profile(profile)
-        bmi = DiseaseSimulationService._bmi(height_cm, inputs.weight)
+        bmi = _safe_float(inputs.bmi, DiseaseSimulationService._bmi(height_cm, inputs.weight)) or 24.0
         sleep_efficiency = round(_clamp((inputs.sleep / 8.0) * 100.0, 0.0, 100.0), 1)
         activity_score = round(_clamp((inputs.steps / 12000.0) * 100.0, 0.0, 100.0), 1)
         bmi_component = round(_clamp(100.0 - DiseaseSimulationService._bmi_risk(bmi) * 100.0, 0.0, 100.0), 1)
@@ -239,6 +346,14 @@ class DiseaseSimulationService:
                 "systolic_bp": int(inputs.systolic_bp),
                 "diastolic_bp": int(inputs.diastolic_bp),
                 "bmi": bmi,
+                "glucose": inputs.glucose,
+                "hba1c": inputs.hba1c,
+                "diet_score": inputs.diet_score,
+                "spo2": inputs.spo2,
+                "resp_rate": inputs.resp_rate,
+                "activity": inputs.activity,
+                "air_quality": inputs.air_quality,
+                "smoking": 1.0 if inputs.smoking else 0.0,
                 "age": profile_age,
             }
         )
@@ -261,6 +376,12 @@ class DiseaseSimulationService:
         sleep_inverse = 1.0 - DiseaseSimulationService._normalize_value("sleep", sleep)
         heart_rate_risk = DiseaseSimulationService._heart_rate_risk(heart_rate)
         weight_factor = DiseaseSimulationService._weight_factor(weight, height_cm)
+        respiratory_activity = _safe_float(feature_payload.get("activity"))
+        respiratory_activity_inverse = (
+            1.0 - DiseaseSimulationService._normalize_value("activity", respiratory_activity)
+            if respiratory_activity is not None
+            else activity_inverse
+        )
 
         overall = (
             0.25 * bmi_risk
@@ -277,6 +398,7 @@ class DiseaseSimulationService:
             "sleep_inverse": round(sleep_inverse, 4),
             "heart_rate_risk": round(heart_rate_risk, 4),
             "weight_factor": round(weight_factor, 4),
+            "respiratory_activity_inverse": round(respiratory_activity_inverse, 4),
         }
 
     @staticmethod
@@ -292,7 +414,14 @@ class DiseaseSimulationService:
         sleep_inverse = components["sleep_inverse"]
         heart_rate_risk = components["heart_rate_risk"]
         weight_factor = components["weight_factor"]
+        respiratory_activity_inverse = components.get("respiratory_activity_inverse", activity_inverse)
         glucose_risk = DiseaseSimulationService._glucose_risk(_safe_float(feature_payload.get("glucose")))
+        hba1c_risk = DiseaseSimulationService._hba1c_risk(_safe_float(feature_payload.get("hba1c")))
+        diet_risk = DiseaseSimulationService._diet_risk(_safe_float(feature_payload.get("diet_score")))
+        spo2_risk = DiseaseSimulationService._spo2_risk(_safe_float(feature_payload.get("spo2")))
+        resp_rate_risk = DiseaseSimulationService._resp_rate_risk(_safe_float(feature_payload.get("resp_rate")))
+        air_quality_risk = DiseaseSimulationService._air_quality_risk(_safe_float(feature_payload.get("air_quality")))
+        smoking_risk = 0.75 if _safe_bool(feature_payload.get("smoking"), False) else 0.0
 
         cardio_rule = _clamp(
             0.30 * bp_risk
@@ -309,17 +438,20 @@ class DiseaseSimulationService:
             + 0.20 * activity_inverse
             + 0.15 * sleep_inverse
             + 0.15 * glucose_risk
-            + 0.10 * bp_risk
-            + 0.15 * weight_factor,
+            + 0.15 * hba1c_risk
+            + 0.05 * diet_risk
+            + 0.05 * bp_risk,
             0.0,
             1.0,
         )
         respiratory_rule = _clamp(
-            0.30 * sleep_inverse
-            + 0.20 * activity_inverse
-            + 0.20 * heart_rate_risk
-            + 0.15 * bp_risk
-            + 0.15 * weight_factor,
+            0.25 * spo2_risk
+            + 0.20 * resp_rate_risk
+            + 0.15 * respiratory_activity_inverse
+            + 0.15 * air_quality_risk
+            + 0.10 * smoking_risk
+            + 0.10 * sleep_inverse
+            + 0.05 * weight_factor,
             0.0,
             1.0,
         )
@@ -338,6 +470,12 @@ class DiseaseSimulationService:
                     "fallback_probability": round(overall_fallback, 4),
                     "components": components,
                     "glucose_risk": round(glucose_risk, 4),
+                    "hba1c_risk": round(hba1c_risk, 4),
+                    "diet_risk": round(diet_risk, 4),
+                    "spo2_risk": round(spo2_risk, 4),
+                    "resp_rate_risk": round(resp_rate_risk, 4),
+                    "air_quality_risk": round(air_quality_risk, 4),
+                    "smoking_risk": round(smoking_risk, 4),
                 },
             )
 
@@ -354,6 +492,12 @@ class DiseaseSimulationService:
                 "fallback_probability": round(overall_fallback, 4),
                 "components": components,
                 "glucose_risk": round(glucose_risk, 4),
+                "hba1c_risk": round(hba1c_risk, 4),
+                "diet_risk": round(diet_risk, 4),
+                "spo2_risk": round(spo2_risk, 4),
+                "resp_rate_risk": round(resp_rate_risk, 4),
+                "air_quality_risk": round(air_quality_risk, 4),
+                "smoking_risk": round(smoking_risk, 4),
             },
         )
 
