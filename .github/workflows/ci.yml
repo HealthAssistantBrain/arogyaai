@@ -3,42 +3,8 @@ name: ArogyaAI CI
 on:
   push:
     branches: [master, develop]
-    paths:
-      - ".github/workflows/**"
-      - ".dockerignore"
-      - "docker-compose.yml"
-      - "infra/**"
-      - "apps/frontend/**"
-      - "apps/backend/**"
-      - "pipelines/prediction-service/**"
-      - "pipelines/rag-service/**"
-      - "pipelines/wearable-service/**"
-      - "pipelines/ml_pipeline/**"
-      - "pipelines/rag_pipeline/**"
-      - "pipelines/feature_pipeline/**"
-      - "pipelines/storage_pipeline/**"
-      - "pipelines/orchestration_pipeline/**"
-      - "pipelines/schemas/**"
-      - "pipelines/*.py"
   pull_request:
     branches: [master, develop]
-    paths:
-      - ".github/workflows/**"
-      - ".dockerignore"
-      - "docker-compose.yml"
-      - "infra/**"
-      - "apps/frontend/**"
-      - "apps/backend/**"
-      - "pipelines/prediction-service/**"
-      - "pipelines/rag-service/**"
-      - "pipelines/wearable-service/**"
-      - "pipelines/ml_pipeline/**"
-      - "pipelines/rag_pipeline/**"
-      - "pipelines/feature_pipeline/**"
-      - "pipelines/storage_pipeline/**"
-      - "pipelines/orchestration_pipeline/**"
-      - "pipelines/schemas/**"
-      - "pipelines/*.py"
   workflow_dispatch:
 
 permissions:
@@ -57,146 +23,68 @@ env:
   VITE_API_URL: "http://localhost:8000"
 
 jobs:
-  changes:
-    name: Detect Changed Areas
+  validate:
+    name: Validate
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      backend: ${{ steps.filter.outputs.backend }}
-      backend_image: ${{ steps.filter.outputs.backend_image }}
-      compose: ${{ steps.filter.outputs.compose }}
-      frontend: ${{ steps.filter.outputs.frontend }}
-      ml: ${{ steps.filter.outputs.ml }}
-      prediction_service: ${{ steps.filter.outputs.prediction_service }}
-      rag_pipeline: ${{ steps.filter.outputs.rag_pipeline }}
-      rag_service: ${{ steps.filter.outputs.rag_service }}
-      wearable_service: ${{ steps.filter.outputs.wearable_service }}
-      any: ${{ steps.filter.outputs.any }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Compute path filters
-        id: filter
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          all=false
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            all=true
-            git ls-files > changed-files.txt
-          else
-            if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-              base="${{ github.event.pull_request.base.sha }}"
-              head="${{ github.event.pull_request.head.sha }}"
-            else
-              base="${{ github.event.before }}"
-              head="${{ github.sha }}"
-            fi
-
-            if [[ -z "${base}" || "${base}" =~ ^0+$ ]] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
-              base="$(git hash-object -t tree /dev/null)"
-            fi
-
-            git diff --name-only "${base}" "${head}" > changed-files.txt
-          fi
-
-          echo "Changed files:"
-          sed 's/^/  - /' changed-files.txt || true
-
-          changed() {
-            local pattern="$1"
-            if [[ "${all}" == "true" ]] || grep -Eq "${pattern}" changed-files.txt; then
-              echo "true"
-            else
-              echo "false"
-            fi
-          }
-
-          or_bool() {
-            if [[ "$1" == "true" || "$2" == "true" ]]; then
-              echo "true"
-            else
-              echo "false"
-            fi
-          }
-
-          shared="$(changed '^(\.github/workflows/|\.dockerignore$|docker-compose\.yml$|infra/)')"
-          frontend_paths="$(changed '^(apps/frontend/)')"
-          backend_paths="$(changed '^(apps/backend/)')"
-          ml_paths="$(changed '^(pipelines/ml_pipeline/|pipelines/feature_pipeline/|apps/backend/tests/test_ml_|apps/backend/tests/test_feature_pipeline_labs\.py)')"
-          rag_pipeline_paths="$(changed '^(pipelines/rag_pipeline/|apps/backend/tests/test_(rag_pipeline_retrieval|llama_index_rag_integration)\.py)')"
-          prediction_paths="$(changed '^(pipelines/prediction-service/)')"
-          rag_service_paths="$(changed '^(pipelines/rag-service/)')"
-          wearable_paths="$(changed '^(pipelines/wearable-service/)')"
-          compose_paths="$(changed '^(docker-compose\.yml$|\.dockerignore$|infra/|apps/[^/]+/(Dockerfile|\.dockerignore)$|pipelines/[^/]+/(Dockerfile|\.dockerignore)$)')"
-
-          frontend="$(or_bool "${shared}" "${frontend_paths}")"
-          backend="$(or_bool "${shared}" "${backend_paths}")"
-          ml="$(or_bool "${shared}" "${ml_paths}")"
-          rag_pipeline="$(or_bool "${shared}" "${rag_pipeline_paths}")"
-          prediction_service="$(or_bool "${shared}" "${prediction_paths}")"
-          rag_service="$(or_bool "${shared}" "${rag_service_paths}")"
-          wearable_service="$(or_bool "${shared}" "${wearable_paths}")"
-          compose="$(or_bool "${shared}" "${compose_paths}")"
-
-          backend_image="${backend}"
-          backend_image="$(or_bool "${backend_image}" "${ml}")"
-          backend_image="$(or_bool "${backend_image}" "${rag_pipeline}")"
-
-          any=false
-          for value in "${frontend}" "${backend}" "${ml}" "${rag_pipeline}" "${prediction_service}" "${rag_service}" "${wearable_service}" "${compose}"; do
-            if [[ "${value}" == "true" ]]; then
-              any=true
-            fi
-          done
-
-          {
-            echo "frontend=${frontend}"
-            echo "backend=${backend}"
-            echo "backend_image=${backend_image}"
-            echo "ml=${ml}"
-            echo "rag_pipeline=${rag_pipeline}"
-            echo "prediction_service=${prediction_service}"
-            echo "rag_service=${rag_service}"
-            echo "wearable_service=${wearable_service}"
-            echo "compose=${compose}"
-            echo "any=${any}"
-          } >> "${GITHUB_OUTPUT}"
-
-  compose-validate:
-    name: Docker Compose Validation
-    runs-on: ubuntu-latest
-    needs: changes
-    if: needs.changes.outputs.any == 'true'
     timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Debug Context
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Event: ${{ github.event_name }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "Changed files:"
+          git diff --name-only HEAD~1 || git diff-tree --no-commit-id --name-only -r HEAD
 
       - name: Show Docker versions
         run: |
+          set -e
           docker version
           docker compose version
 
       - name: Validate Docker Compose file
-        run: docker compose config --quiet
+        run: |
+          set -e
+          docker compose config --quiet
 
-  frontend:
-    name: Frontend Build
+  build:
+    name: Build
     runs-on: ubuntu-latest
-    needs: changes
-    if: needs.changes.outputs.frontend == 'true'
-    timeout-minutes: 20
-    defaults:
-      run:
-        working-directory: apps/frontend
+    needs: validate
+    if: always()
+    timeout-minutes: 60
+    strategy:
+      fail-fast: true
+    env:
+      COMPOSE_PARALLEL_LIMIT: "4"
+      DOCKER_BUILDKIT: "1"
     steps:
+      - name: Enforce validate result
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Validate result: ${{ needs.validate.result }}"
+          test "${{ needs.validate.result }}" = "success"
+
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Debug Context
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Event: ${{ github.event_name }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "Changed files:"
+          git diff --name-only HEAD~1 || git diff-tree --no-commit-id --name-only -r HEAD
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -206,14 +94,21 @@ jobs:
           cache-dependency-path: apps/frontend/package-lock.json
 
       - name: Install frontend dependencies
-        run: npm ci
+        working-directory: apps/frontend
+        run: |
+          set -e
+          npm ci
 
       - name: Build frontend
-        run: npm run build
+        working-directory: apps/frontend
+        run: |
+          set -e
+          npm run build
         env:
           VITE_API_URL: ${{ env.VITE_API_URL }}
 
       - name: Run frontend tests when configured
+        working-directory: apps/frontend
         shell: bash
         run: |
           set -euo pipefail
@@ -222,258 +117,6 @@ jobs:
           else
             echo "No frontend test script configured."
           fi
-
-  backend:
-    name: Backend Tests And Migrations
-    runs-on: ubuntu-latest
-    needs: changes
-    if: needs.changes.outputs.backend == 'true'
-    timeout-minutes: 45
-    services:
-      postgres:
-        image: timescale/timescaledb:2.15.3-pg15
-        env:
-          POSTGRES_DB: arogyaai
-          POSTGRES_PASSWORD: password
-          POSTGRES_USER: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d arogyaai"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      APP_ENCRYPTION_KEY: ci-only-encryption-key
-      DATABASE_URL: postgresql+psycopg2://postgres:password@localhost:5432/arogyaai
-      FRONTEND_APP_URL: http://localhost:5173
-      JWT_SECRET_KEY: ci-only-jwt-secret
-      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/backend
-      REDIS_URL: redis://localhost:6379/0
-      SUPABASE_BUCKET_NAME: medical-reports
-      SUPABASE_SERVICE_ROLE_KEY: ci-only-service-role-key
-      SUPABASE_URL: https://supabase.invalid
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-          cache-dependency-path: apps/backend/requirements.txt
-
-      - name: Install backend dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r apps/backend/requirements.txt pytest
-
-      - name: Run Alembic migrations
-        working-directory: apps/backend
-        run: alembic upgrade head
-
-      - name: Run backend pytest
-        run: python -m pytest apps/backend/tests -q
-
-  ml-pipeline:
-    name: ML Pipeline Tests
-    runs-on: ubuntu-latest
-    needs: changes
-    if: needs.changes.outputs.ml == 'true'
-    timeout-minutes: 30
-    env:
-      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/backend
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-          cache-dependency-path: apps/backend/requirements.txt
-
-      - name: Install ML dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r apps/backend/requirements.txt pytest
-
-      - name: Run ML pytest
-        run: |
-          python -m pytest \
-            apps/backend/tests/test_ml_data_mapper.py \
-            apps/backend/tests/test_ml_multimodel.py \
-            apps/backend/tests/test_ml_notification_hook.py \
-            apps/backend/tests/test_ml_predict.py \
-            apps/backend/tests/test_feature_pipeline_labs.py \
-            -q
-
-  rag-pipeline:
-    name: RAG Pipeline Tests
-    runs-on: ubuntu-latest
-    needs: changes
-    if: needs.changes.outputs.rag_pipeline == 'true'
-    timeout-minutes: 30
-    env:
-      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/backend
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-          cache-dependency-path: apps/backend/requirements.txt
-
-      - name: Install RAG dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r apps/backend/requirements.txt pytest
-
-      - name: Run RAG pytest
-        run: |
-          python -m pytest \
-            apps/backend/tests/test_rag_pipeline_retrieval.py \
-            apps/backend/tests/test_llama_index_rag_integration.py \
-            -q
-
-  prediction-service:
-    name: Prediction Service Smoke
-    runs-on: ubuntu-latest
-    needs: changes
-    if: needs.changes.outputs.prediction_service == 'true'
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: pipelines/prediction-service
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-          cache-dependency-path: pipelines/prediction-service/requirements.txt
-
-      - name: Install service dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt pytest
-
-      - name: Compile service code
-        run: python -m compileall -q .
-
-      - name: Run service pytest when present
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ -d tests ]]; then
-            python -m pytest -q
-          else
-            echo "No prediction-service pytest suite configured."
-          fi
-
-  rag-service:
-    name: RAG Service Smoke
-    runs-on: ubuntu-latest
-    needs: changes
-    if: needs.changes.outputs.rag_service == 'true'
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: pipelines/rag-service
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-          cache-dependency-path: pipelines/rag-service/requirements.txt
-
-      - name: Install service dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt pytest
-
-      - name: Compile service code
-        run: python -m compileall -q .
-
-      - name: Run service pytest when present
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ -d tests ]]; then
-            python -m pytest -q
-          else
-            echo "No rag-service pytest suite configured."
-          fi
-
-  wearable-service:
-    name: Wearable Service Smoke
-    runs-on: ubuntu-latest
-    needs: changes
-    if: needs.changes.outputs.wearable_service == 'true'
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: pipelines/wearable-service
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Debug repo structure
-        working-directory: .
-        run: |
-          pwd
-          ls -R pipelines/wearable-service
-          test -f pipelines/wearable-service/requirements.txt
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-          cache-dependency-path: pipelines/wearable-service/requirements.txt
-
-      - name: Install service dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt pytest
-
-      - name: Compile service code
-        run: python -m compileall -q .
-
-      - name: Run service pytest when present
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ -d tests ]]; then
-            python -m pytest -q
-          else
-            echo "No wearable-service pytest suite configured."
-          fi
-
-  docker-build:
-    name: Docker Compose Build
-    runs-on: ubuntu-latest
-    needs: [changes, compose-validate]
-    if: needs.changes.outputs.any == 'true'
-    timeout-minutes: 45
-    env:
-      COMPOSE_PARALLEL_LIMIT: "4"
-      DOCKER_BUILDKIT: "1"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
 
       - name: Create CI env files
         shell: bash
@@ -502,41 +145,13 @@ jobs:
           SUPABASE_URL=https://supabase.invalid
           EOF
 
-      - name: Build changed services
-        id: build
+      - name: Build Docker services
         shell: bash
         run: |
           set -euo pipefail
-
-          services=()
-          if [[ "${{ needs.changes.outputs.frontend }}" == "true" ]]; then
-            services+=(frontend)
-          fi
-          if [[ "${{ needs.changes.outputs.backend_image }}" == "true" ]]; then
-            services+=(backend)
-          fi
-          if [[ "${{ needs.changes.outputs.prediction_service }}" == "true" ]]; then
-            services+=(prediction-service)
-          fi
-          if [[ "${{ needs.changes.outputs.rag_service }}" == "true" ]]; then
-            services+=(rag-service)
-          fi
-          if [[ "${{ needs.changes.outputs.wearable_service }}" == "true" ]]; then
-            services+=(wearable-service)
-          fi
-
-          if [[ "${#services[@]}" -eq 0 ]]; then
-            echo "No service images selected for build."
-            echo "services=" >> "${GITHUB_OUTPUT}"
-            exit 0
-          fi
-
-          printf 'Building Docker services: %s\n' "${services[*]}"
-          docker compose build "${services[@]}"
-          echo "services=${services[*]}" >> "${GITHUB_OUTPUT}"
+          docker compose build frontend backend prediction-service rag-service
 
       - name: Run backend health check
-        if: contains(steps.build.outputs.services, 'backend')
         shell: bash
         run: |
           set -euo pipefail
@@ -560,9 +175,272 @@ jobs:
       - name: Dump Docker logs on failure
         if: failure()
         run: |
+          set -e
           docker compose ps || true
           docker compose logs --tail=200 || true
 
       - name: Clean up Docker Compose
         if: always()
-        run: docker compose down -v --remove-orphans
+        run: |
+          set -e
+          docker compose down -v --remove-orphans
+
+  test-backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    needs: build
+    if: always()
+    timeout-minutes: 45
+    strategy:
+      fail-fast: true
+    services:
+      postgres:
+        image: timescale/timescaledb:2.15.3-pg15
+        env:
+          POSTGRES_DB: arogyaai
+          POSTGRES_PASSWORD: password
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d arogyaai"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENCRYPTION_KEY: ci-only-encryption-key
+      DATABASE_URL: postgresql+psycopg2://postgres:password@localhost:5432/arogyaai
+      FRONTEND_APP_URL: http://localhost:5173
+      JWT_SECRET_KEY: ci-only-jwt-secret
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/backend
+      REDIS_URL: redis://localhost:6379/0
+      SUPABASE_BUCKET_NAME: medical-reports
+      SUPABASE_SERVICE_ROLE_KEY: ci-only-service-role-key
+      SUPABASE_URL: https://supabase.invalid
+    steps:
+      - name: Enforce build result
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Build result: ${{ needs.build.result }}"
+          test "${{ needs.build.result }}" = "success"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Debug Context
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Event: ${{ github.event_name }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "Changed files:"
+          git diff --name-only HEAD~1 || git diff-tree --no-commit-id --name-only -r HEAD
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: apps/backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: |
+          set -e
+          python -m pip install --upgrade pip
+          python -m pip install -r apps/backend/requirements.txt pytest
+
+      - name: Run Alembic migrations
+        working-directory: apps/backend
+        run: |
+          set -e
+          alembic upgrade head
+
+      - name: Run backend pytest
+        run: |
+          set -e
+          python -m pytest apps/backend/tests -q
+
+  test-ml:
+    name: ML Pipeline Tests
+    runs-on: ubuntu-latest
+    needs: build
+    if: always()
+    timeout-minutes: 30
+    strategy:
+      fail-fast: true
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/backend
+    steps:
+      - name: Enforce build result
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Build result: ${{ needs.build.result }}"
+          test "${{ needs.build.result }}" = "success"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Debug Context
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Event: ${{ github.event_name }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "Changed files:"
+          git diff --name-only HEAD~1 || git diff-tree --no-commit-id --name-only -r HEAD
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: apps/backend/requirements.txt
+
+      - name: Install ML dependencies
+        run: |
+          set -e
+          python -m pip install --upgrade pip
+          python -m pip install -r apps/backend/requirements.txt pytest
+
+      - name: Run ML pytest
+        run: |
+          set -e
+          python -m pytest \
+            apps/backend/tests/test_ml_data_mapper.py \
+            apps/backend/tests/test_ml_multimodel.py \
+            apps/backend/tests/test_ml_notification_hook.py \
+            apps/backend/tests/test_ml_predict.py \
+            apps/backend/tests/test_feature_pipeline_labs.py \
+            -q
+
+  test-rag:
+    name: RAG Pipeline Tests
+    runs-on: ubuntu-latest
+    needs: build
+    if: always()
+    timeout-minutes: 30
+    strategy:
+      fail-fast: true
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/backend
+    steps:
+      - name: Enforce build result
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Build result: ${{ needs.build.result }}"
+          test "${{ needs.build.result }}" = "success"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Debug Context
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Event: ${{ github.event_name }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "Changed files:"
+          git diff --name-only HEAD~1 || git diff-tree --no-commit-id --name-only -r HEAD
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: apps/backend/requirements.txt
+
+      - name: Install RAG dependencies
+        run: |
+          set -e
+          python -m pip install --upgrade pip
+          python -m pip install -r apps/backend/requirements.txt pytest
+
+      - name: Run RAG pytest
+        run: |
+          set -e
+          python -m pytest \
+            apps/backend/tests/test_rag_pipeline_retrieval.py \
+            apps/backend/tests/test_llama_index_rag_integration.py \
+            -q
+
+  smoke:
+    name: Smoke (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    needs: [test-backend, test-ml, test-rag]
+    if: always()
+    timeout-minutes: 20
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - service: prediction-service
+            path: pipelines/prediction-service
+          - service: rag-service
+            path: pipelines/rag-service
+          - service: wearable-service
+            path: pipelines/wearable-service
+    steps:
+      - name: Enforce upstream test results
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Backend tests result: ${{ needs.test-backend.result }}"
+          echo "ML tests result: ${{ needs.test-ml.result }}"
+          echo "RAG tests result: ${{ needs.test-rag.result }}"
+          test "${{ needs.test-backend.result }}" = "success"
+          test "${{ needs.test-ml.result }}" = "success"
+          test "${{ needs.test-rag.result }}" = "success"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Debug Context
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Event: ${{ github.event_name }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "Changed files:"
+          git diff --name-only HEAD~1 || git diff-tree --no-commit-id --name-only -r HEAD
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: ${{ matrix.path }}/requirements.txt
+
+      - name: Install service dependencies
+        working-directory: ${{ matrix.path }}
+        run: |
+          set -e
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest
+
+      - name: Compile service code
+        working-directory: ${{ matrix.path }}
+        run: |
+          set -e
+          python -m compileall -q .
+
+      - name: Run service pytest when present
+        working-directory: ${{ matrix.path }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -d tests ]]; then
+            python -m pytest -q
+          else
+            echo "No ${{ matrix.service }} pytest suite configured."
+          fi
