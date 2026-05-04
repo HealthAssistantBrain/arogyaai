@@ -2050,5 +2050,635 @@
       "input": "{\n  \"query\": \"hi\",\n  \"context\": {\n    \"ml_prediction\": {\n      \"risk_score\": 0.23,\n      \"risk_level\": \"low\",\n      \"disease_probabilities\": {\n        \"cardiovascular\": 0.27,\n        \"diabetes\": 0.27,\n        \"respiratory\": 0.2525\n      },\n      \"health_score\": 57.77,\n      \"drivers\": [\n        {\n          \"feature\": \"Sleep Hours\",\n          \"direction\": \"Positive\",\n          \"explanation\": \"Sleep hours has a positive contribution to the prediction.\"\n        },\n        {\n          \"feature\": \"Systolic BP\",\n          \"direction\": \"Negative\",\n          \"explanation\": \"Systolic bp has a negative contribution to the prediction.\"\n        },\n        {\n          \"feature\": \"BMI\",\n          \"direction\": \"Negative\",\n          \"explanation\": \"Bmi has a negative contribution to the prediction.\"\n        },\n        {\n          \"feature\": \"Heart Rate\",\n          \"direction\": \"Positive\",\n          \"explanation\": \"Heart rate has a positive contribution to the prediction.\"\n        },\n        {\n          \"feature\": \"Diastolic BP\",\n          \"direction\": \"Negative\",\n          \"explanation\": \"Diastolic bp has a negative contribution to the prediction.\"\n        }\n      ],\n      \"prediction_id\": \"078641e1-1907-4d86-9380-a1b7acfd8ee2\"\n    },\n    \"wearables\": {\n      \"heart_rate\": {\n        \"latest\": 76.2,\n        \"unit\": \"bpm\",\n        \"timestamp\": \"2026-05-02T10:30:00+00:00\",\n        \"avg_24h\": 80.59,\n        \"avg_7d\": 78.91,\n        \"trend\": \"stable\"\n      },\n      \"steps\": {\n        \"latest\": 6093.0,\n        \"unit\": \"count\",\n        \"timestamp\": \"2026-05-01T18:30:00+00:00\",\n        \"avg_24h\": 6093.0,\n        \"avg_7d\": 5651.86,\n        \"trend\": \"stable\"\n      },\n      \"sleep\": null,\n      \"trends\": {\n        \"heart_rate_7d\": 78.91,\n        \"steps_7d\": 4858.0,\n        \"sleep_efficiency\": 0.0,\n        \"bmi\": 17.9,\n        \"lifestyle_score\": 38.8,\n        \"activity_score\": 47.1,\n        \"data_availability\": {\n          \"sleep\": false,\n          \"steps\": true,\n          \"heart_rate\": true\n        }\n      },\n      \"highlights\": []\n    },\n    \"labs\": {\n      \"recent\": [],\n      \"abnormal\": []\n    },\n    \"symptoms\": [\n      \"Daytime fatigue\",\n      \"Daytime cognitive slowing\"\n    ],\n    \"rag_context\": [\n      {\n        \"title\": \"Sleep Clinical Reference\",\n        \"source\": \"Sleep.md\",\n        \"category\": \"Sleep\",\n        \"topic\": \"Sleep quality and metabolic health\",\n        \"disease_type\": \"Sleep\",\n        \"source_url\": \"\",\n        \"source_org\": \"ArogyaAI\",\n        \"retrieval_method\": \"llama_index\",\n        \"excerpt\": \"Insomnia is often managed with behavioral approaches before long-term sedative medication. Sleep complaints can be both a cause and consequence of metabolic or cardiovascular risk.\",\n        \"score\": 0.7632764592242673,\n        \"citation\": {\n          \"source\": \"Sleep.md\",\n          \"title\": \"Sleep Clinical Reference\",\n          \"url\": \"\"\n        }\n      },\n      {\n        \"title\": \"Sleep Clinical Reference\",\n        \"source\": \"Sleep.md\",\n        \"category\": \"Sleep\",\n        \"topic\": \"Sleep quality and metabolic health\",\n        \"disease_type\": \"Sleep\",\n        \"source_url\": \"\",\n        \"source_org\": \"ArogyaAI\",\n        \"retrieval_method\": \"llama_index\",\n        \"excerpt\": \"Sleep findings should be connected to glucose trends, blood pressure, resting heart rate, activity, stress, and reported symptoms.\",\n        \"score\": 0.7564329320037381,\n        \"citation\": {\n          \"source\": \"Sleep.md\",\n          \"title\": \"Sleep Clinical Reference\",\n          \"url\": \"\"\n        }\n      },\n      {\n        \"title\": \"Cardiovascular Clinical Reference\",\n        \"source\": \"Cardiovascular.md\",\n        \"category\": \"Cardiovascular\",\n        \"topic\": \"Cardiovascular risk and symptom assessment\",\n        \"disease_type\": \"Cardiovascular\",\n        \"source_url\": \"\",\n        \"source_org\": \"ArogyaAI\",\n        \"retrieval_method\": \"llama_index\",\n        \"excerpt\": \"Wearable data can help identify trends but does not replace clinical evaluation, especially for acute symptoms. Clinical reasoning should distinguish stable risk reduction from acute symptom triage.\",\n        \"score\": 0.748790347826257,\n        \"citation\": {\n          \"source\": \"Cardiovascular.md\",\n          \"title\": \"Cardiovascular Clinical Reference\",\n          \"url\": \"\"\n        }\n      }\n    ],\n    \"rag_disease_context\": [\n      {\n        \"disease_type\": \"cardiovascular\",\n        \"title\": \"Cardiovascular symptom and risk context\",\n        \"summary\": \"Chest discomfort, palpitations, dizziness, blood pressure, and elevated heart-rate patterns require red-flag screening and timely clinical review when severe, new, exertional, or worsening.\"\n      },\n      {\n        \"disease_type\": \"sleep\",\n        \"title\": \"Sleep and recovery context\",\n        \"summary\": \"Sleep disruption can affect recovery, blood pressure, glucose regulation, fatigue, and symptom interpretation.\"\n      }\n    ],\n    \"conversation_history\": [\n      {\n        \"role\": \"user\",\n        \"content\": \"hi\"\n      },\n      {\n        \"role\": \"assistant\",\n        \"content\": \"I hear your concern, and I will reason through it using the information available.\\n\\nThe user is asking for health interpretation, but the symptom signal is broad. The safest reasoning path is to use available risk predictions, vitals, labs, and retrieved medical context while asking for more detail.\\n\\nPossible explanations include This could relate to cardiovascular disease risk; Guidance on cardiovascular clinical reference supports considering a Cardiovascular explanation.\\n\\nOne thing I would like to understand better is What symptoms are you noticing, when did they start, and how severe are they from 1 to 10? Also, Have you noticed triggers, recent illness, medication changes, dehydration, stress, or unusual exertion around the same time?\\n\\nFor now, Diabetes Clinical Reference.Symptoms.\"\n      },\n      {\n        \"role\": \"assistant\",\n        \"content\": \"Hello. Tell me what's going on, even if it feels vague. I'll ask the next useful question and interpret your health data cautiously.\"\n      }\n    ],\n    \"conversation_state\": {\n      \"messages\": [\n        {\n          \"role\": \"user\",\n          \"content\": \"hi\"\n        },\n        {\n          \"role\": \"assistant\",\n          \"content\": \"I hear your concern, and I will reason through it using the information available.\\n\\nThe user is asking for health interpretation, but the symptom signal is broad. The safest reasoning path is to use available risk predictions, vitals, labs, and retrieved medical context while asking for more detail.\\n\\nPossible explanations include This could relate to cardiovascular disease risk; Guidance on cardiovascular clinical reference supports considering a Cardiovascular explanation.\\n\\nOne thing I would like to understand better is What symptoms are you noticing, when did they start, and how severe are they from 1 to 10? Also, Have you noticed triggers, recent illness, medication changes, dehydration, stress, or unusual exertion around the same time?\\n\\nFor now, Diabetes Clinical Reference.Symptoms.\"\n        }\n      ],\n      \"symptoms_history\": [\n        \"Daytime fatigue\",\n        \"Daytime cognitive slowing\"\n      ],\n      \"last_risk_score\": 0.23,\n      \"follow_up_pending\": true\n    },\n    \"patient_profile\": {\n      \"age\": 22,\n      \"gender\": \"male\",\n      \"height_cm\": 167.0,\n      \"weight_kg\": 50.0,\n      \"activity_level\": 12000,\n      \"sleep_hours\": 7.5,\n      \"stress_level\": 3,\n      \"family_history\": \"\",\n      \"allergies\": \"\",\n      \"current_medications\": \"\",\n      \"goals\": \"\"\n    },\n    \"patient_vitals\": {\n      \"heart_rate\": {\n        \"latest\": 76.2,\n        \"unit\": \"bpm\",\n        \"timestamp\": \"2026-05-02T10:30:00+00:00\",\n        \"avg_24h\": 80.59,\n        \"avg_7d\": 78.91,\n        \"trend\": \"stable\"\n      },\n      \"steps\": {\n        \"latest\": 6093.0,\n        \"unit\": \"count\",\n        \"timestamp\": \"2026-05-01T18:30:00+00:00\",\n        \"avg_24h\": 6093.0,\n        \"avg_7d\": 5651.86,\n        \"trend\": \"stable\"\n      }\n    },\n    \"ml_risk_scores\": {\n      \"risk_level\": \"LOW\",\n      \"overall_risk\": 0.23,\n      \"condition_risks\": {\n        \"cardiovascular\": 0.27,\n        \"diabetes\": 0.27,\n        \"respiratory\": 0.2525\n      },\n      \"health_score\": 57.77,\n      \"prediction_id\": \"078641e1-1907-4d86-9380-a1b7acfd8ee2\"\n    },\n    \"shap_drivers\": [\n      {\n        \"feature\": \"Sleep Hours\",\n        \"direction\": \"Positive\",\n        \"explanation\": \"Sleep hours has a positive contribution to the prediction.\"\n      },\n      {\n        \"feature\": \"Systolic BP\",\n        \"direction\": \"Negative\",\n        \"explanation\": \"Systolic bp has a negative contribution to the prediction.\"\n      },\n      {\n        \"feature\": \"BMI\",\n        \"direction\": \"Negative\",\n        \"explanation\": \"Bmi has a negative contribution to the prediction.\"\n      },\n      {\n        \"feature\": \"Heart Rate\",\n        \"direction\": \"Positive\",\n        \"explanation\": \"Heart rate has a positive contribution to the prediction.\"\n      },\n      {\n        \"feature\": \"Diastolic BP\",\n        \"direction\": \"Negative\",\n        \"explanation\": \"Diastolic bp has a negative contribution to the prediction.\"\n      }\n    ],\n    \"context_bundle\": {\n      \"user_data\": {\n        \"profile\": {\n          \"age\": 22,\n          \"gender\": \"male\",\n          \"height_cm\": 167.0,\n          \"weight_kg\": 50.0,\n          \"activity_level\": 12000,\n          \"sleep_hours\": 7.5,\n          \"stress_level\": 3,\n          \"family_history\": \"\",\n          \"allergies\": \"\",\n          \"current_medications\": \"\",\n          \"goals\": \"\"\n        },\n        \"vitals\": {\n          \"heart_rate\": {\n            \"latest\": 76.2,\n            \"unit\": \"bpm\",\n            \"timestamp\": \"2026-05-02T10:30:00+00:00\",\n            \"avg_24h\": 80.59,\n            \"avg_7d\": 78.91,\n            \"trend\": \"stable\"\n          },\n          \"steps\": {\n            \"latest\": 6093.0,\n            \"unit\": \"count\",\n            \"timestamp\": \"2026-05-01T18:30:00+00:00\",\n            \"avg_24h\": 6093.0,\n            \"avg_7d\": 5651.86,\n            \"trend\": \"stable\"\n          }\n        },\n        \"wearable_trends\": {\n          \"heart_rate_7d\": 78.91,\n          \"steps_7d\": 4858.0,\n          \"sleep_efficiency\": 0.0,\n          \"bmi\": 17.9,\n          \"lifestyle_score\": 38.8,\n          \"activity_score\": 47.1,\n          \"data_availability\": {\n            \"sleep\": false,\n            \"steps\": true,\n            \"heart_rate\": true\n          }\n        },\n        \"lab_results\": [],\n        \"abnormal_labs\": [],\n        \"clinical_history\": null,\n        \"history_timeline\": [\n          {\n            \"type\": \"vital\",\n            \"timestamp\": \"2026-05-02T10:30:00+00:00\",\n            \"summary\": \"Heart Rate: 76.2 bpm\"\n          },\n          {\n            \"type\": \"vital\",\n            \"timestamp\": \"2026-05-02T09:30:00+00:00\",\n            \"summary\": \"Heart Rate: 86.5 bpm\"\n          },\n          {\n            \"type\": \"vital\",\n            \"timestamp\": \"2026-05-02T08:30:00+00:00\",\n            \"summary\": \"Heart Rate: 75.1 bpm\"\n          },\n          {\n            \"type\": \"vital\",\n            \"timestamp\": \"2026-05-02T07:30:00+00:00\",\n            \"summary\": \"Heart Rate: 80.2 bpm\"\n          },\n          {\n            \"type\": \"vital\",\n            \"timestamp\": \"2026-05-02T06:30:00+00:00\",\n            \"summary\": \"Heart Rate: 90.0 bpm\"\n          },\n          {\n            \"type\": \"vital\",\n            \"timestamp\": \"2026-05-01T21:30:00+00:00\",\n            \"summary\": \"Heart Rate: 82.5 bpm\"\n          }\n        ],\n        \"conversation_state\": {\n          \"messages\": [\n            {\n              \"role\": \"user\",\n              \"content\": \"hi\"\n            },\n            {\n              \"role\": \"assistant\",\n              \"content\": \"I hear your concern, and I will reason through it using the information available.\\n\\nThe user is asking for health interpretation, but the symptom signal is broad. The safest reasoning path is to use available risk predictions, vitals, labs, and retrieved medical context while asking for more detail.\\n\\nPossible explanations include This could relate to cardiovascular disease risk; Guidance on cardiovascular clinical reference supports considering a Cardiovascular explanation.\\n\\nOne thing I would like to understand better is What symptoms are you noticing, when did they start, and how severe are they from 1 to 10? Also, Have you noticed triggers, recent illness, medication changes, dehydration, stress, or unusual exertion around the same time?\\n\\nFor now, Diabetes Clinical Reference.Symptoms.\"\n            }\n          ],\n          \"symptoms_history\": [\n            \"Daytime fatigue\",\n            \"Daytime cognitive slowing\"\n          ],\n          \"last_risk_score\": 0.23,\n          \"follow_up_pending\": true\n        }\n      },\n      \"ml_output\": {\n        \"risk_score\": 0.23,\n        \"risk_level\": \"LOW\",\n        \"condition_risks\": {\n          \"cardiovascular\": 0.27,\n          \"diabetes\": 0.27,\n          \"respiratory\": 0.2525\n        },\n        \"health_score\": 57.77,\n        \"shap_drivers\": [\n          {\n            \"feature_name\": \"sleep_hours\",\n            \"label\": \"Sleep Hours\",\n            \"impact\": 2.4383,\n            \"direction\": \"positive\",\n            \"feature_value\": 0.0,\n            \"explanation\": \"sleep_hours has a positive contribution to the prediction.\"\n          },\n          {\n            \"feature_name\": \"systolic_bp\",\n            \"label\": \"Systolic BP\",\n            \"impact\": -1.4786,\n            \"direction\": \"negative\",\n            \"feature_value\": 120.0,\n            \"explanation\": \"systolic_bp has a negative contribution to the prediction.\"\n          },\n          {\n            \"feature_name\": \"bmi\",\n            \"label\": \"BMI\",\n            \"impact\": -0.9475,\n            \"direction\": \"negative\",\n            \"feature_value\": 17.9,\n            \"explanation\": \"bmi has a negative contribution to the prediction.\"\n          },\n          {\n            \"feature_name\": \"heart_rate\",\n            \"label\": \"Heart Rate\",\n            \"impact\": 0.8389,\n            \"direction\": \"positive\",\n            \"feature_value\": 78.91,\n            \"explanation\": \"heart_rate has a positive contribution to the prediction.\"\n          },\n          {\n            \"feature_name\": \"diastolic_bp\",\n            \"label\": \"Diastolic BP\",\n            \"impact\": -0.4586,\n            \"direction\": \"negative\",\n            \"feature_value\": 80.0,\n            \"explanation\": \"diastolic_bp has a negative contribution to the prediction.\"\n          }\n        ],\n        \"source\": \"ml\"\n      },\n      \"rag_context\": {\n        \"summary\": [\n          {\n            \"title\": \"Sleep Clinical Reference\",\n            \"source\": \"Sleep.md\",\n            \"category\": \"Sleep\",\n            \"topic\": \"Sleep quality and metabolic health\",\n            \"disease_type\": \"Sleep\",\n            \"source_url\": \"\",\n            \"source_org\": \"ArogyaAI\",\n            \"retrieval_method\": \"llama_index\",\n            \"excerpt\": \"Insomnia is often managed with behavioral approaches before long-term sedative medication. Sleep complaints can be both a cause and consequence of metabolic or cardiovascular risk.\",\n            \"score\": 0.7632764592242673,\n            \"citation\": {\n              \"source\": \"Sleep.md\",\n              \"title\": \"Sleep Clinical Reference\",\n              \"url\": \"\"\n            }\n          },\n          {\n            \"title\": \"Sleep Clinical Reference\",\n            \"source\": \"Sleep.md\",\n            \"category\": \"Sleep\",\n            \"topic\": \"Sleep quality and metabolic health\",\n            \"disease_type\": \"Sleep\",\n            \"source_url\": \"\",\n            \"source_org\": \"ArogyaAI\",\n            \"retrieval_method\": \"llama_index\",\n            \"excerpt\": \"Sleep findings should be connected to glucose trends, blood pressure, resting heart rate, activity, stress, and reported symptoms.\",\n            \"score\": 0.7564329320037381,\n            \"citation\": {\n              \"source\": \"Sleep.md\",\n              \"title\": \"Sleep Clinical Reference\",\n              \"url\": \"\"\n            }\n          },\n          {\n            \"title\": \"Cardiovascular Clinical Reference\",\n            \"source\": \"Cardiovascular.md\",\n            \"category\": \"Cardiovascular\",\n            \"topic\": \"Cardiovascular risk and symptom assessment\",\n            \"disease_type\": \"Cardiovascular\",\n            \"source_url\": \"\",\n            \"source_org\": \"ArogyaAI\",\n            \"retrieval_method\": \"llama_index\",\n            \"excerpt\": \"Wearable data can help identify trends but does not replace clinical evaluation, especially for acute symptoms. Clinical reasoning should distinguish stable risk reduction from acute symptom triage.\",\n            \"score\": 0.748790347826257,\n            \"citation\": {\n              \"source\": \"Cardiovascular.md\",\n              \"title\": \"Cardiovascular Clinical Reference\",\n              \"url\": \"\"\n            }\n          }\n        ],\n        \"top_chunks\": [\n          {\n            \"title\": \"Sleep Clinical Reference\",\n            \"source\": \"Sleep.md\",\n            \"category\": \"Sleep\",\n            \"topic\": \"Sleep quality and metabolic health\",\n            \"disease_type\": \"Sleep\",\n            \"severity\": \"Urgent\",\n            \"source_url\": \"\",\n            \"source_org\": \"ArogyaAI\",\n            \"retrieval_method\": \"llama_index\",\n            \"excerpt\": \"Insomnia is often managed with behavioral approaches before long-term sedative medication. Sleep complaints can be both a cause and consequence of metabolic or cardiovascular risk.\",\n            \"score\": 0.7632764592242673,\n            \"citation\": {\n              \"source\": \"Sleep.md\",\n              \"title\": \"Sleep Clinical Reference\",\n              \"url\": \"\"\n            }\n          },\n          {\n            \"title\": \"Sleep Clinical Reference\",\n            \"source\": \"Sleep.md\",\n            \"category\": \"Sleep\",\n            \"topic\": \"Sleep quality and metabolic health\",\n            \"disease_type\": \"Sleep\",\n            \"severity\": \"Urgent\",\n            \"source_url\": \"\",\n            \"source_org\": \"ArogyaAI\",\n            \"retrieval_method\": \"llama_index\",\n            \"excerpt\": \"Sleep findings should be connected to glucose trends, blood pressure, resting heart rate, activity, stress, and reported symptoms. Red Flags.\",\n            \"score\": 0.7564329320037381,\n            \"citation\": {\n              \"source\": \"Sleep.md\",\n              \"title\": \"Sleep Clinical Reference\",\n              \"url\": \"\"\n            }\n          },\n          {\n            \"title\": \"Cardiovascular Clinical Reference\",\n            \"source\": \"Cardiovascular.md\",\n            \"category\": \"Cardiovascular\",\n            \"topic\": \"Cardiovascular risk and symptom assessment\",\n            \"disease_type\": \"Cardiovascular\",\n            \"severity\": \"Urgent\",\n            \"source_url\": \"\",\n            \"source_org\": \"ArogyaAI\",\n            \"retrieval_method\": \"llama_index\",\n            \"excerpt\": \"Wearable data can help identify trends but does not replace clinical evaluation, especially for acute symptoms. Clinical reasoning should distinguish stable risk reduction from acute symptom triage.\",\n            \"score\": 0.748790347826257,\n            \"citation\": {\n              \"source\": \"Cardiovascular.md\",\n              \"title\": \"Cardiovascular Clinical Reference\",\n              \"url\": \"\"\n            }\n          }\n        ],\n        \"disease_context\": [\n          {\n            \"disease_type\": \"cardiovascular\",\n            \"title\": \"Cardiovascular symptom and risk context\",\n            \"summary\": \"Chest discomfort, palpitations, dizziness, blood pressure, and elevated heart-rate patterns require red-flag screening and timely clinical review when severe, new, exertional, or worsening.\"\n          },\n          {\n            \"disease_type\": \"sleep\",\n            \"title\": \"Sleep and recovery context\",\n            \"summary\": \"Sleep disruption can affect recovery, blood pressure, glucose regulation, fatigue, and symptom interpretation.\"\n          }\n        ],\n        \"source\": \"llama_index\"\n      }\n    }\n  }\n}",
       "output": "{\n  \"understanding\": \"I understand you are noticing Daytime fatigue, Daytime cognitive slowing.\",\n  \"clinical_interpretation\": \"From what you are describing, the main concern is Daytime fatigue, Daytime cognitive slowing. This should be interpreted together with recent health data and red-flag symptoms, without treating it as a diagnosis.\",\n  \"message\": \"I understand your concern. From what you are describing, the main issue is Daytime fatigue, Daytime cognitive slowing.\\n\\nFrom what you are describing, the main concern is Daytime fatigue, Daytime cognitive slowing. This should be interpreted together with recent health data and red-flag symptoms, without treating it as a diagnosis.\\n\\nPossible explanations include This could relate to cardiovascular disease risk; This may fit a metabolic, sleep, recovery, or glucose-related pattern.\\n\\nOne thing I would like to understand better is When did this start, how long does it last, and is it changing over time? Also, How severe is it from 1 to 10, and is it getting better, worse, or staying the same?\\n\\nFor now, Diabetes Clinical Reference.Symptoms. Sleep Clinical Reference.Symptoms.\",\n  \"possible_causes\": [\n    \"This could relate to cardiovascular disease risk.\",\n    \"This may fit a metabolic, sleep, recovery, or glucose-related pattern.\",\n    \"This may fit a general medical pattern.\",\n    \"Guidance on sleep clinical reference makes a Sleep explanation worth considering.\"\n  ],\n  \"follow_up_questions\": [\n    \"When did this start, how long does it last, and is it changing over time?\",\n    \"How severe is it from 1 to 10, and is it getting better, worse, or staying the same?\"\n  ],\n  \"recommendations\": [\n    \"Diabetes Clinical Reference.Symptoms.\",\n    \"Sleep Clinical Reference.Symptoms.\",\n    \"Cardiovascular Clinical Reference.Symptoms.\",\n    \"Work toward at least 8,000 daily steps or equivalent moderate activity to improve cardiovascular and metabolic resilience.\"\n  ],\n  \"risk_level\": \"low\",\n  \"confidence_score\": 0.61\n}"
     }
+  },
+  {
+    "timestamp": "2026-05-04T09:24:30.426375+00:00",
+    "input": {
+      "query": "hi",
+      "history": [
+        {
+          "role": "assistant",
+          "content": "Hello. Tell me what's going on, even if it feels vague. I'll ask the next useful question and interpret your health data cautiously."
+        }
+      ]
+    },
+    "context": {
+      "ml_prediction": {
+        "risk_score": 0.2,
+        "risk_level": "low",
+        "disease_probabilities": {
+          "diabetes": 0.26,
+          "respiratory": 0.19,
+          "cardiovascular": 0.33
+        },
+        "health_score": 68.11,
+        "drivers": [
+          {
+            "feature": "Systolic BP",
+            "direction": "Negative",
+            "explanation": "Systolic bp has a negative contribution to the prediction."
+          },
+          {
+            "feature": "Heart Rate",
+            "direction": "Positive",
+            "explanation": "Heart rate has a positive contribution to the prediction."
+          },
+          {
+            "feature": "BMI",
+            "direction": "Negative",
+            "explanation": "Bmi has a negative contribution to the prediction."
+          },
+          {
+            "feature": "Diastolic BP",
+            "direction": "Positive",
+            "explanation": "Diastolic bp has a positive contribution to the prediction."
+          },
+          {
+            "feature": "Steps",
+            "direction": "Positive",
+            "explanation": "Steps has a positive contribution to the prediction."
+          }
+        ],
+        "prediction_id": "610ce1c9-7b8c-47c4-a7f0-1f82e58967c2"
+      },
+      "wearables": {
+        "heart_rate": {
+          "latest": 1.0,
+          "unit": "bpm",
+          "timestamp": "2026-05-04T02:30:00+00:00",
+          "avg_24h": 60.98,
+          "avg_7d": 76.15,
+          "trend": "down"
+        },
+        "steps": {
+          "latest": 2775.0,
+          "unit": "count",
+          "timestamp": "2026-05-03T18:30:00+00:00",
+          "avg_24h": 2775.0,
+          "avg_7d": 4721.0,
+          "trend": "down"
+        },
+        "sleep": {
+          "latest": 9.0,
+          "unit": "hours",
+          "timestamp": "2026-05-03T02:00:00+00:00",
+          "avg_24h": null,
+          "avg_7d": 8.7,
+          "trend": "stable"
+        },
+        "trends": {
+          "heart_rate_7d": 76.4,
+          "steps_7d": 5133.57,
+          "sleep_efficiency": 46.59,
+          "bmi": 19.5,
+          "lifestyle_score": 54.9,
+          "activity_score": 40.7,
+          "data_availability": {
+            "sleep": true,
+            "steps": true,
+            "heart_rate": true
+          }
+        },
+        "highlights": []
+      },
+      "labs": {
+        "recent": [],
+        "abnormal": []
+      },
+      "symptoms": [
+        "Headache",
+        "Dizziness",
+        "Fatigue",
+        "Reduced exercise tolerance"
+      ],
+      "rag_context": [
+        {
+          "title": "Cardiovascular Clinical Reference",
+          "source": "Cardiovascular.md",
+          "category": "Cardiovascular",
+          "topic": "Cardiovascular risk and symptom assessment",
+          "disease_type": "Cardiovascular",
+          "source_url": "",
+          "source_org": "ArogyaAI",
+          "retrieval_method": "llama_index",
+          "excerpt": "Shortness of breath may reflect cardiac, respiratory, metabolic, or anxiety-related causes, so associated signs matter.",
+          "score": 0.7825043072920678,
+          "citation": {
+            "source": "Cardiovascular.md",
+            "title": "Cardiovascular Clinical Reference",
+            "url": ""
+          }
+        },
+        {
+          "title": "Cardiovascular Clinical Reference",
+          "source": "Cardiovascular.md",
+          "category": "Cardiovascular",
+          "topic": "Cardiovascular risk and symptom assessment",
+          "disease_type": "Cardiovascular",
+          "source_url": "",
+          "source_org": "ArogyaAI",
+          "retrieval_method": "llama_index",
+          "excerpt": "Inflammatory conditions, pregnancy-related hypertension, early menopause, chronic stress, and air pollution exposure can also increase risk. Risk should be viewed as a combined profile rather than a single number.",
+          "score": 0.7735520452912832,
+          "citation": {
+            "source": "Cardiovascular.md",
+            "title": "Cardiovascular Clinical Reference",
+            "url": ""
+          }
+        },
+        {
+          "title": "Cardiovascular Clinical Reference",
+          "source": "Cardiovascular.md",
+          "category": "Cardiovascular",
+          "topic": "Cardiovascular risk and symptom assessment",
+          "disease_type": "Cardiovascular",
+          "source_url": "",
+          "source_org": "ArogyaAI",
+          "retrieval_method": "llama_index",
+          "excerpt": "Wearable data can help identify trends but does not replace clinical evaluation, especially for acute symptoms. Clinical reasoning should distinguish stable risk reduction from acute symptom triage.",
+          "score": 0.7669340597721511,
+          "citation": {
+            "source": "Cardiovascular.md",
+            "title": "Cardiovascular Clinical Reference",
+            "url": ""
+          }
+        }
+      ],
+      "rag_disease_context": [
+        {
+          "disease_type": "cardiovascular",
+          "title": "Cardiovascular symptom and risk context",
+          "summary": "Chest discomfort, palpitations, dizziness, blood pressure, and elevated heart-rate patterns require red-flag screening and timely clinical review when severe, new, exertional, or worsening."
+        }
+      ],
+      "conversation_history": [
+        {
+          "role": "assistant",
+          "content": "Hello. Tell me what's going on, even if it feels vague. I'll ask the next useful question and interpret your health data cautiously."
+        }
+      ],
+      "conversation_state": {
+        "messages": [],
+        "symptoms_history": [],
+        "last_risk_score": null,
+        "follow_up_pending": false
+      },
+      "patient_profile": {
+        "age": 0,
+        "gender": "male",
+        "height_cm": 160.0,
+        "weight_kg": 50.0,
+        "activity_level": 12000,
+        "sleep_hours": 7.5,
+        "stress_level": 3,
+        "family_history": "",
+        "allergies": "",
+        "current_medications": "",
+        "goals": "High Protein"
+      },
+      "patient_vitals": {
+        "body_temperature": {
+          "latest": 36.9,
+          "unit": "celsius",
+          "timestamp": "2026-05-04T04:30:00+00:00",
+          "avg_24h": 36.9,
+          "avg_7d": 36.95,
+          "trend": "stable"
+        },
+        "blood_pressure_diastolic": {
+          "latest": 121.0,
+          "unit": "mmHg",
+          "timestamp": "2026-05-04T04:30:00+00:00",
+          "avg_24h": 120.5,
+          "avg_7d": 120.75,
+          "trend": "stable"
+        },
+        "blood_pressure_systolic": {
+          "latest": 121.0,
+          "unit": "mmHg",
+          "timestamp": "2026-05-04T04:30:00+00:00",
+          "avg_24h": 120.5,
+          "avg_7d": 120.75,
+          "trend": "stable"
+        },
+        "glucose": {
+          "latest": 73.9,
+          "unit": "mg/dL",
+          "timestamp": "2026-05-04T04:30:00+00:00",
+          "avg_24h": 802.7,
+          "avg_7d": 563.38,
+          "trend": "up"
+        },
+        "spo2": {
+          "latest": 96.0,
+          "unit": "%",
+          "timestamp": "2026-05-04T04:30:00+00:00",
+          "avg_24h": 96.0,
+          "avg_7d": 97.25,
+          "trend": "stable"
+        },
+        "heart_rate": {
+          "latest": 1.0,
+          "unit": "bpm",
+          "timestamp": "2026-05-04T02:30:00+00:00",
+          "avg_24h": 60.98,
+          "avg_7d": 76.15,
+          "trend": "down"
+        },
+        "steps": {
+          "latest": 2775.0,
+          "unit": "count",
+          "timestamp": "2026-05-03T18:30:00+00:00",
+          "avg_24h": 2775.0,
+          "avg_7d": 4721.0,
+          "trend": "down"
+        },
+        "sleep": {
+          "latest": 9.0,
+          "unit": "hours",
+          "timestamp": "2026-05-03T02:00:00+00:00",
+          "avg_24h": null,
+          "avg_7d": 8.7,
+          "trend": "stable"
+        }
+      },
+      "ml_risk_scores": {
+        "risk_level": "LOW",
+        "overall_risk": 0.2,
+        "condition_risks": {
+          "diabetes": 0.26,
+          "respiratory": 0.19,
+          "cardiovascular": 0.33
+        },
+        "health_score": 68.11,
+        "prediction_id": "610ce1c9-7b8c-47c4-a7f0-1f82e58967c2"
+      },
+      "shap_drivers": [
+        {
+          "feature": "Systolic BP",
+          "direction": "Negative",
+          "explanation": "Systolic bp has a negative contribution to the prediction."
+        },
+        {
+          "feature": "Heart Rate",
+          "direction": "Positive",
+          "explanation": "Heart rate has a positive contribution to the prediction."
+        },
+        {
+          "feature": "BMI",
+          "direction": "Negative",
+          "explanation": "Bmi has a negative contribution to the prediction."
+        },
+        {
+          "feature": "Diastolic BP",
+          "direction": "Positive",
+          "explanation": "Diastolic bp has a positive contribution to the prediction."
+        },
+        {
+          "feature": "Steps",
+          "direction": "Positive",
+          "explanation": "Steps has a positive contribution to the prediction."
+        }
+      ],
+      "context_bundle": {
+        "user_data": {
+          "profile": {
+            "age": 0,
+            "gender": "male",
+            "height_cm": 160.0,
+            "weight_kg": 50.0,
+            "activity_level": 12000,
+            "sleep_hours": 7.5,
+            "stress_level": 3,
+            "family_history": "",
+            "allergies": "",
+            "current_medications": "",
+            "goals": "High Protein"
+          },
+          "vitals": {
+            "body_temperature": {
+              "latest": 36.9,
+              "unit": "celsius",
+              "timestamp": "2026-05-04T04:30:00+00:00",
+              "avg_24h": 36.9,
+              "avg_7d": 36.95,
+              "trend": "stable"
+            },
+            "blood_pressure_diastolic": {
+              "latest": 121.0,
+              "unit": "mmHg",
+              "timestamp": "2026-05-04T04:30:00+00:00",
+              "avg_24h": 120.5,
+              "avg_7d": 120.75,
+              "trend": "stable"
+            },
+            "blood_pressure_systolic": {
+              "latest": 121.0,
+              "unit": "mmHg",
+              "timestamp": "2026-05-04T04:30:00+00:00",
+              "avg_24h": 120.5,
+              "avg_7d": 120.75,
+              "trend": "stable"
+            },
+            "glucose": {
+              "latest": 73.9,
+              "unit": "mg/dL",
+              "timestamp": "2026-05-04T04:30:00+00:00",
+              "avg_24h": 802.7,
+              "avg_7d": 563.38,
+              "trend": "up"
+            },
+            "spo2": {
+              "latest": 96.0,
+              "unit": "%",
+              "timestamp": "2026-05-04T04:30:00+00:00",
+              "avg_24h": 96.0,
+              "avg_7d": 97.25,
+              "trend": "stable"
+            },
+            "heart_rate": {
+              "latest": 1.0,
+              "unit": "bpm",
+              "timestamp": "2026-05-04T02:30:00+00:00",
+              "avg_24h": 60.98,
+              "avg_7d": 76.15,
+              "trend": "down"
+            },
+            "steps": {
+              "latest": 2775.0,
+              "unit": "count",
+              "timestamp": "2026-05-03T18:30:00+00:00",
+              "avg_24h": 2775.0,
+              "avg_7d": 4721.0,
+              "trend": "down"
+            },
+            "sleep": {
+              "latest": 9.0,
+              "unit": "hours",
+              "timestamp": "2026-05-03T02:00:00+00:00",
+              "avg_24h": null,
+              "avg_7d": 8.7,
+              "trend": "stable"
+            }
+          },
+          "wearable_trends": {
+            "heart_rate_7d": 76.4,
+            "steps_7d": 5133.57,
+            "sleep_efficiency": 46.59,
+            "bmi": 19.5,
+            "lifestyle_score": 54.9,
+            "activity_score": 40.7,
+            "data_availability": {
+              "sleep": true,
+              "steps": true,
+              "heart_rate": true
+            }
+          },
+          "lab_results": [],
+          "abnormal_labs": [],
+          "clinical_history": null,
+          "history_timeline": [
+            {
+              "type": "vital",
+              "timestamp": "2026-05-04T04:30:00+00:00",
+              "summary": "Body Temperature: 36.9 celsius"
+            },
+            {
+              "type": "vital",
+              "timestamp": "2026-05-04T04:30:00+00:00",
+              "summary": "Blood Pressure Diastolic: 121.0 mmHg"
+            },
+            {
+              "type": "vital",
+              "timestamp": "2026-05-04T04:30:00+00:00",
+              "summary": "Blood Pressure Systolic: 121.0 mmHg"
+            },
+            {
+              "type": "vital",
+              "timestamp": "2026-05-04T04:30:00+00:00",
+              "summary": "Glucose: 73.9 mg/dL"
+            },
+            {
+              "type": "vital",
+              "timestamp": "2026-05-04T04:30:00+00:00",
+              "summary": "Spo2: 96.0 %"
+            },
+            {
+              "type": "vital",
+              "timestamp": "2026-05-04T03:30:00+00:00",
+              "summary": "Glucose: 1531.5 mg/dL"
+            }
+          ],
+          "conversation_state": {
+            "messages": [],
+            "symptoms_history": [],
+            "last_risk_score": null,
+            "follow_up_pending": false
+          }
+        },
+        "ml_output": {
+          "risk_score": 0.2,
+          "risk_level": "LOW",
+          "condition_risks": {
+            "diabetes": 0.26,
+            "respiratory": 0.19,
+            "cardiovascular": 0.33
+          },
+          "health_score": 68.11,
+          "shap_drivers": [
+            {
+              "feature_name": "systolic_bp",
+              "label": "Systolic BP",
+              "impact": -1.6061,
+              "direction": "negative",
+              "feature_value": 121.0,
+              "explanation": "systolic_bp has a negative contribution to the prediction."
+            },
+            {
+              "feature_name": "heart_rate",
+              "label": "Heart Rate",
+              "impact": 0.8489,
+              "direction": "positive",
+              "feature_value": 76.4,
+              "explanation": "heart_rate has a positive contribution to the prediction."
+            },
+            {
+              "feature_name": "bmi",
+              "label": "BMI",
+              "impact": -0.8178,
+              "direction": "negative",
+              "feature_value": 19.5,
+              "explanation": "bmi has a negative contribution to the prediction."
+            },
+            {
+              "feature_name": "diastolic_bp",
+              "label": "Diastolic BP",
+              "impact": 0.6928,
+              "direction": "positive",
+              "feature_value": 121.0,
+              "explanation": "diastolic_bp has a positive contribution to the prediction."
+            },
+            {
+              "feature_name": "steps",
+              "label": "Steps",
+              "impact": 0.2685,
+              "direction": "positive",
+              "feature_value": 5133.57,
+              "explanation": "steps has a positive contribution to the prediction."
+            }
+          ],
+          "source": "ml"
+        },
+        "rag_context": {
+          "summary": [
+            {
+              "title": "Cardiovascular Clinical Reference",
+              "source": "Cardiovascular.md",
+              "category": "Cardiovascular",
+              "topic": "Cardiovascular risk and symptom assessment",
+              "disease_type": "Cardiovascular",
+              "source_url": "",
+              "source_org": "ArogyaAI",
+              "retrieval_method": "llama_index",
+              "excerpt": "Shortness of breath may reflect cardiac, respiratory, metabolic, or anxiety-related causes, so associated signs matter.",
+              "score": 0.7825043072920678,
+              "citation": {
+                "source": "Cardiovascular.md",
+                "title": "Cardiovascular Clinical Reference",
+                "url": ""
+              }
+            },
+            {
+              "title": "Cardiovascular Clinical Reference",
+              "source": "Cardiovascular.md",
+              "category": "Cardiovascular",
+              "topic": "Cardiovascular risk and symptom assessment",
+              "disease_type": "Cardiovascular",
+              "source_url": "",
+              "source_org": "ArogyaAI",
+              "retrieval_method": "llama_index",
+              "excerpt": "Inflammatory conditions, pregnancy-related hypertension, early menopause, chronic stress, and air pollution exposure can also increase risk. Risk should be viewed as a combined profile rather than a single number.",
+              "score": 0.7735520452912832,
+              "citation": {
+                "source": "Cardiovascular.md",
+                "title": "Cardiovascular Clinical Reference",
+                "url": ""
+              }
+            },
+            {
+              "title": "Cardiovascular Clinical Reference",
+              "source": "Cardiovascular.md",
+              "category": "Cardiovascular",
+              "topic": "Cardiovascular risk and symptom assessment",
+              "disease_type": "Cardiovascular",
+              "source_url": "",
+              "source_org": "ArogyaAI",
+              "retrieval_method": "llama_index",
+              "excerpt": "Wearable data can help identify trends but does not replace clinical evaluation, especially for acute symptoms. Clinical reasoning should distinguish stable risk reduction from acute symptom triage.",
+              "score": 0.7669340597721511,
+              "citation": {
+                "source": "Cardiovascular.md",
+                "title": "Cardiovascular Clinical Reference",
+                "url": ""
+              }
+            }
+          ],
+          "top_chunks": [
+            {
+              "title": "Cardiovascular Clinical Reference",
+              "source": "Cardiovascular.md",
+              "category": "Cardiovascular",
+              "topic": "Cardiovascular risk and symptom assessment",
+              "disease_type": "Cardiovascular",
+              "severity": "Urgent",
+              "source_url": "",
+              "source_org": "ArogyaAI",
+              "retrieval_method": "llama_index",
+              "excerpt": "Shortness of breath may reflect cardiac, respiratory, metabolic, or anxiety-related causes, so associated signs matter. Causes.",
+              "score": 0.7825043072920678,
+              "citation": {
+                "source": "Cardiovascular.md",
+                "title": "Cardiovascular Clinical Reference",
+                "url": ""
+              }
+            },
+            {
+              "title": "Cardiovascular Clinical Reference",
+              "source": "Cardiovascular.md",
+              "category": "Cardiovascular",
+              "topic": "Cardiovascular risk and symptom assessment",
+              "disease_type": "Cardiovascular",
+              "severity": "Urgent",
+              "source_url": "",
+              "source_org": "ArogyaAI",
+              "retrieval_method": "llama_index",
+              "excerpt": "Inflammatory conditions, pregnancy-related hypertension, early menopause, chronic stress, and air pollution exposure can also increase risk. Risk should be viewed as a combined profile rather than a single number.",
+              "score": 0.7735520452912832,
+              "citation": {
+                "source": "Cardiovascular.md",
+                "title": "Cardiovascular Clinical Reference",
+                "url": ""
+              }
+            },
+            {
+              "title": "Cardiovascular Clinical Reference",
+              "source": "Cardiovascular.md",
+              "category": "Cardiovascular",
+              "topic": "Cardiovascular risk and symptom assessment",
+              "disease_type": "Cardiovascular",
+              "severity": "Urgent",
+              "source_url": "",
+              "source_org": "ArogyaAI",
+              "retrieval_method": "llama_index",
+              "excerpt": "Wearable data can help identify trends but does not replace clinical evaluation, especially for acute symptoms. Clinical reasoning should distinguish stable risk reduction from acute symptom triage.",
+              "score": 0.7669340597721511,
+              "citation": {
+                "source": "Cardiovascular.md",
+                "title": "Cardiovascular Clinical Reference",
+                "url": ""
+              }
+            }
+          ],
+          "disease_context": [
+            {
+              "disease_type": "cardiovascular",
+              "title": "Cardiovascular symptom and risk context",
+              "summary": "Chest discomfort, palpitations, dizziness, blood pressure, and elevated heart-rate patterns require red-flag screening and timely clinical review when severe, new, exertional, or worsening."
+            }
+          ],
+          "source": "llama_index"
+        }
+      }
+    },
+    "output": {
+      "message": "I understand your concern. Let us look at this carefully with the information available.\n\nI need a little more detail to understand the health concern clearly. It is best to interpret this alongside any recent vitals, labs, symptoms, and relevant medical context.\n\nPossible explanations include This could relate to hypertension risk; This could relate to cardiovascular disease risk.\n\nOne thing I would like to understand better is What symptoms are you noticing, when did they start, and how severe are they from 1 to 10? Also, Have you noticed triggers, recent illness, medication changes, dehydration, stress, or unusual exertion around the same time?\n\nFor now, Hypertension And Elevated Blood Pressure - Lifestyle Recommendations 2. Diabetes Clinical Reference.Symptoms.",
+      "understanding": "I understand that you want help interpreting your current health concern.",
+      "clinical_interpretation": "I need a little more detail to understand the health concern clearly. It is best to interpret this alongside any recent vitals, labs, symptoms, and relevant medical context.",
+      "clinical_insight": "I need a little more detail to understand the health concern clearly. It is best to interpret this alongside any recent vitals, labs, symptoms, and relevant medical context.",
+      "possible_causes": [
+        "This could relate to hypertension risk.",
+        "This could relate to cardiovascular disease risk.",
+        "Guidance on cardiovascular clinical reference makes a Cardiovascular explanation worth considering."
+      ],
+      "risk_level": "low",
+      "confidence_score": 0.6,
+      "follow_up_questions": [
+        "What symptoms are you noticing, when did they start, and how severe are they from 1 to 10?",
+        "Have you noticed triggers, recent illness, medication changes, dehydration, stress, or unusual exertion around the same time?"
+      ],
+      "recommendations": [
+        "Hypertension And Elevated Blood Pressure - Lifestyle Recommendations 2.",
+        "Diabetes Clinical Reference.Symptoms.",
+        "Hypertension And Elevated Blood Pressure - Lifestyle Recommendations 1.",
+        "Reduce sodium intake, monitor home blood pressure regularly, and keep follow-up readings consistent."
+      ],
+      "safety_note": "If this feels severe, unusual, or is getting worse, it is best to get checked in person.",
+      "formatted_response": "I understand your concern. Let us look at this carefully with the information available.\n\nI need a little more detail to understand the health concern clearly. It is best to interpret this alongside any recent vitals, labs, symptoms, and relevant medical context.\n\nPossible explanations include This could relate to hypertension risk; This could relate to cardiovascular disease risk.\n\nOne thing I would like to understand better is What symptoms are you noticing, when did they start, and how severe are they from 1 to 10? Also, Have you noticed triggers, recent illness, medication changes, dehydration, stress, or unusual exertion around the same time?\n\nFor now, Hypertension And Elevated Blood Pressure - Lifestyle Recommendations 2. Diabetes Clinical Reference.Symptoms."
+    },
+    "fine_tuning_example": {
+      "instruction": "You are a clinical AI assistant speaking like a calm, careful doctor. You listen first, reason privately, avoid overconfidence, ask at most one or two focused questions, explain in simple language, and prioritize patient safety. Never give a final diagnosis. Use patient vitals, recent risk data, symptoms, labs, wearables, and medical context internally. Return JSON with message, follow_up_questions, recommendations, and risk_level. The message must read like natural clinical conversation.",
+      "input": "{\n  \"query\": \"hi\",\n  \"context\": {\n    \"ml_prediction\": {\n      \"risk_score\": 0.2,\n      \"risk_level\": \"low\",\n      \"disease_probabilities\": {\n        \"diabetes\": 0.26,\n        \"respiratory\": 0.19,\n        \"cardiovascular\": 0.33\n      },\n      \"health_score\": 68.11,\n      \"drivers\": [\n        {\n          \"feature\": \"Systolic BP\",\n          \"direction\": \"Negative\",\n          \"explanation\": \"Systolic bp has a negative contribution to the prediction.\"\n        },\n        {\n          \"feature\": \"Heart Rate\",\n          \"direction\": \"Positive\",\n          \"explanation\": \"Heart rate has a positive contribution to the prediction.\"\n        },\n        {\n          \"feature\": \"BMI\",\n          \"direction\": \"Negative\",\n          \"explanation\": \"Bmi has a negative contribution to the prediction.\"\n        },\n        {\n          \"feature\": \"Diastolic BP\",\n          \"direction\": \"Positive\",\n          \"explanation\": \"Diastolic bp has a positive contribution to the prediction.\"\n        },\n        {\n          \"feature\": \"Steps\",\n          \"direction\": \"Positive\",\n          \"explanation\": \"Steps has a positive contribution to the prediction.\"\n        }\n      ],\n      \"prediction_id\": \"610ce1c9-7b8c-47c4-a7f0-1f82e58967c2\"\n    },\n    \"wearables\": {\n      \"heart_rate\": {\n        \"latest\": 1.0,\n        \"unit\": \"bpm\",\n        \"timestamp\": \"2026-05-04T02:30:00+00:00\",\n        \"avg_24h\": 60.98,\n        \"avg_7d\": 76.15,\n        \"trend\": \"down\"\n      },\n      \"steps\": {\n        \"latest\": 2775.0,\n        \"unit\": \"count\",\n        \"timestamp\": \"2026-05-03T18:30:00+00:00\",\n        \"avg_24h\": 2775.0,\n        \"avg_7d\": 4721.0,\n        \"trend\": \"down\"\n      },\n      \"sleep\": {\n        \"latest\": 9.0,\n        \"unit\": \"hours\",\n        \"timestamp\": \"2026-05-03T02:00:00+00:00\",\n        \"avg_24h\": null,\n        \"avg_7d\": 8.7,\n        \"trend\": \"stable\"\n      },\n      \"trends\": {\n        \"heart_rate_7d\": 76.4,\n        \"steps_7d\": 5133.57,\n        \"sleep_efficiency\": 46.59,\n        \"bmi\": 19.5,\n        \"lifestyle_score\": 54.9,\n        \"activity_score\": 40.7,\n        \"data_availability\": {\n          \"sleep\": true,\n          \"steps\": true,\n          \"heart_rate\": true\n        }\n      },\n      \"highlights\": []\n    },\n    \"labs\": {\n      \"recent\": [],\n      \"abnormal\": []\n    },\n    \"symptoms\": [\n      \"Headache\",\n      \"Dizziness\",\n      \"Fatigue\",\n      \"Reduced exercise tolerance\"\n    ],\n    \"rag_context\": [\n      {\n        \"title\": \"Cardiovascular Clinical Reference\",\n        \"source\": \"Cardiovascular.md\",\n        \"category\": \"Cardiovascular\",\n        \"topic\": \"Cardiovascular risk and symptom assessment\",\n        \"disease_type\": \"Cardiovascular\",\n        \"source_url\": \"\",\n        \"source_org\": \"ArogyaAI\",\n        \"retrieval_method\": \"llama_index\",\n        \"excerpt\": \"Shortness of breath may reflect cardiac, respiratory, metabolic, or anxiety-related causes, so associated signs matter.\",\n        \"score\": 0.7825043072920678,\n        \"citation\": {\n          \"source\": \"Cardiovascular.md\",\n          \"title\": \"Cardiovascular Clinical Reference\",\n          \"url\": \"\"\n        }\n      },\n      {\n        \"title\": \"Cardiovascular Clinical Reference\",\n        \"source\": \"Cardiovascular.md\",\n        \"category\": \"Cardiovascular\",\n        \"topic\": \"Cardiovascular risk and symptom assessment\",\n        \"disease_type\": \"Cardiovascular\",\n        \"source_url\": \"\",\n        \"source_org\": \"ArogyaAI\",\n        \"retrieval_method\": \"llama_index\",\n        \"excerpt\": \"Inflammatory conditions, pregnancy-related hypertension, early menopause, chronic stress, and air pollution exposure can also increase risk. Risk should be viewed as a combined profile rather than a single number.\",\n        \"score\": 0.7735520452912832,\n        \"citation\": {\n          \"source\": \"Cardiovascular.md\",\n          \"title\": \"Cardiovascular Clinical Reference\",\n          \"url\": \"\"\n        }\n      },\n      {\n        \"title\": \"Cardiovascular Clinical Reference\",\n        \"source\": \"Cardiovascular.md\",\n        \"category\": \"Cardiovascular\",\n        \"topic\": \"Cardiovascular risk and symptom assessment\",\n        \"disease_type\": \"Cardiovascular\",\n        \"source_url\": \"\",\n        \"source_org\": \"ArogyaAI\",\n        \"retrieval_method\": \"llama_index\",\n        \"excerpt\": \"Wearable data can help identify trends but does not replace clinical evaluation, especially for acute symptoms. Clinical reasoning should distinguish stable risk reduction from acute symptom triage.\",\n        \"score\": 0.7669340597721511,\n        \"citation\": {\n          \"source\": \"Cardiovascular.md\",\n          \"title\": \"Cardiovascular Clinical Reference\",\n          \"url\": \"\"\n        }\n      }\n    ],\n    \"rag_disease_context\": [\n      {\n        \"disease_type\": \"cardiovascular\",\n        \"title\": \"Cardiovascular symptom and risk context\",\n        \"summary\": \"Chest discomfort, palpitations, dizziness, blood pressure, and elevated heart-rate patterns require red-flag screening and timely clinical review when severe, new, exertional, or worsening.\"\n      }\n    ],\n    \"conversation_history\": [\n      {\n        \"role\": \"assistant\",\n        \"content\": \"Hello. Tell me what's going on, even if it feels vague. I'll ask the next useful question and interpret your health data cautiously.\"\n      }\n    ],\n    \"conversation_state\": {\n      \"messages\": [],\n      \"symptoms_history\": [],\n      \"last_risk_score\": null,\n      \"follow_up_pending\": false\n    },\n    \"patient_profile\": {\n      \"age\": 0,\n      \"gender\": \"male\",\n      \"height_cm\": 160.0,\n      \"weight_kg\": 50.0,\n      \"activity_level\": 12000,\n      \"sleep_hours\": 7.5,\n      \"stress_level\": 3,\n      \"family_history\": \"\",\n      \"allergies\": \"\",\n      \"current_medications\": \"\",\n      \"goals\": \"High Protein\"\n    },\n    \"patient_vitals\": {\n      \"body_temperature\": {\n        \"latest\": 36.9,\n        \"unit\": \"celsius\",\n        \"timestamp\": \"2026-05-04T04:30:00+00:00\",\n        \"avg_24h\": 36.9,\n        \"avg_7d\": 36.95,\n        \"trend\": \"stable\"\n      },\n      \"blood_pressure_diastolic\": {\n        \"latest\": 121.0,\n        \"unit\": \"mmHg\",\n        \"timestamp\": \"2026-05-04T04:30:00+00:00\",\n        \"avg_24h\": 120.5,\n        \"avg_7d\": 120.75,\n        \"trend\": \"stable\"\n      },\n      \"blood_pressure_systolic\": {\n        \"latest\": 121.0,\n        \"unit\": \"mmHg\",\n        \"timestamp\": \"2026-05-04T04:30:00+00:00\",\n        \"avg_24h\": 120.5,\n        \"avg_7d\": 120.75,\n        \"trend\": \"stable\"\n      },\n      \"glucose\": {\n        \"latest\": 73.9,\n        \"unit\": \"mg/dL\",\n        \"timestamp\": \"2026-05-04T04:30:00+00:00\",\n        \"avg_24h\": 802.7,\n        \"avg_7d\": 563.38,\n        \"trend\": \"up\"\n      },\n      \"spo2\": {\n        \"latest\": 96.0,\n        \"unit\": \"%\",\n        \"timestamp\": \"2026-05-04T04:30:00+00:00\",\n        \"avg_24h\": 96.0,\n        \"avg_7d\": 97.25,\n        \"trend\": \"stable\"\n      },\n      \"heart_rate\": {\n        \"latest\": 1.0,\n        \"unit\": \"bpm\",\n        \"timestamp\": \"2026-05-04T02:30:00+00:00\",\n        \"avg_24h\": 60.98,\n        \"avg_7d\": 76.15,\n        \"trend\": \"down\"\n      },\n      \"steps\": {\n        \"latest\": 2775.0,\n        \"unit\": \"count\",\n        \"timestamp\": \"2026-05-03T18:30:00+00:00\",\n        \"avg_24h\": 2775.0,\n        \"avg_7d\": 4721.0,\n        \"trend\": \"down\"\n      },\n      \"sleep\": {\n        \"latest\": 9.0,\n        \"unit\": \"hours\",\n        \"timestamp\": \"2026-05-03T02:00:00+00:00\",\n        \"avg_24h\": null,\n        \"avg_7d\": 8.7,\n        \"trend\": \"stable\"\n      }\n    },\n    \"ml_risk_scores\": {\n      \"risk_level\": \"LOW\",\n      \"overall_risk\": 0.2,\n      \"condition_risks\": {\n        \"diabetes\": 0.26,\n        \"respiratory\": 0.19,\n        \"cardiovascular\": 0.33\n      },\n      \"health_score\": 68.11,\n      \"prediction_id\": \"610ce1c9-7b8c-47c4-a7f0-1f82e58967c2\"\n    },\n    \"shap_drivers\": [\n      {\n        \"feature\": \"Systolic BP\",\n        \"direction\": \"Negative\",\n        \"explanation\": \"Systolic bp has a negative contribution to the prediction.\"\n      },\n      {\n        \"feature\": \"Heart Rate\",\n        \"direction\": \"Positive\",\n        \"explanation\": \"Heart rate has a positive contribution to the prediction.\"\n      },\n      {\n        \"feature\": \"BMI\",\n        \"direction\": \"Negative\",\n        \"explanation\": \"Bmi has a negative contribution to the prediction.\"\n      },\n      {\n        \"feature\": \"Diastolic BP\",\n        \"direction\": \"Positive\",\n        \"explanation\": \"Diastolic bp has a positive contribution to the prediction.\"\n      },\n      {\n        \"feature\": \"Steps\",\n        \"direction\": \"Positive\",\n        \"explanation\": \"Steps has a positive contribution to the prediction.\"\n      }\n    ],\n    \"context_bundle\": {\n      \"user_data\": {\n        \"profile\": {\n          \"age\": 0,\n          \"gender\": \"male\",\n          \"height_cm\": 160.0,\n          \"weight_kg\": 50.0,\n          \"activity_level\": 12000,\n          \"sleep_hours\": 7.5,\n          \"stress_level\": 3,\n          \"family_history\": \"\",\n          \"allergies\": \"\",\n          \"current_medications\": \"\",\n          \"goals\": \"High Protein\"\n        },\n        \"vitals\": {\n          \"body_temperature\": {\n            \"latest\": 36.9,\n            \"unit\": \"celsius\",\n            \"timestamp\": \"2026-05-04T04:30:00+00:00\",\n            \"avg_24h\": 36.9,\n            \"avg_7d\": 36.95,\n            \"trend\": \"stable\"\n          },\n          \"blood_pressure_diastolic\": {\n            \"latest\": 121.0,\n            \"unit\": \"mmHg\",\n            \"timestamp\": \"2026-05-04T04:30:00+00:00\",\n            \"avg_24h\": 120.5,\n            \"avg_7d\": 120.75,\n            \"trend\": \"stable\"\n          },\n          \"blood_pressure_systolic\": {\n            \"latest\": 121.0,\n            \"unit\": \"mmHg\",\n            \"timestamp\": \"2026-05-04T04:30:00+00:00\",\n            \"avg_24h\": 120.5,\n            \"avg_7d\": 120.75,\n            \"trend\": \"stable\"\n          },\n          \"glucose\": {\n            \"latest\": 73.9,\n            \"unit\": \"mg/dL\",\n            \"timestamp\": \"2026-05-04T04:30:00+00:00\",\n            \"avg_24h\": 802.7,\n            \"avg_7d\": 563.38,\n            \"trend\": \"up\"\n          },\n          \"spo2\": {\n            \"latest\": 96.0,\n            \"unit\": \"%\",\n            \"timestamp\": \"2026-05-04T04:30:00+00:00\",\n            \"avg_24h\": 96.0,\n            \"avg_7d\": 97.25,\n            \"trend\": \"stable\"\n          },\n          \"heart_rate\": {\n            \"latest\": 1.0,\n            \"unit\": \"bpm\",\n            \"timestamp\": \"2026-05-04T02:30:00+00:00\",\n            \"avg_24h\": 60.98,\n            \"avg_7d\": 76.15,\n            \"trend\": \"down\"\n          },\n          \"steps\": {\n            \"latest\": 2775.0,\n            \"unit\": \"count\",\n            \"timestamp\": \"2026-05-03T18:30:00+00:00\",\n            \"avg_24h\": 2775.0,\n            \"avg_7d\": 4721.0,\n            \"trend\": \"down\"\n          },\n          \"sleep\": {\n            \"latest\": 9.0,\n            \"unit\": \"hours\",\n            \"timestamp\": \"2026-05-03T02:00:00+00:00\",\n            \"avg_24h\": null,\n            \"avg_7d\": 8.7,\n            \"trend\": \"stable\"\n          }\n        },\n        \"wearable_trends\": {\n          \"heart_rate_7d\": 76.4,\n          \"steps_7d\": 5133.57,\n          \"sleep_efficiency\": 46.59,\n          \"bmi\": 19.5,\n          \"lifestyle_score\": 54.9,\n          \"activity_score\": 40.7,\n          \"data_availability\": {\n            \"sleep\": true,\n            \"steps\": true,\n            \"heart_rate\": true\n          }\n        },\n        \"lab_results\": [],\n        \"abnormal_labs\": [],\n        \"clinical_history\": null,\n        \"history_timeline\": [\n          {\n            \"type\": \"vital\",\n            \"timestamp\": \"2026-05-04T04:30:00+00:00\",\n            \"summary\": \"Body Temperature: 36.9 celsius\"\n          },\n          {\n            \"type\": \"vital\",\n            \"timestamp\": \"2026-05-04T04:30:00+00:00\",\n            \"summary\": \"Blood Pressure Diastolic: 121.0 mmHg\"\n          },\n          {\n            \"type\": \"vital\",\n            \"timestamp\": \"2026-05-04T04:30:00+00:00\",\n            \"summary\": \"Blood Pressure Systolic: 121.0 mmHg\"\n          },\n          {\n            \"type\": \"vital\",\n            \"timestamp\": \"2026-05-04T04:30:00+00:00\",\n            \"summary\": \"Glucose: 73.9 mg/dL\"\n          },\n          {\n            \"type\": \"vital\",\n            \"timestamp\": \"2026-05-04T04:30:00+00:00\",\n            \"summary\": \"Spo2: 96.0 %\"\n          },\n          {\n            \"type\": \"vital\",\n            \"timestamp\": \"2026-05-04T03:30:00+00:00\",\n            \"summary\": \"Glucose: 1531.5 mg/dL\"\n          }\n        ],\n        \"conversation_state\": {\n          \"messages\": [],\n          \"symptoms_history\": [],\n          \"last_risk_score\": null,\n          \"follow_up_pending\": false\n        }\n      },\n      \"ml_output\": {\n        \"risk_score\": 0.2,\n        \"risk_level\": \"LOW\",\n        \"condition_risks\": {\n          \"diabetes\": 0.26,\n          \"respiratory\": 0.19,\n          \"cardiovascular\": 0.33\n        },\n        \"health_score\": 68.11,\n        \"shap_drivers\": [\n          {\n            \"feature_name\": \"systolic_bp\",\n            \"label\": \"Systolic BP\",\n            \"impact\": -1.6061,\n            \"direction\": \"negative\",\n            \"feature_value\": 121.0,\n            \"explanation\": \"systolic_bp has a negative contribution to the prediction.\"\n          },\n          {\n            \"feature_name\": \"heart_rate\",\n            \"label\": \"Heart Rate\",\n            \"impact\": 0.8489,\n            \"direction\": \"positive\",\n            \"feature_value\": 76.4,\n            \"explanation\": \"heart_rate has a positive contribution to the prediction.\"\n          },\n          {\n            \"feature_name\": \"bmi\",\n            \"label\": \"BMI\",\n            \"impact\": -0.8178,\n            \"direction\": \"negative\",\n            \"feature_value\": 19.5,\n            \"explanation\": \"bmi has a negative contribution to the prediction.\"\n          },\n          {\n            \"feature_name\": \"diastolic_bp\",\n            \"label\": \"Diastolic BP\",\n            \"impact\": 0.6928,\n            \"direction\": \"positive\",\n            \"feature_value\": 121.0,\n            \"explanation\": \"diastolic_bp has a positive contribution to the prediction.\"\n          },\n          {\n            \"feature_name\": \"steps\",\n            \"label\": \"Steps\",\n            \"impact\": 0.2685,\n            \"direction\": \"positive\",\n            \"feature_value\": 5133.57,\n            \"explanation\": \"steps has a positive contribution to the prediction.\"\n          }\n        ],\n        \"source\": \"ml\"\n      },\n      \"rag_context\": {\n        \"summary\": [\n          {\n            \"title\": \"Cardiovascular Clinical Reference\",\n            \"source\": \"Cardiovascular.md\",\n            \"category\": \"Cardiovascular\",\n            \"topic\": \"Cardiovascular risk and symptom assessment\",\n            \"disease_type\": \"Cardiovascular\",\n            \"source_url\": \"\",\n            \"source_org\": \"ArogyaAI\",\n            \"retrieval_method\": \"llama_index\",\n            \"excerpt\": \"Shortness of breath may reflect cardiac, respiratory, metabolic, or anxiety-related causes, so associated signs matter.\",\n            \"score\": 0.7825043072920678,\n            \"citation\": {\n              \"source\": \"Cardiovascular.md\",\n              \"title\": \"Cardiovascular Clinical Reference\",\n              \"url\": \"\"\n            }\n          },\n          {\n            \"title\": \"Cardiovascular Clinical Reference\",\n            \"source\": \"Cardiovascular.md\",\n            \"category\": \"Cardiovascular\",\n            \"topic\": \"Cardiovascular risk and symptom assessment\",\n            \"disease_type\": \"Cardiovascular\",\n            \"source_url\": \"\",\n            \"source_org\": \"ArogyaAI\",\n            \"retrieval_method\": \"llama_index\",\n            \"excerpt\": \"Inflammatory conditions, pregnancy-related hypertension, early menopause, chronic stress, and air pollution exposure can also increase risk. Risk should be viewed as a combined profile rather than a single number.\",\n            \"score\": 0.7735520452912832,\n            \"citation\": {\n              \"source\": \"Cardiovascular.md\",\n              \"title\": \"Cardiovascular Clinical Reference\",\n              \"url\": \"\"\n            }\n          },\n          {\n            \"title\": \"Cardiovascular Clinical Reference\",\n            \"source\": \"Cardiovascular.md\",\n            \"category\": \"Cardiovascular\",\n            \"topic\": \"Cardiovascular risk and symptom assessment\",\n            \"disease_type\": \"Cardiovascular\",\n            \"source_url\": \"\",\n            \"source_org\": \"ArogyaAI\",\n            \"retrieval_method\": \"llama_index\",\n            \"excerpt\": \"Wearable data can help identify trends but does not replace clinical evaluation, especially for acute symptoms. Clinical reasoning should distinguish stable risk reduction from acute symptom triage.\",\n            \"score\": 0.7669340597721511,\n            \"citation\": {\n              \"source\": \"Cardiovascular.md\",\n              \"title\": \"Cardiovascular Clinical Reference\",\n              \"url\": \"\"\n            }\n          }\n        ],\n        \"top_chunks\": [\n          {\n            \"title\": \"Cardiovascular Clinical Reference\",\n            \"source\": \"Cardiovascular.md\",\n            \"category\": \"Cardiovascular\",\n            \"topic\": \"Cardiovascular risk and symptom assessment\",\n            \"disease_type\": \"Cardiovascular\",\n            \"severity\": \"Urgent\",\n            \"source_url\": \"\",\n            \"source_org\": \"ArogyaAI\",\n            \"retrieval_method\": \"llama_index\",\n            \"excerpt\": \"Shortness of breath may reflect cardiac, respiratory, metabolic, or anxiety-related causes, so associated signs matter. Causes.\",\n            \"score\": 0.7825043072920678,\n            \"citation\": {\n              \"source\": \"Cardiovascular.md\",\n              \"title\": \"Cardiovascular Clinical Reference\",\n              \"url\": \"\"\n            }\n          },\n          {\n            \"title\": \"Cardiovascular Clinical Reference\",\n            \"source\": \"Cardiovascular.md\",\n            \"category\": \"Cardiovascular\",\n            \"topic\": \"Cardiovascular risk and symptom assessment\",\n            \"disease_type\": \"Cardiovascular\",\n            \"severity\": \"Urgent\",\n            \"source_url\": \"\",\n            \"source_org\": \"ArogyaAI\",\n            \"retrieval_method\": \"llama_index\",\n            \"excerpt\": \"Inflammatory conditions, pregnancy-related hypertension, early menopause, chronic stress, and air pollution exposure can also increase risk. Risk should be viewed as a combined profile rather than a single number.\",\n            \"score\": 0.7735520452912832,\n            \"citation\": {\n              \"source\": \"Cardiovascular.md\",\n              \"title\": \"Cardiovascular Clinical Reference\",\n              \"url\": \"\"\n            }\n          },\n          {\n            \"title\": \"Cardiovascular Clinical Reference\",\n            \"source\": \"Cardiovascular.md\",\n            \"category\": \"Cardiovascular\",\n            \"topic\": \"Cardiovascular risk and symptom assessment\",\n            \"disease_type\": \"Cardiovascular\",\n            \"severity\": \"Urgent\",\n            \"source_url\": \"\",\n            \"source_org\": \"ArogyaAI\",\n            \"retrieval_method\": \"llama_index\",\n            \"excerpt\": \"Wearable data can help identify trends but does not replace clinical evaluation, especially for acute symptoms. Clinical reasoning should distinguish stable risk reduction from acute symptom triage.\",\n            \"score\": 0.7669340597721511,\n            \"citation\": {\n              \"source\": \"Cardiovascular.md\",\n              \"title\": \"Cardiovascular Clinical Reference\",\n              \"url\": \"\"\n            }\n          }\n        ],\n        \"disease_context\": [\n          {\n            \"disease_type\": \"cardiovascular\",\n            \"title\": \"Cardiovascular symptom and risk context\",\n            \"summary\": \"Chest discomfort, palpitations, dizziness, blood pressure, and elevated heart-rate patterns require red-flag screening and timely clinical review when severe, new, exertional, or worsening.\"\n          }\n        ],\n        \"source\": \"llama_index\"\n      }\n    }\n  }\n}",
+      "output": "{\n  \"understanding\": \"I understand that you want help interpreting your current health concern.\",\n  \"clinical_interpretation\": \"I need a little more detail to understand the health concern clearly. It is best to interpret this alongside any recent vitals, labs, symptoms, and relevant medical context.\",\n  \"message\": \"I understand your concern. Let us look at this carefully with the information available.\\n\\nI need a little more detail to understand the health concern clearly. It is best to interpret this alongside any recent vitals, labs, symptoms, and relevant medical context.\\n\\nPossible explanations include This could relate to hypertension risk; This could relate to cardiovascular disease risk.\\n\\nOne thing I would like to understand better is What symptoms are you noticing, when did they start, and how severe are they from 1 to 10? Also, Have you noticed triggers, recent illness, medication changes, dehydration, stress, or unusual exertion around the same time?\\n\\nFor now, Hypertension And Elevated Blood Pressure - Lifestyle Recommendations 2. Diabetes Clinical Reference.Symptoms.\",\n  \"possible_causes\": [\n    \"This could relate to hypertension risk.\",\n    \"This could relate to cardiovascular disease risk.\",\n    \"Guidance on cardiovascular clinical reference makes a Cardiovascular explanation worth considering.\"\n  ],\n  \"follow_up_questions\": [\n    \"What symptoms are you noticing, when did they start, and how severe are they from 1 to 10?\",\n    \"Have you noticed triggers, recent illness, medication changes, dehydration, stress, or unusual exertion around the same time?\"\n  ],\n  \"recommendations\": [\n    \"Hypertension And Elevated Blood Pressure - Lifestyle Recommendations 2.\",\n    \"Diabetes Clinical Reference.Symptoms.\",\n    \"Hypertension And Elevated Blood Pressure - Lifestyle Recommendations 1.\",\n    \"Reduce sodium intake, monitor home blood pressure regularly, and keep follow-up readings consistent.\"\n  ],\n  \"risk_level\": \"low\",\n  \"confidence_score\": 0.6\n}"
+    }
   }
 ]

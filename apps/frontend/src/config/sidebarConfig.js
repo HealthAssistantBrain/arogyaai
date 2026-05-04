@@ -39,7 +39,6 @@ const sidebarConfig = [
     section: 'Intelligence',
     items: [
       { label: 'AI Insights', icon: Brain, path: ROUTES.INSIGHTS },
-      { label: 'AI Risk Prediction', icon: Brain, path: ROUTES.RISK_PREDICTION },
       { label: 'Disease Simulator', icon: FlaskConical, path: ROUTES.SIMULATOR },
       { label: 'Recommendations', icon: ListChecks, path: ROUTES.RECOMMENDATIONS },
     ],

@@ -29,5 +29,4 @@ export const ROUTES: RouteConfig[] = [
   { path: '/onboarding', component: Onboarding4, guards: ['AUTH_GUARD', 'EMAIL_GUARD'], public: false, module: 'ONBOARDING' },
   { path: '/dashboard', component: Dashboard, guards: ['AUTH_GUARD', 'EMAIL_GUARD', 'ONBOARDING_GUARD'], public: false, module: 'DASHBOARD' },
   { path: '/onboarding/step-4', component: Onboarding4, guards: ['AUTH_GUARD', 'EMAIL_GUARD'], public: false, module: 'ONBOARDING' },
-  { path: '/ai-risk', component: lazy(() => import('../pages/RiskExplanation')), guards: ['AUTH_GUARD', 'EMAIL_GUARD', 'ONBOARDING_GUARD'], public: false, module: 'INTELLIGENCE' },
 ];

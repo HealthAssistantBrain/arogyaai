@@ -35,9 +35,7 @@ const AIHealthInsights = lazy(() => import('../pages/AIInsights'))
 const AIInsightsDesktop = lazy(() => import('../pages/AIInsightsDesktop'))
 const DiseaseSimulator = lazy(() => import('../pages/Simulate'))
 const HealthTimeline = lazy(() => import('../pages/Timeline'))
-const RiskExplanation = lazy(() => import('../pages/RiskExplanation'))
 const PreventiveRecs = lazy(() => import('../pages/PreventiveRecommendations'))
-const AIRiskReport = lazy(() => import('../pages/AIRiskReport'))
 const AQIMonitor = lazy(() => import('../pages/AQIMonitor'))
 const LabTestResults = lazy(() => import('../pages/LabResults'))
 const MedicalReports = lazy(() => import('../pages/Reports'))
@@ -136,13 +134,9 @@ export default function AppRouter() {
               <Route path={ROUTES.DOCTOR_DASHBOARD} element={<DoctorDashboard />} />
               <Route path={`${ROUTES.INSIGHTS}/*`} element={<AIHealthInsights />} />
               <Route path={`${ROUTES.INSIGHTS_DESKTOP}/*`} element={<AIInsightsDesktop />} />
-              <Route path={ROUTES.RISK_PREDICTION} element={<RiskExplanation />} />
               <Route path={`${ROUTES.SIMULATOR}/*`} element={<DiseaseSimulator />} />
               <Route path={ROUTES.TIMELINE} element={<HealthTimeline />} />
-              <Route path={ROUTES.RISK_EXPLANATION} element={<RiskExplanation />} />
-              <Route path="/risk-prediction" element={<Navigate to={ROUTES.RISK_PREDICTION} replace />} />
               <Route path={ROUTES.RECOMMENDATIONS} element={<PreventiveRecs />} />
-              <Route path={ROUTES.RISK_REPORT} element={<AIRiskReport />} />
               <Route path={ROUTES.AQI_MONITOR} element={<AQIMonitor />} />
               <Route path={ROUTES.LAB_RESULTS} element={<LabTestResults />} />
               <Route path={ROUTES.MEDICAL_REPORTS} element={<MedicalReports />} />

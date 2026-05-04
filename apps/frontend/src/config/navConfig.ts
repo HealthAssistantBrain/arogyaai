@@ -36,7 +36,6 @@ export const navConfig: NavSection[] = [
             { label: 'Dashboard', icon: LayoutDashboard, path: ROUTES.DASHBOARD },
             { label: 'Doctor Monitor', icon: Stethoscope, path: ROUTES.DOCTOR_DASHBOARD, roles: ['doctor'] },
             { label: 'AI Insights', icon: Brain, path: ROUTES.INSIGHTS },
-            { label: 'AI Risk Prediction', icon: Brain, path: ROUTES.RISK_PREDICTION },
             { label: 'Disease Simulator', icon: FlaskConical, path: ROUTES.SIMULATOR },
             { label: 'Recommendations', icon: ListChecks, path: ROUTES.RECOMMENDATIONS },
             { label: 'Health Timeline', icon: History, path: ROUTES.TIMELINE },

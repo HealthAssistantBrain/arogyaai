@@ -430,6 +430,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Debug repo structure
+        working-directory: .
+        run: |
+          pwd
+          ls -R pipelines/wearable-service
+          test -f pipelines/wearable-service/requirements.txt
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
