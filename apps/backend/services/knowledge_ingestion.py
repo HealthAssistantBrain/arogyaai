@@ -268,7 +268,11 @@ def _client(settings: RagSettings):
         from qdrant_client import QdrantClient
     except ImportError as exc:
         raise RuntimeError("qdrant-client is required for Qdrant storage.") from exc
-    return QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key)
+    return QdrantClient(
+        url=settings.qdrant_url,
+        api_key=settings.qdrant_api_key,
+        timeout=settings.qdrant_timeout_seconds,
+    )
 
 
 def _ensure_collection(settings: RagSettings, vector_size: int) -> None:

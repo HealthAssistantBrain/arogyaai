@@ -190,6 +190,53 @@ async def health_api():
         )
 
 
+def _env_bool(name: str, default: str = "false") -> bool:
+    return os.getenv(name, default).lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
+async def safe_init_rag():
+    from pipelines.rag_pipeline.config import RagSettings
+    from pipelines.rag_pipeline.retriever import MedicalKnowledgeRetriever
+
+    retries = max(1, _env_int("RAG_STARTUP_RETRIES", 5))
+    delay_seconds = max(0.0, _env_float("RAG_STARTUP_RETRY_DELAY_SECONDS", 2.0))
+
+    for attempt in range(1, retries + 1):
+        try:
+            rag_state = await asyncio.to_thread(
+                MedicalKnowledgeRetriever(RagSettings()).assert_index_ready
+            )
+            print(f"[RAG INIT] ready: {rag_state}")
+            return rag_state
+        except Exception as exc:
+            print(f"[RAG INIT] attempt {attempt} failed: {exc}")
+            logger.warning(
+                "RAG Qdrant index check attempt failed | attempt=%s/%s error=%s",
+                attempt,
+                retries,
+                exc,
+            )
+            if attempt < retries and delay_seconds:
+                await asyncio.sleep(delay_seconds)
+
+    print("[RAG INIT] FAILED - continuing without RAG")
+    return None
+
+
 # Mount modular routers (prefixes now managed in routers)
 app.include_router(auth.router)
 app.include_router(aqi.router)
@@ -222,8 +269,6 @@ app.include_router(emergency_routes.router)
 @app.on_event("startup")
 async def _startup_scheduler():
     from sqlalchemy import text
-    from pipelines.rag_pipeline.config import RagSettings
-    from pipelines.rag_pipeline.retriever import MedicalKnowledgeRetriever
 
     def _check_db_connection():
         with engine.connect() as conn:
@@ -240,15 +285,21 @@ async def _startup_scheduler():
         logger.warning("DB Connected check failed during startup: %s", exc)
         log_pipeline("database", step="connection_check", status="unhealthy", data="failed")
 
-    if os.getenv("RAG_STARTUP_INDEX_CHECK", "true").lower() in {"1", "true", "yes", "on"}:
+    app.state.rag_state = None
+    if _env_bool("RAG_STARTUP_INDEX_CHECK", "true"):
         try:
-            rag_state = await asyncio.to_thread(MedicalKnowledgeRetriever(RagSettings()).assert_index_ready)
-            logger.info("RAG Qdrant index ready | %s", rag_state)
-            log_pipeline("rag", step="qdrant_index_check", status="healthy", data=str(rag_state))
+            rag_state = await safe_init_rag()
+            app.state.rag_state = rag_state
+            if rag_state is None:
+                logger.warning("RAG Qdrant index unavailable during startup; continuing in degraded mode")
+                log_pipeline("rag", step="qdrant_index_check", status="degraded", data="fallback")
+            else:
+                logger.info("RAG Qdrant index ready | %s", rag_state)
+                log_pipeline("rag", step="qdrant_index_check", status="healthy", data=str(rag_state))
         except Exception as exc:
-            logger.critical("RAG Qdrant index check failed during startup: %s", exc)
-            log_pipeline("rag", step="qdrant_index_check", status="unhealthy", data="failed")
-            raise
+            print(f"Startup warning: RAG initialization failed unexpectedly: {exc}")
+            logger.exception("Startup warning: RAG initialization failed unexpectedly: %s", exc)
+            log_pipeline("rag", step="qdrant_index_check", status="degraded", data="fallback")
 
     try:
         start_google_fit_worker()

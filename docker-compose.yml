@@ -70,6 +70,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      qdrant:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8000/health"]
       interval: 10s
@@ -213,6 +215,12 @@ services:
       - qdrant_data:/qdrant/storage
     networks:
       - arogyaai_net
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ': > /dev/tcp/127.0.0.1/6333'"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
 
   nginx:
     image: nginx:alpine

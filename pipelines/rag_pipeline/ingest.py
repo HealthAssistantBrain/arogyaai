@@ -102,6 +102,13 @@ def _qdrant_url() -> str:
     return raw_url
 
 
+def _qdrant_timeout_seconds() -> float:
+    try:
+        return float(os.getenv("QDRANT_TIMEOUT_SECONDS", "5.0"))
+    except (TypeError, ValueError):
+        return 5.0
+
+
 def _clean_text(value: str) -> str:
     return clean_rag_text(value)
 
@@ -331,7 +338,11 @@ def _connect_qdrant():
             "Install backend dependencies, then rerun: python pipelines/rag_pipeline/ingest.py"
         ) from exc
 
-    return QdrantClient(url=_qdrant_url(), api_key=os.getenv("QDRANT_API_KEY") or None)
+    return QdrantClient(
+        url=_qdrant_url(),
+        api_key=os.getenv("QDRANT_API_KEY") or None,
+        timeout=_qdrant_timeout_seconds(),
+    )
 
 
 def _point_id(chunk_id: str) -> str:

@@ -33,7 +33,11 @@ class MedicalKnowledgeRetriever:
                 "Install backend dependencies before using explanations."
             ) from exc
 
-        return QdrantClient(url=self.settings.qdrant_url, api_key=self.settings.qdrant_api_key)
+        return QdrantClient(
+            url=self.settings.qdrant_url,
+            api_key=self.settings.qdrant_api_key,
+            timeout=self.settings.qdrant_timeout_seconds,
+        )
 
     def _vector_size(self, collection: Any) -> int | None:
         try:
