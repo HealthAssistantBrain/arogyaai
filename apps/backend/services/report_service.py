@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import mimetypes
 import re
@@ -646,12 +647,10 @@ class ReportService:
             return {
                 "title": title,
                 "summary": [
-                    "Report uploaded and stored successfully.",
-                    "No readable text was found in this file.",
-                    "OCR providers returned no usable text for this upload.",
+                    "This upload could not be clinically summarized because no readable report text was extracted.",
                 ],
                 "full_text": "",
-                "ocr_text": "No text could be extracted from this report.",
+                "ocr_text": "",
                 "markers": [],
                 "source": "local-fallback",
                 "text_source": text_source,
@@ -660,14 +659,23 @@ class ReportService:
                 "ocr_warnings": ocr_warnings or [],
                 "text_pages": text_pages or [],
                 "ocr_layout": None,
+                "structured_lab_data": cls._empty_structured_lab_data(title),
             }
 
         markers = cls._extract_markers(normalized_text)
-        summary = cls._summarize_text(normalized_text, markers)
+        structured_lab_data = cls._extract_structured_lab_data(
+            extracted_text or normalized_text,
+            title,
+            text_source=text_source,
+            ocr_confidence=ocr_confidence,
+            text_pages=text_pages,
+            fallback_markers=markers,
+        )
+        summary = cls._summarize_text(normalized_text, structured_lab_data.get("biomarkers") or markers)
         summary_view = cls._build_summary_view(
             normalized_text,
             summary,
-            markers,
+            structured_lab_data.get("biomarkers") or markers,
             title,
             source,
         )
@@ -681,7 +689,9 @@ class ReportService:
             "summary_view": summary_view,
             "full_text": normalized_text,
             "ocr_text": normalized_text[:1200],
-            "markers": markers[:6],
+            "markers": (structured_lab_data.get("biomarkers") or markers)[:12],
+            "biomarkers": structured_lab_data.get("biomarkers") or markers,
+            "structured_lab_data": structured_lab_data,
             "source": source,
             "text_source": text_source,
             "ocr_provider": ocr_provider,
@@ -697,12 +707,10 @@ class ReportService:
             return {
                 "title": title,
                 "summary": [
-                    f"{fallback_kind} report uploaded and stored successfully.",
-                    "No readable text was returned by the configured OCR providers.",
-                    "Check Google Vision credentials or local Tesseract installation before reprocessing.",
+                    f"This {fallback_kind} upload could not be clinically summarized because no readable report text was extracted.",
                 ],
                 "full_text": "",
-                "ocr_text": "No text could be extracted from this report.",
+                "ocr_text": "",
                 "markers": [],
                 "source": "local-fallback",
                 "text_source": ocr_result.source_type,
@@ -711,6 +719,7 @@ class ReportService:
                 "ocr_warnings": ocr_result.warnings,
                 "text_pages": [],
                 "ocr_layout": None,
+                "structured_lab_data": cls._empty_structured_lab_data(title),
             }
 
         return cls._build_local_analysis(
@@ -758,6 +767,7 @@ class ReportService:
         if not extracted_text or cls._looks_like_fallback_text(extracted_text):
             return analysis
 
+        enriched = dict(analysis)
         try:
             prediction_response = await PredictionClient().get_prediction(
                 {
@@ -767,7 +777,7 @@ class ReportService:
             )
         except Exception:
             logger.exception("Prediction summary generation failed for report %s", filename)
-            return analysis
+            return await cls._enrich_analysis_with_clinical_summary(filename, enriched)
 
         if not prediction_response.get("success") or prediction_response.get("status") != "ready":
             logger.warning(
@@ -775,7 +785,7 @@ class ReportService:
                 filename,
                 prediction_response.get("error") or prediction_response.get("status"),
             )
-            return analysis
+            return await cls._enrich_analysis_with_clinical_summary(filename, enriched)
 
         prediction_data = prediction_response.get("data") or {}
         structured_summary = cls._normalize_structured_summary(
@@ -793,7 +803,6 @@ class ReportService:
             structured_summary,
             fallback=cls._summary_lines(analysis.get("summary"), fallback=[cls.PROCESSING_SUMMARY]),
         )
-        enriched = dict(analysis)
         enriched.update(
             {
                 "summary": generated_summary,
@@ -808,7 +817,607 @@ class ReportService:
                 "summary_source": prediction_data.get("summary_source") or prediction_response.get("source") or "prediction-service",
             }
         )
+        return await cls._enrich_analysis_with_clinical_summary(filename, enriched)
+
+    @staticmethod
+    def _empty_structured_lab_data(title: str = "Medical Report") -> dict[str, Any]:
+        return {
+            "test_type": title or "Medical Report",
+            "biomarkers": [],
+            "abnormal_values": [],
+        }
+
+    @classmethod
+    def _extract_structured_lab_data(
+        cls,
+        text: str,
+        title: str,
+        *,
+        text_source: str = "PDF",
+        ocr_confidence: float | None = None,
+        text_pages: list[dict[str, Any]] | None = None,
+        fallback_markers: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        biomarkers: list[dict[str, Any]] = []
+        try:
+            from services.lab_pipeline_service import extract_lab_values, normalize_lab_values
+
+            raw_values = extract_lab_values(
+                text,
+                source_type=text_source or "PDF",
+                source_confidence=ocr_confidence,
+                page_metadata=text_pages,
+            )
+            biomarkers = [
+                cls._normalize_summary_biomarker(item)
+                for item in normalize_lab_values(raw_values)
+                if isinstance(item, dict)
+            ]
+        except Exception:
+            logger.exception("Structured lab extraction failed during report summary generation")
+
+        if not biomarkers and fallback_markers:
+            biomarkers = cls._markers_to_structured_biomarkers(fallback_markers)
+
+        test_type = cls._infer_test_type(title, text, biomarkers)
+        abnormal_values = [
+            cls._clinical_abnormal_value(item)
+            for item in biomarkers
+            if cls._is_abnormal_status(item.get("status"))
+        ]
+        structured_data = {
+            "test_type": test_type,
+            "biomarkers": biomarkers,
+            "abnormal_values": abnormal_values,
+        }
+        cls._log_summary_json("structured_data_input", structured_data)
+        return structured_data
+
+    @staticmethod
+    def _normalize_summary_biomarker(item: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(item)
+        name = str(normalized.get("name") or normalized.get("test_name") or "").lower()
+        context = " ".join(
+            str(normalized.get(key) or "")
+            for key in ("source_text", "source_span")
+        ).lower()
+
+        if "mg/dl" in context or "mg %" in context:
+            normalized["unit"] = "mg/dL"
+        elif "g/dl" in context or "gm/dl" in context or "g%" in context:
+            normalized["unit"] = "g/dL"
+
+        if "%" in context and any(token in name for token in ("hba1c", "a1c", "hematocrit")):
+            normalized["unit"] = "%"
+
+        if normalized.get("unit") == "g/dL" and any(
+            token in name
+            for token in (
+                "glucose",
+                "cholesterol",
+                "triglyceride",
+                "creatinine",
+                "urea",
+                "bilirubin",
+                "uric acid",
+                "calcium",
+            )
+        ):
+            normalized["unit"] = "mg/dL"
+
+        return normalized
+
+    @classmethod
+    def _markers_to_structured_biomarkers(cls, markers: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        biomarkers = []
+        for marker in markers:
+            if not isinstance(marker, dict):
+                continue
+            value = cls._safe_float(marker.get("value"))
+            if value is None:
+                continue
+            biomarkers.append(
+                {
+                    "name": str(marker.get("name") or "Biomarker").strip(),
+                    "test_name": str(marker.get("name") or "Biomarker").strip(),
+                    "value": value,
+                    "unit": str(marker.get("unit") or "").strip(),
+                    "reference_range": str(marker.get("reference_range") or "").strip(),
+                    "status": str(marker.get("status") or marker.get("flag") or "captured").strip(),
+                    "confidence_score": marker.get("confidence_score"),
+                }
+            )
+        return biomarkers
+
+    @classmethod
+    async def _enrich_analysis_with_clinical_summary(cls, filename: str, analysis: dict[str, Any]) -> dict[str, Any]:
+        structured_data = analysis.get("structured_lab_data")
+        if not isinstance(structured_data, dict):
+            structured_data = cls._empty_structured_lab_data(analysis.get("title") or filename)
+
+        biomarkers = structured_data.get("biomarkers") if isinstance(structured_data.get("biomarkers"), list) else []
+        if not biomarkers:
+            return analysis
+
+        rag_context = await cls._retrieve_report_rag_context(structured_data)
+        clinical_json = await cls.generate_clinical_summary(structured_data, rag_context)
+        if not clinical_json:
+            return analysis
+
+        patient_info = {}
+        if isinstance(analysis.get("summary_view"), dict):
+            patient_info = analysis["summary_view"].get("patient_info") or {}
+
+        summary_lines = cls._summary_lines(
+            [clinical_json.get("summary"), *(clinical_json.get("key_findings") or [])],
+            fallback=cls._summary_lines(analysis.get("summary")),
+        )[:6]
+        summary_view = {
+            "title": analysis.get("title") or Path(filename).stem,
+            "summary": summary_lines[0],
+            "patient_info": patient_info,
+            "test_type": structured_data.get("test_type") or cls._infer_test_type(str(analysis.get("title") or filename), "", biomarkers),
+            "key_findings": summary_lines,
+            "biomarkers": biomarkers,
+            "abnormal_values": clinical_json.get("abnormal_values") or [],
+            "risks": cls._summary_lines(clinical_json.get("clinical_interpretation")),
+            "recommendations": clinical_json.get("recommendations") or [],
+            "risk_level": clinical_json.get("risk_level") or "Low",
+            "notes": cls._summary_lines(clinical_json.get("clinical_interpretation")),
+            "source": "clinical-summary-rag-llm",
+        }
+        structured_summary = {
+            "patient": cls._format_patient_info(patient_info),
+            "test": summary_view["test_type"],
+            "findings": summary_lines,
+            "abnormal": clinical_json.get("abnormal_values") or [],
+            "notes": clinical_json.get("clinical_interpretation") or "",
+            "clinical_interpretation": clinical_json.get("clinical_interpretation") or "",
+        }
+
+        enriched = dict(analysis)
+        enriched.update(
+            {
+                "summary": summary_lines,
+                "patient_summary": clinical_json.get("summary") or summary_lines[0],
+                "structured_summary": structured_summary,
+                "summary_view": summary_view,
+                "risks": summary_view["risks"],
+                "risk_level": summary_view["risk_level"],
+                "recommendations": summary_view["recommendations"],
+                "abnormal_values": summary_view["abnormal_values"],
+                "extracted_values": biomarkers,
+                "biomarkers": biomarkers,
+                "markers": biomarkers[:12],
+                "rag_context": rag_context,
+                "clinical_summary_json": clinical_json,
+                "summary_source": "clinical-summary-rag-llm",
+            }
+        )
+        cls._log_summary_json("final_summary_json", clinical_json)
         return enriched
+
+    @classmethod
+    async def _retrieve_report_rag_context(cls, structured_data: dict[str, Any]) -> dict[str, Any]:
+        query = cls._build_report_rag_query(structured_data)
+        try:
+            from pipelines.rag_pipeline.config import RagSettings
+            from pipelines.rag_pipeline.corpus import load_corpus_chunks
+            from pipelines.rag_pipeline.keyword import keyword_retrieve
+            from pipelines.rag_pipeline.text_cleaning import clean_source_payload
+
+            settings = RagSettings()
+            chunks = await asyncio.to_thread(load_corpus_chunks, settings)
+            documents = await asyncio.to_thread(keyword_retrieve, query, chunks, limit=min(settings.top_k, 4))
+            context = {
+                "query": query,
+                "source": "rag_keyword",
+                "documents": [clean_source_payload(doc.as_dict()) for doc in documents],
+                "summary": [clean_source_payload(doc.as_dict()) for doc in documents],
+                "top_chunks": [clean_source_payload(doc.as_dict()) for doc in documents],
+                "error": None,
+            }
+        except Exception as exc:
+            logger.warning("Report summary RAG retrieval failed: %s", exc)
+            context = {
+                "query": query,
+                "source": "rag_unavailable",
+                "documents": [],
+                "summary": [],
+                "top_chunks": [],
+                "error": str(exc),
+            }
+
+        cls._log_summary_json("rag_context", context)
+        return context
+
+    @staticmethod
+    def _build_report_rag_query(structured_data: dict[str, Any]) -> str:
+        biomarkers = structured_data.get("biomarkers") if isinstance(structured_data.get("biomarkers"), list) else []
+        names = [str(item.get("name") or item.get("test_name") or "").strip() for item in biomarkers if isinstance(item, dict)]
+        abnormal_names = [
+            name
+            for name, item in zip(names, biomarkers, strict=False)
+            if isinstance(item, dict) and ReportService._is_abnormal_status(item.get("status"))
+        ]
+        focus_terms = [
+            str(structured_data.get("test_type") or "medical report"),
+            "lab interpretation clinical reference ranges",
+            "abnormal biomarkers",
+            *abnormal_names,
+            *names[:8],
+            "glucose hba1c cholesterol ldl triglycerides blood pressure cardiovascular diabetes renal thyroid hematology",
+        ]
+        return " ".join(term for term in focus_terms if term).strip()
+
+    @classmethod
+    async def generate_clinical_summary(
+        cls,
+        structured_data: dict[str, Any],
+        rag_context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        risk_level = cls._compute_lab_risk_level(structured_data)
+        deterministic_payload = cls._fallback_clinical_summary_payload(
+            structured_data,
+            rag_context or {},
+            risk_level=risk_level,
+        )
+        prompt = cls._clinical_summary_prompt(structured_data, rag_context or {}, risk_level=risk_level)
+        llm_payload = await cls._call_report_summary_llm(prompt)
+        return cls._normalize_clinical_summary_payload(
+            llm_payload,
+            fallback=deterministic_payload,
+            structured_data=structured_data,
+            computed_risk_level=risk_level,
+        )
+
+    @staticmethod
+    def _clinical_summary_prompt(
+        structured_data: dict[str, Any],
+        rag_context: dict[str, Any],
+        *,
+        risk_level: str,
+    ) -> str:
+        return f"""
+You are a clinical-grade medical assistant.
+
+Generate a structured, factual, and conservative clinical report summary.
+
+INPUT:
+- Lab results (with values and reference ranges)
+- Detected abnormalities
+- Retrieved medical knowledge
+
+RULES:
+- Do NOT hallucinate values
+- Do NOT diagnose
+- Interpret only based on given data
+- Use medical tone (like a doctor note)
+- Be specific, not generic
+
+OUTPUT:
+
+{{
+  "summary": "...",
+  "key_findings": [...],
+  "abnormal_values": [...],
+  "clinical_interpretation": "...",
+  "risk_level": "...",
+  "recommendations": [...]
+}}
+
+Interpret:
+- Each abnormal value explicitly
+- Mention normal findings briefly
+- Link interpretation to medical reasoning
+
+Lab results:
+{json.dumps(structured_data, indent=2, default=str)}
+
+Retrieved medical knowledge:
+{json.dumps((rag_context or {}).get("top_chunks") or (rag_context or {}).get("summary") or [], indent=2, default=str)}
+
+Computed risk floor from lab data:
+{risk_level}
+
+Return ONLY valid JSON. Use risk_level as one of LOW, MODERATE, HIGH.
+""".strip()
+
+    @staticmethod
+    async def _call_report_summary_llm(prompt: str) -> dict[str, Any] | None:
+        try:
+            from pipelines.rag_pipeline.config import RagSettings
+
+            settings = RagSettings()
+            if not settings.ollama_base_url and not (settings.llm_api_base and settings.llm_api_key):
+                return None
+
+            from services.chat_service import call_llm
+
+            return await call_llm(prompt)
+        except Exception as exc:
+            logger.warning("Clinical report summary LLM unavailable: %s", exc)
+            return None
+
+    @classmethod
+    def _normalize_clinical_summary_payload(
+        cls,
+        payload: Any,
+        *,
+        fallback: dict[str, Any],
+        structured_data: dict[str, Any],
+        computed_risk_level: str,
+    ) -> dict[str, Any]:
+        source = payload if isinstance(payload, dict) else {}
+        summary = cls._clean_sentence(source.get("summary")) or fallback["summary"]
+        key_findings = cls._summary_lines(source.get("key_findings"), fallback=fallback["key_findings"])[:6]
+        clinical_interpretation = (
+            cls._clean_sentence(source.get("clinical_interpretation"))
+            or fallback["clinical_interpretation"]
+        )
+        recommendations = cls._summary_lines(source.get("recommendations"), fallback=fallback["recommendations"])[:5]
+        risk_level = cls._stronger_risk_level(
+            cls._normalize_risk_label(source.get("risk_level")),
+            computed_risk_level,
+        )
+        abnormal_values = [
+            cls._clinical_abnormal_value(item)
+            for item in (structured_data.get("biomarkers") or [])
+            if isinstance(item, dict) and cls._is_abnormal_status(item.get("status"))
+        ]
+        return {
+            "summary": summary,
+            "key_findings": key_findings,
+            "abnormal_values": abnormal_values,
+            "clinical_interpretation": clinical_interpretation,
+            "risk_level": risk_level,
+            "recommendations": recommendations,
+        }
+
+    @classmethod
+    def _fallback_clinical_summary_payload(
+        cls,
+        structured_data: dict[str, Any],
+        rag_context: dict[str, Any],
+        *,
+        risk_level: str,
+    ) -> dict[str, Any]:
+        biomarkers = [item for item in (structured_data.get("biomarkers") or []) if isinstance(item, dict)]
+        abnormal_values = [cls._clinical_abnormal_value(item) for item in biomarkers if cls._is_abnormal_status(item.get("status"))]
+        normal_values = [item for item in biomarkers if not cls._is_abnormal_status(item.get("status"))]
+        test_type = str(structured_data.get("test_type") or "medical report")
+
+        if abnormal_values:
+            abnormal_text = "; ".join(item["interpretation"].rstrip(".") for item in abnormal_values[:4])
+            summary = f"{test_type} shows {len(abnormal_values)} abnormal marker(s): {abnormal_text}."
+        else:
+            normal_names = ", ".join(str(item.get("name") or item.get("test_name")) for item in normal_values[:4] if item.get("name") or item.get("test_name"))
+            summary = f"{test_type} shows measured markers within their stated reference ranges"
+            summary += f", including {normal_names}." if normal_names else "."
+
+        key_findings = [item["interpretation"] for item in abnormal_values[:4]]
+        if normal_values:
+            normal_names = ", ".join(cls._format_biomarker_value(item) for item in normal_values[:3])
+            if normal_names:
+                key_findings.append(f"Other reviewed markers were within range: {normal_names}.")
+        if not key_findings:
+            key_findings = [summary]
+
+        rag_titles = [
+            str(item.get("title") or item.get("source") or "").strip()
+            for item in (rag_context.get("top_chunks") or rag_context.get("summary") or [])
+            if isinstance(item, dict) and (item.get("title") or item.get("source"))
+        ]
+        knowledge_note = f" Retrieved context referenced {', '.join(rag_titles[:2])}." if rag_titles else ""
+        clinical_interpretation = (
+            "The interpretation is based only on extracted values and the reference ranges printed in the report. "
+            f"{'Abnormal markers should be correlated with symptoms, history, medicines, and prior trends.' if abnormal_values else 'No extracted marker shows a clear out-of-range pattern.'}"
+            f"{knowledge_note}"
+        )
+        recommendations = cls._recommendations_for_lab_summary(abnormal_values, normal_values, risk_level)
+        return {
+            "summary": summary,
+            "key_findings": key_findings[:6],
+            "abnormal_values": abnormal_values,
+            "clinical_interpretation": clinical_interpretation,
+            "risk_level": risk_level,
+            "recommendations": recommendations,
+        }
+
+    @classmethod
+    def _recommendations_for_lab_summary(
+        cls,
+        abnormal_values: list[dict[str, Any]],
+        normal_values: list[dict[str, Any]],
+        risk_level: str,
+    ) -> list[str]:
+        if not abnormal_values:
+            return [
+                "Review these results during routine care, especially if symptoms are present or prior values are trending upward or downward.",
+            ]
+
+        names = " ".join(str(item.get("name") or "").lower() for item in abnormal_values)
+        recommendations = [
+            "Discuss the abnormal result(s) with a clinician, using prior reports and current symptoms for context.",
+        ]
+        if any(token in names for token in ("glucose", "hba1c", "a1c")):
+            recommendations.append("Confirm glucose-related abnormalities with appropriate fasting glucose, HbA1c, or repeat testing as advised by a clinician.")
+        if any(token in names for token in ("cholesterol", "ldl", "hdl", "triglyceride")):
+            recommendations.append("Review cardiovascular risk factors and lipid management options with a clinician.")
+        if any(token in names for token in ("creatinine", "urea", "bun", "sodium", "potassium")):
+            recommendations.append("Correlate kidney or electrolyte abnormalities with hydration status, medicines, and repeat testing if clinically indicated.")
+        if any(token in names for token in ("hemoglobin", "wbc", "platelet")):
+            recommendations.append("Interpret blood-count abnormalities with symptoms, infection signs, bleeding history, and previous CBC trends.")
+        if risk_level == "High":
+            recommendations.append("Arrange prompt medical review, especially if symptoms are present or the abnormality is new.")
+        return recommendations[:5]
+
+    @staticmethod
+    def _is_abnormal_status(status: Any) -> bool:
+        return str(status or "").strip().lower() in {"high", "low", "borderline", "abnormal", "critical"}
+
+    @staticmethod
+    def _safe_float(value: Any) -> float | None:
+        try:
+            if value is None or value == "":
+                return None
+            return float(str(value).replace("<", "").replace(">", "").strip())
+        except (TypeError, ValueError):
+            return None
+
+    @classmethod
+    def _clinical_abnormal_value(cls, item: dict[str, Any]) -> dict[str, Any]:
+        value_text = cls._format_biomarker_value(item)
+        status = str(item.get("status") or "abnormal").strip().lower()
+        reference = str(item.get("reference_range") or "").strip()
+        direction = "above" if status in {"high", "critical"} else "below" if status == "low" else "outside"
+        if status == "borderline":
+            direction = "near the edge of"
+        interpretation = f"{value_text} is {direction} the reference range"
+        if reference:
+            interpretation += f" ({reference})"
+        interpretation += "."
+        return {
+            "name": item.get("name") or item.get("test_name"),
+            "value": item.get("value"),
+            "unit": item.get("unit"),
+            "reference_range": reference,
+            "status": item.get("status"),
+            "severity": cls._biomarker_deviation(item)[1],
+            "interpretation": interpretation,
+        }
+
+    @staticmethod
+    def _format_biomarker_value(item: dict[str, Any]) -> str:
+        name = str(item.get("name") or item.get("test_name") or "Biomarker").strip()
+        value = item.get("value")
+        unit = str(item.get("unit") or "").strip()
+        value_text = f"{value:g}" if isinstance(value, float) and value.is_integer() else str(value)
+        return f"{name} {value_text}{(' ' + unit) if unit else ''}".strip()
+
+    @classmethod
+    def _compute_lab_risk_level(cls, structured_data: dict[str, Any]) -> str:
+        biomarkers = [item for item in (structured_data.get("biomarkers") or []) if isinstance(item, dict)]
+        abnormal = [item for item in biomarkers if cls._is_abnormal_status(item.get("status"))]
+        if not abnormal:
+            return "Low"
+
+        severities = [cls._biomarker_deviation(item)[1] for item in abnormal]
+        critical = any(severity == "critical" or cls._is_known_critical_marker(item) for item, severity in zip(abnormal, severities, strict=False))
+        meaningful_abnormal = [item for item, severity in zip(abnormal, severities, strict=False) if severity in {"moderate", "critical"}]
+        risk_marker_count = sum(1 for item in abnormal if cls._is_known_risk_marker(item))
+
+        if critical or len(abnormal) >= 3 or (len(meaningful_abnormal) >= 2 and risk_marker_count >= 1):
+            return "High"
+        if len(meaningful_abnormal) >= 1 or len(abnormal) >= 2 or risk_marker_count >= 1:
+            return "Moderate"
+        return "Low"
+
+    @classmethod
+    def _biomarker_deviation(cls, item: dict[str, Any]) -> tuple[float, str]:
+        value = cls._safe_float(item.get("value"))
+        reference = str(item.get("reference_range") or "").strip()
+        status = str(item.get("status") or "").strip().lower()
+        if value is None:
+            return 0.0, "minor" if status == "borderline" else "moderate"
+
+        deviation = 0.0
+        lt = re.match(r"^<\s*([0-9]+(?:\.[0-9]+)?)$", reference)
+        gt = re.match(r"^>\s*([0-9]+(?:\.[0-9]+)?)$", reference)
+        rng = re.match(r"^([0-9]+(?:\.[0-9]+)?)\s*(?:-|to)\s*([0-9]+(?:\.[0-9]+)?)$", reference, flags=re.IGNORECASE)
+        if lt:
+            high = float(lt.group(1))
+            deviation = max(0.0, (value - high) / max(high, 1.0))
+        elif gt:
+            low = float(gt.group(1))
+            deviation = max(0.0, (low - value) / max(low, 1.0))
+        elif rng:
+            low, high = float(rng.group(1)), float(rng.group(2))
+            if value < low:
+                deviation = (low - value) / max(low, 1.0)
+            elif value > high:
+                deviation = (value - high) / max(high, 1.0)
+
+        if status == "critical" or deviation >= 0.35:
+            return deviation, "critical"
+        if status in {"high", "low", "abnormal"} or deviation >= 0.15:
+            return deviation, "moderate"
+        return deviation, "minor"
+
+    @classmethod
+    def _is_known_risk_marker(cls, item: dict[str, Any]) -> bool:
+        name = str(item.get("name") or item.get("test_name") or "").lower()
+        return any(
+            token in name
+            for token in (
+                "bp",
+                "blood pressure",
+                "glucose",
+                "hba1c",
+                "a1c",
+                "cholesterol",
+                "ldl",
+                "hdl",
+                "triglyceride",
+            )
+        )
+
+    @classmethod
+    def _is_known_critical_marker(cls, item: dict[str, Any]) -> bool:
+        name = str(item.get("name") or item.get("test_name") or "").lower()
+        value = cls._safe_float(item.get("value"))
+        if value is None:
+            return False
+        if "hba1c" in name or "a1c" in name:
+            return value >= 6.5
+        if "fasting" in name and "glucose" in name:
+            return value >= 126
+        if "random" in name and "glucose" in name:
+            return value >= 200
+        if "ldl" in name:
+            return value >= 190
+        if "triglyceride" in name:
+            return value >= 500
+        if "cholesterol" in name and "hdl" not in name and "ldl" not in name:
+            return value >= 240
+        if "systolic" in name or name == "bp":
+            return value >= 160
+        if "diastolic" in name:
+            return value >= 100
+        return False
+
+    @staticmethod
+    def _normalize_risk_label(value: Any) -> str | None:
+        text = str(value or "").strip().lower()
+        if text in {"high", "critical"}:
+            return "High"
+        if text in {"moderate", "medium"}:
+            return "Moderate"
+        if text == "low":
+            return "Low"
+        return None
+
+    @classmethod
+    def _stronger_risk_level(cls, candidate: str | None, computed: str) -> str:
+        order = {"Low": 0, "Moderate": 1, "High": 2}
+        candidate = candidate if candidate in order else computed
+        return candidate if order[candidate] >= order.get(computed, 0) else computed
+
+    @staticmethod
+    def _clean_sentence(value: Any) -> str:
+        text = re.sub(r"\s+", " ", str(value or "")).strip()
+        if not text:
+            return ""
+        if text[-1] not in ".!?":
+            text += "."
+        return text
+
+    @staticmethod
+    def _log_summary_json(label: str, payload: Any) -> None:
+        try:
+            logger.info("report_summary_%s=%s", label, json.dumps(payload, default=str)[:4000])
+        except Exception:
+            logger.info("report_summary_%s=<unserializable>", label)
 
     @staticmethod
     def _load_lab_pipeline_runner() -> Callable[[str], Any]:
@@ -945,11 +1554,11 @@ class ReportService:
             findings = cls._summary_lines(fallback_summary, fallback=[cls.PROCESSING_SUMMARY])
 
         return {
-            "patient": patient or "Not specified in the uploaded report.",
+            "patient": patient,
             "test": test or "Medical Report",
             "findings": findings,
             "abnormal": abnormal,
-            "notes": notes or "Clinical review is recommended for diagnosis, treatment decisions, and comparison with prior reports.",
+            "notes": notes,
         }
 
     @classmethod
@@ -971,7 +1580,7 @@ class ReportService:
         return {
             "title": stored_view.get("title") or test_type,
             "summary": stored_view.get("summary") or findings[0],
-            "patient_info": stored_view.get("patient_info") or structured_summary.get("patient") or "Not specified in the uploaded report.",
+            "patient_info": stored_view.get("patient_info") or structured_summary.get("patient") or "",
             "test_type": test_type,
             "key_findings": findings,
             "biomarkers": stored_view.get("biomarkers") or [],
@@ -987,7 +1596,7 @@ class ReportService:
     def _structured_summary_from_view(summary_view: dict[str, Any]) -> dict[str, Any]:
         notes = summary_view.get("notes") or []
         return {
-            "patient": ReportService._format_patient_info(summary_view.get("patient_info")) or "Not specified in the uploaded report.",
+            "patient": ReportService._format_patient_info(summary_view.get("patient_info")),
             "test": str(summary_view.get("test_type") or summary_view.get("title") or "Medical Report").strip(),
             "findings": ReportService._summary_lines(summary_view.get("key_findings")),
             "abnormal": ReportService._safe_list(summary_view.get("abnormal_values")),
@@ -1206,7 +1815,7 @@ class ReportService:
                 "key_findings": safe_summary_lines,
                 "biomarkers": [],
                 "abnormal_values": [],
-                "notes": ["Clinical review is recommended once readable report text is available."],
+                "notes": ["Readable report text is required before clinical interpretation."],
                 "source": source,
             }
 
@@ -1218,7 +1827,7 @@ class ReportService:
             "key_findings": safe_summary_lines,
             "biomarkers": [marker for marker in markers if marker],
             "abnormal_values": [],
-            "notes": ["Clinical review is recommended for diagnosis, treatment decisions, and comparison with prior reports."],
+            "notes": [],
             "source": source,
         }
 
