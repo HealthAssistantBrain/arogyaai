@@ -205,6 +205,13 @@ def _blood_pressure_value(systolic: Any, diastolic: Any) -> str | None:
     diastolic_value = _safe_int(diastolic)
     if systolic_value is None or diastolic_value is None:
         return None
+    if systolic_value == diastolic_value:
+        logger.warning(
+            "INVALID_BP_BLOCKED | stage=context_builder | systolic=%s | diastolic=%s",
+            systolic_value,
+            diastolic_value,
+        )
+        return None
     return f"{systolic_value}/{diastolic_value}"
 
 

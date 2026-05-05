@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+from contextlib import ExitStack
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from zoneinfo import ZoneInfo
 import asyncio
 import sys
 
+from fastapi import HTTPException
 import httpx
 import pytest
 
@@ -21,7 +23,9 @@ for path in (REPO_ROOT, BACKEND_ROOT):
 
 from core.config import settings  # noqa: E402
 from pipelines.ingestion_pipeline.service import compute_daily_step_summary, compute_daily_steps  # noqa: E402
+import services.google_fit_service as google_fit_service_module  # noqa: E402
 from services.google_fit_service import (  # noqa: E402
+    BloodPressureFetchResult,
     GOOGLE_FIT_ACTIVITY_SCOPE,
     GOOGLE_FIT_BODY_SCOPE,
     GOOGLE_FIT_BLOOD_GLUCOSE_SCOPE,
@@ -49,8 +53,19 @@ def test_google_fit_verify_uses_explicit_ca_bundle(monkeypatch):
 
 def test_google_fit_verify_allows_dev_only_disable(monkeypatch):
     monkeypatch.setattr(settings, "GOOGLE_FIT_SSL_VERIFY", False)
+    monkeypatch.setattr(settings, "APP_ENV", "development")
 
     assert GoogleFitService._google_fit_verify() is False
+
+
+def test_google_fit_verify_ignores_disable_outside_dev(monkeypatch):
+    monkeypatch.setattr(settings, "GOOGLE_FIT_SSL_VERIFY", False)
+    monkeypatch.setattr(settings, "APP_ENV", "production")
+    monkeypatch.setattr(settings, "GOOGLE_FIT_CA_BUNDLE", "")
+    monkeypatch.delenv("SSL_CERT_FILE", raising=False)
+    monkeypatch.delenv("REQUESTS_CA_BUNDLE", raising=False)
+
+    assert GoogleFitService._google_fit_verify()
 
 
 def test_scope_status_accepts_required_google_fit_scopes():
@@ -200,6 +215,50 @@ def test_aggregate_fit_data_can_bucket_steps_by_local_day_period():
     assert body["bucketByTime"] == {
         "period": {"type": "day", "value": 1, "timeZoneId": "Asia/Kolkata"}
     }
+
+
+def test_google_api_request_retries_once_after_timeout(monkeypatch):
+    response = SimpleNamespace(
+        status_code=200,
+        is_error=False,
+        text='{"bucket":[]}',
+        json=lambda: {"bucket": []},
+    )
+    attempts = {"count": 0}
+
+    class FakeAsyncClient:
+        def __init__(self, *, timeout, verify):
+            assert timeout == 12.0
+            self.verify = verify
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def request(self, method, url, **kwargs):
+            attempts["count"] += 1
+            if attempts["count"] == 1:
+                raise httpx.ReadTimeout("timed out")
+            return response
+
+    sleep_mock = AsyncMock()
+    monkeypatch.setattr(google_fit_service_module.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(google_fit_service_module.asyncio, "sleep", sleep_mock)
+
+    result = asyncio.run(
+        GoogleFitService._google_api_request(
+            "GET",
+            "https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate",
+            operation="aggregate:test",
+            timeout=12.0,
+        )
+    )
+
+    assert result is response
+    assert attempts["count"] == 2
+    sleep_mock.assert_awaited_once_with(1.0)
 
 
 def test_fetch_steps_ignores_duplicate_step_sources_and_uses_estimated_source():
@@ -392,6 +451,36 @@ def test_fetch_spo2_reads_oxygen_saturation():
     assert records[0]["value"] == 97.5
 
 
+def test_fetch_spo2_ignores_summary_aggregate_client_error_after_empty_primary():
+    start_millis = int(datetime(2026, 4, 30, tzinfo=timezone.utc).timestamp() * 1000)
+    end_millis = int(datetime(2026, 5, 1, tzinfo=timezone.utc).timestamp() * 1000)
+
+    with patch.object(
+        GoogleFitService,
+        "_aggregate_fit_data",
+        new=AsyncMock(
+            side_effect=[
+                {"bucket": []},
+                HTTPException(status_code=400, detail="Failed to fetch Google Fit data for com.google.oxygen_saturation.summary"),
+            ]
+        ),
+    ) as aggregate:
+        records = asyncio.run(
+            GoogleFitService.fetch_spo2(
+                SimpleNamespace(id="user-1"),
+                "token",
+                days=1,
+                timezone_name="UTC",
+                start_ts=start_millis,
+                end_ts=end_millis,
+            )
+        )
+
+    assert records == []
+    assert aggregate.await_count == 2
+    assert aggregate.await_args_list[1].args[1] == "com.google.oxygen_saturation.summary"
+
+
 def test_fetch_glucose_normalizes_google_fit_mmol_to_mg_dl():
     start_millis = int(datetime(2026, 4, 30, tzinfo=timezone.utc).timestamp() * 1000)
     end_millis = int(datetime(2026, 5, 1, tzinfo=timezone.utc).timestamp() * 1000)
@@ -455,6 +544,38 @@ def test_fetch_blood_pressure_splits_systolic_and_diastolic_records():
         "blood_pressure_diastolic",
     ]
     assert records[0]["metadata"] == {"systolic": 122.0, "diastolic": 78.0}
+    assert records[1]["value"] == 122.0
+    assert records[2]["value"] == 78.0
+
+
+def test_fetch_blood_pressure_ignores_summary_aggregate_client_error_after_empty_primary():
+    start_millis = int(datetime(2026, 4, 30, tzinfo=timezone.utc).timestamp() * 1000)
+    end_millis = int(datetime(2026, 5, 1, tzinfo=timezone.utc).timestamp() * 1000)
+
+    with patch.object(
+        GoogleFitService,
+        "_aggregate_fit_data",
+        new=AsyncMock(
+            side_effect=[
+                {"bucket": []},
+                HTTPException(status_code=400, detail="Failed to fetch Google Fit data for com.google.blood_pressure.summary"),
+            ]
+        ),
+    ) as aggregate:
+        records = asyncio.run(
+            GoogleFitService.fetch_blood_pressure(
+                SimpleNamespace(id="user-1"),
+                "token",
+                days=1,
+                timezone_name="UTC",
+                start_ts=start_millis,
+                end_ts=end_millis,
+            )
+        )
+
+    assert records == []
+    assert aggregate.await_count == 2
+    assert aggregate.await_args_list[1].args[1] == "com.google.blood_pressure.summary"
 
 
 def test_fetch_blood_pressure_uses_source_raw_fallback_for_manual_entries():
@@ -498,6 +619,374 @@ def test_fetch_blood_pressure_uses_source_raw_fallback_for_manual_entries():
         "blood_pressure_diastolic",
     ]
     assert records[0]["metadata"] == {"systolic": 128.0, "diastolic": 82.0}
+    assert records[1]["value"] == 128.0
+    assert records[2]["value"] == 82.0
+
+
+def test_fetch_blood_pressure_keeps_130_over_85_distinct():
+    start_millis = int(datetime(2026, 4, 30, tzinfo=timezone.utc).timestamp() * 1000)
+    end_millis = int(datetime(2026, 5, 1, tzinfo=timezone.utc).timestamp() * 1000)
+    response = {
+        "bucket": [
+            {
+                "startTimeMillis": str(start_millis),
+                "dataset": [{"point": [{"value": [{"fpVal": 130.0}, {"fpVal": 85.0}]}]}],
+            }
+        ]
+    }
+
+    with patch.object(GoogleFitService, "_aggregate_fit_data", new=AsyncMock(return_value=response)):
+        records = asyncio.run(
+            GoogleFitService.fetch_blood_pressure(
+                SimpleNamespace(id="user-1"),
+                "token",
+                days=1,
+                timezone_name="UTC",
+                start_ts=start_millis,
+                end_ts=end_millis,
+            )
+        )
+
+    assert records[0]["metadata"] == {"systolic": 130.0, "diastolic": 85.0}
+    assert records[1]["type"] == "blood_pressure_systolic"
+    assert records[1]["value"] == 130.0
+    assert records[2]["type"] == "blood_pressure_diastolic"
+    assert records[2]["value"] == 85.0
+
+
+def test_parse_blood_pressure_reads_summary_map_values():
+    assert GoogleFitService.parse_blood_pressure(
+        {
+            "value": [
+                {
+                    "mapVal": {
+                        "systolic": {"fpVal": 120.0},
+                        "diastolic": {"fpVal": 80.0},
+                    }
+                }
+            ]
+        }
+    ) == (120.0, 80.0)
+
+
+def test_parse_blood_pressure_uses_median_for_mixed_aggregate_values():
+    assert GoogleFitService.parse_blood_pressure(
+        {
+            "value": [
+                {"fpVal": 121.0},
+                {"fpVal": 125.0},
+                {"fpVal": 126.0},
+                {"fpVal": 78.0},
+                {"fpVal": 80.0},
+                {"fpVal": 85.0},
+                {"intVal": 3},
+                {"intVal": 1},
+            ]
+        }
+    ) == (125.0, 80.0)
+
+
+def test_fetch_blood_pressure_reads_summary_mapval_list_entries():
+    start_millis = int(datetime(2026, 4, 30, tzinfo=timezone.utc).timestamp() * 1000)
+    end_millis = int(datetime(2026, 5, 1, tzinfo=timezone.utc).timestamp() * 1000)
+    response = {
+        "bucket": [
+            {
+                "startTimeMillis": str(start_millis),
+                "dataset": [
+                    {
+                        "point": [
+                            {
+                                "startTimeNanos": str(start_millis * 1_000_000),
+                                "endTimeNanos": str(end_millis * 1_000_000),
+                                "value": [
+                                    {
+                                        "mapVal": [
+                                            {"key": "systolic", "value": {"fpVal": 121.0}},
+                                            {"key": "diastolic", "value": {"fpVal": 80.0}},
+                                        ]
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                ],
+            }
+        ]
+    }
+
+    with patch.object(GoogleFitService, "_aggregate_fit_data", new=AsyncMock(return_value=response)):
+        records = asyncio.run(
+            GoogleFitService.fetch_blood_pressure(
+                SimpleNamespace(id="user-1"),
+                "token",
+                days=1,
+                timezone_name="UTC",
+                start_ts=start_millis,
+                end_ts=end_millis,
+            )
+        )
+
+    assert [record["type"] for record in records] == [
+        "blood_pressure",
+        "blood_pressure_systolic",
+        "blood_pressure_diastolic",
+    ]
+    assert records[0]["metadata"] == {"systolic": 121.0, "diastolic": 80.0}
+    assert records[1]["value"] == 121.0
+    assert records[2]["value"] == 80.0
+
+
+def test_fetch_blood_pressure_uses_median_for_mixed_aggregate_values():
+    start_millis = int(datetime(2026, 4, 30, tzinfo=timezone.utc).timestamp() * 1000)
+    end_millis = int(datetime(2026, 5, 1, tzinfo=timezone.utc).timestamp() * 1000)
+    response = {
+        "bucket": [
+            {
+                "startTimeMillis": str(start_millis),
+                "dataset": [
+                    {
+                        "point": [
+                            {
+                                "value": [
+                                    {"fpVal": 121.0},
+                                    {"fpVal": 125.0},
+                                    {"fpVal": 126.0},
+                                    {"fpVal": 78.0},
+                                    {"fpVal": 80.0},
+                                    {"fpVal": 85.0},
+                                    {"intVal": 3},
+                                    {"intVal": 1},
+                                ]
+                            }
+                        ]
+                    }
+                ],
+            }
+        ]
+    }
+
+    with patch.object(GoogleFitService, "_aggregate_fit_data", new=AsyncMock(return_value=response)):
+        records = asyncio.run(
+            GoogleFitService.fetch_blood_pressure(
+                SimpleNamespace(id="user-1"),
+                "token",
+                days=1,
+                timezone_name="UTC",
+                start_ts=start_millis,
+                end_ts=end_millis,
+            )
+        )
+
+    assert [record["type"] for record in records] == [
+        "blood_pressure",
+        "blood_pressure_systolic",
+        "blood_pressure_diastolic",
+    ]
+    assert records[0]["metadata"] == {"systolic": 125.0, "diastolic": 80.0}
+    assert records[1]["value"] == 125.0
+    assert records[2]["value"] == 80.0
+
+
+def test_parse_blood_pressure_rejects_duplicate_values():
+    assert GoogleFitService.parse_blood_pressure(
+        {"value": [{"fpVal": 122.0}, {"fpVal": 122.0}]}
+    ) is None
+
+
+def test_fetch_blood_pressure_skips_invalid_duplicate_values_from_raw_fallback():
+    start_millis = int(datetime(2026, 4, 30, tzinfo=timezone.utc).timestamp() * 1000)
+    end_millis = int(datetime(2026, 5, 1, tzinfo=timezone.utc).timestamp() * 1000)
+    response = {
+        "bucket": [
+            {
+                "startTimeMillis": str(start_millis),
+                "dataset": [{"point": [{"value": [{"fpVal": 122.0}, {"fpVal": 122.0}]}]}],
+            }
+        ],
+        "raw_dataset_size": 1,
+    }
+
+    with (
+        patch.object(GoogleFitService, "_fetch_source_dataset_with_raw_fallback", new=AsyncMock(return_value=response)) as source_fetch,
+        patch.object(GoogleFitService, "_aggregate_fit_data", new=AsyncMock(return_value={"bucket": []})) as aggregate,
+    ):
+        records = asyncio.run(
+            GoogleFitService.fetch_blood_pressure(
+                SimpleNamespace(id="user-1"),
+                "token",
+                days=1,
+                timezone_name="UTC",
+                start_ts=start_millis,
+                end_ts=end_millis,
+                data_sources=[
+                    {
+                        "dataStreamId": "raw:com.google.blood_pressure:com.google.android.apps.fitness:user_input",
+                        "dataType": {"name": "com.google.blood_pressure"},
+                    }
+                ],
+            )
+        )
+
+    source_fetch.assert_awaited_once()
+    aggregate.assert_not_awaited()
+    assert records == []
+
+
+def test_sync_steps_overwrites_stale_blood_pressure_when_bp_fetch_is_empty():
+    start_millis = int(datetime(2026, 4, 30, tzinfo=timezone.utc).timestamp() * 1000)
+    end_millis = int(datetime(2026, 5, 6, tzinfo=timezone.utc).timestamp() * 1000)
+    connection = SimpleNamespace(
+        default_timezone="UTC",
+        last_synced_at=None,
+        raw_last_response={},
+        last_sync_status=None,
+        google_email="user@example.com",
+        device_id=None,
+    )
+    user = SimpleNamespace(id="user-1")
+    db = MagicMock()
+    db.query.return_value.filter.return_value.order_by.return_value.all.return_value = []
+    store_vitals_mock = MagicMock(return_value=[])
+
+    all_scopes_ready = {
+        "steps": True,
+        "heart_rate": True,
+        "sleep": True,
+        "spo2": True,
+        "glucose": True,
+        "blood_pressure": True,
+        "body_temperature": True,
+        "location": True,
+    }
+    step_record = {
+        "type": "steps",
+        "value": 3210,
+        "unit": "count",
+        "timestamp": datetime.fromtimestamp(start_millis / 1000, tz=timezone.utc),
+        "source": "google_fit",
+        "timezone": "UTC",
+    }
+
+    with ExitStack() as stack:
+        stack.enter_context(patch.object(GoogleFitService, "validate_sync_auth", new=AsyncMock(return_value=(connection, "token", None))))
+        stack.enter_context(patch.object(GoogleFitService, "_list_data_sources", new=AsyncMock(return_value=[])))
+        stack.enter_context(patch.object(GoogleFitService, "_filter_data_sources_by_metric", return_value={}))
+        stack.enter_context(patch.object(GoogleFitService, "_scope_status", return_value=all_scopes_ready))
+        stack.enter_context(patch.object(GoogleFitService, "fetch_steps", new=AsyncMock(return_value=[step_record])))
+        stack.enter_context(patch.object(GoogleFitService, "fetch_heart_rate", new=AsyncMock(return_value=[])))
+        stack.enter_context(patch.object(GoogleFitService, "fetch_sleep", new=AsyncMock(return_value=[])))
+        stack.enter_context(patch.object(GoogleFitService, "fetch_spo2", new=AsyncMock(return_value=[])))
+        stack.enter_context(patch.object(GoogleFitService, "fetch_glucose", new=AsyncMock(return_value=[])))
+        stack.enter_context(patch.object(GoogleFitService, "fetch_blood_pressure", new=AsyncMock(return_value=[])))
+        stack.enter_context(patch.object(GoogleFitService, "fetch_body_temperature", new=AsyncMock(return_value=[])))
+        stack.enter_context(patch.object(GoogleFitService, "fetch_location", new=AsyncMock(return_value=[])))
+        stack.enter_context(patch.object(GoogleFitService, "_stored_step_totals_by_day", return_value={}))
+        stack.enter_context(patch.object(GoogleFitService, "_filter_delayed_step_records", return_value=([step_record], {})))
+        stack.enter_context(patch.object(google_fit_service_module.UserDataService, "store_vitals", store_vitals_mock))
+        stack.enter_context(patch.object(google_fit_service_module.UserDataService, "store_wearable_metrics", return_value=[]))
+        stack.enter_context(patch.object(GoogleFitService, "_get_or_create_device", return_value=SimpleNamespace(id="device-1", is_active=False)))
+        stack.enter_context(patch.object(GoogleFitService, "_data_availability_from_user_vitals", return_value={}))
+        stack.enter_context(patch.object(GoogleFitService, "_count_user_vitals_by_metric", return_value={}))
+        stack.enter_context(patch.object(GoogleFitService, "_step_debug_payload", return_value={}))
+        stack.enter_context(patch.object(GoogleFitService, "_connection_raw_payload", return_value={}))
+        stack.enter_context(patch.object(google_fit_service_module, "generate_health_alerts"))
+        stack.enter_context(patch.object(google_fit_service_module, "emit_event"))
+        asyncio.run(
+            GoogleFitService.sync_steps(
+                db,
+                user,
+                timezone_name="UTC",
+                days=6,
+                start_ts=start_millis,
+                end_ts=end_millis,
+            )
+        )
+
+    overwrite_types = store_vitals_mock.call_args.kwargs["overwrite_types"]
+    assert "blood_pressure_systolic" in [value.value for value in overwrite_types]
+    assert "blood_pressure_diastolic" in [value.value for value in overwrite_types]
+
+
+def test_sync_steps_does_not_overwrite_blood_pressure_when_bp_fetch_is_invalid():
+    start_millis = int(datetime(2026, 4, 30, tzinfo=timezone.utc).timestamp() * 1000)
+    end_millis = int(datetime(2026, 5, 6, tzinfo=timezone.utc).timestamp() * 1000)
+    connection = SimpleNamespace(
+        default_timezone="UTC",
+        last_synced_at=None,
+        raw_last_response={},
+        last_sync_status=None,
+        google_email="user@example.com",
+        device_id=None,
+    )
+    user = SimpleNamespace(id="user-1")
+    db = MagicMock()
+    db.query.return_value.filter.return_value.order_by.return_value.all.return_value = []
+    store_vitals_mock = MagicMock(return_value=[])
+
+    all_scopes_ready = {
+        "steps": True,
+        "heart_rate": True,
+        "sleep": True,
+        "spo2": True,
+        "glucose": True,
+        "blood_pressure": True,
+        "body_temperature": True,
+        "location": True,
+    }
+    step_record = {
+        "type": "steps",
+        "value": 3210,
+        "unit": "count",
+        "timestamp": datetime.fromtimestamp(start_millis / 1000, tz=timezone.utc),
+        "source": "google_fit",
+        "timezone": "UTC",
+    }
+
+    with ExitStack() as stack:
+        stack.enter_context(patch.object(GoogleFitService, "validate_sync_auth", new=AsyncMock(return_value=(connection, "token", None))))
+        stack.enter_context(patch.object(GoogleFitService, "_list_data_sources", new=AsyncMock(return_value=[])))
+        stack.enter_context(patch.object(GoogleFitService, "_filter_data_sources_by_metric", return_value={}))
+        stack.enter_context(patch.object(GoogleFitService, "_scope_status", return_value=all_scopes_ready))
+        stack.enter_context(patch.object(GoogleFitService, "fetch_steps", new=AsyncMock(return_value=[step_record])))
+        stack.enter_context(patch.object(GoogleFitService, "fetch_heart_rate", new=AsyncMock(return_value=[])))
+        stack.enter_context(patch.object(GoogleFitService, "fetch_sleep", new=AsyncMock(return_value=[])))
+        stack.enter_context(patch.object(GoogleFitService, "fetch_spo2", new=AsyncMock(return_value=[])))
+        stack.enter_context(patch.object(GoogleFitService, "fetch_glucose", new=AsyncMock(return_value=[])))
+        stack.enter_context(
+            patch.object(
+                GoogleFitService,
+                "fetch_blood_pressure",
+                new=AsyncMock(return_value=BloodPressureFetchResult([], invalid_duplicate_detected=True)),
+            )
+        )
+        stack.enter_context(patch.object(GoogleFitService, "fetch_body_temperature", new=AsyncMock(return_value=[])))
+        stack.enter_context(patch.object(GoogleFitService, "fetch_location", new=AsyncMock(return_value=[])))
+        stack.enter_context(patch.object(GoogleFitService, "_stored_step_totals_by_day", return_value={}))
+        stack.enter_context(patch.object(GoogleFitService, "_filter_delayed_step_records", return_value=([step_record], {})))
+        stack.enter_context(patch.object(google_fit_service_module.UserDataService, "store_vitals", store_vitals_mock))
+        stack.enter_context(patch.object(google_fit_service_module.UserDataService, "store_wearable_metrics", return_value=[]))
+        stack.enter_context(patch.object(GoogleFitService, "_get_or_create_device", return_value=SimpleNamespace(id="device-1", is_active=False)))
+        stack.enter_context(patch.object(GoogleFitService, "_data_availability_from_user_vitals", return_value={}))
+        stack.enter_context(patch.object(GoogleFitService, "_count_user_vitals_by_metric", return_value={}))
+        stack.enter_context(patch.object(GoogleFitService, "_step_debug_payload", return_value={}))
+        stack.enter_context(patch.object(GoogleFitService, "_connection_raw_payload", return_value={}))
+        stack.enter_context(patch.object(google_fit_service_module, "generate_health_alerts"))
+        stack.enter_context(patch.object(google_fit_service_module, "emit_event"))
+        asyncio.run(
+            GoogleFitService.sync_steps(
+                db,
+                user,
+                timezone_name="UTC",
+                days=6,
+                start_ts=start_millis,
+                end_ts=end_millis,
+            )
+        )
+
+    overwrite_types = store_vitals_mock.call_args.kwargs["overwrite_types"]
+    assert "blood_pressure_systolic" not in [value.value for value in overwrite_types]
+    assert "blood_pressure_diastolic" not in [value.value for value in overwrite_types]
 
 
 def test_fetch_body_temperature_reads_celsius():

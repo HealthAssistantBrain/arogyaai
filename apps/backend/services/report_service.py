@@ -1,10 +1,11 @@
 import asyncio
+import hashlib
 import json
 import logging
 import mimetypes
 import re
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable
@@ -16,6 +17,8 @@ try:
     from pypdf import PdfReader
 except ModuleNotFoundError:  # pragma: no cover - optional dependency
     PdfReader = None
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from core.config import settings
@@ -36,6 +39,57 @@ class ReportService:
     ALLOWED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png"}
     MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
     PROCESSING_SUMMARY = "Report uploaded successfully. Analysis is in progress."
+
+    @staticmethod
+    def _compute_file_hash(file_bytes: bytes) -> str:
+        return hashlib.sha256(file_bytes).hexdigest()
+
+    @staticmethod
+    def _upload_metadata(
+        *,
+        original_filename: str,
+        stored_filename: str | None,
+        storage_path: str,
+        file_size: int,
+        file_hash: str,
+        date_of_report: str | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "date_of_report": date_of_report,
+            "file_name": original_filename,
+            "original_filename": original_filename,
+            "stored_filename": stored_filename,
+            "file_size": file_size,
+            "storage_path": str(storage_path),
+            "file_hash": file_hash,
+        }
+
+    @staticmethod
+    def _get_report_by_hash(db: Session, user_id: Any, file_hash: str) -> Report | None:
+        return (
+            db.query(Report)
+            .filter(
+                Report.user_id == user_id,
+                Report.file_hash == file_hash,
+                Report.is_deleted == False,
+            )
+            .first()
+        )
+
+    @classmethod
+    def _build_upload_response(cls, report: Report) -> dict[str, Any]:
+        serialized = cls._serialize_report(report)
+        if serialized["status"] == ReportStatusEnum.PROCESSING.value:
+            serialized["summary"] = [cls.PROCESSING_SUMMARY]
+            serialized["patient_summary"] = cls.PROCESSING_SUMMARY
+            serialized["summary_source"] = "background-processing"
+            serialized["summary_view"] = cls._build_processing_summary_view(serialized["file_name"])
+        return {
+            "success": True,
+            "status": "uploaded",
+            "error": None,
+            "data": serialized,
+        }
 
     @classmethod
     async def upload_and_summarize(
@@ -65,6 +119,18 @@ class ReportService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="File is too large. Please upload a report smaller than 10 MB.",
             )
+        file_hash = cls._compute_file_hash(file_bytes)
+
+        existing_report = cls._get_report_by_hash(db, current_user.id, file_hash)
+        if existing_report:
+            logger.info(
+                "REPORT_DUPLICATE_SKIPPED user_id=%s report_id=%s file_hash=%s status=%s",
+                current_user.id,
+                existing_report.id,
+                file_hash,
+                existing_report.status.value,
+            )
+            return cls._build_upload_response(existing_report)
 
         log_pipeline("report", step="upload_file", status="running", data="pending")
         storage_path, public_url = cls._persist_file(current_user.id, original_filename, file_bytes)
@@ -75,25 +141,49 @@ class ReportService:
             user_id=current_user.id,
             report_type=ReportTypeEnum(report_type),
             file_url=public_url,
+            file_hash=file_hash,
             original_filename=original_filename,
             stored_filename=stored_filename,
             storage_path=str(storage_path),
             summary_data={
-                "upload_metadata": {
-                    "date_of_report": normalized_report_date,
-                    "file_name": original_filename,
-                    "original_filename": original_filename,
-                    "stored_filename": stored_filename,
-                    "file_size": len(file_bytes),
-                    "storage_path": str(storage_path),
-                }
+                "upload_metadata": cls._upload_metadata(
+                    original_filename=original_filename,
+                    stored_filename=stored_filename,
+                    storage_path=str(storage_path),
+                    file_size=len(file_bytes),
+                    file_hash=file_hash,
+                    date_of_report=normalized_report_date,
+                )
             },
             status=ReportStatusEnum.PROCESSING,
         )
         db.add(report)
-        db.commit()
+        try:
+            db.flush()
+            create_report_timeline_event(db, report, commit=False)
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            existing_report = cls._get_report_by_hash(db, current_user.id, file_hash)
+            if existing_report:
+                logger.info(
+                    "REPORT_DUPLICATE_SKIPPED user_id=%s report_id=%s file_hash=%s status=%s",
+                    current_user.id,
+                    existing_report.id,
+                    file_hash,
+                    existing_report.status.value,
+                )
+                return cls._build_upload_response(existing_report)
+            raise
+
         db.refresh(report)
-        create_report_timeline_event(db, report)
+        logger.info(
+            "REPORT_CREATED user_id=%s report_id=%s file_hash=%s status=%s",
+            current_user.id,
+            report.id,
+            file_hash,
+            report.status.value,
+        )
 
         cls._schedule_report_processing(
             str(report.id),
@@ -103,31 +193,7 @@ class ReportService:
             background_tasks=background_tasks,
         )
 
-        return {
-            "success": True,
-            "status": "uploaded",
-            "error": None,
-            "data": {
-                "id": str(report.id),
-                "name": original_filename,
-                "file_name": original_filename,
-                "original_filename": original_filename,
-                "stored_filename": stored_filename,
-                "file_size": len(file_bytes),
-                "report_type": report.report_type.value,
-                "file_url": report.file_url,
-                "status": report.status.value,
-                "created_at": report.created_at.isoformat() if report.created_at else None,
-                "updated_at": report.updated_at.isoformat() if report.updated_at else None,
-                "storage_path": str(storage_path),
-                "date_of_report": normalized_report_date,
-                "summary": [cls.PROCESSING_SUMMARY],
-                "ocr_text": "",
-                "markers": [],
-                "summary_source": "background-processing",
-                "summary_view": cls._build_processing_summary_view(original_filename),
-            },
-        }
+        return cls._build_upload_response(report)
 
     @classmethod
     def _schedule_report_processing(
@@ -160,6 +226,16 @@ class ReportService:
             report = cls._get_report_by_id(db, report_id)
             if not report:
                 logger.warning("Skipping report processing because report %s was not found", report_id)
+                return
+            if report.status != ReportStatusEnum.PROCESSING:
+                logger.info(
+                    "REPORT_DUPLICATE_SKIPPED report_id=%s status=%s reason=not_processing",
+                    report_id,
+                    report.status.value,
+                )
+                return
+            if not cls._claim_report_processing(db, report_id):
+                logger.info("REPORT_DUPLICATE_SKIPPED report_id=%s reason=already_claimed", report_id)
                 return
 
             log_pipeline("report", step="analyze_report", status="running", data="pending")
@@ -330,10 +406,38 @@ class ReportService:
         report.parsed_text = parsed_text
         report.summary_data = merged_summary
         report.status = ReportStatusEnum.COMPLETED
+        create_report_timeline_event(db, report, commit=False)
         db.commit()
         db.refresh(report)
-        create_report_timeline_event(db, report)
         return report
+
+    @staticmethod
+    def _claim_report_processing(db: Session, report_id: str) -> bool:
+        started_at = datetime.now(timezone.utc).isoformat()
+        result = db.execute(
+            text(
+                """
+                UPDATE reports
+                SET
+                    summary_data = jsonb_set(
+                        COALESCE(summary_data, '{}'::jsonb),
+                        '{processing_started_at}',
+                        to_jsonb(CAST(:started_at AS text)),
+                        true
+                    ),
+                    updated_at = now()
+                WHERE id = CAST(:report_id AS uuid)
+                  AND COALESCE(is_deleted, false) = false
+                  AND status = 'PROCESSING'::report_status_enum
+                  AND COALESCE(summary_data ->> 'processing_started_at', '') = ''
+                RETURNING id
+                """
+            ),
+            {"report_id": report_id, "started_at": started_at},
+        )
+        claimed = result.scalar() is not None
+        db.commit()
+        return claimed
 
     @staticmethod
     def _get_report_by_id(db: Session, report_id: str) -> Report | None:

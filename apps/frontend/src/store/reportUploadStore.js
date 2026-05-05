@@ -17,12 +17,20 @@ export const useReportUploadStore = create((set) => ({
         errorMessage: '',
     }),
     setReportResult: (reportResult, uploadedFileName = '') => set({
+        pendingFile: null,
+        pendingPreviewUrl: '',
+        pendingReportId: '',
         reportResult,
         uploadedFileName,
         errorMessage: '',
     }),
     setProcessing: (isProcessing) => set({ isProcessing }),
     setErrorMessage: (errorMessage) => set({ errorMessage }),
+    clearPendingUpload: () => set({
+        pendingFile: null,
+        pendingPreviewUrl: '',
+        pendingReportId: '',
+    }),
     clearReportFlow: () => set({
         pendingFile: null,
         pendingPreviewUrl: '',

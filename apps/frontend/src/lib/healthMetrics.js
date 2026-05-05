@@ -109,6 +109,22 @@ const toFiniteNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+export const extractBloodPressureValues = (metric = {}) => {
+  const payload = typeof metric === 'object' && !Array.isArray(metric) ? safeObject(metric) : { value: metric };
+  const textValue = typeof payload.value === 'string' ? payload.value : '';
+  const bpMatch = textValue.match(/(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)/);
+
+  return {
+    systolic: toFiniteNumber(payload.systolic ?? payload.sys ?? payload.sbp ?? payload.rawValue?.systolic ?? payload.value?.systolic ?? bpMatch?.[1]),
+    diastolic: toFiniteNumber(payload.diastolic ?? payload.dia ?? payload.dbp ?? payload.rawValue?.diastolic ?? payload.value?.diastolic ?? bpMatch?.[2]),
+  };
+};
+
+export const formatBloodPressureReading = (metric = {}) => {
+  const { systolic, diastolic } = extractBloodPressureValues(metric);
+  return `${systolic === null ? '--' : Math.round(systolic)} / ${diastolic === null ? '--' : Math.round(diastolic)}`;
+};
+
 const resolveMetricKey = (key) => METRIC_KEY_BY_ALIAS[String(key).toLowerCase()] ?? null;
 
 const RECENT_DATA_MS = 24 * 60 * 60 * 1000;
@@ -185,17 +201,22 @@ const normalizeMetricSeries = (series = []) => safeArray(series)
 const normalizeBloodPressureMetric = (key, metric, lastUpdatedFallback) => {
   const spec = metricConfig[key];
   const payload = typeof metric === 'object' && !Array.isArray(metric) ? safeObject(metric) : { value: metric };
-  const textValue = typeof payload.value === 'string' ? payload.value : '';
-  const bpMatch = textValue.match(/(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)/);
-  const systolic = toFiniteNumber(payload.systolic ?? payload.sys ?? payload.sbp ?? payload.value?.systolic ?? bpMatch?.[1]);
-  const diastolic = toFiniteNumber(payload.diastolic ?? payload.dia ?? payload.dbp ?? payload.value?.diastolic ?? bpMatch?.[2]);
-  const hasValue = systolic !== null && diastolic !== null;
+  const { systolic, diastolic } = extractBloodPressureValues(payload);
+  const hasValue = systolic !== null || diastolic !== null;
   const timestamp = hasValue ? extractPayloadDate(payload, lastUpdatedFallback) : null;
   const parsedTimestamp = parseMetricDate(timestamp);
+  const formattedValue = hasValue ? formatBloodPressureReading(payload) : null;
+  const bloodPressurePayload = {
+    systolic,
+    diastolic,
+    value: formattedValue,
+    raw: payload.value,
+  };
+  console.log('BP FINAL:', bloodPressurePayload);
 
   return {
     ...spec,
-    value: hasValue ? `${Math.round(systolic)}/${Math.round(diastolic)}` : null,
+    value: formattedValue,
     rawValue: hasValue ? { systolic, diastolic } : null,
     systolic,
     diastolic,

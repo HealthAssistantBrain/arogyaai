@@ -62,12 +62,12 @@ export default function App() {
   useEffect(() => {
     if (!initComplete || healthStatus === 'unknown' || healthStatus === 'checking') return;
 
-    if (maintenance && location.pathname !== ROUTES.MAINTENANCE) {
+    if (healthStatus === 'down' && maintenance && location.pathname !== ROUTES.MAINTENANCE) {
       navigate(ROUTES.MAINTENANCE, { replace: true });
       return;
     }
 
-    if (!maintenance && location.pathname === ROUTES.MAINTENANCE) {
+    if (healthStatus !== 'down' && location.pathname === ROUTES.MAINTENANCE) {
       INIT_RESOLVER()
         .then((result) => {
           const nextRoute = result?.route || ROUTES.HOME;

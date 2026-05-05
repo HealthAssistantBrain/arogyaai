@@ -42,12 +42,16 @@ def test_upload_and_summarize_returns_uploaded_report_and_queues_processing():
     file = FakeUploadFile("cbc-report.pdf", "application/pdf", b"%PDF-1.4 fake")
     background_tasks = BackgroundTasks()
     added: dict[str, object] = {}
+    query = MagicMock()
+    query.filter.return_value.first.return_value = None
+    db.query.return_value = query
 
     def add_side_effect(report):
-        report.id = report_id
-        report.created_at = created_at
-        report.updated_at = created_at
-        added["report"] = report
+        if hasattr(report, "report_type"):
+            report.id = report_id
+            report.created_at = created_at
+            report.updated_at = created_at
+            added["report"] = report
 
     db.add.side_effect = add_side_effect
 
@@ -78,11 +82,72 @@ def test_upload_and_summarize_returns_uploaded_report_and_queues_processing():
     assert result["data"]["summary_view"]["key_findings"] == [ReportService.PROCESSING_SUMMARY]
     assert added["report"].original_filename == "cbc-report.pdf"
     assert added["report"].stored_filename == "cbc-report.pdf"
+    assert added["report"].file_hash == ReportService._compute_file_hash(b"%PDF-1.4 fake")
     assert added["report"].summary_data["upload_metadata"]["original_filename"] == "cbc-report.pdf"
+    assert added["report"].summary_data["upload_metadata"]["file_hash"] == ReportService._compute_file_hash(b"%PDF-1.4 fake")
     assert len(background_tasks.tasks) == 1
     task = background_tasks.tasks[0]
     assert task.func == ReportService.process_uploaded_report
     assert task.args == (str(report_id), "cbc-report.pdf", "application/pdf", b"%PDF-1.4 fake")
+
+
+def test_upload_and_summarize_returns_existing_report_for_duplicate_hash():
+    db = MagicMock()
+    current_user = SimpleNamespace(id=uuid4())
+    created_at = datetime(2026, 4, 30, 10, 0, tzinfo=timezone.utc)
+    file_bytes = b"%PDF-1.4 fake"
+    file_hash = ReportService._compute_file_hash(file_bytes)
+    file = FakeUploadFile("cbc-report.pdf", "application/pdf", file_bytes)
+    existing_report = SimpleNamespace(
+        id=uuid4(),
+        user_id=current_user.id,
+        report_type=SimpleNamespace(value="BLOOD_TEST"),
+        status=ReportStatusEnum.COMPLETED,
+        file_url="https://example.test/cbc-report.pdf",
+        file_hash=file_hash,
+        original_filename="cbc-report.pdf",
+        stored_filename="cbc-report.pdf",
+        storage_path="reports/user/cbc-report.pdf",
+        summary_data={
+            "summary": ["Ready"],
+            "summary_source": "prediction-service",
+            "upload_metadata": {
+                "original_filename": "cbc-report.pdf",
+                "stored_filename": "cbc-report.pdf",
+                "file_name": "cbc-report.pdf",
+                "file_size": len(file_bytes),
+                "storage_path": "reports/user/cbc-report.pdf",
+                "file_hash": file_hash,
+            },
+        },
+        parsed_text="Hemoglobin 13.8 g/dL",
+        created_at=created_at,
+        updated_at=created_at,
+    )
+    query = MagicMock()
+    query.filter.return_value.first.return_value = existing_report
+    db.query.return_value = query
+
+    with patch.object(ReportService, "_persist_file") as persist_file, patch.object(
+        ReportService,
+        "_schedule_report_processing",
+    ) as schedule_processing:
+        result = asyncio.run(
+            ReportService.upload_and_summarize(
+                db,
+                current_user,
+                file,
+                "BLOOD_TEST",
+                background_tasks=BackgroundTasks(),
+            )
+        )
+
+    assert result["success"] is True
+    assert result["data"]["id"] == str(existing_report.id)
+    assert result["data"]["status"] == ReportStatusEnum.COMPLETED.value
+    persist_file.assert_not_called()
+    schedule_processing.assert_not_called()
+    db.add.assert_not_called()
 
 
 def test_serialize_report_prefers_original_filename_over_uuid_storage_name():

@@ -160,12 +160,22 @@ async def route_audit_middleware(request: Request, call_next):
     return response
 
 
-def _health_logic():
-    return {"status": "ok"}
-
 @app.get("/health", tags=["System"])
 async def health_root():
-    return JSONResponse(status_code=200, content=_health_logic())
+    try:
+        return JSONResponse(status_code=200, content=await get_system_readiness())
+    except Exception as exc:
+        logger.exception("Health probe failed: %s", exc)
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "down",
+                "core_system": "down",
+                "maintenance_eligible": True,
+                "services": {"db": "degraded"},
+                "checks": {"db": {"status": "degraded", "error": "probe_failed"}},
+            },
+        )
 
 @app.get("/api/v1/health", tags=["System"])
 async def health_api():
@@ -176,7 +186,9 @@ async def health_api():
         return JSONResponse(
             status_code=200,
             content={
-                "status": "degraded",
+                "status": "down",
+                "core_system": "down",
+                "maintenance_eligible": True,
                 "services": {
                     "db": "degraded",
                 },

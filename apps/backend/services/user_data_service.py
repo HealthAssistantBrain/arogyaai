@@ -3,6 +3,7 @@ User data service — canonical profile, settings, onboarding, and vitals storag
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable, Optional
 from zoneinfo import ZoneInfo
@@ -31,6 +32,7 @@ RANGE_WINDOWS = {
     "7d": timedelta(days=7),
     "30d": timedelta(days=30),
 }
+logger = logging.getLogger(__name__)
 
 
 def _now_utc() -> datetime:
@@ -68,6 +70,33 @@ def _parse_timestamp(value: Any) -> datetime:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid timestamp format") from exc
 
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid timestamp value")
+
+
+def _classify_blood_pressure_values(systolic: float | None, diastolic: float | None) -> str:
+    if systolic is None and diastolic is None:
+        return "missing"
+    if systolic is None or diastolic is None:
+        return "partial"
+    if float(systolic) == float(diastolic):
+        return "duplicate"
+    return "pair"
+
+
+def _coerce_blood_pressure_value(value: Any) -> float | None:
+    try:
+        if value is None:
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_blood_pressure_pair_from_metadata(metadata: dict[str, Any] | None) -> tuple[float | None, float | None]:
+    metadata = metadata if isinstance(metadata, dict) else {}
+    return (
+        _coerce_blood_pressure_value(metadata.get("systolic")),
+        _coerce_blood_pressure_value(metadata.get("diastolic")),
+    )
 
 
 def _serialize_setting(setting: UserSetting, user_id: str) -> dict:
@@ -394,6 +423,83 @@ class UserDataService:
                 "unit": unit,
             }
 
+        bp_values_by_timestamp: dict[tuple[datetime, UserVitalSourceEnum], dict[str, float]] = {}
+        for item in normalized_records.values():
+            bp_key = (item["timestamp"], item["source"])
+            if item["vital_type"] == UserVitalTypeEnum.BLOOD_PRESSURE_SYSTOLIC:
+                bp_values_by_timestamp.setdefault(bp_key, {})["systolic"] = item["value"]
+            elif item["vital_type"] == UserVitalTypeEnum.BLOOD_PRESSURE_DIASTOLIC:
+                bp_values_by_timestamp.setdefault(bp_key, {})["diastolic"] = item["value"]
+
+        for (timestamp, source), bp_values in bp_values_by_timestamp.items():
+            systolic = bp_values.get("systolic")
+            diastolic = bp_values.get("diastolic")
+            bp_state = _classify_blood_pressure_values(systolic, diastolic)
+            logger.info(
+                "BP_VALIDATION | stage=db_validation | user_id=%s | timestamp=%s | source=%s | status=%s | systolic=%s | diastolic=%s",
+                str(user.id),
+                timestamp.isoformat(),
+                source.value,
+                bp_state,
+                systolic,
+                diastolic,
+            )
+            if bp_state == "duplicate":
+                logger.warning(
+                    "INVALID_BP_BLOCKED | stage=db_validation | user_id=%s | timestamp=%s | source=%s | function_name=store_vitals | systolic=%s | diastolic=%s",
+                    str(user.id),
+                    timestamp.isoformat(),
+                    source.value,
+                    systolic,
+                    diastolic,
+                )
+                logger.warning(
+                    "BP_SKIPPED_INVALID | stage=db_validation | user_id=%s | timestamp=%s | source=%s | systolic=%s | diastolic=%s",
+                    str(user.id),
+                    timestamp.isoformat(),
+                    source.value,
+                    systolic,
+                    diastolic,
+                )
+                continue
+
+            if bp_state == "pair":
+                logger.info(
+                    "BP_PARSED | stage=db_validation | user_id=%s | timestamp=%s | source=%s | systolic=%s | diastolic=%s",
+                    str(user.id),
+                    timestamp.isoformat(),
+                    source.value,
+                    systolic,
+                    diastolic,
+                )
+            logger.info(
+                "BP_DB_WRITE | stage=db_validation | user_id=%s | timestamp=%s | source=%s | status=%s | systolic=%s | diastolic=%s",
+                str(user.id),
+                timestamp.isoformat(),
+                source.value,
+                bp_state,
+                systolic,
+                diastolic,
+            )
+
+        invalid_bp_keys = {
+            bp_key
+            for bp_key, bp_values in bp_values_by_timestamp.items()
+            if _classify_blood_pressure_values(bp_values.get("systolic"), bp_values.get("diastolic")) == "duplicate"
+        }
+        if invalid_bp_keys:
+            normalized_records = {
+                key: item
+                for key, item in normalized_records.items()
+                if not (
+                    item["vital_type"] in {
+                        UserVitalTypeEnum.BLOOD_PRESSURE_SYSTOLIC,
+                        UserVitalTypeEnum.BLOOD_PRESSURE_DIASTOLIC,
+                    }
+                    and (item["timestamp"], item["source"]) in invalid_bp_keys
+                )
+            }
+
         delete_types: set[UserVitalTypeEnum] = set()
         if overwrite_types is not None:
             for item in overwrite_types:
@@ -457,6 +563,18 @@ class UserDataService:
                     source=source_enum,
                 )
                 db.add(vital)
+            if vital_enum in {
+                UserVitalTypeEnum.BLOOD_PRESSURE_SYSTOLIC,
+                UserVitalTypeEnum.BLOOD_PRESSURE_DIASTOLIC,
+            }:
+                logger.info(
+                    "BP_DB_WRITE | stage=db_upsert | user_id=%s | type=%s | timestamp=%s | source=%s | value=%s",
+                    str(user.id),
+                    vital_enum.value,
+                    timestamp.isoformat(),
+                    source_enum.value,
+                    value,
+                )
             saved.append(vital)
 
         if saved or (overwrite_window and delete_types):
@@ -501,6 +619,38 @@ class UserDataService:
             if record.get("timezone"):
                 metadata = {**metadata, "timezone": record.get("timezone")}
             metadata = {**metadata, **extra_metadata}
+
+            if metric_type == "blood_pressure":
+                systolic, diastolic = _extract_blood_pressure_pair_from_metadata(metadata)
+                bp_state = _classify_blood_pressure_values(systolic, diastolic)
+                logger.info(
+                    "BP_VALIDATION | stage=wearable_metric_validation | user_id=%s | timestamp=%s | source=%s | status=%s | systolic=%s | diastolic=%s",
+                    str(user.id),
+                    timestamp.isoformat(),
+                    source,
+                    bp_state,
+                    systolic,
+                    diastolic,
+                )
+                if bp_state == "duplicate":
+                    logger.warning(
+                        "INVALID_BP_BLOCKED | stage=wearable_metric_validation | user_id=%s | timestamp=%s | source=%s | function_name=store_wearable_metrics | systolic=%s | diastolic=%s",
+                        str(user.id),
+                        timestamp.isoformat(),
+                        source,
+                        systolic,
+                        diastolic,
+                    )
+                    continue
+                logger.info(
+                    "BP_DB_WRITE | stage=wearable_metric_validation | user_id=%s | timestamp=%s | source=%s | status=%s | systolic=%s | diastolic=%s",
+                    str(user.id),
+                    timestamp.isoformat(),
+                    source,
+                    bp_state,
+                    systolic,
+                    diastolic,
+                )
 
             normalized_records[(metric_type, timestamp, source)] = {
                 "metric_type": metric_type,

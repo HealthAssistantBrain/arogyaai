@@ -20,6 +20,19 @@ const isBrowser = () => typeof window !== 'undefined'
 const getSupabase = () => getSupabaseClient() ?? supabase
 let authStateSubscription = null
 
+const clearGoogleFitClientSyncState = () => {
+  if (!isBrowser()) return
+
+  void import('./healthStore').then(({ default: useHealthStore }) => {
+    useHealthStore.getState().setConnection(false)
+    useHealthStore.getState().setSyncing(false)
+  }).catch(() => {})
+
+  void import('./deviceStore').then(({ default: useDeviceStore }) => {
+    useDeviceStore.getState().setGoogleFitConnected(false)
+  }).catch(() => {})
+}
+
 const isWriteMethod = (method = 'GET') => ['POST', 'PUT', 'PATCH', 'DELETE'].includes(String(method).toUpperCase())
 
 export const clearLegacyAuthStorage = () => {
@@ -428,6 +441,7 @@ export const useAuthStore = create(
           role: 'patient',
           isHydratingAuth: false,
         }, false, 'reset')
+        clearGoogleFitClientSyncState()
         clearLegacyAuthStorage()
       },
 
@@ -804,6 +818,16 @@ export const useAuthStore = create(
         set({ isHydratingAuth: true }, false, 'logout_start')
 
         let signOutError = null
+        const logoutToken = get().token
+
+        try {
+          await fetchJson(`${API_BASE_URL}/auth/logout`, {
+            method: 'POST',
+            token: logoutToken,
+          })
+        } catch (err) {
+          console.warn('[authStore] Backend logout cleanup failed:', err?.message || err)
+        }
 
         try {
           const client = getSupabase()

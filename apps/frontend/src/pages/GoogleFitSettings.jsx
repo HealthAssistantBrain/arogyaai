@@ -19,9 +19,8 @@ import {
   disconnectGoogleFit,
   fetchGoogleFitStatus,
   startGoogleFitConnect,
-  syncGoogleFit,
 } from '../lib/googleFitApi';
-import { refreshAfterGoogleFitSync } from '../lib/googleFitRefresh';
+import { runGoogleFitSyncOnce } from '../lib/googleFitSyncController';
 import { setGoogleFitConnectionState } from '../lib/googleFitConnectionState';
 
 const DEFAULT_TIMEZONE = import.meta.env.VITE_GOOGLE_FIT_DEFAULT_TIMEZONE || 'Asia/Kolkata';
@@ -138,10 +137,13 @@ const GoogleFitSettings = () => {
     setError('');
 
     try {
-      const response = await syncGoogleFit({ timezone, days: DEFAULT_WINDOW_DAYS });
+      const response = await runGoogleFitSyncOnce({
+        timezone,
+        days: DEFAULT_WINDOW_DAYS,
+        requireConnected: false,
+      });
       await Promise.all([
         loadStatus(timezone, { silent: true }),
-        refreshAfterGoogleFitSync(),
       ]);
       if (showSuccessMessage) {
         const missing = Array.isArray(response?.missing) ? response.missing : [];

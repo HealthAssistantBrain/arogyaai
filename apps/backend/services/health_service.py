@@ -168,11 +168,19 @@ async def get_system_readiness() -> dict[str, Any]:
         services[key] = status
         checks[key] = result
 
-    overall_status = "ok" if all(status in {"ok", "skipped"} for status in services.values()) else "degraded"
+    core_status = "healthy" if services.get("db") in {"ok", "skipped"} else "down"
+    overall_status = "ok" if core_status == "healthy" else "down"
 
     return {
         "status": overall_status,
+        "core_system": core_status,
+        "maintenance_eligible": core_status == "down",
         "services": services,
         "checks": checks,
+        "external_services": {
+            key: value
+            for key, value in services.items()
+            if key != "db"
+        },
         "checked_at": _utc_now(),
     }

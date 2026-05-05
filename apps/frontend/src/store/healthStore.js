@@ -391,6 +391,7 @@ export const useHealthStore = create(
           metricsInFlight = (async () => {
             try {
               const response = await api.get('/health/metrics');
+              console.log('BP RAW:', response.data);
               const snapshot = normalizeHealthMetricsResponse(response.data);
 
               if (requestId !== metricsRequestSeq) {

@@ -4,7 +4,7 @@ Report model — maps to the `reports` table.
 """
 import enum
 
-from sqlalchemy import Column, String, Text, Boolean, Enum, ForeignKey
+from sqlalchemy import Boolean, Column, Enum, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 
@@ -30,10 +30,14 @@ class ReportStatusEnum(str, enum.Enum):
 
 class Report(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "reports"
+    __table_args__ = (
+        UniqueConstraint("user_id", "file_hash", name="uq_reports_user_file_hash"),
+    )
 
     user_id     = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     report_type = Column(Enum(ReportTypeEnum, name="report_type_enum"), nullable=False)
     file_url    = Column(Text, nullable=False)
+    file_hash = Column(String(64), nullable=True, index=True)
     original_filename = Column(Text, nullable=True)
     stored_filename = Column(Text, nullable=True)
     parsed_text = Column(Text)

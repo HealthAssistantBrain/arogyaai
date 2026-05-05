@@ -1,6 +1,8 @@
+import asyncio
 import uuid
 import logging
 import os
+import statistics
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -84,6 +86,9 @@ GOOGLE_FIT_MAX_FETCH_WINDOW_DAYS = 7
 GOOGLE_FIT_INITIAL_FETCH_WINDOW_DAYS = 7
 GOOGLE_FIT_PAGE_SIZE_DAYS = 7
 GOOGLE_FIT_MAX_SYNC_RETRIES = 2
+GOOGLE_FIT_API_REQUEST_RETRIES = 2
+GOOGLE_FIT_SYNC_LOCK_TTL_SECONDS = 300
+GOOGLE_FIT_SYNC_RATE_LIMIT_SECONDS = 60
 GOOGLE_FIT_DAILY_BUCKET_MILLIS = 24 * 60 * 60 * 1000
 GOOGLE_FIT_METRIC_DATA_TYPES = {
     "heart_rate": GOOGLE_FIT_HEART_RATE_DATA_TYPE,
@@ -106,6 +111,19 @@ GOOGLE_FIT_STEP_SOURCE_PRIORITY = (
 GOOGLE_FIT_OPTIONAL_SYNC_METRICS = {"sleep", "spo2", "location"}
 GOOGLE_FIT_RECONSENT_METRICS = {"glucose", "blood_pressure", "body_temperature"}
 logger = logging.getLogger("google_fit_service")
+
+
+class BloodPressureFetchResult(list):
+    """List-like fetch result that carries BP validation status."""
+
+    def __init__(
+        self,
+        records: list[dict[str, Any]] | None = None,
+        *,
+        invalid_duplicate_detected: bool = False,
+    ) -> None:
+        super().__init__(records or [])
+        self.invalid_duplicate_detected = bool(invalid_duplicate_detected)
 
 
 class GoogleFitService:
@@ -143,8 +161,11 @@ class GoogleFitService:
     @staticmethod
     def _google_fit_verify() -> str | bool:
         if not settings.GOOGLE_FIT_SSL_VERIFY:
-            logger.warning("[GFit] SSL verification disabled for Google Fit HTTP client; development fallback only.")
-            return False
+            app_env = str(getattr(settings, "APP_ENV", "") or "").strip().lower()
+            if app_env in {"dev", "development", "local", "test"}:
+                logger.warning("[GFit] SSL verification disabled for Google Fit HTTP client; development fallback only.")
+                return False
+            logger.warning("[GFit] Ignoring GOOGLE_FIT_SSL_VERIFY=false outside development; SSL verification remains enabled.")
 
         ca_bundle_candidates = (
             settings.GOOGLE_FIT_CA_BUNDLE,
@@ -162,6 +183,137 @@ class GoogleFitService:
         return certifi.where()
 
     @staticmethod
+    def _log_external_service_failure(
+        *,
+        operation: str,
+        exc: Exception,
+        user_id: Any = None,
+        retry_count: int = 0,
+        fallback_used: bool = True,
+    ) -> None:
+        logger.error(
+            "external_service_failure | service=google_fit | operation=%s | user=%s | retry_count=%s | fallback_used=%s | error_type=%s | error=%s",
+            operation,
+            user_id,
+            retry_count,
+            fallback_used,
+            exc.__class__.__name__,
+            exc,
+            exc_info=True,
+        )
+
+    @staticmethod
+    def build_fault_tolerant_sync_failure_response(
+        db: Session,
+        user: User | None,
+        exc: Exception,
+        *,
+        timezone_name: str | None = None,
+        retry_count: int = 0,
+        operation: str = "sync",
+        fallback_used: bool = True,
+    ) -> dict[str, Any]:
+        user_id = getattr(user, "id", None)
+        GoogleFitService._log_external_service_failure(
+            operation=operation,
+            exc=exc,
+            user_id=user_id,
+            retry_count=retry_count,
+            fallback_used=fallback_used,
+        )
+
+        resolved_timezone = GoogleFitService._resolve_timezone(timezone_name)
+        connection = GoogleFitService.get_connection(db, user) if user is not None else None
+        sync_timestamp = datetime.now(timezone.utc)
+        error_payload = {
+            "event": "external_service_failure",
+            "service": "google_fit",
+            "operation": operation,
+            "error_type": exc.__class__.__name__,
+            "error": str(exc),
+            "retry_count": retry_count,
+            "fallback_used": fallback_used,
+            "failed_at": sync_timestamp.isoformat(),
+        }
+
+        data_availability = GoogleFitService._empty_data_availability()
+        stats = GoogleFitService._build_stats([])
+        scope_status: dict[str, bool] = {}
+        missing_scopes: list[str] = []
+        last_synced_at = None
+        google_email = None
+
+        if user is not None:
+            try:
+                data_availability = GoogleFitService._data_availability_from_user_vitals(db, user)
+            except Exception:
+                logger.debug("[GFit] Failed to read local data availability after sync failure", exc_info=True)
+
+        if connection is not None:
+            try:
+                status_data = GoogleFitService.get_status(db, user, timezone_name=resolved_timezone) if user is not None else {}
+                stats = status_data.get("stats", stats)
+                data_availability = status_data.get("data_availability", data_availability)
+                scope_status = status_data.get("scope_status", scope_status) or {}
+                missing_scopes = status_data.get("missing_scopes", missing_scopes) or []
+                last_synced_at = status_data.get("last_synced_at")
+                google_email = status_data.get("google_email")
+            except Exception:
+                logger.debug("[GFit] Failed to read Google Fit status after sync failure", exc_info=True)
+
+            try:
+                raw_payload = GoogleFitService._connection_raw_payload(connection)
+                background_sync = raw_payload.get("background_sync") if isinstance(raw_payload, dict) else None
+                if isinstance(background_sync, dict):
+                    background_sync.update(
+                        {
+                            "status": "failed",
+                            "failed_at": sync_timestamp.isoformat(),
+                            "error": str(exc),
+                            "retry_count": retry_count,
+                            "fallback_used": fallback_used,
+                        }
+                    )
+                    raw_payload["background_sync"] = background_sync
+                raw_payload["external_service_failure"] = error_payload
+                connection.raw_last_response = raw_payload
+                connection.last_sync_status = "failed"
+                db.add(connection)
+                db.commit()
+                db.refresh(connection)
+                last_synced_at = connection.last_synced_at.isoformat() if connection.last_synced_at else last_synced_at
+                google_email = connection.google_email
+            except Exception:
+                db.rollback()
+                logger.exception("[GFit] Failed to persist external service failure | user=%s", user_id)
+
+        return {
+            "success": True,
+            "status": "failed",
+            "wearable_status": "failed",
+            "message": "Google Fit sync unavailable",
+            "core_system": "healthy",
+            "error": str(exc),
+            "source": "google_fit",
+            "partial": True,
+            "connected": bool(connection),
+            "timezone": resolved_timezone,
+            "last_synced_at": last_synced_at,
+            "last_sync_status": "failed",
+            "stats": stats,
+            "raw_json": getattr(connection, "raw_last_response", None) if connection is not None else {"external_service_failure": error_payload},
+            "google_email": google_email,
+            "data_source_id": GOOGLE_FIT_DATASOURCE_ID,
+            "data_availability": data_availability,
+            "scope_status": scope_status,
+            "missing_scopes": missing_scopes,
+            "needs_reconsent": bool(missing_scopes),
+            "retry_count": retry_count,
+            "fallback_used": fallback_used,
+            "data": [],
+        }
+
+    @staticmethod
     async def _google_api_request(
         method: str,
         url: str,
@@ -171,20 +323,43 @@ class GoogleFitService:
         **kwargs: Any,
     ) -> httpx.Response:
         verify = GoogleFitService._google_fit_verify()
-        try:
-            async with httpx.AsyncClient(timeout=timeout, verify=verify) as client:
-                response = await client.request(method, url, **kwargs)
-        except (httpx.TimeoutException, httpx.TransportError) as exc:
-            logger.exception(
-                "[GFit] Google API transport failure | operation=%s | method=%s | url=%s | verify=%s | error_type=%s | error=%s",
-                operation,
-                method.upper(),
-                url,
-                verify,
-                exc.__class__.__name__,
-                exc,
-            )
-            raise
+        last_error: Exception | None = None
+        for attempt in range(1, GOOGLE_FIT_API_REQUEST_RETRIES + 1):
+            try:
+                async with httpx.AsyncClient(timeout=timeout, verify=verify) as client:
+                    response = await client.request(method, url, **kwargs)
+                break
+            except (httpx.TimeoutException, httpx.TransportError) as exc:
+                last_error = exc
+                if attempt >= GOOGLE_FIT_API_REQUEST_RETRIES:
+                    logger.exception(
+                        "[GFit] Google API transport failure | operation=%s | method=%s | url=%s | verify=%s | attempt=%s/%s | error_type=%s | error=%s",
+                        operation,
+                        method.upper(),
+                        url,
+                        verify,
+                        attempt,
+                        GOOGLE_FIT_API_REQUEST_RETRIES,
+                        exc.__class__.__name__,
+                        exc,
+                    )
+                    raise
+
+                logger.warning(
+                    "[GFit] Google API transport retry | operation=%s | method=%s | url=%s | verify=%s | attempt=%s/%s | error_type=%s | error=%s",
+                    operation,
+                    method.upper(),
+                    url,
+                    verify,
+                    attempt,
+                    GOOGLE_FIT_API_REQUEST_RETRIES,
+                    exc.__class__.__name__,
+                    exc,
+                )
+                await asyncio.sleep(float(attempt))
+
+        if last_error is not None and "response" not in locals():
+            raise last_error
 
         logger.info(
             "[GFit] Google API response | operation=%s | method=%s | status=%s | bytes=%s | success=%s",
@@ -289,6 +464,248 @@ class GoogleFitService:
             if extracted is not None:
                 extracted_values.append(extracted)
         return extracted_values
+
+    @staticmethod
+    def _extract_direct_numeric_value(value: Any) -> float | None:
+        if not isinstance(value, dict):
+            return None
+
+        for key in ("intVal", "fpVal"):
+            raw_value = value.get(key)
+            if raw_value is None:
+                continue
+            try:
+                return float(raw_value)
+            except (TypeError, ValueError):
+                continue
+
+        return None
+
+    @staticmethod
+    def _extract_map_entries(value: Any) -> dict[str, Any]:
+        if not isinstance(value, dict):
+            return {}
+
+        map_values = value.get("mapVal")
+        if isinstance(map_values, dict):
+            return {
+                str(key).strip().lower(): nested_value
+                for key, nested_value in map_values.items()
+                if isinstance(key, str)
+            }
+
+        if not isinstance(map_values, list):
+            return {}
+
+        entries: dict[str, Any] = {}
+        for item in map_values:
+            if not isinstance(item, dict):
+                continue
+            key = item.get("key")
+            nested_value = item.get("value")
+            if isinstance(key, str):
+                entries[key.strip().lower()] = nested_value
+        return entries
+
+    @staticmethod
+    def _extract_blood_pressure_numeric(value: Any, *, component: str | None = None) -> float | None:
+        map_entries = GoogleFitService._extract_map_entries(value)
+
+        if component:
+            if not map_entries:
+                return None
+            nested_value = map_entries.get(component.strip().lower())
+            if nested_value is None:
+                return None
+            return GoogleFitService._extract_blood_pressure_numeric(nested_value)
+
+        direct_numeric = GoogleFitService._extract_direct_numeric_value(value)
+        if direct_numeric is not None:
+            return float(direct_numeric)
+
+        if not map_entries:
+            return None
+
+        for aggregate_key in ("average", "avg", "mean", "value"):
+            nested_value = map_entries.get(aggregate_key)
+            if nested_value is None:
+                continue
+            extracted = GoogleFitService._extract_blood_pressure_numeric(nested_value)
+            if extracted is not None:
+                return float(extracted)
+
+        if len(map_entries) == 1:
+            return GoogleFitService._extract_blood_pressure_numeric(next(iter(map_entries.values())))
+
+        return None
+
+    @staticmethod
+    def _extract_blood_pressure_fp_values(values: list[Any]) -> list[float]:
+        numeric_values: list[float] = []
+        for value in values:
+            if not isinstance(value, dict):
+                continue
+            raw_value = value.get("fpVal")
+            if raw_value is None:
+                continue
+            try:
+                numeric_values.append(float(raw_value))
+            except (TypeError, ValueError):
+                continue
+        return numeric_values
+
+    @staticmethod
+    def _extract_blood_pressure_pair(
+        values: list[Any],
+    ) -> tuple[tuple[float, float] | None, str]:
+        for value in values:
+            systolic = GoogleFitService._extract_blood_pressure_numeric(value, component="systolic")
+            diastolic = GoogleFitService._extract_blood_pressure_numeric(value, component="diastolic")
+            if systolic is not None and diastolic is not None:
+                return (float(systolic), float(diastolic)), "map_values"
+
+        numeric_values = GoogleFitService._extract_blood_pressure_fp_values(values)
+        if len(numeric_values) < 2:
+            return None, "insufficient_values"
+
+        if len(set(numeric_values)) == 1:
+            return None, "duplicate_values"
+
+        systolic_vals = [value for value in numeric_values if value >= 100]
+        diastolic_vals = [value for value in numeric_values if value < 100]
+        if not systolic_vals or not diastolic_vals:
+            return None, "clustering_failed"
+
+        systolic = int(statistics.median(systolic_vals))
+        diastolic = int(statistics.median(diastolic_vals))
+        logger.info(
+            "BP_PARSED_FROM_AGGREGATE_MEDIAN | raw=%s | systolic_vals=%s | diastolic_vals=%s | final=%s/%s",
+            numeric_values,
+            systolic_vals,
+            diastolic_vals,
+            systolic,
+            diastolic,
+        )
+        return (float(systolic), float(diastolic)), "aggregate_median"
+
+        return None, "non_numeric_values"
+
+    @staticmethod
+    def _parse_blood_pressure_with_reason(datapoint: dict[str, Any]) -> tuple[tuple[float, float] | None, str | None]:
+        values = datapoint.get("value") or []
+        logger.info("BP_RAW_DATA | stage=google_fit_fetch | values=%s", values)
+        parsed_pair, parse_path = GoogleFitService._extract_blood_pressure_pair(values)
+        if parsed_pair is None and parse_path == "insufficient_values":
+            logger.warning(
+                "BP_PARSE_ERROR_INSUFFICIENT_VALUES | values=%s",
+                values,
+            )
+            logger.warning(
+                "BP_PARSE_ERROR | reason=insufficient_values | values=%s",
+                values,
+            )
+            logger.warning(
+                "BP_SKIPPED_INVALID | reason=insufficient_values | values=%s",
+                values,
+            )
+            logger.warning(
+                "BP_VALIDATION | stage=google_fit_parse | status=rejected_missing | systolic=%s | diastolic=%s",
+                None,
+                None,
+            )
+            return None, "insufficient_values"
+
+        if parsed_pair is None and parse_path == "clustering_failed":
+            numeric_values = GoogleFitService._extract_blood_pressure_fp_values(values)
+            logger.warning(
+                "BP_CLUSTERING_FAILED | numeric_values=%s",
+                numeric_values,
+            )
+            logger.warning(
+                "BP_SKIPPED_INVALID | reason=clustering_failed | values=%s",
+                values,
+            )
+            logger.warning(
+                "BP_VALIDATION | stage=google_fit_parse | status=rejected_non_numeric | systolic=%s | diastolic=%s",
+                None,
+                None,
+            )
+            return None, "clustering_failed"
+
+        if parsed_pair is None and parse_path == "duplicate_values":
+            numeric_values = GoogleFitService._extract_blood_pressure_fp_values(values)
+            duplicate_value = numeric_values[0] if numeric_values else None
+            logger.warning(
+                "BP_DUPLICATE_DETECTED_AFTER_PARSE | systolic=%s | diastolic=%s | values=%s",
+                duplicate_value,
+                duplicate_value,
+                values,
+            )
+            logger.warning(
+                "BP_SKIPPED_INVALID | reason=duplicate_values | systolic=%s | diastolic=%s",
+                duplicate_value,
+                duplicate_value,
+            )
+            logger.warning(
+                "BP_VALIDATION | stage=google_fit_parse | status=rejected_duplicate | systolic=%s | diastolic=%s",
+                duplicate_value,
+                duplicate_value,
+            )
+            return None, "duplicate_values"
+
+        if parsed_pair is None:
+            logger.warning(
+                "BP_PARSE_ERROR | reason=non_numeric_values | values=%s",
+                values,
+            )
+            logger.warning(
+                "BP_SKIPPED_INVALID | reason=non_numeric_values | values=%s",
+                values,
+            )
+            logger.warning(
+                "BP_VALIDATION | stage=google_fit_parse | status=rejected_non_numeric | systolic=%s | diastolic=%s",
+                None,
+                None,
+            )
+            return None, "non_numeric_values"
+
+        systolic_value, diastolic_value = parsed_pair
+        if systolic_value == diastolic_value:
+            logger.warning(
+                "BP_DUPLICATE_DETECTED_AFTER_PARSE | systolic=%s | diastolic=%s | values=%s",
+                systolic_value,
+                diastolic_value,
+                values,
+            )
+            logger.warning(
+                "BP_SKIPPED_INVALID | reason=duplicate_values | systolic=%s | diastolic=%s",
+                systolic_value,
+                diastolic_value,
+            )
+            logger.warning(
+                "BP_VALIDATION | stage=google_fit_parse | status=rejected_duplicate | systolic=%s | diastolic=%s",
+                systolic_value,
+                diastolic_value,
+            )
+            return None, "duplicate_values"
+
+        logger.info(
+            "BP_VALIDATION | stage=google_fit_parse | status=accepted | systolic=%s | diastolic=%s",
+            systolic_value,
+            diastolic_value,
+        )
+        logger.info(
+            "BP_PARSED_CORRECT | mode=%s | systolic=%s | diastolic=%s",
+            parse_path,
+            systolic_value,
+            diastolic_value,
+        )
+        return (systolic_value, diastolic_value), None
+
+    @staticmethod
+    def parse_blood_pressure(datapoint: dict[str, Any]) -> tuple[float, float] | None:
+        parsed, _reason = GoogleFitService._parse_blood_pressure_with_reason(datapoint)
+        return parsed
 
     @staticmethod
     def _redirect_uri() -> str:
@@ -1427,6 +1844,14 @@ class GoogleFitService:
             )
 
         if response.is_error:
+            logger.warning(
+                "[GFit] Aggregate request failed | data_type=%s | data_source_id=%s | status=%s | bytes=%s | body=%s",
+                data_type_name,
+                data_source_id or "all_sources",
+                response.status_code,
+                len(response.text or ""),
+                response.text[:500],
+            )
             raise HTTPException(status_code=400, detail=f"Failed to fetch Google Fit data for {data_type_name}")
 
         payload = response.json()
@@ -2158,6 +2583,223 @@ class GoogleFitService:
             return None
 
         return background_sync
+
+    @staticmethod
+    def _redis_client():
+        from core.celery_app import CELERY_BROKER_URL
+        import redis
+
+        return redis.Redis.from_url(CELERY_BROKER_URL.replace("/0", "/2"), decode_responses=True)
+
+    @staticmethod
+    def _sync_lock_key(user_id: str) -> str:
+        return f"gfit_sync_lock:{user_id}"
+
+    @staticmethod
+    def _sync_rate_limit_key(user_id: str) -> str:
+        return f"gfit_sync_rate:{user_id}"
+
+    @staticmethod
+    def acquire_sync_lock(user_id: str, ttl_seconds: int = GOOGLE_FIT_SYNC_LOCK_TTL_SECONDS) -> bool:
+        try:
+            acquired = GoogleFitService._redis_client().set(
+                GoogleFitService._sync_lock_key(user_id),
+                "1",
+                nx=True,
+                ex=ttl_seconds,
+            )
+            return bool(acquired)
+        except Exception as exc:
+            logger.error("SYNC_ABORTED | user=%s | reason=redis_lock_unavailable | error=%s", user_id, exc)
+            return False
+
+    @staticmethod
+    def release_sync_lock(user_id: str) -> None:
+        try:
+            GoogleFitService._redis_client().delete(GoogleFitService._sync_lock_key(user_id))
+        except Exception as exc:
+            logger.warning("[GFit] Redis lock release failed | user=%s | error=%s", user_id, exc)
+
+    @staticmethod
+    def is_sync_locked(user_id: str) -> bool:
+        try:
+            return bool(GoogleFitService._redis_client().exists(GoogleFitService._sync_lock_key(user_id)))
+        except Exception as exc:
+            logger.warning("[GFit] Redis lock check failed | user=%s | error=%s", user_id, exc)
+            return False
+
+    @staticmethod
+    def acquire_sync_rate_limit(user_id: str, ttl_seconds: int = GOOGLE_FIT_SYNC_RATE_LIMIT_SECONDS) -> bool:
+        try:
+            acquired = GoogleFitService._redis_client().set(
+                GoogleFitService._sync_rate_limit_key(user_id),
+                "1",
+                nx=True,
+                ex=ttl_seconds,
+            )
+            return bool(acquired)
+        except Exception as exc:
+            logger.warning("[GFit] Redis rate-limit check failed; allowing guarded sync | user=%s | error=%s", user_id, exc)
+            return True
+
+    @staticmethod
+    def clear_sync_controls(user_id: str) -> None:
+        try:
+            GoogleFitService._redis_client().delete(
+                GoogleFitService._sync_lock_key(user_id),
+                GoogleFitService._sync_rate_limit_key(user_id),
+                f"gfit_sync_cancel:{user_id}",
+            )
+        except Exception as exc:
+            logger.warning("[GFit] Failed to clear sync controls | user=%s | error=%s", user_id, exc)
+
+    @staticmethod
+    def build_sync_blocked_response(
+        db: Session,
+        user: User,
+        *,
+        reason: str,
+        message: str,
+        timezone_name: str | None = None,
+        connected: bool = False,
+        status_value: str = "auth_blocked",
+    ) -> dict[str, Any]:
+        connection = GoogleFitService.get_connection(db, user)
+        resolved_timezone = GoogleFitService._resolve_timezone(timezone_name or getattr(connection, "default_timezone", None))
+        stats = GoogleFitService._build_stats([])
+        data_availability = GoogleFitService._empty_data_availability()
+        scope_status = GoogleFitService._scope_status(connection)
+        missing_scopes: list[str] = []
+
+        if connection is not None:
+            try:
+                data_availability = GoogleFitService._data_availability_from_user_vitals(db, user)
+                missing_scopes = GoogleFitService._missing_metric_scopes(connection)
+                raw_payload = GoogleFitService._connection_raw_payload(connection)
+                raw_payload["sync_blocked"] = {
+                    "reason": reason,
+                    "blocked_at": datetime.now(timezone.utc).isoformat(),
+                }
+                connection.raw_last_response = raw_payload
+                if reason in {"token_expired", "tokens_missing", "disconnected"}:
+                    if reason in {"token_expired", "tokens_missing"}:
+                        connection.access_token_encrypted = None
+                        connection.refresh_token_encrypted = None
+                    connection.last_sync_status = "auth_failed" if reason != "disconnected" else "disconnected"
+                db.add(connection)
+                if reason in {"token_expired", "tokens_missing"}:
+                    user_device = db.query(UserDevice).filter(
+                        UserDevice.user_id == user.id,
+                        UserDevice.provider == PROVIDER_GOOGLE_FIT,
+                    ).first()
+                    if user_device:
+                        user_device.access_token = None
+                        user_device.refresh_token = None
+                        user_device.token_expiry = None
+                        user_device.is_active = False
+                db.commit()
+                db.refresh(connection)
+            except Exception:
+                db.rollback()
+                logger.exception("[GFit] Failed to persist sync blocked state | user=%s | reason=%s", user.id, reason)
+
+        return {
+            "success": True,
+            "status": status_value,
+            "wearable_status": "auth_blocked",
+            "core_system": "healthy",
+            "error": None,
+            "partial": True,
+            "message": message,
+            "source": "google_fit",
+            "connected": connected and connection is not None,
+            "sync_blocked": True,
+            "sync_blocked_reason": reason,
+            "data": [],
+            "stats": stats,
+            "raw_json": getattr(connection, "raw_last_response", None) if connection else None,
+            "google_email": getattr(connection, "google_email", None) if connection else None,
+            "last_synced_at": connection.last_synced_at.isoformat() if connection and connection.last_synced_at else None,
+            "last_sync_status": getattr(connection, "last_sync_status", None) if connection else "disconnected",
+            "timezone": resolved_timezone,
+            "data_source_id": GOOGLE_FIT_DATASOURCE_ID,
+            "data_availability": data_availability,
+            "scope_status": scope_status,
+            "missing_scopes": missing_scopes,
+            "needs_reconsent": bool(missing_scopes),
+        }
+
+    @staticmethod
+    async def validate_sync_auth(
+        db: Session,
+        user: User,
+        *,
+        timezone_name: str | None = None,
+        sync_mode: str = "sync",
+    ) -> tuple[GoogleFitConnection | None, str | None, dict[str, Any] | None]:
+        connection = GoogleFitService.get_connection(db, user)
+        if not connection:
+            logger.warning("SYNC_BLOCKED_AUTH | user=%s | sync_mode=%s | reason=not_connected", user.id, sync_mode)
+            return None, None, GoogleFitService.build_sync_blocked_response(
+                db,
+                user,
+                reason="not_connected",
+                message="Google Fit is not connected",
+                timezone_name=timezone_name,
+                connected=False,
+                status_value="not_connected",
+            )
+
+        if (connection.last_sync_status or "").lower() == "disconnected":
+            logger.warning("SYNC_BLOCKED_AUTH | user=%s | sync_mode=%s | reason=disconnected", user.id, sync_mode)
+            return connection, None, GoogleFitService.build_sync_blocked_response(
+                db,
+                user,
+                reason="disconnected",
+                message="Google Fit is disconnected",
+                timezone_name=timezone_name,
+                connected=False,
+                status_value="not_connected",
+            )
+
+        if not connection.access_token_encrypted and not connection.refresh_token_encrypted:
+            logger.warning("SYNC_BLOCKED_AUTH | user=%s | sync_mode=%s | reason=tokens_missing", user.id, sync_mode)
+            return connection, None, GoogleFitService.build_sync_blocked_response(
+                db,
+                user,
+                reason="tokens_missing",
+                message="Google Fit authorization expired. Please reconnect Google Fit.",
+                timezone_name=timezone_name,
+                connected=True,
+            )
+
+        try:
+            access_token = await GoogleFitService.get_valid_access_token(db, user)
+        except HTTPException as exc:
+            if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+                logger.warning("SYNC_BLOCKED_AUTH | user=%s | sync_mode=%s | reason=token_expired", user.id, sync_mode)
+                return connection, None, GoogleFitService.build_sync_blocked_response(
+                    db,
+                    user,
+                    reason="token_expired",
+                    message="Google Fit authorization expired. Please reconnect Google Fit.",
+                    timezone_name=timezone_name,
+                    connected=True,
+                )
+            raise
+
+        if not access_token:
+            logger.warning("SYNC_BLOCKED_AUTH | user=%s | sync_mode=%s | reason=token_expired", user.id, sync_mode)
+            return connection, None, GoogleFitService.build_sync_blocked_response(
+                db,
+                user,
+                reason="token_expired",
+                message="Google Fit authorization expired. Please reconnect Google Fit.",
+                timezone_name=timezone_name,
+                connected=True,
+            )
+
+        return connection, access_token, None
 
     @staticmethod
     def mark_background_sync_queued(
@@ -3023,6 +3665,43 @@ class GoogleFitService:
         return round(sum(values) / len(values), 2)
 
     @staticmethod
+    def _extract_bucket_blood_pressure(bucket: dict[str, Any]) -> tuple[dict[str, float | int] | None, bool]:
+        latest_valid_reading: dict[str, float | int] | None = None
+        invalid_duplicate_detected = False
+        fallback_timestamp = (
+            GoogleFitService._extract_bucket_end_millis(bucket)
+            or GoogleFitService._extract_bucket_start_millis(bucket)
+            or -1
+        )
+
+        for dataset in bucket.get("dataset", []):
+            for point in dataset.get("point", []):
+                parsed, invalid_reason = GoogleFitService._parse_blood_pressure_with_reason(point)
+                if invalid_reason == "duplicate_values":
+                    invalid_duplicate_detected = True
+                if parsed is None:
+                    continue
+
+                point_timestamp = (
+                    GoogleFitService._point_time_millis(point, prefer_end_time=True)
+                    or GoogleFitService._point_time_millis(point, prefer_end_time=False)
+                    or fallback_timestamp
+                )
+                systolic, diastolic = parsed
+                candidate = {
+                    "timestamp": int(point_timestamp),
+                    "systolic": float(systolic),
+                    "diastolic": float(diastolic),
+                }
+                if latest_valid_reading is None or int(candidate["timestamp"]) >= int(latest_valid_reading["timestamp"]):
+                    latest_valid_reading = candidate
+
+        if latest_valid_reading is None:
+            return None, invalid_duplicate_detected
+
+        return latest_valid_reading, invalid_duplicate_detected
+
+    @staticmethod
     def _normalize_glucose_mmol_to_mg_dl(value: float) -> float:
         return round(float(value) * 18.0182, 1)
 
@@ -3148,13 +3827,28 @@ class GoogleFitService:
             for candidate_data_type in data_types_to_try:
                 if records:
                     break
-                response_json = await GoogleFitService._aggregate_fit_data(
-                    access_token,
-                    candidate_data_type,
-                    start_millis,
-                    end_millis,
-                    60 * 60 * 1000,
-                )
+                try:
+                    response_json = await GoogleFitService._aggregate_fit_data(
+                        access_token,
+                        candidate_data_type,
+                        start_millis,
+                        end_millis,
+                        60 * 60 * 1000,
+                    )
+                except HTTPException as exc:
+                    if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+                        raise
+                    if summary_data_type_name and candidate_data_type == summary_data_type_name:
+                        logger.info(
+                            "[GFit] Summary aggregate unavailable; treating as empty | metric=%s | data_type=%s | start_ms=%s | end_ms=%s | error=%s",
+                            metric_name,
+                            candidate_data_type,
+                            start_millis,
+                            end_millis,
+                            exc.detail,
+                        )
+                        continue
+                    raise
                 GoogleFitService._log_raw_google_fit_response(
                     metric_name,
                     response_json,
@@ -3282,6 +3976,7 @@ class GoogleFitService:
     ) -> list[dict[str, Any]]:
         timezone_name = timezone_name or settings.GOOGLE_FIT_DEFAULT_TIMEZONE
         records: list[dict[str, Any]] = []
+        invalid_duplicate_detected = False
         for start_millis, end_millis, window_days in GoogleFitService._build_candidate_windows(
             timezone_name,
             start_ts=start_ts,
@@ -3329,27 +4024,51 @@ class GoogleFitService:
                     timezone_name=timezone_name,
                     data_source_id=source_id,
                 )
-                logger.info("BP RAW: %s", source_response)
+                if source_response.get("raw_dataset_size"):
+                    logger.info(
+                        "BP_FALLBACK_USED | source=%s | raw_dataset_size=%s",
+                        source_id,
+                        source_response.get("raw_dataset_size"),
+                    )
+                logger.info("BP_RAW_RESPONSE | stage=google_fit_fetch | source=%s | payload=%s", source_id, source_response)
                 if GoogleFitService._response_point_count(source_response) > 0:
                     response_json = source_response
                     break
 
             if response_json is None:
-                response_json = await GoogleFitService._aggregate_fit_data(
-                    access_token,
-                    GOOGLE_FIT_BLOOD_PRESSURE_DATA_TYPE,
-                    start_millis,
-                    end_millis,
-                    60 * 60 * 1000,
-                )
+                try:
+                    response_json = await GoogleFitService._aggregate_fit_data(
+                        access_token,
+                        GOOGLE_FIT_BLOOD_PRESSURE_DATA_TYPE,
+                        start_millis,
+                        end_millis,
+                        60 * 60 * 1000,
+                    )
+                except HTTPException as exc:
+                    if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+                        raise
+                    logger.warning("[GFit] blood_pressure aggregate fetch failed | error=%s", exc.detail)
+                    continue
             if GoogleFitService._response_point_count(response_json) == 0:
-                response_json = await GoogleFitService._aggregate_fit_data(
-                    access_token,
-                    GOOGLE_FIT_BLOOD_PRESSURE_SUMMARY_DATA_TYPE,
-                    start_millis,
-                    end_millis,
-                    60 * 60 * 1000,
-                )
+                try:
+                    response_json = await GoogleFitService._aggregate_fit_data(
+                        access_token,
+                        GOOGLE_FIT_BLOOD_PRESSURE_SUMMARY_DATA_TYPE,
+                        start_millis,
+                        end_millis,
+                        60 * 60 * 1000,
+                    )
+                except HTTPException as exc:
+                    if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+                        raise
+                    logger.info(
+                        "[GFit] Summary aggregate unavailable; treating as empty | metric=blood_pressure | data_type=%s | start_ms=%s | end_ms=%s | error=%s",
+                        GOOGLE_FIT_BLOOD_PRESSURE_SUMMARY_DATA_TYPE,
+                        start_millis,
+                        end_millis,
+                        exc.detail,
+                    )
+                    continue
             GoogleFitService._log_raw_google_fit_response(
                 "blood_pressure",
                 response_json,
@@ -3358,14 +4077,16 @@ class GoogleFitService:
                 timezone_name=timezone_name,
                 data_source_id="all_sources",
             )
-            logger.info("BP RAW: %s", response_json)
+            logger.info("BP_RAW_RESPONSE | stage=google_fit_fetch | source=all_sources | payload=%s", response_json)
             records = []
             for bucket in response_json.get("bucket", []):
-                timestamp = GoogleFitService._extract_bucket_start_millis(bucket)
-                systolic = GoogleFitService._aggregate_scalar_value(bucket, value_index=0)
-                diastolic = GoogleFitService._aggregate_scalar_value(bucket, value_index=1)
-                if timestamp is None or systolic is None or diastolic is None:
+                parsed_bp, bucket_invalid_duplicate = GoogleFitService._extract_bucket_blood_pressure(bucket)
+                invalid_duplicate_detected = invalid_duplicate_detected or bucket_invalid_duplicate
+                if parsed_bp is None:
                     continue
+                timestamp = int(parsed_bp["timestamp"])
+                systolic = float(parsed_bp["systolic"])
+                diastolic = float(parsed_bp["diastolic"])
                 base = {
                     "unit": "mmHg",
                     "timestamp": datetime.fromtimestamp(timestamp / 1000, tz=timezone.utc),
@@ -3391,9 +4112,17 @@ class GoogleFitService:
                 len(records),
             )
             if records:
-                return sorted(records, key=lambda item: item["timestamp"])
+                return BloodPressureFetchResult(
+                    sorted(records, key=lambda item: item["timestamp"]),
+                    invalid_duplicate_detected=invalid_duplicate_detected,
+                )
+        if invalid_duplicate_detected:
+            logger.warning(
+                "INVALID_BP_BLOCKED | stage=google_fit_fetch | user_id=%s | source=google_fit | function_name=fetch_blood_pressure",
+                getattr(user, "id", "unknown"),
+            )
         logger.warning("[GFit] Blood pressure data unavailable | user=%s", getattr(user, "id", "unknown"))
-        return []
+        return BloodPressureFetchResult([], invalid_duplicate_detected=invalid_duplicate_detected)
 
     @staticmethod
     async def fetch_location(
@@ -3558,37 +4287,29 @@ class GoogleFitService:
     ) -> dict[str, Any]:
         sync_start_time = datetime.now(timezone.utc)
         sync_start_perf = time.perf_counter()
-        connection = GoogleFitService.get_connection(db, user)
+        connection, access_token, blocked_response = await GoogleFitService.validate_sync_auth(
+            db,
+            user,
+            timezone_name=timezone_name,
+            sync_mode="background_page" if background_sync_page else "direct",
+        )
+        if blocked_response is not None:
+            GoogleFitService._log_sync_execution_time(
+                user.id,
+                sync_start_time,
+                sync_start_perf,
+                status_value=blocked_response.get("status", "auth_blocked"),
+            )
+            return blocked_response
+
         logger.info(
-            "[GFit] SYNC STARTED | user=%s | timezone=%s | days=%s | silent=%s | start_time=%s",
+            "SYNC_PAGE_START | user=%s | timezone=%s | days=%s | silent=%s | start_time=%s",
             user.id,
             timezone_name,
             days,
             silent,
             sync_start_time.isoformat(),
         )
-        if not connection:
-            logger.warning("[GFit] Sync requested for user=%s but Google Fit is not connected", user.id)
-            GoogleFitService._log_sync_execution_time(user.id, sync_start_time, sync_start_perf, status_value="not_connected")
-            return {
-                "success": True,
-                "status": "ready",
-                "error": None,
-                "partial": True,
-                "message": "Google Fit is not connected",
-                "connected": False,
-                "data": [],
-                "stats": GoogleFitService._build_stats([]),
-                "raw_json": None,
-                "google_email": None,
-                "last_synced_at": None,
-                "last_sync_status": "disconnected",
-                "data_source_id": GOOGLE_FIT_DATASOURCE_ID,
-                "data_availability": GoogleFitService._empty_data_availability(),
-                "scope_status": GoogleFitService._scope_status(connection),
-                "missing_scopes": [],
-                "needs_reconsent": False,
-            }
 
         resolved_timezone = GoogleFitService._resolve_timezone(timezone_name or connection.default_timezone)
         connection.default_timezone = resolved_timezone
@@ -3596,30 +4317,6 @@ class GoogleFitService:
         now = datetime.now(timezone.utc)
         if silent and connection.last_synced_at and (now - connection.last_synced_at).total_seconds() < 30:
             logger.info("[GFit] Silent sync requested; bypassing cached response for user=%s", user.id)
-
-        access_token = await GoogleFitService.get_valid_access_token(db, user)
-        if not access_token:
-            logger.warning("[GFit] Sync requested for user=%s but Google Fit access token is unavailable", user.id)
-            GoogleFitService._log_sync_execution_time(user.id, sync_start_time, sync_start_perf, status_value="missing_token")
-            return {
-                "success": True,
-                "status": "ready",
-                "error": None,
-                "partial": True,
-                "message": "Google Fit authorization expired. Please reconnect Google Fit.",
-                "connected": True,
-                "data": [],
-                "stats": GoogleFitService._build_stats([]),
-                "raw_json": None,
-                "google_email": connection.google_email,
-                "last_synced_at": connection.last_synced_at.isoformat() if connection.last_synced_at else None,
-                "last_sync_status": connection.last_sync_status,
-                "data_source_id": GOOGLE_FIT_DATASOURCE_ID,
-                "data_availability": GoogleFitService._data_availability_from_user_vitals(db, user),
-                "scope_status": GoogleFitService._scope_status(connection),
-                "missing_scopes": GoogleFitService._missing_metric_scopes(connection),
-                "needs_reconsent": bool(GoogleFitService._missing_metric_scopes(connection)),
-            }
 
         try:
             requested_days = int(days or GOOGLE_FIT_DEFAULT_FETCH_WINDOW_DAYS)
@@ -3655,13 +4352,30 @@ class GoogleFitService:
             GoogleFitService._millis_to_nanos(fetch_start_millis),
             GoogleFitService._millis_to_nanos(fetch_end_millis),
         )
+        external_failure_detected = False
         try:
             all_data_sources = await GoogleFitService._list_data_sources(access_token)
-        except HTTPException:
+        except HTTPException as exc:
+            if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+                logger.warning("SYNC_BLOCKED_AUTH | user=%s | sync_mode=direct | reason=token_revoked", user.id)
+                return GoogleFitService.build_sync_blocked_response(
+                    db,
+                    user,
+                    reason="token_expired",
+                    message="Google Fit authorization expired. Please reconnect Google Fit.",
+                    timezone_name=resolved_timezone,
+                    connected=True,
+                )
             raise
-        except (httpx.TimeoutException, httpx.TransportError):
-            logger.exception("[GFit] Data source discovery transport failed | user=%s", user.id)
-            raise
+        except (httpx.TimeoutException, httpx.TransportError) as exc:
+            external_failure_detected = True
+            GoogleFitService._log_external_service_failure(
+                operation="data_source_discovery",
+                exc=exc,
+                user_id=user.id,
+                fallback_used=True,
+            )
+            all_data_sources = []
         except Exception as exc:
             logger.warning("[GFit] Data source discovery failed; using dataTypeName aggregates | user=%s | error=%s", user.id, exc)
             all_data_sources = []
@@ -3672,6 +4386,7 @@ class GoogleFitService:
         heart_rate_records: list[dict[str, Any]] = []
         sleep_records: list[dict[str, Any]] = []
         fetched_metric_names: list[str] = []
+        overwrite_metric_names: list[str] = []
         failed_metrics: list[str] = []
         optional_metrics = GOOGLE_FIT_OPTIONAL_SYNC_METRICS
         metric_statuses: dict[str, str] = {
@@ -3704,36 +4419,97 @@ class GoogleFitService:
                 logger.warning("[GFit] Missing scope for metric=%s | user=%s", metric_name, user.id)
                 continue
 
-            try:
-                fetch_kwargs = {
-                    "days": sync_days,
-                    "timezone_name": resolved_timezone,
-                    "start_ts": fetch_start_millis,
-                    "end_ts": fetch_end_millis,
-                }
-                if metric_name in data_sources_by_metric:
-                    fetch_kwargs["data_sources"] = data_sources_by_metric.get(metric_name, [])
-                fetched = await fetcher(
-                    user,
-                    access_token,
-                    **fetch_kwargs,
+            fetch_kwargs = {
+                "days": sync_days,
+                "timezone_name": resolved_timezone,
+                "start_ts": fetch_start_millis,
+                "end_ts": fetch_end_millis,
+            }
+            if metric_name in data_sources_by_metric:
+                fetch_kwargs["data_sources"] = data_sources_by_metric.get(metric_name, [])
+
+            fetched = []
+            last_fetch_error: Exception | None = None
+            for attempt in range(1, GOOGLE_FIT_MAX_SYNC_RETRIES + 1):
+                try:
+                    fetched = await fetcher(
+                        user,
+                        access_token,
+                        **fetch_kwargs,
+                    )
+                    last_fetch_error = None
+                    break
+                except HTTPException as exc:
+                    if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+                        if metric_name in optional_metrics:
+                            logger.warning(
+                                "[GFit] Optional metric auth unavailable; treating as not available | user=%s | metric=%s",
+                                user.id,
+                                metric_name,
+                            )
+                            fetched = []
+                            last_fetch_error = None
+                            break
+                        logger.warning(
+                            "SYNC_BLOCKED_AUTH | user=%s | sync_mode=direct | reason=token_revoked | metric=%s",
+                            user.id,
+                            metric_name,
+                        )
+                        return GoogleFitService.build_sync_blocked_response(
+                            db,
+                            user,
+                            reason="token_expired",
+                            message="Google Fit authorization expired. Please reconnect Google Fit.",
+                            timezone_name=resolved_timezone,
+                            connected=True,
+                        )
+                    last_fetch_error = exc
+                except (httpx.TimeoutException, httpx.TransportError) as exc:
+                    external_failure_detected = True
+                    last_fetch_error = exc
+                    GoogleFitService._log_external_service_failure(
+                        operation=f"fetch_{metric_name}",
+                        exc=exc,
+                        user_id=user.id,
+                        retry_count=attempt,
+                        fallback_used=True,
+                    )
+                except Exception as exc:
+                    last_fetch_error = exc
+
+                logger.warning(
+                    "[GFit] %s fetch attempt failed | user=%s | attempt=%s/%s | error=%s",
+                    metric_name,
+                    user.id,
+                    attempt,
+                    GOOGLE_FIT_MAX_SYNC_RETRIES,
+                    last_fetch_error,
                 )
-            except (httpx.TimeoutException, httpx.TransportError):
-                logger.exception("[GFit] %s transport failed for user=%s", metric_name, user.id)
-                raise
-            except Exception as exc:
+
+            if last_fetch_error is not None:
                 metric_statuses[metric_name] = "not_available" if metric_name in optional_metrics else "failed"
                 if metric_name not in optional_metrics:
                     failed_metrics.append(metric_name)
                 logger.warning(
-                    "[GFit] %s fetch failed for user=%s: %s",
-                    metric_name,
+                    "SYNC_ABORTED | user=%s | metric=%s | reason=max_retries_exhausted | attempts=%s",
                     user.id,
-                    exc,
+                    metric_name,
+                    GOOGLE_FIT_MAX_SYNC_RETRIES,
                 )
                 continue
 
-            records = fetched or []
+            records = list(fetched or [])
+            invalid_bp_blocked = (
+                metric_name == "blood_pressure"
+                and bool(getattr(fetched, "invalid_duplicate_detected", False))
+            )
+            if not (metric_name == "blood_pressure" and invalid_bp_blocked and not records):
+                overwrite_metric_names.append(metric_name)
+            else:
+                logger.warning(
+                    "INVALID_BP_BLOCKED | stage=sync_overwrite_guard | user_id=%s | source=google_fit | function_name=sync_steps",
+                    user.id,
+                )
             if records:
                 metric_statuses[metric_name] = "ready"
                 fetched_metric_names.append(metric_name)
@@ -3780,6 +4556,7 @@ class GoogleFitService:
                 if not step_records:
                     metric_statuses["steps"] = "delayed"
                     fetched_metric_names = [name for name in fetched_metric_names if name != "steps"]
+                    overwrite_metric_names = [name for name in overwrite_metric_names if name != "steps"]
 
         if not all_records:
             empty_metrics = [
@@ -3799,8 +4576,7 @@ class GoogleFitService:
                 fetch_start_millis,
                 fetch_end_millis,
             )
-            delay_warning = "Google Fit data delayed; keeping last known data."
-            logger.warning("[GFit] data delayed: keeping last known data | user=%s", user.id)
+            logger.warning("SYNC_ABORTED | user=%s | reason=no_records | failed_metrics=%s", user.id, failed_metrics)
             sync_timestamp = datetime.now(timezone.utc)
             data_availability = GoogleFitService._data_availability_from_user_vitals(db, user)
             vital_counts = GoogleFitService._count_user_vitals_by_metric(db, user)
@@ -3815,6 +4591,9 @@ class GoogleFitService:
             )
             required_failed_metrics = [metric_name for metric_name in failed_metrics if metric_name not in optional_metrics]
             required_missing_scopes = [metric_name for metric_name in missing_scopes if metric_name not in optional_metrics]
+            has_external_failure = bool(required_failed_metrics or external_failure_detected)
+            delay_warning = "Google Fit sync unavailable" if has_external_failure else "Google Fit data delayed; keeping last known data."
+            logger.warning("[GFit] data delayed: keeping last known data | user=%s", user.id)
             partial = bool(required_failed_metrics or required_missing_scopes)
             raw_payload = GoogleFitService._connection_raw_payload(connection)
             background_sync = raw_payload.get("background_sync")
@@ -3871,6 +4650,14 @@ class GoogleFitService:
                 "dataset_counts": vital_counts,
                 "debug": step_debug,
                 "warning": delay_warning,
+                "wearable_status": "failed" if has_external_failure else "no_data",
+                "core_system": "healthy",
+                "external_service_failure": {
+                    "service": "google_fit",
+                    "failed_metrics": required_failed_metrics,
+                    "retry_count": 0,
+                    "fallback_used": True,
+                } if has_external_failure else None,
                 "execution": {
                     "start_time": sync_start_time.isoformat(),
                     "end_time": sync_timestamp.isoformat(),
@@ -3882,7 +4669,7 @@ class GoogleFitService:
 
             connection.raw_last_response = no_data_raw_response
             connection.last_synced_at = sync_timestamp
-            connection.last_sync_status = "partial" if partial else "no_data"
+            connection.last_sync_status = "failed" if has_external_failure else ("partial" if partial else "no_data")
             db.add(connection)
             db.commit()
             db.refresh(connection)
@@ -3892,11 +4679,14 @@ class GoogleFitService:
             GoogleFitService._log_sync_execution_time(user.id, sync_start_time, sync_start_perf, status_value="no_data")
             return {
                 "success": True,
-                "status": "no_data",
+                "status": "failed" if has_external_failure else "no_data",
+                "wearable_status": "failed" if has_external_failure else "no_data",
+                "core_system": "healthy",
                 "error": None,
                 "partial": partial,
                 "message": delay_warning,
                 "warning": delay_warning,
+                "source": "google_fit",
                 "connected": True,
                 "missing": sorted(set(required_failed_metrics + required_missing_scopes)),
                 "timezone": resolved_timezone,
@@ -3917,7 +4707,7 @@ class GoogleFitService:
 
         overwrite_vital_types = [
             vital_type
-            for metric_name in fetched_metric_names
+            for metric_name in overwrite_metric_names
             for vital_type in GoogleFitService.METRIC_VITAL_TYPE_MAP.get(metric_name, ())
         ]
         if delayed_step_details:
@@ -3926,6 +4716,12 @@ class GoogleFitService:
                 for vital_type in overwrite_vital_types
                 if vital_type != UserVitalTypeEnum.STEPS
             ]
+        logger.info(
+            "[GFit] Sync overwrite metric set | user=%s | metrics=%s | vital_types=%s",
+            user.id,
+            overwrite_metric_names,
+            [vital_type.value for vital_type in overwrite_vital_types],
+        )
         if all_records and overwrite_vital_types:
             saved_records = UserDataService.store_vitals(
                 db,
@@ -4060,6 +4856,14 @@ class GoogleFitService:
             "dataset_counts": vital_counts,
             "debug": step_debug,
             "warning": empty_data_warning,
+            "wearable_status": "partial" if failed_metrics or missing_scopes or external_failure_detected else "ready",
+            "core_system": "healthy",
+            "external_service_failure": {
+                "service": "google_fit",
+                "failed_metrics": failed_metrics,
+                "retry_count": 0,
+                "fallback_used": True,
+            } if failed_metrics or external_failure_detected else None,
             "execution": {
                 "start_time": sync_start_time.isoformat(),
                 "end_time": sync_timestamp.isoformat(),
@@ -4116,14 +4920,18 @@ class GoogleFitService:
             message = "Steps synced. Some optional metrics were unavailable."
 
         GoogleFitService._log_sync_execution_time(user.id, sync_start_time, sync_start_perf, status_value=connection.last_sync_status)
+        logger.info("SYNC_COMPLETE | user=%s | source=direct | status=%s | records=%s", user.id, connection.last_sync_status, len(saved_records))
         return {
             "success": True,
             "status": "ready",
+            "wearable_status": "partial" if partial or external_failure_detected else "ready",
+            "core_system": "healthy",
             "error": None,
             "partial": partial,
             "message": message,
             "warning": warning_message,
             "connected": True,
+            "source": "google_fit",
             "missing": missing_metrics,
             "timezone": resolved_timezone,
             "last_synced_at": connection.last_synced_at.isoformat(),
@@ -4150,7 +4958,21 @@ class GoogleFitService:
     ) -> dict[str, Any]:
         paginated_start_time = datetime.now(timezone.utc)
         paginated_start_perf = time.perf_counter()
-        connection = GoogleFitService.get_connection(db, user)
+        connection, _access_token, blocked_response = await GoogleFitService.validate_sync_auth(
+            db,
+            user,
+            timezone_name=timezone_name,
+            sync_mode="paginated",
+        )
+        if blocked_response is not None:
+            GoogleFitService._log_sync_execution_time(
+                user.id,
+                paginated_start_time,
+                paginated_start_perf,
+                status_value=blocked_response.get("status", "auth_blocked"),
+            )
+            return blocked_response
+
         resolved_timezone = GoogleFitService._resolve_timezone(timezone_name or getattr(connection, "default_timezone", None))
         requested_days = max(1, min(int(days or GOOGLE_FIT_DEFAULT_FETCH_WINDOW_DAYS), GOOGLE_FIT_MAX_FETCH_WINDOW_DAYS))
         local_day, _start_millis, _end_millis = GoogleFitService._build_current_local_day_window(resolved_timezone)
@@ -4159,6 +4981,7 @@ class GoogleFitService:
             days=requested_days,
             page_size_days=page_size_days,
         )
+        logger.info("SYNC_START | user=%s | source=paginated | pages=%s | days=%s", user.id, len(windows), requested_days)
         logger.info(
             "[GFit] Paginated sync started | user=%s | requested_days=%s | page_size_days=%s | pages=%s | local_day=%s | start_time=%s",
             user.id,
@@ -4174,6 +4997,23 @@ class GoogleFitService:
         pages_with_data = 0
 
         for start_millis, end_millis, window_days, page_number in windows:
+            # ── MID-LOOP AUTH CHECK: stop if user disconnected ──
+            mid_loop_connection = GoogleFitService.get_connection(db, user)
+            if not mid_loop_connection:
+                logger.warning("SYNC_STOPPED_LOGOUT | user=%s | reason=connection_deleted_mid_sync | page=%s", user.id, page_number)
+                break
+            if (mid_loop_connection.last_sync_status or "").lower() == "disconnected":
+                logger.warning("SYNC_STOPPED_LOGOUT | user=%s | reason=status_disconnected_mid_sync | page=%s", user.id, page_number)
+                break
+            if not mid_loop_connection.access_token_encrypted and not mid_loop_connection.refresh_token_encrypted:
+                logger.warning("SYNC_AUTH_FAILED | user=%s | reason=tokens_cleared_mid_sync | page=%s", user.id, page_number)
+                break
+
+            # ── CANCELLATION CHECK ──
+            if GoogleFitService._is_sync_cancelled(str(user.id)):
+                logger.warning("SYNC_STOPPED_LOGOUT | user=%s | reason=cancel_flag_set_mid_sync | page=%s", user.id, page_number)
+                break
+
             logger.info(
                 "[GFit] Paginated sync page | user=%s | page=%s | window_days=%s | start_ms=%s | end_ms=%s",
                 user.id,
@@ -4207,7 +5047,7 @@ class GoogleFitService:
 
         if pages_with_data == 0:
             logger.warning(
-                "[GFit] Paginated sync fetched zero records across all windows | user=%s | pages=%s | requested_days=%s",
+                "SYNC_ABORTED | user=%s | reason=no_data | pages=%s | requested_days=%s",
                 user.id,
                 len(page_results),
                 requested_days,
@@ -4215,12 +5055,14 @@ class GoogleFitService:
             connection = GoogleFitService.get_connection(db, user)
             raw_payload = GoogleFitService._connection_raw_payload(connection)
             background_sync = raw_payload.get("background_sync")
+            first_status = str((first_result or {}).get("wearable_status") or (first_result or {}).get("status") or "")
+            sync_failed = first_status == "failed"
             if isinstance(background_sync, dict):
                 background_sync.update(
                     {
                         "status": "completed",
                         "completed_at": datetime.now(timezone.utc).isoformat(),
-                        "result": "no_data",
+                        "result": "failed" if sync_failed else "no_data",
                         "pages_requested": len(windows),
                         "pages_completed": len(page_results),
                         "pages_with_data": 0,
@@ -4229,7 +5071,7 @@ class GoogleFitService:
                 raw_payload["background_sync"] = background_sync
                 if connection:
                     connection.raw_last_response = raw_payload
-                    connection.last_sync_status = "no_data"
+                    connection.last_sync_status = "failed" if sync_failed else "no_data"
                     db.add(connection)
                     db.commit()
                     db.refresh(connection)
@@ -4240,17 +5082,24 @@ class GoogleFitService:
                 user.id,
                 paginated_start_time,
                 paginated_start_perf,
-                status_value="no_data",
+                status_value="failed" if sync_failed else "no_data",
             )
             return first_result or {
                 "success": True,
                 "status": "no_data",
+                "wearable_status": "no_data",
+                "core_system": "healthy",
                 "message": "No data available",
+                "source": "google_fit",
                 "connected": True,
                 "data": [],
             }
 
-        final_status = "ready" if all(result.get("success", False) for result in page_results) else "partial"
+        any_page_failed = any(
+            str(result.get("wearable_status") or result.get("status") or "").lower() == "failed"
+            for result in page_results
+        )
+        final_status = "partial" if any_page_failed or not all(result.get("success", False) for result in page_results) else "ready"
         connection = GoogleFitService.get_connection(db, user)
         raw_payload = GoogleFitService._connection_raw_payload(connection)
         background_sync = raw_payload.get("background_sync")
@@ -4281,12 +5130,16 @@ class GoogleFitService:
             paginated_start_perf,
             status_value=final_status,
         )
+        logger.info("SYNC_COMPLETE | user=%s | source=paginated | status=%s | pages_completed=%s", user.id, final_status, len(page_results))
         return {
-            "success": final_status == "ready",
+            "success": True,
             "status": final_status,
+            "wearable_status": "partial" if final_status != "ready" else "ready",
+            "core_system": "healthy",
             "error": None,
             "partial": final_status != "ready",
             "message": "Google Fit background sync completed.",
+            "source": "google_fit",
             "connected": status_data.get("connected", True),
             "sync_mode": "background",
             "requested_days": requested_days,
@@ -4383,7 +5236,42 @@ class GoogleFitService:
         }
 
     @staticmethod
+    def _is_sync_cancelled(user_id: str) -> bool:
+        """Check if sync was cancelled for this user (e.g. logout/disconnect)."""
+        try:
+            from core.celery_app import CELERY_BROKER_URL
+            import redis
+
+            cancel_key = f"gfit_sync_cancel:{user_id}"
+            r = redis.Redis.from_url(CELERY_BROKER_URL.replace("/0", "/2"), decode_responses=True)
+            return bool(r.exists(cancel_key))
+        except Exception:
+            return False
+
+    @staticmethod
+    def _set_sync_cancelled(user_id: str, ttl_seconds: int = 60) -> None:
+        """Set a cancellation flag in Redis so running syncs stop immediately."""
+        try:
+            from core.celery_app import CELERY_BROKER_URL
+            import redis
+
+            r = redis.Redis.from_url(CELERY_BROKER_URL.replace("/0", "/2"), decode_responses=True)
+            cancel_key = f"gfit_sync_cancel:{user_id}"
+            r.set(cancel_key, "1", ex=ttl_seconds)
+            # Also clear any active sync lock so the slot is freed
+            lock_key = f"gfit_sync_lock:{user_id}"
+            rate_limit_key = f"gfit_sync_rate:{user_id}"
+            r.delete(lock_key, rate_limit_key)
+        except Exception as exc:
+            logger.warning("[GFit] Failed to set sync cancellation flag | user=%s | error=%s", user_id, exc)
+
+    @staticmethod
     def disconnect(db: Session, user: User) -> dict[str, Any]:
+        # ── SET CANCELLATION FLAG FIRST ────────────────────────
+        # This ensures any running sync stops at its next checkpoint
+        GoogleFitService._set_sync_cancelled(str(user.id))
+        logger.info("SYNC_STOPPED_LOGOUT | user=%s | reason=disconnect_called", user.id)
+
         connection = GoogleFitService.get_connection(db, user)
         if connection and connection.device_id:
             device = db.query(Device).filter(Device.id == connection.device_id).first()
@@ -4411,3 +5299,37 @@ class GoogleFitService:
         db.commit()
 
         return {"connected": False, "message": "Google Fit disconnected"}
+
+    @staticmethod
+    def stop_sync_on_logout(db: Session, user_id: str) -> None:
+        user_id_value = uuid.UUID(str(user_id))
+        GoogleFitService._set_sync_cancelled(str(user_id_value))
+        logger.info("SYNC_STOPPED_LOGOUT | user=%s | reason=logout", user_id_value)
+
+        connection = db.query(GoogleFitConnection).filter(GoogleFitConnection.user_id == user_id_value).first()
+        if connection:
+            connection.access_token_encrypted = None
+            connection.refresh_token_encrypted = None
+            connection.last_sync_status = "disconnected"
+            raw_payload = GoogleFitService._connection_raw_payload(connection)
+            raw_payload["sync_blocked"] = {
+                "reason": "logout",
+                "blocked_at": datetime.now(timezone.utc).isoformat(),
+            }
+            connection.raw_last_response = raw_payload
+            if connection.device_id:
+                device = db.query(Device).filter(Device.id == connection.device_id).first()
+                if device:
+                    device.is_active = False
+
+        user_device = db.query(UserDevice).filter(
+            UserDevice.user_id == user_id_value,
+            UserDevice.provider == PROVIDER_GOOGLE_FIT,
+        ).first()
+        if user_device:
+            user_device.access_token = None
+            user_device.refresh_token = None
+            user_device.token_expiry = None
+            user_device.is_active = False
+
+        db.commit()

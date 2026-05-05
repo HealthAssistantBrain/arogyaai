@@ -161,3 +161,87 @@ def test_build_feature_snapshot_uses_latest_lab_results():
     assert payload["user_profile"]["occupation"] == "Teacher"
     assert payload["medical_history"]["medications"] == "Metformin"
     assert payload["initial_clinical_snapshot"]["duration"] == "2 days"
+
+
+def test_build_feature_snapshot_ignores_duplicate_legacy_blood_pressure():
+    db = MagicMock()
+    user = SimpleNamespace(id=uuid4())
+
+    history_query = MagicMock()
+    history_query.filter.return_value.order_by.return_value.first.return_value = None
+
+    conditions_query = MagicMock()
+    conditions_query.filter.return_value.all.return_value = []
+
+    vitals_query = MagicMock()
+    vitals_query.filter.return_value.order_by.return_value.first.return_value = SimpleNamespace(
+        recorded_at=datetime(2026, 5, 1, tzinfo=timezone.utc),
+        blood_pressure_sys=122,
+        blood_pressure_dia=122,
+    )
+
+    labs_query = MagicMock()
+    labs_query.filter.return_value.order_by.return_value.all.return_value = []
+
+    bp_query = MagicMock()
+    bp_query.filter.return_value.order_by.return_value.first.return_value = None
+
+    db.query.side_effect = [history_query, conditions_query, vitals_query, labs_query, bp_query]
+
+    with patch(
+        "pipelines.feature_pipeline.service._latest_profile",
+        return_value=SimpleNamespace(
+            height_cm=172.0,
+            weight_kg=74.0,
+            date_of_birth=None,
+            age=34,
+            gender="female",
+            family_history="",
+            allergies="",
+            goals="",
+            sleep_hours=6.5,
+            stress_level=4,
+            occupation=None,
+            city=None,
+            marital_status=None,
+            surgeries=None,
+            hospitalizations=False,
+            hospitalization_details=None,
+            current_medications=None,
+            smoking=False,
+            alcohol=False,
+            activity_level=None,
+        ),
+    ), patch(
+        "pipelines.feature_pipeline.service.SleepService.get_sleep_summary",
+        return_value={"data": {}, "last_updated": None},
+    ), patch(
+        "pipelines.feature_pipeline.service._recent_heart_rates",
+        return_value=[],
+    ), patch(
+        "pipelines.feature_pipeline.service._recent_steps",
+        return_value=[],
+    ), patch(
+        "pipelines.feature_pipeline.service._recent_sleep_rows",
+        return_value=([], [], 0),
+    ), patch(
+        "pipelines.feature_pipeline.service._latest_user_vital_value",
+        return_value=None,
+    ), patch(
+        "pipelines.feature_pipeline.service.data_availability_7d",
+        return_value={"steps": False, "heart_rate": False, "sleep": False},
+    ), patch(
+        "pipelines.feature_pipeline.service.hr_mean_7d",
+        return_value=0.0,
+    ), patch(
+        "pipelines.feature_pipeline.service.avg_steps_7d",
+        return_value=0.0,
+    ), patch(
+        "pipelines.feature_pipeline.service.sleep_efficiency_7d",
+        return_value=0.0,
+    ):
+        snapshot = FeaturePipelineService.build_feature_snapshot(db, user, persist=False)
+
+    assert snapshot.systolic_bp is None
+    assert snapshot.diastolic_bp is None
+    assert snapshot.bp_category == "unknown"

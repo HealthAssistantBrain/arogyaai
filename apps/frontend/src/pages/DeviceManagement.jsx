@@ -16,13 +16,12 @@ import googleFitLogo from '../assets/google-fit.png';
 import { openCommandPalette } from '../components/CommandPalette';
 import AddDeviceModal from '../components/AddDeviceModal';
 import Button from '../components/ui/Button';
-import { syncGoogleFit } from '../lib/googleFitApi';
+import { runGoogleFitSyncOnce } from '../lib/googleFitSyncController';
 import useDeviceStore from '../store/deviceStore';
 import {
   fetchConnectedDeviceSummaries,
   GOOGLE_FIT_PROVIDER,
 } from '../lib/deviceApi';
-import { refreshAfterGoogleFitSync } from '../lib/googleFitRefresh';
 import { setGoogleFitConnectionState } from '../lib/googleFitConnectionState';
 
 function formatLastSynced(value) {
@@ -309,11 +308,11 @@ const DeviceManagement = () => {
         toast.success('Google Fit connected. Starting your first sync.');
 
         try {
-          await syncGoogleFit({
+          await runGoogleFitSyncOnce({
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             days: 7,
+            requireConnected: false,
           });
-          await refreshAfterGoogleFitSync();
         } catch (apiError) {
           toast.error(extractErrorMessage(apiError, 'Google Fit connected, but the first sync failed.'));
         }
@@ -393,11 +392,11 @@ const DeviceManagement = () => {
 
     setSyncingDeviceId(device.id);
     try {
-      await syncGoogleFit({
+      await runGoogleFitSyncOnce({
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         days: 7,
+        requireConnected: false,
       });
-      await refreshAfterGoogleFitSync();
       await loadDevices({ silent: true });
       toast.success('Google Fit sync triggered.');
     } catch (apiError) {

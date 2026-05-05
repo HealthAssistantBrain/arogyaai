@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import logging
 from typing import Any
 import uuid
 
@@ -13,6 +14,8 @@ from models.report import Report
 from models.timeline_event import TimelineEvent
 from models.user_vital import UserVital, UserVitalTypeEnum
 from services.clinical_history_service import ClinicalHistoryService
+
+logger = logging.getLogger("uvicorn.error")
 
 
 def _vital_title(vital_type: UserVitalTypeEnum) -> str:
@@ -96,7 +99,7 @@ def serialize_timeline_event(event: TimelineEvent) -> dict[str, Any]:
     return payload
 
 
-def create_timeline_event(db: Session, data: dict[str, Any]) -> TimelineEvent:
+def create_timeline_event(db: Session, data: dict[str, Any], *, commit: bool = True) -> TimelineEvent:
     timestamp = data.get("timestamp") or datetime.now(timezone.utc)
     if isinstance(timestamp, str):
         timestamp = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
@@ -133,8 +136,18 @@ def create_timeline_event(db: Session, data: dict[str, Any]) -> TimelineEvent:
             **_event_metadata(existing.event_metadata),
             **metadata,
         }
-        db.commit()
+        if commit:
+            db.commit()
+        else:
+            db.flush()
         db.refresh(existing)
+        logger.info(
+            "TIMELINE_EVENT_CREATED user_id=%s reference_id=%s timeline_event_id=%s type=%s",
+            user_id,
+            reference_id,
+            existing.id,
+            event_type,
+        )
         return existing
 
     event = TimelineEvent(
@@ -146,12 +159,22 @@ def create_timeline_event(db: Session, data: dict[str, Any]) -> TimelineEvent:
         event_metadata=metadata,
     )
     db.add(event)
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     db.refresh(event)
+    logger.info(
+        "TIMELINE_EVENT_CREATED user_id=%s reference_id=%s timeline_event_id=%s type=%s",
+        user_id,
+        reference_id,
+        event.id,
+        event_type,
+    )
     return event
 
 
-def create_report_timeline_event(db: Session, report: Report) -> TimelineEvent:
+def create_report_timeline_event(db: Session, report: Report, *, commit: bool = True) -> TimelineEvent:
     summary_data = report.summary_data if isinstance(report.summary_data, dict) else {}
     upload_metadata = summary_data.get("upload_metadata") if isinstance(summary_data.get("upload_metadata"), dict) else {}
     filename = (
@@ -184,6 +207,7 @@ def create_report_timeline_event(db: Session, report: Report) -> TimelineEvent:
                 "url": "/medical-reports",
             },
         },
+        commit=commit,
     )
 
 

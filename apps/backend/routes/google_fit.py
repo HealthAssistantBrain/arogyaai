@@ -1,5 +1,6 @@
 import logging
 import uuid
+from datetime import datetime, timezone
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
@@ -11,7 +12,11 @@ from database.session import get_db
 from routes.users import get_current_user_from_header
 from schemas.api_models import GoogleFitConnectRequest, GoogleFitSyncRequest
 from services.audit_service import log_event
-from services.google_fit_service import GOOGLE_FIT_DEFAULT_FETCH_WINDOW_DAYS, GOOGLE_FIT_MAX_FETCH_WINDOW_DAYS, GoogleFitService
+from services.google_fit_service import (
+    GOOGLE_FIT_DEFAULT_FETCH_WINDOW_DAYS,
+    GOOGLE_FIT_MAX_FETCH_WINDOW_DAYS,
+    GoogleFitService,
+)
 from workers.google_fit_tasks import sync_google_fit_for_user_task
 
 router = APIRouter(prefix="/api/v1/google-fit", tags=["Google Fit"])
@@ -48,6 +53,7 @@ async def google_fit_debug(
 
 
 route_logger = logging.getLogger("google_fit_routes")
+_ACTIVE_SYNC_USERS: set[str] = set()
 
 
 def _log_connect_payload(result: dict[str, object]) -> None:
@@ -93,6 +99,69 @@ def _safe_not_connected_sync_result(db: Session, current_user, timezone: str | N
             "missing_scopes": status_payload.get("missing_scopes"),
             "needs_reconsent": status_payload.get("needs_reconsent"),
         },
+    }
+
+
+def _recent_sync_exists(db: Session, current_user, *, last_30_seconds: bool = False) -> dict[str, object] | None:
+    window_seconds = 30 if last_30_seconds else 180
+    connection = GoogleFitService.get_connection(db, current_user)
+    if not connection:
+        return None
+
+    recent_background_sync = GoogleFitService.get_recent_background_sync(
+        db,
+        current_user,
+        max_age_seconds=window_seconds,
+    )
+    if recent_background_sync:
+        return {
+            "reason": "background_sync_running",
+            "task_id": recent_background_sync.get("task_id"),
+            "last_synced_at": connection.last_synced_at.isoformat() if connection.last_synced_at else None,
+        }
+
+    if not connection.last_synced_at:
+        return None
+
+    last_synced_at = connection.last_synced_at
+    if last_synced_at.tzinfo is None:
+        last_synced_at = last_synced_at.replace(tzinfo=timezone.utc)
+
+    seconds_since_sync = (datetime.now(timezone.utc) - last_synced_at).total_seconds()
+    if seconds_since_sync <= window_seconds:
+        return {
+            "reason": "recent_sync",
+            "seconds_since_sync": seconds_since_sync,
+            "last_synced_at": connection.last_synced_at.isoformat(),
+        }
+
+    return None
+
+
+def _build_duplicate_sync_result(db: Session, current_user, payload: GoogleFitSyncRequest, duplicate: dict[str, object]) -> dict[str, object]:
+    status_data = GoogleFitService.get_status(db, current_user, timezone_name=payload.timezone)
+    return {
+        "success": True,
+        "status": "skipped_duplicate",
+        "error": None,
+        "partial": False,
+        "message": "Google Fit sync skipped because a sync ran recently.",
+        "connected": status_data.get("connected", True),
+        "sync_mode": "duplicate_guard",
+        "duplicate": True,
+        "duplicate_reason": duplicate.get("reason"),
+        "task_id": duplicate.get("task_id"),
+        "timezone": status_data.get("timezone"),
+        "last_synced_at": status_data.get("last_synced_at") or duplicate.get("last_synced_at"),
+        "last_sync_status": status_data.get("last_sync_status"),
+        "stats": status_data.get("stats", GoogleFitService._build_stats([])),
+        "raw_json": status_data.get("raw_json"),
+        "google_email": status_data.get("google_email"),
+        "data_availability": status_data.get("data_availability"),
+        "scope_status": status_data.get("scope_status"),
+        "missing_scopes": status_data.get("missing_scopes") or [],
+        "needs_reconsent": status_data.get("needs_reconsent", False),
+        "data": [],
     }
 
 
@@ -288,31 +357,55 @@ async def _run_google_fit_data_sync(
     db: Session,
     endpoint: str,
 ) -> dict[str, object] | Response:
-    if not current_user.google_fit_connection:
-        result = _safe_not_connected_sync_result(db, current_user)
+    connection, _access_token, blocked_result = await GoogleFitService.validate_sync_auth(
+        db,
+        current_user,
+        timezone_name=None,
+        sync_mode="data_sync",
+    )
+    if blocked_result is not None:
+        result = {"status": blocked_result.get("status", "auth_blocked"), "lastUpdated": None, "data": blocked_result}
         log_event(
             current_user.id,
             "wearable_sync",
             endpoint,
             {
                 "status": result.get("status"),
-                "connected": False,
-                "message": result.get("data", {}).get("message"),
+                "connected": blocked_result.get("connected"),
+                "message": blocked_result.get("message"),
+                "sync_blocked_reason": blocked_result.get("sync_blocked_reason"),
             },
         )
         return result
 
-    connection = GoogleFitService.get_connection(db, current_user)
-
     if connection and connection.last_synced_at:
         route_logger.info("[GFit] Bypassing conditional cache for sync request | user=%s", current_user.id)
 
-    result = _enqueue_google_fit_sync(
-        db,
-        current_user,
-        timezone=connection.default_timezone if connection else None,
-        days=GOOGLE_FIT_DEFAULT_FETCH_WINDOW_DAYS,
-    )
+    sync_user_key = str(current_user.id)
+    if GoogleFitService.is_sync_locked(sync_user_key):
+        route_logger.info("SYNC_SKIPPED_LOCK | user=%s | source=data_sync", current_user.id)
+        result = GoogleFitService.build_background_sync_response(
+            db,
+            current_user,
+            timezone_name=connection.default_timezone if connection else None,
+            days=GOOGLE_FIT_DEFAULT_FETCH_WINDOW_DAYS,
+            already_running=True,
+        )
+    elif not GoogleFitService.acquire_sync_rate_limit(sync_user_key):
+        route_logger.info("SYNC_SKIPPED_RATE_LIMIT | user=%s | source=data_sync", current_user.id)
+        result = _build_duplicate_sync_result(
+            db,
+            current_user,
+            GoogleFitSyncRequest(timezone=connection.default_timezone if connection else None, days=GOOGLE_FIT_DEFAULT_FETCH_WINDOW_DAYS),
+            {"reason": "rate_limited", "last_synced_at": connection.last_synced_at.isoformat() if connection and connection.last_synced_at else None},
+        )
+    else:
+        result = _enqueue_google_fit_sync(
+            db,
+            current_user,
+            timezone=connection.default_timezone if connection else None,
+            days=GOOGLE_FIT_DEFAULT_FETCH_WINDOW_DAYS,
+        )
 
     connection = GoogleFitService.get_connection(db, current_user)
     last_updated = None
@@ -371,34 +464,141 @@ async def sync_google_fit(
     current_user=Depends(get_current_user_from_header),
     db: Session = Depends(get_db),
 ):
-    if not current_user.google_fit_connection:
-        result = _safe_not_connected_sync_result(db, current_user, payload.timezone)["data"]
+    connection, _access_token, blocked_result = await GoogleFitService.validate_sync_auth(
+        db,
+        current_user,
+        timezone_name=payload.timezone,
+        sync_mode="manual_api",
+    )
+    if blocked_result is not None:
+        result = blocked_result
         log_event(
             current_user.id,
             "wearable_sync",
             "/api/v1/google-fit/sync",
             {
                 "status": result.get("status"),
-                "connected": False,
+                "connected": result.get("connected"),
                 "timezone": payload.timezone,
                 "days": payload.days,
                 "silent": silent,
+                "sync_blocked_reason": result.get("sync_blocked_reason"),
             },
         )
         return result
 
+    duplicate_sync = _recent_sync_exists(db, current_user, last_30_seconds=True)
+    if duplicate_sync:
+        result = _build_duplicate_sync_result(db, current_user, payload, duplicate_sync)
+        log_event(
+            current_user.id,
+            "wearable_sync",
+            "/api/v1/google-fit/sync",
+            {
+                "status": result.get("status"),
+                "connected": result.get("connected"),
+                "timezone": payload.timezone,
+                "days": payload.days,
+                "silent": silent,
+                "duplicate": True,
+                "duplicate_reason": result.get("duplicate_reason"),
+                "last_synced_at": result.get("last_synced_at"),
+            },
+        )
+        return result
+
+    sync_user_key = str(current_user.id)
+    if sync_user_key in _ACTIVE_SYNC_USERS:
+        duplicate_sync = {"reason": "sync_in_progress"}
+        result = _build_duplicate_sync_result(db, current_user, payload, duplicate_sync)
+        log_event(
+            current_user.id,
+            "wearable_sync",
+            "/api/v1/google-fit/sync",
+            {
+                "status": result.get("status"),
+                "connected": result.get("connected"),
+                "timezone": payload.timezone,
+                "days": payload.days,
+                "silent": silent,
+                "duplicate": True,
+                "duplicate_reason": result.get("duplicate_reason"),
+            },
+        )
+        return result
+
+    _ACTIVE_SYNC_USERS.add(sync_user_key)
+    redis_lock_acquired = False
     try:
-        requested_days = int(payload.days or GOOGLE_FIT_DEFAULT_FETCH_WINDOW_DAYS)
-    except (TypeError, ValueError):
-        requested_days = GOOGLE_FIT_DEFAULT_FETCH_WINDOW_DAYS
-    sync_days = max(1, min(requested_days, GOOGLE_FIT_MAX_FETCH_WINDOW_DAYS))
-    result = await GoogleFitService.sync_steps(
-        db,
-        current_user,
-        timezone_name=payload.timezone,
-        days=sync_days,
-        silent=False,
-    )
+        try:
+            requested_days = int(payload.days or GOOGLE_FIT_DEFAULT_FETCH_WINDOW_DAYS)
+        except (TypeError, ValueError):
+            requested_days = GOOGLE_FIT_DEFAULT_FETCH_WINDOW_DAYS
+        sync_days = max(1, min(requested_days, GOOGLE_FIT_MAX_FETCH_WINDOW_DAYS))
+
+        if not GoogleFitService.acquire_sync_rate_limit(sync_user_key):
+            route_logger.info("SYNC_SKIPPED_RATE_LIMIT | user=%s | source=manual_api", current_user.id)
+            duplicate_sync = {
+                "reason": "rate_limited",
+                "last_synced_at": connection.last_synced_at.isoformat() if connection and connection.last_synced_at else None,
+            }
+            result = _build_duplicate_sync_result(db, current_user, payload, duplicate_sync)
+            log_event(
+                current_user.id,
+                "wearable_sync",
+                "/api/v1/google-fit/sync",
+                {
+                    "status": result.get("status"),
+                    "duplicate": True,
+                    "duplicate_reason": "rate_limited",
+                },
+            )
+            return result
+
+        # ── DISTRIBUTED LOCK ───────────────────────────────────
+        redis_lock_acquired = GoogleFitService.acquire_sync_lock(sync_user_key)
+        if not redis_lock_acquired:
+            route_logger.info("SYNC_SKIPPED_LOCK | user=%s | source=manual_api", current_user.id)
+            duplicate_sync = {"reason": "redis_lock_held"}
+            result = _build_duplicate_sync_result(db, current_user, payload, duplicate_sync)
+            log_event(
+                current_user.id,
+                "wearable_sync",
+                "/api/v1/google-fit/sync",
+                {
+                    "status": result.get("status"),
+                    "duplicate": True,
+                    "duplicate_reason": "redis_lock_held",
+                },
+            )
+            return result
+
+        route_logger.info("SYNC_START | user=%s | source=manual_api | days=%s", current_user.id, sync_days)
+        try:
+            result = await GoogleFitService.sync_steps(
+                db,
+                current_user,
+                timezone_name=payload.timezone,
+                days=sync_days,
+                silent=False,
+            )
+        except Exception as exc:
+            db.rollback()
+            route_logger.exception("[GFit] Direct sync isolated external failure | user=%s | error=%s", current_user.id, exc)
+            result = GoogleFitService.build_fault_tolerant_sync_failure_response(
+                db,
+                current_user,
+                exc,
+                timezone_name=payload.timezone,
+                retry_count=0,
+                operation="api_sync",
+                fallback_used=True,
+            )
+    finally:
+        if redis_lock_acquired:
+            GoogleFitService.release_sync_lock(sync_user_key)
+        _ACTIVE_SYNC_USERS.discard(sync_user_key)
+
     log_event(
         current_user.id,
         "wearable_sync",

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+import logging
 from statistics import mean, pstdev
 from typing import Any, Iterable
 from uuid import UUID
@@ -17,6 +18,7 @@ from pipelines.storage_pipeline.service import StoragePipelineService
 LOOKBACK_DAYS = 30
 SLEEP_LOOKBACK_DAYS = 14
 VITAL_LOOKBACK_DAYS = 7
+logger = logging.getLogger(__name__)
 
 
 def _clamp(value: float, minimum: float, maximum: float) -> float:
@@ -91,6 +93,27 @@ def _age_from_dob(dob) -> int | None:
     if (today.month, today.day) < (dob.month, dob.day):
         years -= 1
     return max(years, 0)
+
+
+def _validated_blood_pressure_pair(
+    systolic: int | None,
+    diastolic: int | None,
+    *,
+    stage: str,
+    user_id: Any,
+) -> tuple[int | None, int | None]:
+    if systolic is None or diastolic is None:
+        return systolic, diastolic
+    if systolic == diastolic:
+        logger.warning(
+            "INVALID_BP_BLOCKED | stage=%s | user_id=%s | systolic=%s | diastolic=%s",
+            stage,
+            user_id,
+            systolic,
+            diastolic,
+        )
+        return None, None
+    return systolic, diastolic
 
 
 def _bp_category(sys_bp: int | None, dia_bp: int | None) -> str:
@@ -633,10 +656,22 @@ class FeaturePipelineService:
 
         systolic_bp = _safe_int(_latest_user_vital_value(db, user, UserVitalTypeEnum.BLOOD_PRESSURE_SYSTOLIC))
         diastolic_bp = _safe_int(_latest_user_vital_value(db, user, UserVitalTypeEnum.BLOOD_PRESSURE_DIASTOLIC))
+        systolic_bp, diastolic_bp = _validated_blood_pressure_pair(
+            systolic_bp,
+            diastolic_bp,
+            stage="feature_pipeline_user_vitals",
+            user_id=user.id,
+        )
         if systolic_bp is None:
             systolic_bp = _safe_int(getattr(latest_vitals, "blood_pressure_sys", None))
         if diastolic_bp is None:
             diastolic_bp = _safe_int(getattr(latest_vitals, "blood_pressure_dia", None))
+        systolic_bp, diastolic_bp = _validated_blood_pressure_pair(
+            systolic_bp,
+            diastolic_bp,
+            stage="feature_pipeline_legacy_vitals",
+            user_id=user.id,
+        )
         bp_category = _bp_category(systolic_bp, diastolic_bp)
 
         age = _age_from_dob(getattr(profile, "date_of_birth", None))

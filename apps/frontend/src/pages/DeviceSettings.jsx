@@ -18,9 +18,8 @@ import {
   disconnectGoogleFit,
   fetchGoogleFitStatus,
   startGoogleFitConnect,
-  syncGoogleFit,
 } from '../lib/googleFitApi';
-import { refreshAfterGoogleFitSync } from '../lib/googleFitRefresh';
+import { runGoogleFitSyncOnce } from '../lib/googleFitSyncController';
 import { setGoogleFitConnectionState } from '../lib/googleFitConnectionState';
 
 const DEFAULT_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -143,8 +142,7 @@ const DeviceSettings = () => {
         setGoogleFitConnectionState(true);
         setNotice('Google Fit connected. Pulling the latest data now.');
         try {
-          await syncGoogleFit({ timezone, days: 7 });
-          await refreshAfterGoogleFitSync();
+          await runGoogleFitSyncOnce({ timezone, days: 7, requireConnected: false });
         } catch (apiError) {
           setError(extractErrorMessage(apiError, 'Google Fit connected, but sync failed.'));
         }
@@ -192,10 +190,13 @@ const DeviceSettings = () => {
     setError('');
 
     try {
-      const response = await syncGoogleFit({ timezone, days: 7 });
+      const response = await runGoogleFitSyncOnce({
+        timezone,
+        days: 7,
+        requireConnected: false,
+      });
       await Promise.all([
         loadStatus({ silent: true }),
-        refreshAfterGoogleFitSync(),
       ]);
       setNotice(response?.message || 'Google Fit sync completed.');
     } catch (apiError) {

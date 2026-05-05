@@ -26,6 +26,7 @@ const ReportProcessing = () => {
     const setReportResult = useReportUploadStore((state) => state.setReportResult);
     const setProcessing = useReportUploadStore((state) => state.setProcessing);
     const setErrorMessageInStore = useReportUploadStore((state) => state.setErrorMessage);
+    const clearPendingUpload = useReportUploadStore((state) => state.clearPendingUpload);
 
     const [progress, setProgress] = useState(0);
     const [stageKey, setStageKey] = useState('uploading');
@@ -139,6 +140,7 @@ const ReportProcessing = () => {
                 const reportData = response.data.data || {};
                 saveUploadedReportSession(reportData);
                 setReportResult(reportData, pendingFile.name);
+                clearPendingUpload();
 
                 setTimeout(() => {
                     if (!isMounted) return;
@@ -155,6 +157,7 @@ const ReportProcessing = () => {
                 setErrorMessage(message);
                 setErrorMessageInStore(message);
                 setProcessing(false);
+                clearPendingUpload();
                 toast.error(message);
             }
         };
@@ -171,7 +174,7 @@ const ReportProcessing = () => {
             clearTimeout(insightStageTimeout);
             clearInterval(interval);
         };
-    }, [navigate, pendingFile, setErrorMessageInStore, setProcessing, setReportResult]);
+    }, [clearPendingUpload, navigate, pendingFile, setErrorMessageInStore, setProcessing, setReportResult]);
 
     const activeStage = PIPELINE_STAGES.find((stage) => stage.key === stageKey) || PIPELINE_STAGES[0];
     const getStageStatus = (stageTarget) => {

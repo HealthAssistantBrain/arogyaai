@@ -21,16 +21,19 @@ contract stay identical.
 
 from __future__ import annotations
 
+import logging
 import math
 import random
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
 from models import User, UserVital, UserVitalTypeEnum, WearableMetric
 from services.recommendation_engine import generate_recommendation_plan
 from services.recommendation_service import generate_test_recommendations
+
+logger = logging.getLogger(__name__)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -55,6 +58,191 @@ def _envelope(data: dict, status: str, source: str, error: Optional[str] = None)
         "data": data,
         "error": error,
         "last_updated": _now(),
+    }
+
+
+def _is_valid_blood_pressure_pair(systolic: Any, diastolic: Any) -> bool:
+    try:
+        if systolic is None or diastolic is None:
+            return False
+        return float(systolic) != float(diastolic)
+    except (TypeError, ValueError):
+        return False
+
+
+def _coerce_blood_pressure_value(value: Any) -> float | None:
+    try:
+        if value is None:
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _classify_blood_pressure_reading(systolic: Any, diastolic: Any) -> str:
+    systolic_value = _coerce_blood_pressure_value(systolic)
+    diastolic_value = _coerce_blood_pressure_value(diastolic)
+    if systolic_value is None and diastolic_value is None:
+        return "missing"
+    if systolic_value is None or diastolic_value is None:
+        return "partial"
+    if systolic_value == diastolic_value:
+        return "duplicate"
+    return "pair"
+
+
+def _build_blood_pressure_metric(
+    systolic_payload: dict[str, Any],
+    diastolic_payload: dict[str, Any],
+    *,
+    user_id: str | None = None,
+) -> dict[str, Any]:
+    systolic_series = {
+        point.get("timestamp"): _coerce_blood_pressure_value(point.get("value"))
+        for point in systolic_payload.get("series", [])
+        if point.get("timestamp")
+    }
+    diastolic_series = {
+        point.get("timestamp"): _coerce_blood_pressure_value(point.get("value"))
+        for point in diastolic_payload.get("series", [])
+        if point.get("timestamp")
+    }
+
+    series: list[dict[str, Any]] = []
+    latest_valid_pair: dict[str, Any] | None = None
+    latest_partial_reading: dict[str, Any] | None = None
+    for timestamp in sorted(set(systolic_series) | set(diastolic_series)):
+        systolic = systolic_series.get(timestamp)
+        diastolic = diastolic_series.get(timestamp)
+        reading_state = _classify_blood_pressure_reading(systolic, diastolic)
+        if reading_state == "missing":
+            continue
+        if reading_state == "duplicate":
+            logger.warning(
+                "BP_SKIPPED_INVALID | stage=api_response | user_id=%s | timestamp=%s | systolic=%s | diastolic=%s",
+                user_id,
+                timestamp,
+                systolic,
+                diastolic,
+            )
+            logger.warning(
+                "BP_VALIDATION | stage=api_response | user_id=%s | timestamp=%s | status=rejected_duplicate | systolic=%s | diastolic=%s",
+                user_id,
+                timestamp,
+                systolic,
+                diastolic,
+            )
+            continue
+
+        paired_point = {
+            "timestamp": timestamp,
+            "systolic": systolic,
+            "diastolic": diastolic,
+        }
+        series.append(paired_point)
+        logger.info(
+            "BP_VALIDATION | stage=api_response | user_id=%s | timestamp=%s | status=%s | systolic=%s | diastolic=%s",
+            user_id,
+            timestamp,
+            reading_state,
+            systolic,
+            diastolic,
+        )
+        if reading_state == "pair":
+            latest_valid_pair = paired_point
+        elif latest_partial_reading is None or timestamp >= latest_partial_reading["timestamp"]:
+            latest_partial_reading = paired_point
+
+    fallback_systolic = _coerce_blood_pressure_value(systolic_payload.get("value"))
+    fallback_diastolic = _coerce_blood_pressure_value(diastolic_payload.get("value"))
+    fallback_systolic_timestamp = systolic_payload.get("last_updated")
+    fallback_diastolic_timestamp = diastolic_payload.get("last_updated")
+    fallback_pair: dict[str, Any] | None = None
+    fallback_partial: dict[str, Any] | None = None
+    if fallback_systolic_timestamp and fallback_systolic_timestamp == fallback_diastolic_timestamp:
+        fallback_state = _classify_blood_pressure_reading(fallback_systolic, fallback_diastolic)
+        if fallback_state == "pair":
+            fallback_pair = {
+                "timestamp": fallback_systolic_timestamp,
+                "systolic": fallback_systolic,
+                "diastolic": fallback_diastolic,
+            }
+        elif fallback_state == "partial":
+            fallback_partial = {
+                "timestamp": fallback_systolic_timestamp,
+                "systolic": fallback_systolic,
+                "diastolic": fallback_diastolic,
+            }
+        elif fallback_systolic is not None or fallback_diastolic is not None:
+            logger.warning(
+                "BP_SKIPPED_INVALID | stage=api_response_latest | user_id=%s | timestamp=%s | systolic=%s | diastolic=%s",
+                user_id,
+                fallback_systolic_timestamp,
+                fallback_systolic,
+                fallback_diastolic,
+            )
+    else:
+        partial_candidates = [
+            {
+                "timestamp": fallback_systolic_timestamp,
+                "systolic": fallback_systolic,
+                "diastolic": None,
+            }
+            if fallback_systolic_timestamp and fallback_systolic is not None
+            else None,
+            {
+                "timestamp": fallback_diastolic_timestamp,
+                "systolic": None,
+                "diastolic": fallback_diastolic,
+            }
+            if fallback_diastolic_timestamp and fallback_diastolic is not None
+            else None,
+        ]
+        fallback_partial = max(
+            [candidate for candidate in partial_candidates if candidate is not None],
+            key=lambda item: item["timestamp"],
+            default=None,
+        )
+
+    selected_reading = latest_valid_pair or fallback_pair or latest_partial_reading or fallback_partial
+
+    if selected_reading is not None:
+        logger.info(
+            "BP_API_RESPONSE | user_id=%s | timestamp=%s | systolic=%s | diastolic=%s | status=%s",
+            user_id,
+            selected_reading["timestamp"],
+            selected_reading["systolic"],
+            selected_reading["diastolic"],
+            "ready" if _classify_blood_pressure_reading(selected_reading["systolic"], selected_reading["diastolic"]) == "pair" else "partial",
+        )
+
+    has_any_bp_data = bool(
+        systolic_payload.get("last_updated")
+        or diastolic_payload.get("last_updated")
+        or systolic_payload.get("series")
+        or diastolic_payload.get("series")
+    )
+    value = (
+        {
+            "systolic": selected_reading["systolic"],
+            "diastolic": selected_reading["diastolic"],
+        }
+        if selected_reading is not None
+        else None
+    )
+    selected_state = _classify_blood_pressure_reading(
+        selected_reading["systolic"] if selected_reading is not None else None,
+        selected_reading["diastolic"] if selected_reading is not None else None,
+    )
+    return {
+        "value": value,
+        "unit": "mmHg",
+        "status": "ready" if selected_state == "pair" else ("partial" if selected_state == "partial" else ("missing" if has_any_bp_data else "no_data")),
+        "source": systolic_payload.get("source") or diastolic_payload.get("source") or "google_fit",
+        "last_updated": selected_reading["timestamp"] if selected_reading is not None else None,
+        "systolic": selected_reading["systolic"] if selected_reading is not None else None,
+        "diastolic": selected_reading["diastolic"] if selected_reading is not None else None,
+        "series": series,
     }
 
 
@@ -382,31 +570,24 @@ async def get_health_metrics(user: User, db: Session) -> dict:
 
     systolic = _metric_payload(UserVitalTypeEnum.BLOOD_PRESSURE_SYSTOLIC, "mmHg")
     diastolic = _metric_payload(UserVitalTypeEnum.BLOOD_PRESSURE_DIASTOLIC, "mmHg")
-    blood_pressure_value = (
-        {"systolic": systolic["value"], "diastolic": diastolic["value"]}
-        if systolic["value"] is not None and diastolic["value"] is not None
-        else None
+    logger.info(
+        "BP_DB_FETCH | user_id=%s | systolic=%s | diastolic=%s",
+        str(user.id),
+        systolic["value"],
+        diastolic["value"],
     )
-    metrics["blood_pressure"] = {
-        "value": blood_pressure_value,
-        "unit": "mmHg",
-        "status": "ready" if systolic["value"] is not None and diastolic["value"] is not None else "no_data",
-        "source": systolic["source"],
-        "last_updated": max(
-            [value for value in (systolic["last_updated"], diastolic["last_updated"]) if value],
-            default=None,
-        ),
-        "systolic": systolic["value"],
-        "diastolic": diastolic["value"],
-        "series": [
-            {
-                "timestamp": sys_point.get("timestamp"),
-                "systolic": sys_point.get("value"),
-                "diastolic": dia_point.get("value") if dia_point else None,
-            }
-            for sys_point, dia_point in zip(systolic["series"], diastolic["series"], strict=False)
-        ],
-    }
+    metrics["blood_pressure"] = _build_blood_pressure_metric(
+        systolic,
+        diastolic,
+        user_id=str(user.id),
+    )
+    logger.info(
+        "BP_API_RESPONSE | user_id=%s | systolic=%s | diastolic=%s | status=%s",
+        str(user.id),
+        metrics["blood_pressure"]["systolic"],
+        metrics["blood_pressure"]["diastolic"],
+        metrics["blood_pressure"]["status"],
+    )
 
     latest_location = (
         db.query(WearableMetric)

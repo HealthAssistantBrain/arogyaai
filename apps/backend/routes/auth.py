@@ -11,6 +11,7 @@ from services.auth_service import AuthService
 from services.audit_service import log_event
 from services.onboarding_service import OnboardingService
 from services.user_service import UserService
+from services.google_fit_service import GoogleFitService
 from routes.users import get_current_user_from_header, get_supabase_claims_from_header
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
@@ -124,6 +125,23 @@ async def refresh_access_token(
 @router.post("/logout")
 async def logout(request: Request, response: Response, db: Session = Depends(get_db)):
     """Clear legacy backend cookies. Supabase sign-out happens on the frontend."""
+    # Best-effort: cancel any active Google Fit sync for this user
+    try:
+        auth_header = request.headers.get("authorization", "")
+        if auth_header:
+            token = auth_header.replace("Bearer ", "").strip()
+            if token:
+                try:
+                    # Decode without verification — we just need the user_id to set the cancel flag
+                    payload = jwt.decode(token, options={"verify_signature": False})
+                    user_id = payload.get("sub") or payload.get("user_id")
+                    if user_id:
+                        GoogleFitService.stop_sync_on_logout(db, user_id)
+                except Exception:
+                    pass  # Best-effort; don't block logout
+    except Exception:
+        pass  # Best-effort; don't block logout
+
     clear_session_cookies(response)
     return {"success": True, "status": "ready", "data": {"message": "Session cleared"}}
 

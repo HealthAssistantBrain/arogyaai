@@ -153,7 +153,29 @@ const mergeReportPreservingLocalPreview = (remoteReport, existingReport) => {
 };
 
 export const normalizeReportList = (items = []) => {
-  return items.filter(Boolean).map(normalizeReport).sort((left, right) => {
+  const uniqueReports = new Map();
+
+  items.filter(Boolean).map(normalizeReport).forEach((report) => {
+    const existing = uniqueReports.get(report.id);
+    if (!existing) {
+      uniqueReports.set(report.id, report);
+      return;
+    }
+
+    const existingTimestamp = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+    const nextTimestamp = new Date(report.updatedAt || report.createdAt || 0).getTime();
+    const preferred = nextTimestamp >= existingTimestamp ? report : existing;
+    const fallback = preferred === report ? existing : report;
+
+    uniqueReports.set(report.id, {
+      ...preferred,
+      localPreviewUrl: preferred.localPreviewUrl || fallback.localPreviewUrl,
+      uploadProgress: preferred.uploadProgress ?? fallback.uploadProgress,
+      statusMessage: preferred.statusMessage || fallback.statusMessage,
+    });
+  });
+
+  return Array.from(uniqueReports.values()).sort((left, right) => {
     return new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime();
   });
 };

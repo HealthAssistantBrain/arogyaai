@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useRef, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
 import DashboardSkeleton from '../components/skeletons/DashboardSkeleton';
@@ -33,22 +33,22 @@ import { ROUTES } from '../router/routes';
 import useDashboardStore from '../store/dashboardStore';
 import { useAuthStore } from '../store/authStore';
 import useHealthStore from '../store/healthStore';
-import api from '../lib/axios';
 import HealthSummary from '../components/HealthSummary';
 import { fetchConnectedDeviceSummaries, GOOGLE_FIT_PROVIDER } from '../lib/deviceApi';
-import { refreshAfterGoogleFitSync } from '../lib/googleFitRefresh';
+import { runGoogleFitSyncOnce } from '../lib/googleFitSyncController';
 import { getApiRootUrl } from '../lib/apiBaseUrl';
 import { safeArray, safeNumber, safeObject, safeText } from '../utils/safeData';
 import { useFetchLock } from '../hooks/useFetchLock';
 import useDeviceStore from '../store/deviceStore';
-import { useSmartSync } from '../hooks/useSmartSync';
 import { setGoogleFitConnectionState } from '../lib/googleFitConnectionState';
 import FloatingChatbot from '../components/ui/FloatingChatbot';
 import AssistantOverlay from '../components/assistant/AssistantOverlay';
 import { useAppStore } from '../store/useAppStore';
 import SmartLoadingOverlay from '../components/ui/SmartLoadingOverlay';
 import useSmartFetchOverlay from '../hooks/useSmartFetchOverlay';
+import useGoogleFitAutoSync from '../hooks/useGoogleFitAutoSync';
 import MetricGroup from '../components/dashboard/MetricGroup';
+import { extractBloodPressureValues, formatBloodPressureReading } from '../lib/healthMetrics';
 
 const DASHBOARD_WS_ROOT = getApiRootUrl(
   import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
@@ -222,6 +222,13 @@ const getTrend = (series = []) => {
 
 const getMetric = (healthMetrics, key) => safeObject(healthMetrics?.metrics?.[key]);
 
+const formatBloodPressureValue = (bp = {}) => {
+  const { systolic, diastolic } = extractBloodPressureValues(bp);
+  const displayValue = formatBloodPressureReading(bp);
+  console.log('BP FINAL:', { systolic, diastolic, value: displayValue });
+  return displayValue;
+};
+
 const buildPremiumMetricGroups = (healthMetrics, dashboardData) => {
   const bp = getMetric(healthMetrics, 'blood_pressure');
   const glucose = getMetric(healthMetrics, 'glucose');
@@ -255,7 +262,7 @@ const buildPremiumMetricGroups = (healthMetrics, dashboardData) => {
       hero: {
         key: 'blood_pressure',
         title: 'Blood Pressure',
-        value: bp.value ?? (bp.systolic && bp.diastolic ? `${Math.round(bp.systolic)}/${Math.round(bp.diastolic)}` : '--/--'),
+        value: formatBloodPressureValue(bp),
         unit: 'mmHg',
         status: getMetricStatus('blood_pressure', null, bp),
         trend: bpTrend.trend,
@@ -378,9 +385,10 @@ const buildPremiumMetricGroups = (healthMetrics, dashboardData) => {
 
 const Dashboard = () => {
   const isSyncing = useHealthStore((s) => s.isSyncing);
-  const setSyncing = useHealthStore((s) => s.setSyncing);
   const [hasAttemptedDashboardLoad, setHasAttemptedDashboardLoad] = useState(false);
   const { acquireLock, releaseLock } = useFetchLock();
+  const syncLockRef = useRef(false);
+  const metricsLoadedForUserRef = useRef(null);
 
   // ── Store ─────────────────────────────────────────────────────────────────
   const { healthScore, alerts,
@@ -405,14 +413,12 @@ const Dashboard = () => {
   const hasAuthUser = !!authUser?.id;
   const authReady = isHydrated && !isHydratingAuth && isAuthenticated && hasAuthUser;
   const authUserId = authUser?.id ?? null;
+  useGoogleFitAutoSync({ enabled: authReady });
 
   const hasDashboardSnapshot = cacheOwnerId === authUserId && lastFetchedAt !== null;
   const shouldBlockOnCacheHydration = !hasHydratedCache && !hasAttemptedDashboardLoad;
   const showSkeleton = !authReady || (!hasDashboardSnapshot && (isFetching || shouldBlockOnCacheHydration));
   const showRefreshOverlay = useSmartFetchOverlay(isFetching, hasDashboardSnapshot, { exitDelayMs: 200 });
-
-  // Initialize Smart Sync Engine
-  useSmartSync(authReady);
 
   const refreshDashboard = useCallback(async ({ silent = true } = {}) => {
     if (!acquireLock('dashboard_refresh')) return;
@@ -454,13 +460,11 @@ const Dashboard = () => {
   useEffect(() => {
     if (!authReady) return;
 
-    void fetchHealthMetrics({ force: true, silent: true });
-    const interval = window.setInterval(() => {
-      void fetchHealthMetrics({ force: true, silent: true });
-    }, 30_000);
+    if (metricsLoadedForUserRef.current === authUserId) return;
 
-    return () => window.clearInterval(interval);
-  }, [authReady, fetchHealthMetrics]);
+    metricsLoadedForUserRef.current = authUserId;
+    void fetchHealthMetrics({ force: true, silent: true });
+  }, [authReady, authUserId, fetchHealthMetrics]);
 
   useEffect(() => {
     if (!authReady || !authUserId || !authToken || typeof WebSocket === 'undefined') return undefined;
@@ -521,14 +525,17 @@ const Dashboard = () => {
 
   // ── Sync handler ──────────────────────────────────────────────────────────
   const handleSync = async () => {
+    if (syncLockRef.current || isSyncing) return;
+
+    syncLockRef.current = true;
+    console.log('SYNC_TRIGGERED');
+
     try {
-      setSyncing(true);
-      await api.post('/google-fit/sync', {});
-      await refreshAfterGoogleFitSync();
+      await runGoogleFitSyncOnce({ requireConnected: false });
     } catch (err) {
       console.error('Sync failed', err);
     } finally {
-      setSyncing(false);
+      syncLockRef.current = false;
     }
   };
 
@@ -602,10 +609,11 @@ const Dashboard = () => {
               Retry Fetch
             </button>
             <button
-              onClick={handleSync}
-              className="rounded-xl bg-slate-100 px-5 py-3 text-xs font-black uppercase tracking-[0.2em] text-slate-700 dark:bg-white/5 dark:text-text-secondary"
+              onClick={() => void handleSync()}
+              disabled={isSyncing}
+              className="rounded-xl bg-slate-100 px-5 py-3 text-xs font-black uppercase tracking-[0.2em] text-slate-700 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-white/5 dark:text-text-secondary"
             >
-              Sync Data
+              {isSyncing ? 'Syncing...' : 'Sync Data'}
             </button>
           </div>
         </div>
@@ -650,7 +658,7 @@ const Dashboard = () => {
                     <h2 className="text-3xl font-black text-text-primary dark:text-text-primary tracking-tight">Overview</h2>
                   </div>
                   <button
-                    onClick={handleSync}
+                    onClick={() => void handleSync()}
                     disabled={isSyncing}
                     className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:shadow-xl transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
                   >
@@ -891,4 +899,3 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
-

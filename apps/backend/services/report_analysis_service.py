@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import HTTPException, UploadFile
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from integrations.prediction_client import PredictionClient
@@ -28,6 +29,36 @@ async def analyze_report_upload(
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
 
     file_bytes = await file.read()
+    if db is not None and current_user is not None:
+        file_hash = ReportService._compute_file_hash(file_bytes)
+        existing_report = ReportService._get_report_by_hash(db, current_user.id, file_hash)
+        if existing_report:
+            logger.info(
+                "REPORT_DUPLICATE_SKIPPED user_id=%s report_id=%s file_hash=%s status=%s",
+                current_user.id,
+                existing_report.id,
+                file_hash,
+                existing_report.status.value,
+            )
+            serialized = ReportService._serialize_report(existing_report)
+            return {
+                "success": True,
+                "status": "ready",
+                "source": "report-analysis",
+                "error": None,
+                "data": {
+                    **serialized,
+                    "request_id": str(uuid4()),
+                    "report_id": serialized["id"],
+                    "pipeline": {
+                        "upload": "completed",
+                        "text_extraction": "completed",
+                        "prediction": "completed",
+                        "insights": "completed",
+                    },
+                    "extracted_text_length": len(serialized.get("parsed_text") or serialized.get("ocr_text") or ""),
+                },
+            }
     request_id = str(uuid4())
     logger.warning(
         "Medical report received: request_id=%s name=%s content_type=%s size=%s",
@@ -210,6 +241,33 @@ def _persist_analyzed_report(
     text_pages: list[dict[str, Any]],
 ) -> dict[str, Any]:
     original_filename = file.filename or "report.pdf"
+    file_hash = ReportService._compute_file_hash(file_bytes)
+    existing_report = ReportService._get_report_by_hash(db, current_user.id, file_hash)
+    if existing_report:
+        logger.info(
+            "REPORT_DUPLICATE_SKIPPED user_id=%s report_id=%s file_hash=%s status=%s",
+            current_user.id,
+            existing_report.id,
+            file_hash,
+            existing_report.status.value,
+        )
+        serialized = ReportService._serialize_report(existing_report)
+        return {
+            "id": serialized["id"],
+            "name": serialized["name"],
+            "file_name": serialized["file_name"],
+            "original_filename": serialized["original_filename"],
+            "stored_filename": serialized["stored_filename"],
+            "file_url": serialized["file_url"],
+            "file_size": serialized["file_size"],
+            "report_type": serialized["report_type"],
+            "status": serialized["status"],
+            "created_at": serialized["created_at"],
+            "updated_at": serialized["updated_at"],
+            "storage_path": serialized["storage_path"],
+            "summary_source": serialized["summary_source"],
+        }
+
     storage_path, public_url = ReportService._persist_file(current_user.id, original_filename, file_bytes)
     stored_filename = ReportService._stored_filename(storage_path, public_url)
     normalized_type = _coerce_report_type(report_type, original_filename)
@@ -231,17 +289,18 @@ def _persist_analyzed_report(
         user_id=current_user.id,
         report_type=normalized_type,
         file_url=public_url,
+        file_hash=file_hash,
         original_filename=original_filename,
         stored_filename=stored_filename,
         parsed_text=extracted_text,
         summary_data={
-            "upload_metadata": {
-                "file_name": original_filename,
-                "original_filename": original_filename,
-                "stored_filename": stored_filename,
-                "file_size": len(file_bytes),
-                "storage_path": str(storage_path),
-            },
+            "upload_metadata": ReportService._upload_metadata(
+                original_filename=original_filename,
+                stored_filename=stored_filename,
+                storage_path=str(storage_path),
+                file_size=len(file_bytes),
+                file_hash=file_hash,
+            ),
             "full_text": extracted_text,
             "ocr_text": extracted_text[:1200],
             "text_source": text_source,
@@ -260,9 +319,46 @@ def _persist_analyzed_report(
         status=ReportStatusEnum.COMPLETED,
     )
     db.add(report)
-    db.commit()
+    try:
+        db.flush()
+        create_report_timeline_event(db, report, commit=False)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing_report = ReportService._get_report_by_hash(db, current_user.id, file_hash)
+        if existing_report:
+            logger.info(
+                "REPORT_DUPLICATE_SKIPPED user_id=%s report_id=%s file_hash=%s status=%s",
+                current_user.id,
+                existing_report.id,
+                file_hash,
+                existing_report.status.value,
+            )
+            serialized = ReportService._serialize_report(existing_report)
+            return {
+                "id": serialized["id"],
+                "name": serialized["name"],
+                "file_name": serialized["file_name"],
+                "original_filename": serialized["original_filename"],
+                "stored_filename": serialized["stored_filename"],
+                "file_url": serialized["file_url"],
+                "file_size": serialized["file_size"],
+                "report_type": serialized["report_type"],
+                "status": serialized["status"],
+                "created_at": serialized["created_at"],
+                "updated_at": serialized["updated_at"],
+                "storage_path": serialized["storage_path"],
+                "summary_source": serialized["summary_source"],
+            }
+        raise
     db.refresh(report)
-    create_report_timeline_event(db, report)
+    logger.info(
+        "REPORT_CREATED user_id=%s report_id=%s file_hash=%s status=%s",
+        current_user.id,
+        report.id,
+        file_hash,
+        report.status.value,
+    )
 
     # ── Lab pipeline hook (non-fatal) ──────────────────────────────────────
     # Runs after the report is committed so report.id exists in the DB.

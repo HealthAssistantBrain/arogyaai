@@ -52,6 +52,20 @@ def test_get_latest_vitals_normalizes_values(monkeypatch):
     }
 
 
+def test_get_latest_vitals_blocks_duplicate_blood_pressure(monkeypatch):
+    rows = [
+        SimpleNamespace(vital_type=UserVitalTypeEnum.BLOOD_PRESSURE_SYSTOLIC, value=122, unit="mmHg", timestamp=5),
+        SimpleNamespace(vital_type=UserVitalTypeEnum.BLOOD_PRESSURE_DIASTOLIC, value=122, unit="mmHg", timestamp=5),
+    ]
+
+    monkeypatch.setattr(context_builder, "_fetch_vital_rows", lambda db, user_id: rows)
+    monkeypatch.setattr(context_builder, "_latest_from_wearables", lambda db, user_id, metric: VitalReading(metric, None))
+
+    vitals = context_builder.get_latest_vitals("user-1", db=object())
+
+    assert vitals["blood_pressure"] is None
+
+
 def test_fetch_predictions_extracts_condition_risks(monkeypatch):
     risk_score = SimpleNamespace(
         risk_payload={"risks": {"diabetes": 0.72, "cardiovascular_risk": 64}},

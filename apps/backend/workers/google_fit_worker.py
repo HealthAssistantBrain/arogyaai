@@ -19,8 +19,52 @@ _sync_lock = threading.Lock()
 _worker_thread: threading.Thread | None = None
 _worker_stop = threading.Event()
 
-_MIN_INTERVAL_SECONDS = 180
-_MAX_INTERVAL_SECONDS = 300
+_MIN_INTERVAL_SECONDS = 280
+_MAX_INTERVAL_SECONDS = 320
+_MIN_USER_SYNC_INTERVAL_SECONDS = 300
+
+
+def _is_user_sync_eligible(user: User, connection: GoogleFitConnection | None) -> bool:
+    """Check if a user is eligible for background sync (authenticated + connected)."""
+    if not connection:
+        return False
+    if (connection.last_sync_status or "").lower() == "disconnected":
+        return False
+    if not connection.access_token_encrypted and not connection.refresh_token_encrypted:
+        return False
+    return True
+
+
+def _was_synced_recently(connection: GoogleFitConnection | None) -> bool:
+    if not connection or not connection.last_synced_at:
+        return False
+    last_synced_at = connection.last_synced_at
+    if last_synced_at.tzinfo is None:
+        last_synced_at = last_synced_at.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - last_synced_at).total_seconds() < _MIN_USER_SYNC_INTERVAL_SECONDS
+
+
+def _acquire_user_sync_lock(user_id: str, ttl_seconds: int = 300) -> bool:
+    """Acquire a Redis-based distributed lock for a specific user's sync."""
+    return GoogleFitService.acquire_sync_lock(user_id, ttl_seconds=ttl_seconds)
+
+
+def _release_user_sync_lock(user_id: str) -> None:
+    """Release the Redis-based distributed lock for a specific user's sync."""
+    GoogleFitService.release_sync_lock(user_id)
+
+
+def _is_sync_cancelled(user_id: str) -> bool:
+    """Check if sync was cancelled for this user (e.g. logout/disconnect)."""
+    try:
+        from core.celery_app import CELERY_BROKER_URL
+        import redis
+
+        cancel_key = f"gfit_sync_cancel:{user_id}"
+        r = redis.Redis.from_url(CELERY_BROKER_URL.replace("/0", "/2"), decode_responses=True)
+        return bool(r.exists(cancel_key))
+    except Exception:
+        return False
 
 
 async def _sync_connected_user(db, user: User, connection: GoogleFitConnection | None) -> dict[str, Any]:
@@ -48,20 +92,46 @@ def _load_connected_users(db) -> list[User]:
 
 def run_google_fit_sync() -> dict[str, Any]:
     if not _sync_lock.acquire(blocking=False):
-        logger.info("[GoogleFitWorker] Sync already running; skipping concurrent invocation")
+        logger.info("SYNC_SKIPPED_ALREADY_RUNNING | scope=global | reason=worker_lock_held")
         return {"success": False, "status": "skipped", "message": "sync already running"}
 
     db = SessionLocal()
     try:
         users = _load_connected_users(db)
+        logger.info("AUTO_SYNC_CYCLE_START | eligible_users=%s", len(users))
 
         synced_users = 0
         skipped_users = 0
         failed_users = 0
+        auth_blocked_users = 0
 
         for user in users:
+            user_id_str = str(user.id)
             setting = user.user_settings
             connection = user.google_fit_connection
+
+            # ── AUTH GUARD ─────────────────────────────────────
+            if not _is_user_sync_eligible(user, connection):
+                auth_blocked_users += 1
+                logger.info("SYNC_AUTH_FAILED | user=%s | reason=not_eligible", user_id_str)
+                continue
+
+            # ── CANCELLATION CHECK ─────────────────────────────
+            if _is_sync_cancelled(user_id_str):
+                skipped_users += 1
+                logger.info("SYNC_STOPPED_LOGOUT | user=%s | reason=cancel_flag_set", user_id_str)
+                continue
+
+            if _was_synced_recently(connection):
+                skipped_users += 1
+                logger.info("SYNC_SKIPPED_RATE_LIMIT | user=%s | source=auto_worker", user_id_str)
+                continue
+
+            # ── PER-USER DISTRIBUTED LOCK ──────────────────────
+            if not _acquire_user_sync_lock(user_id_str):
+                skipped_users += 1
+                logger.info("SYNC_SKIPPED_LOCK | user=%s | reason=redis_lock_held", user_id_str)
+                continue
 
             try:
                 result = asyncio.run(_sync_connected_user(db, user, connection))
@@ -70,12 +140,15 @@ def run_google_fit_sync() -> dict[str, Any]:
                         setting.last_fetch_at = datetime.now(timezone.utc)
                         db.commit()
                     synced_users += 1
+                    logger.info("SYNC_COMPLETE | user=%s | sync_mode=auto", user_id_str)
                 else:
                     skipped_users += 1
             except Exception as exc:
                 failed_users += 1
                 db.rollback()
-                logger.exception("[GoogleFitWorker] Sync failed for user=%s: %s", user.id, exc)
+                logger.exception("SYNC_FAILED | user=%s | sync_mode=auto | error=%s", user_id_str, exc)
+            finally:
+                _release_user_sync_lock(user_id_str)
 
         summary = {
             "success": failed_users == 0,
@@ -83,12 +156,14 @@ def run_google_fit_sync() -> dict[str, Any]:
             "synced_users": synced_users,
             "skipped_users": skipped_users,
             "failed_users": failed_users,
+            "auth_blocked_users": auth_blocked_users,
         }
         logger.info(
-            "[GoogleFitWorker] Sync finished | synced=%s skipped=%s failed=%s",
+            "AUTO_SYNC_CYCLE_END | synced=%s skipped=%s failed=%s auth_blocked=%s",
             synced_users,
             skipped_users,
             failed_users,
+            auth_blocked_users,
         )
         return summary
     finally:

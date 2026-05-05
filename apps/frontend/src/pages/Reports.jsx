@@ -164,6 +164,7 @@ const Reports = () => {
     const setReportResult = useReportUploadStore((state) => state.setReportResult);
     const setProcessing = useReportUploadStore((state) => state.setProcessing);
     const setUploadErrorMessage = useReportUploadStore((state) => state.setErrorMessage);
+    const clearPendingUpload = useReportUploadStore((state) => state.clearPendingUpload);
     const startedUploadRef = useRef('');
     const [downloadingReportId, setDownloadingReportId] = useState(null);
     const [reportPendingDelete, setReportPendingDelete] = useState(null);
@@ -294,12 +295,14 @@ const Reports = () => {
                 const nextReport = replaceOptimisticReport(temporaryReportId, normalizedReport);
                 saveUploadedReportSession(nextReport);
                 setReportResult(nextReport, pendingFile.name);
+                clearPendingUpload();
                 toast.success('Report uploaded. Analysis is running.');
             } catch (error) {
                 const message = error?.response?.data?.error || error?.response?.data?.detail || error?.message || 'Upload failed.';
                 markReportFailed(temporaryReportId, message);
                 setUploadErrorMessage(message);
                 setProcessing(false);
+                clearPendingUpload();
                 toast.error(message);
             }
         };
@@ -312,6 +315,7 @@ const Reports = () => {
         pendingPreviewUrl,
         pendingReportId,
         replaceOptimisticReport,
+        clearPendingUpload,
         setProcessing,
         setReportResult,
         setUploadErrorMessage,

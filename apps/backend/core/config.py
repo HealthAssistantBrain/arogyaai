@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     # APP URLS
+    APP_ENV: str = os.getenv("APP_ENV", os.getenv("ENVIRONMENT", "production")).strip().lower()
     FRONTEND_APP_URL: str = os.getenv("FRONTEND_APP_URL", "http://localhost:5173")
     BACKEND_PUBLIC_URL: str = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000")
     REPORT_UPLOAD_DIR: str = os.getenv("REPORT_UPLOAD_DIR", str(Path("uploads") / "reports"))  # DEPRECATED — use Supabase Storage
