@@ -98,6 +98,7 @@ services:
 
   celery-worker:
     image: arogyaai-backend:dev
+    build: *backend-build
     command: ["celery", "-A", "core.celery_app", "worker", "--loglevel=info"]
     env_file:
       - path: ./apps/backend/.env
