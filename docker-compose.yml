@@ -1,3 +1,16 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# ArogyaAI Docker Compose — Cross-platform, profile-aware configuration
+#
+# Profiles:
+#   (default)   — CPU-safe, works on Mac ARM64 + Linux x86_64 + Windows
+#   gpu         — NVIDIA GPU-accelerated backend (x86_64 only)
+#
+# Usage:
+#   Mac / CPU:   docker compose up -d
+#   GPU:         docker compose --profile gpu up -d
+#
+# ══════════════════════════════════════════════════════════════════════════════
+
 x-gpu-reservation: &gpu-reservation
   resources:
     reservations:
@@ -15,7 +28,9 @@ x-service-build-args: &service-build-args
 x-backend-build: &backend-build
   context: ./
   dockerfile: apps/backend/Dockerfile
-  args: *service-build-args
+  args:
+    <<: *service-build-args
+    ENABLE_GPU: ${ENABLE_GPU:-false}
 
 x-backend-dev-volumes: &backend-dev-volumes
   - ./apps/backend:/app/apps/backend
@@ -86,6 +101,13 @@ services:
       service: backend
     profiles:
       - gpu
+    image: arogyaai-backend-gpu:dev
+    build:
+      context: ./
+      dockerfile: apps/backend/Dockerfile
+      args:
+        <<: *service-build-args
+        ENABLE_GPU: "true"
     environment:
       RUN_MIGRATIONS: "true"
       ENABLE_GPU: "true"

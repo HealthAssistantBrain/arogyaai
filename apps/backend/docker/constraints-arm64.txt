@@ -1,0 +1,54 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# constraints-arm64.txt — ARM64 / Apple Silicon pip constraints
+#
+# This file is used as `pip install --constraint constraints-arm64.txt` on
+# ARM64 builds to prevent NVIDIA CUDA packages from being installed as
+# transitive dependencies of PyTorch, sentence-transformers, etc.
+#
+# HOW IT WORKS:
+#   pip constraints cannot truly "block" a package, but we can pin NVIDIA
+#   packages to empty-marker versions that effectively exclude them.
+#   Combined with pre-installing CPU-only torch (which has no nvidia deps),
+#   this ensures pip never resolves nvidia-* packages.
+#
+# NOTE: This file does NOT modify requirements.txt.
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ── Block NVIDIA CUDA packages ───────────────────────────────────────────────
+# These are transitive dependencies of CUDA-enabled PyTorch wheels.
+# On ARM64, torch is pre-installed from the CPU index (no NVIDIA deps),
+# so these constraints prevent any other path from pulling them in.
+nvidia-cublas-cu11==0.0.0; python_version == "0"
+nvidia-cublas-cu12==0.0.0; python_version == "0"
+nvidia-cuda-cupti-cu11==0.0.0; python_version == "0"
+nvidia-cuda-cupti-cu12==0.0.0; python_version == "0"
+nvidia-cuda-nvrtc-cu11==0.0.0; python_version == "0"
+nvidia-cuda-nvrtc-cu12==0.0.0; python_version == "0"
+nvidia-cuda-runtime-cu11==0.0.0; python_version == "0"
+nvidia-cuda-runtime-cu12==0.0.0; python_version == "0"
+nvidia-cudnn-cu11==0.0.0; python_version == "0"
+nvidia-cudnn-cu12==0.0.0; python_version == "0"
+nvidia-cudnn-cu13==0.0.0; python_version == "0"
+nvidia-cufft-cu11==0.0.0; python_version == "0"
+nvidia-cufft-cu12==0.0.0; python_version == "0"
+nvidia-curand-cu11==0.0.0; python_version == "0"
+nvidia-curand-cu12==0.0.0; python_version == "0"
+nvidia-cusolver-cu11==0.0.0; python_version == "0"
+nvidia-cusolver-cu12==0.0.0; python_version == "0"
+nvidia-cusparse-cu11==0.0.0; python_version == "0"
+nvidia-cusparse-cu12==0.0.0; python_version == "0"
+nvidia-nccl-cu11==0.0.0; python_version == "0"
+nvidia-nccl-cu12==0.0.0; python_version == "0"
+nvidia-nvjitlink-cu11==0.0.0; python_version == "0"
+nvidia-nvjitlink-cu12==0.0.0; python_version == "0"
+nvidia-nvtx-cu11==0.0.0; python_version == "0"
+nvidia-nvtx-cu12==0.0.0; python_version == "0"
+triton==0.0.0; python_version == "0"
+
+# ── Pin ARM64-safe versions of ML packages ───────────────────────────────────
+# These ensure pip selects wheels that have ARM64 Linux builds available.
+# torch/torchvision/torchaudio are pre-installed from the CPU index,
+# so these just prevent pip from trying to upgrade them.
+onnxruntime>=1.17.0,<2.0.0
+xgboost>=2.0.0
+lightgbm>=4.0.0
