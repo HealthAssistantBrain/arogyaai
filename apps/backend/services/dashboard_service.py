@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import logging
 import math
-import random
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -34,6 +33,31 @@ from services.recommendation_engine import generate_recommendation_plan
 from services.recommendation_service import generate_test_recommendations
 
 logger = logging.getLogger(__name__)
+ROLLING_WINDOW_HOURS = 24
+COMPARISON_WINDOW_HOURS = 48
+STEP_STREAK_WINDOW_DAYS = 7
+RECENT_EMPTY_MESSAGES = {
+    "steps": "No recent step data",
+    "heart_rate": "No recent heart rate data",
+    "sleep": "No recent sleep data",
+    "spo2": "No recent SpO2 data",
+    "glucose": "No recent glucose data",
+    "body_temperature": "No recent temperature data",
+    "blood_pressure": "No recent blood pressure data",
+    "resting_hr": "No recent resting heart rate data",
+    "recovery": "No recent recovery data",
+}
+TREND_EPSILON = {
+    "steps": 50.0,
+    "heart_rate": 1.0,
+    "sleep": 0.1,
+    "spo2": 0.2,
+    "glucose": 1.0,
+    "body_temperature": 0.1,
+    "resting_hr": 1.0,
+    "recovery": 1.0,
+}
+GLUCOSE_MGDL_PER_MMOLL = 18.0
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -44,12 +68,6 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _user_rng(user: User) -> random.Random:
-    """Deterministic RNG seeded by user.id — same user always gets same data."""
-    seed = int(str(user.id).replace("-", ""), 16) % (2 ** 32)
-    return random.Random(seed)
-
-
 def _envelope(data: dict, status: str, source: str, error: Optional[str] = None) -> dict:
     return {
         "success": error is None,
@@ -58,6 +76,477 @@ def _envelope(data: dict, status: str, source: str, error: Optional[str] = None)
         "data": data,
         "error": error,
         "last_updated": _now(),
+    }
+
+
+def _rolling_window_bounds(hours: int = ROLLING_WINDOW_HOURS) -> tuple[datetime, datetime, datetime]:
+    current_end = datetime.now(timezone.utc)
+    current_start = current_end - timedelta(hours=hours)
+    previous_start = current_start - timedelta(hours=hours)
+    return previous_start, current_start, current_end
+
+
+def _normalize_metric_value(vital_type: UserVitalTypeEnum, value: float | None, unit: str | None) -> tuple[float | None, str | None]:
+    if value is None:
+        return None, unit
+
+    normalized_unit = str(unit or "").strip() or None
+    if vital_type == UserVitalTypeEnum.SLEEP and normalized_unit and normalized_unit.lower() in {"minutes", "minute", "min", "mins"}:
+        return round(float(value) / 60.0, 2), "hours"
+    return float(value), normalized_unit
+
+
+def _canonical_glucose_unit(unit: str | None) -> str | None:
+    normalized = str(unit or "").strip().lower()
+    if not normalized:
+        return None
+    if normalized in {"mmol/l", "mmol"}:
+        return "mmol/L"
+    if normalized in {"mg/dl", "mgdl"}:
+        return "mg/dL"
+    return str(unit).strip()
+
+
+def _convert_glucose_value(value: float | None, from_unit: str | None, to_unit: str | None) -> float | None:
+    if value is None:
+        return None
+
+    source_unit = _canonical_glucose_unit(from_unit)
+    target_unit = _canonical_glucose_unit(to_unit)
+    numeric_value = float(value)
+
+    if not source_unit or not target_unit or source_unit == target_unit:
+        return round(numeric_value, 1)
+    if source_unit == "mmol/L" and target_unit == "mg/dL":
+        return round(numeric_value * GLUCOSE_MGDL_PER_MMOLL, 1)
+    if source_unit == "mg/dL" and target_unit == "mmol/L":
+        return round(numeric_value / GLUCOSE_MGDL_PER_MMOLL, 1)
+    return round(numeric_value, 1)
+
+
+def _trend_from_delta(metric_name: str, delta: float | None) -> str:
+    if delta is None:
+        return "flat"
+    if abs(delta) < TREND_EPSILON.get(metric_name, 0.5):
+        return "flat"
+    return "up" if delta > 0 else "down"
+
+
+def _percentile(values: list[float], percentile: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(float(value) for value in values)
+    if percentile <= 0:
+        return ordered[0]
+    if percentile >= 100:
+        return ordered[-1]
+    rank = (len(ordered) - 1) * (percentile / 100.0)
+    lower = int(math.floor(rank))
+    upper = min(len(ordered) - 1, lower + 1)
+    weight = rank - lower
+    return ordered[lower] * (1 - weight) + ordered[upper] * weight
+
+
+def _average(values: list[float]) -> float | None:
+    if not values:
+        return None
+    return sum(values) / len(values)
+
+
+def _serialize_vital_series(rows: list[UserVital], vital_type: UserVitalTypeEnum) -> list[dict[str, Any]]:
+    series: list[dict[str, Any]] = []
+    for row in rows:
+        normalized_value, normalized_unit = _normalize_metric_value(
+            vital_type,
+            float(row.value) if row.value is not None else None,
+            row.unit,
+        )
+        if normalized_value is None or row.timestamp is None:
+            continue
+        series.append(
+            {
+                "value": normalized_value,
+                "timestamp": row.timestamp.isoformat(),
+                "unit": normalized_unit,
+                "type": vital_type.value,
+                "source": row.source.value if row.source else "google_fit",
+            }
+        )
+    return series
+
+
+def _query_vital_rows(
+    db: Session,
+    user: User,
+    vital_type: UserVitalTypeEnum,
+    start_at: datetime,
+    end_at: datetime,
+) -> list[UserVital]:
+    return (
+        db.query(UserVital)
+        .filter(
+            UserVital.user_id == user.id,
+            UserVital.vital_type == vital_type,
+            UserVital.timestamp >= start_at,
+            UserVital.timestamp < end_at,
+        )
+        .order_by(UserVital.timestamp.asc())
+        .all()
+    )
+
+
+def _build_metric_payload(
+    db: Session,
+    user: User,
+    metric_name: str,
+    vital_type: UserVitalTypeEnum,
+    default_unit: str,
+) -> dict[str, Any]:
+    previous_start, current_start, current_end = _rolling_window_bounds()
+    rows = _query_vital_rows(db, user, vital_type, previous_start, current_end)
+    current_rows = [row for row in rows if row.timestamp and row.timestamp >= current_start]
+    previous_rows = [row for row in rows if row.timestamp and row.timestamp < current_start]
+
+    current_series = _serialize_vital_series(current_rows, vital_type)
+    previous_series = _serialize_vital_series(previous_rows, vital_type)
+    latest_current = current_series[-1] if current_series else None
+    latest_previous = previous_series[-1] if previous_series else None
+    current_value = latest_current.get("value") if latest_current else None
+    previous_value = latest_previous.get("value") if latest_previous else None
+    delta = None if current_value is None or previous_value is None else round(float(current_value) - float(previous_value), 2)
+    status = "ready" if latest_current is not None else "no_data"
+    last_updated = latest_current.get("timestamp") if latest_current else None
+    payload = {
+        "value": current_value,
+        "current": current_value,
+        "previous": previous_value,
+        "delta": delta,
+        "trend": _trend_from_delta(metric_name, delta),
+        "unit": latest_current.get("unit") if latest_current and latest_current.get("unit") else default_unit,
+        "status": status,
+        "source": latest_current.get("source") if latest_current else "db",
+        "last_updated": last_updated,
+        "series": current_series,
+        "window": "rolling_24h",
+        "window_start": current_start.isoformat(),
+        "window_end": current_end.isoformat(),
+        "empty_message": None if latest_current else RECENT_EMPTY_MESSAGES.get(metric_name, "No recent data"),
+    }
+    logger.info(
+        "METRIC_DB_FETCH | metric_type=%s | user_id=%s | window_start=%s | window_end=%s | series_length=%s | current=%s | previous=%s | source=%s",
+        metric_name,
+        str(user.id),
+        current_start.isoformat(),
+        current_end.isoformat(),
+        len(current_series),
+        current_value,
+        previous_value,
+        payload["source"],
+    )
+    return payload
+
+
+def _glucose_row_payload(row: UserVital) -> dict[str, Any] | None:
+    normalized_value = (
+        float(row.normalized_value)
+        if row.normalized_value is not None
+        else (float(row.value) if row.value is not None else None)
+    )
+    normalized_unit = _canonical_glucose_unit(row.normalized_unit or row.unit) or "mg/dL"
+
+    raw_value = float(row.raw_value) if row.raw_value is not None else None
+    raw_unit = _canonical_glucose_unit(row.raw_unit)
+    if raw_value is None:
+        source_unit = _canonical_glucose_unit(row.unit)
+        if source_unit and source_unit != normalized_unit and row.value is not None:
+            raw_value = float(row.value)
+            raw_unit = source_unit
+        else:
+            raw_value = normalized_value
+            raw_unit = normalized_unit
+
+    if normalized_value is None or row.timestamp is None:
+        return None
+
+    return {
+        "timestamp": row.timestamp.isoformat(),
+        "raw_value": round(float(raw_value), 1) if raw_value is not None else None,
+        "raw_unit": raw_unit or normalized_unit,
+        "normalized_value": round(float(normalized_value), 1),
+        "normalized_unit": normalized_unit,
+        "source": row.source.value if row.source else "google_fit",
+    }
+
+
+def _glucose_display_point(point: dict[str, Any], display_unit: str) -> dict[str, Any]:
+    display_value = _convert_glucose_value(
+        point.get("raw_value"),
+        point.get("raw_unit"),
+        display_unit,
+    )
+    if display_value is None:
+        display_value = _convert_glucose_value(
+            point.get("normalized_value"),
+            point.get("normalized_unit"),
+            display_unit,
+        )
+
+    return {
+        "timestamp": point.get("timestamp"),
+        "value": display_value,
+        "unit": display_unit,
+        "raw_value": point.get("raw_value"),
+        "raw_unit": point.get("raw_unit"),
+        "normalized_value": point.get("normalized_value"),
+        "normalized_unit": point.get("normalized_unit"),
+        "source": point.get("source"),
+    }
+
+
+def _build_glucose_metric_payload(db: Session, user: User) -> dict[str, Any]:
+    previous_start, current_start, current_end = _rolling_window_bounds()
+    rows = _query_vital_rows(db, user, UserVitalTypeEnum.GLUCOSE, previous_start, current_end)
+    current_rows = [row for row in rows if row.timestamp and row.timestamp >= current_start]
+    previous_rows = [row for row in rows if row.timestamp and row.timestamp < current_start]
+
+    current_points = [point for point in (_glucose_row_payload(row) for row in current_rows) if point is not None]
+    previous_points = [point for point in (_glucose_row_payload(row) for row in previous_rows) if point is not None]
+
+    latest_current = current_points[-1] if current_points else None
+    latest_previous = previous_points[-1] if previous_points else None
+    display_unit = _canonical_glucose_unit(latest_current.get("raw_unit") if latest_current else None) or "mg/dL"
+    current_series = [_glucose_display_point(point, display_unit) for point in current_points]
+    previous_series = [_glucose_display_point(point, display_unit) for point in previous_points]
+    current_value = current_series[-1].get("value") if current_series else None
+    previous_value = previous_series[-1].get("value") if previous_series else None
+    delta = None if current_value is None or previous_value is None else round(float(current_value) - float(previous_value), 2)
+    status = "ready" if latest_current is not None else "no_data"
+    last_updated = latest_current.get("timestamp") if latest_current else None
+
+    payload = {
+        "value": current_value,
+        "current": current_value,
+        "previous": previous_value,
+        "delta": delta,
+        "trend": _trend_from_delta("glucose", delta),
+        "unit": display_unit,
+        "precision": 1 if display_unit == "mmol/L" else 0,
+        "status": status,
+        "source": latest_current.get("source") if latest_current else "db",
+        "last_updated": last_updated,
+        "series": current_series,
+        "window": "rolling_24h",
+        "window_start": current_start.isoformat(),
+        "window_end": current_end.isoformat(),
+        "empty_message": None if latest_current else RECENT_EMPTY_MESSAGES["glucose"],
+        "raw_value": latest_current.get("raw_value") if latest_current else None,
+        "raw_unit": latest_current.get("raw_unit") if latest_current else None,
+        "normalized_value": latest_current.get("normalized_value") if latest_current else None,
+        "normalized_unit": latest_current.get("normalized_unit") if latest_current else "mg/dL",
+        "display_value": current_value,
+        "display_unit": display_unit,
+        "preferred_unit": display_unit,
+    }
+    logger.info(
+        "GLUCOSE_PIPELINE_TRACE | stage=api_response | user_id=%s | raw_value=%s | raw_unit=%s | normalized_value=%s | normalized_unit=%s | display_value=%s | display_unit=%s | series_length=%s",
+        str(user.id),
+        payload["raw_value"],
+        payload["raw_unit"],
+        payload["normalized_value"],
+        payload["normalized_unit"],
+        payload["display_value"],
+        payload["display_unit"],
+        len(current_series),
+    )
+    return payload
+
+
+def _step_streak(db: Session, user: User) -> list[bool]:
+    cutoff = datetime.now(timezone.utc) - timedelta(days=STEP_STREAK_WINDOW_DAYS + 2)
+    rows = (
+        db.query(UserVital)
+        .filter(
+            UserVital.user_id == user.id,
+            UserVital.vital_type == UserVitalTypeEnum.STEPS,
+            UserVital.timestamp >= cutoff,
+        )
+        .order_by(UserVital.timestamp.asc())
+        .all()
+    )
+    recent = _serialize_vital_series(rows, UserVitalTypeEnum.STEPS)[-STEP_STREAK_WINDOW_DAYS:]
+    return [bool((item.get("value") or 0) > 0) for item in recent]
+
+
+def _build_resting_hr_metric(db: Session, user: User) -> dict[str, Any]:
+    previous_start, current_start, current_end = _rolling_window_bounds()
+    rows = _query_vital_rows(db, user, UserVitalTypeEnum.HEART_RATE, previous_start, current_end)
+    current_rows = [row for row in rows if row.timestamp and row.timestamp >= current_start]
+    previous_rows = [row for row in rows if row.timestamp and row.timestamp < current_start]
+
+    def _resting_stats(source_rows: list[UserVital]) -> tuple[float | None, list[dict[str, Any]]]:
+        serialized = _serialize_vital_series(source_rows, UserVitalTypeEnum.HEART_RATE)
+        values = [float(item["value"]) for item in serialized if item.get("value") is not None]
+        resting_value = _percentile(values, 20.0)
+        resting_band = []
+        if values:
+            cutoff = _percentile(values, 30.0)
+            resting_band = [
+                item
+                for item in serialized
+                if item.get("value") is not None and cutoff is not None and float(item["value"]) <= float(cutoff)
+            ]
+        return (round(resting_value, 1) if resting_value is not None else None, resting_band)
+
+    current_value, current_series = _resting_stats(current_rows)
+    previous_value, _previous_series = _resting_stats(previous_rows)
+    delta = None if current_value is None or previous_value is None else round(current_value - previous_value, 2)
+    last_updated = current_series[-1]["timestamp"] if current_series else None
+    logger.info(
+        "METRIC_DB_FETCH | metric_type=resting_hr | user_id=%s | window_start=%s | window_end=%s | series_length=%s | current=%s | previous=%s | source=computed_from_heart_rate",
+        str(user.id),
+        current_start.isoformat(),
+        current_end.isoformat(),
+        len(current_series),
+        current_value,
+        previous_value,
+    )
+    return {
+        "value": current_value,
+        "current": current_value,
+        "previous": previous_value,
+        "delta": delta,
+        "trend": _trend_from_delta("resting_hr", delta),
+        "unit": "bpm",
+        "status": "ready" if current_value is not None else "no_data",
+        "source": "computed_from_heart_rate_db",
+        "last_updated": last_updated,
+        "series": current_series,
+        "window": "rolling_24h",
+        "window_start": current_start.isoformat(),
+        "window_end": current_end.isoformat(),
+        "empty_message": None if current_value is not None else RECENT_EMPTY_MESSAGES["resting_hr"],
+    }
+
+
+def _build_recovery_metric(metrics: dict[str, dict[str, Any]], user: User) -> dict[str, Any]:
+    sleep_metric = metrics.get("sleep") or {}
+    steps_metric = metrics.get("steps") or {}
+    heart_metric = metrics.get("heart_rate") or {}
+    resting_metric = metrics.get("resting_hr") or {}
+
+    sleep_value = sleep_metric.get("current")
+    resting_hr = resting_metric.get("current")
+    steps_value = steps_metric.get("current")
+    heart_values = [float(point["value"]) for point in heart_metric.get("series", []) if point.get("value") is not None]
+    current_avg_hr = round(_average(heart_values), 1) if heart_values else None
+    previous_avg_hr = None
+    if heart_metric.get("previous") is not None:
+        previous_avg_hr = float(heart_metric["previous"])
+
+    if sleep_value is None or resting_hr is None:
+        logger.info(
+            "METRIC_DB_FETCH | metric_type=recovery | user_id=%s | series_length=0 | current=None | previous=None | source=computed_from_live_metrics | status=insufficient_data",
+            str(user.id),
+        )
+        return {
+            "value": None,
+            "current": None,
+            "previous": None,
+            "delta": None,
+            "trend": "flat",
+            "unit": "%",
+            "status": "insufficient_data",
+            "source": "computed_from_live_metrics",
+            "last_updated": sleep_metric.get("last_updated") or resting_metric.get("last_updated"),
+            "series": [],
+            "window": "rolling_24h",
+            "window_start": sleep_metric.get("window_start"),
+            "window_end": sleep_metric.get("window_end"),
+            "empty_message": "Insufficient live data for recovery",
+            "inputs": {
+                "sleep_hours": sleep_value,
+                "resting_hr": resting_hr,
+                "steps": steps_value,
+                "avg_heart_rate": current_avg_hr,
+            },
+        }
+
+    def _score_recovery(
+        sleep_hours: float | None,
+        resting_value: float | None,
+        step_total: float | None,
+        avg_heart_rate: float | None,
+        avg_heart_rate_previous: float | None,
+    ) -> float | None:
+        if sleep_hours is None or resting_value is None:
+            return None
+
+        components: list[tuple[float, float]] = []
+        sleep_component = max(0.0, min(100.0, (float(sleep_hours) / 8.0) * 100.0))
+        resting_component = max(0.0, min(100.0, 100.0 - max(0.0, (float(resting_value) - 50.0) * 3.5)))
+        components.extend([(sleep_component, 0.5), (resting_component, 0.35)])
+
+        if step_total is not None:
+            step_component = max(0.0, min(100.0, (float(step_total) / 8000.0) * 100.0))
+            components.append((step_component, 0.1))
+
+        if avg_heart_rate is not None and avg_heart_rate_previous is not None:
+            stability = max(0.0, min(100.0, 100.0 - abs(float(avg_heart_rate) - float(avg_heart_rate_previous)) * 2.5))
+            components.append((stability, 0.05))
+
+        total_weight = sum(weight for _value, weight in components)
+        if total_weight <= 0:
+            return None
+        return round(sum(value * weight for value, weight in components) / total_weight, 1)
+
+    current_score = _score_recovery(sleep_value, resting_hr, steps_value, current_avg_hr, previous_avg_hr)
+    previous_score = _score_recovery(
+        sleep_metric.get("previous"),
+        resting_metric.get("previous"),
+        steps_metric.get("previous"),
+        previous_avg_hr,
+        None,
+    )
+    delta = None if current_score is None or previous_score is None else round(current_score - previous_score, 2)
+    series: list[dict[str, Any]] = []
+    if current_score is not None and sleep_metric.get("last_updated"):
+        series.append(
+            {
+                "timestamp": sleep_metric["last_updated"],
+                "value": current_score,
+                "source": "computed_from_live_metrics",
+            }
+        )
+
+    logger.info(
+        "METRIC_DB_FETCH | metric_type=recovery | user_id=%s | series_length=%s | current=%s | previous=%s | source=computed_from_live_metrics | status=%s",
+        str(user.id),
+        len(series),
+        current_score,
+        previous_score,
+        "ready" if current_score is not None else "insufficient_data",
+    )
+    return {
+        "value": current_score,
+        "current": current_score,
+        "previous": previous_score,
+        "delta": delta,
+        "trend": _trend_from_delta("recovery", delta),
+        "unit": "%",
+        "status": "ready" if current_score is not None else "insufficient_data",
+        "source": "computed_from_live_metrics",
+        "last_updated": sleep_metric.get("last_updated") or resting_metric.get("last_updated"),
+        "series": series,
+        "window": "rolling_24h",
+        "window_start": sleep_metric.get("window_start"),
+        "window_end": sleep_metric.get("window_end"),
+        "empty_message": None if current_score is not None else RECENT_EMPTY_MESSAGES["recovery"],
+        "inputs": {
+            "sleep_hours": sleep_value,
+            "resting_hr": resting_hr,
+            "steps": steps_value,
+            "avg_heart_rate": current_avg_hr,
+        },
     }
 
 
@@ -370,20 +859,20 @@ async def get_health_score(user: User, db: Session) -> dict:
     if ml_result is not None:
         return _envelope(ml_result, status="ready", source="ml")
 
-    # ── Fallback: derive score from persisted onboarding data ─────────────────
+    # ── Fallback: derive score from persisted onboarding data when it exists ──
     raw_score = getattr(user, "health_score", None)
 
     if raw_score is None:
-        # No onboarding data yet — return neutral defaults
         return _envelope(
             {
-                "score": 75,
-                "risk_level": "Moderate",
-                "label": "Moderate",
-                "change_percent": 0.0,
+                "score": None,
+                "risk_level": None,
+                "label": "No recent data",
+                "change_percent": None,
             },
             status="fallback",
-            source="mock",
+            source="db",
+            error="No persisted health score available",
         )
 
     score = round(float(raw_score), 1)
@@ -401,32 +890,50 @@ async def get_health_score(user: User, db: Session) -> dict:
 
 
 async def get_health_history(user: User, db: Session) -> dict:
-    wearable = await _fetch_wearable_history(user)
+    previous_start, current_start, current_end = _rolling_window_bounds()
+    heart_rows = _query_vital_rows(db, user, UserVitalTypeEnum.HEART_RATE, previous_start, current_end)
+    sleep_rows = _query_vital_rows(db, user, UserVitalTypeEnum.SLEEP, previous_start, current_end)
 
-    if wearable is not None:
-        return _envelope(wearable, status="ready", source="wearable")
+    current_heart = [row for row in heart_rows if row.timestamp and row.timestamp >= current_start]
+    current_sleep = [row for row in sleep_rows if row.timestamp and row.timestamp >= current_start]
 
-    # ── Fallback: deterministic per-user synthetic history ────────────────────
-    rng = _user_rng(user)
-    time_labels = ["12 AM", "4 AM", "8 AM", "12 PM", "4 PM", "8 PM", "11 PM"]
-    base_values = [80, 60, 75, 40, 65, 30, 35]
-    hrv = [
-        {"time": lbl, "value": max(20, min(100, base + rng.randint(-5, 5)))}
-        for lbl, base in zip(time_labels, base_values)
-    ]
-    sleep_days = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
-    sleep = [{"day": d, "hours": round(rng.uniform(4.0, 9.0), 1)} for d in sleep_days]
-    avg_sleep = round(sum(s["hours"] for s in sleep) / len(sleep), 1)
+    heart_series = []
+    for item in _serialize_vital_series(current_heart, UserVitalTypeEnum.HEART_RATE):
+        label_ts = datetime.fromisoformat(item["timestamp"].replace("Z", "+00:00")) if item.get("timestamp") else None
+        heart_series.append(
+            {
+                "time": label_ts.strftime("%I:%M %p").lstrip("0") if label_ts else "",
+                "value": item["value"],
+                "timestamp": item["timestamp"],
+            }
+        )
+    sleep_series = []
+    for item in _serialize_vital_series(current_sleep, UserVitalTypeEnum.SLEEP):
+        label_ts = datetime.fromisoformat(item["timestamp"].replace("Z", "+00:00")) if item.get("timestamp") else None
+        sleep_series.append(
+            {
+                "day": label_ts.strftime("%a").upper() if label_ts else "",
+                "hours": item["value"],
+                "timestamp": item["timestamp"],
+            }
+        )
+    avg_sleep = round(sum(item["hours"] for item in sleep_series) / len(sleep_series), 1) if sleep_series else None
+    avg_hr = round(sum(item["value"] for item in heart_series) / len(heart_series), 1) if heart_series else None
+    has_data = bool(heart_series or sleep_series)
 
     return _envelope(
         {
-            "hrv": hrv,
-            "hrv_average_bpm": rng.randint(65, 85),
-            "sleep": sleep,
+            "hrv": heart_series,
+            "hrv_average_bpm": avg_hr,
+            "sleep": sleep_series,
             "sleep_average_hours": avg_sleep,
+            "window": "rolling_24h",
+            "window_start": current_start.isoformat(),
+            "window_end": current_end.isoformat(),
         },
-        status="fallback",
-        source="mock",
+        status="ready" if has_data else "fallback",
+        source="wearable" if has_data else "db",
+        error=None if has_data else "No recent wearable history available",
     )
 
 
@@ -498,78 +1005,24 @@ async def get_recommendation_plan(user: User, db: Session) -> dict:
 
 
 async def get_health_metrics(user: User, db: Session) -> dict:
-    latest_feature = StoragePipelineService.latest_feature_snapshot(db, user)
-    latest_health = StoragePipelineService.latest_health_score(db, user)
-
     metric_specs = {
         "steps": (UserVitalTypeEnum.STEPS, "count"),
         "heart_rate": (UserVitalTypeEnum.HEART_RATE, "bpm"),
         "sleep": (UserVitalTypeEnum.SLEEP, "hours"),
         "spo2": (UserVitalTypeEnum.SPO2, "%"),
-        "glucose": (UserVitalTypeEnum.GLUCOSE, "mg/dL"),
         "body_temperature": (UserVitalTypeEnum.BODY_TEMPERATURE, "celsius"),
     }
 
-    def _normalize_metric_value(vital_type: UserVitalTypeEnum, value: float | None, unit: str | None) -> tuple[float | None, str | None]:
-        if value is None:
-            return None, unit
-
-        if vital_type == UserVitalTypeEnum.GLUCOSE and unit and unit.strip().lower() in {"mmol/l", "mmol"}:
-            return round(float(value) * 18.0182, 1), "mg/dL"
-
-        return float(value), unit
-
-    def _metric_payload(vital_type: UserVitalTypeEnum, default_unit: str) -> dict:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
-        latest = (
-            db.query(UserVital)
-            .filter(
-                UserVital.user_id == user.id,
-                UserVital.vital_type == vital_type,
-            )
-            .order_by(UserVital.timestamp.desc())
-            .first()
-        )
-        rows = (
-            db.query(UserVital)
-            .filter(
-                UserVital.user_id == user.id,
-                UserVital.vital_type == vital_type,
-                UserVital.timestamp >= cutoff,
-            )
-            .order_by(UserVital.timestamp.asc())
-            .limit(100)
-            .all()
-        )
-        latest_value, latest_unit = _normalize_metric_value(
-            vital_type,
-            float(latest.value) if latest and latest.value is not None else None,
-            latest.unit if latest else default_unit,
-        )
-        return {
-            "value": latest_value,
-            "unit": latest_unit or default_unit,
-            "status": "ready" if latest else "no_data",
-            "source": latest.source.value if latest and latest.source else "google_fit",
-            "last_updated": latest.timestamp.isoformat() if latest and latest.timestamp else None,
-            "series": [
-                {
-                    "value": _normalize_metric_value(vital_type, float(row.value), row.unit)[0],
-                    "timestamp": row.timestamp.isoformat() if row.timestamp else None,
-                }
-                for row in rows
-                if row.value is not None
-            ],
-        }
-
     metrics = {
-        metric_name: _metric_payload(vital_type, unit)
+        metric_name: _build_metric_payload(db, user, metric_name, vital_type, unit)
         for metric_name, (vital_type, unit) in metric_specs.items()
     }
+    metrics["glucose"] = _build_glucose_metric_payload(db, user)
     metrics["temperature"] = metrics["body_temperature"]
+    metrics["steps"]["streak"] = _step_streak(db, user)
 
-    systolic = _metric_payload(UserVitalTypeEnum.BLOOD_PRESSURE_SYSTOLIC, "mmHg")
-    diastolic = _metric_payload(UserVitalTypeEnum.BLOOD_PRESSURE_DIASTOLIC, "mmHg")
+    systolic = _build_metric_payload(db, user, "blood_pressure_systolic", UserVitalTypeEnum.BLOOD_PRESSURE_SYSTOLIC, "mmHg")
+    diastolic = _build_metric_payload(db, user, "blood_pressure_diastolic", UserVitalTypeEnum.BLOOD_PRESSURE_DIASTOLIC, "mmHg")
     logger.info(
         "BP_DB_FETCH | user_id=%s | systolic=%s | diastolic=%s",
         str(user.id),
@@ -581,6 +1034,30 @@ async def get_health_metrics(user: User, db: Session) -> dict:
         diastolic,
         user_id=str(user.id),
     )
+    metrics["blood_pressure"]["current"] = metrics["blood_pressure"]["value"]
+    metrics["blood_pressure"]["previous"] = (
+        {
+            "systolic": systolic.get("previous"),
+            "diastolic": diastolic.get("previous"),
+        }
+        if systolic.get("previous") is not None or diastolic.get("previous") is not None
+        else None
+    )
+    current_bp = metrics["blood_pressure"]["value"] or {}
+    if metrics["blood_pressure"]["previous"] is not None and current_bp:
+        metrics["blood_pressure"]["delta"] = {
+            "systolic": round(float(current_bp.get("systolic") or 0) - float(metrics["blood_pressure"]["previous"]["systolic"] or 0), 1),
+            "diastolic": round(float(current_bp.get("diastolic") or 0) - float(metrics["blood_pressure"]["previous"]["diastolic"] or 0), 1),
+        }
+        metrics["blood_pressure"]["trend"] = _trend_from_delta(
+            "blood_pressure",
+            float(metrics["blood_pressure"]["delta"]["systolic"]),
+        )
+    else:
+        metrics["blood_pressure"]["delta"] = None
+        metrics["blood_pressure"]["trend"] = "flat"
+    metrics["blood_pressure"]["empty_message"] = None if metrics["blood_pressure"]["value"] else RECENT_EMPTY_MESSAGES["blood_pressure"]
+    metrics["blood_pressure"]["window"] = "rolling_24h"
     logger.info(
         "BP_API_RESPONSE | user_id=%s | systolic=%s | diastolic=%s | status=%s",
         str(user.id),
@@ -605,17 +1082,11 @@ async def get_health_metrics(user: User, db: Session) -> dict:
             "metadata": latest_location.metric_metadata or {},
         }
 
-    last_updated = None
+    metrics["resting_hr"] = _build_resting_hr_metric(db, user)
+    metrics["recovery"] = _build_recovery_metric(metrics, user)
 
-    if latest_feature is not None:
-        metrics["resting_hr"] = {
-            "value": float(latest_feature.feature_payload.get("avg_rhr")) if latest_feature.feature_payload and latest_feature.feature_payload.get("avg_rhr") is not None else None,
-            "unit": "bpm",
-            "status": "ready",
-            "source": "feature_snapshot",
-            "last_updated": latest_feature.calculated_at.isoformat() if latest_feature.calculated_at else None,
-        }
-        last_updated = latest_feature.calculated_at.isoformat() if latest_feature.calculated_at else last_updated
+    latest_health = StoragePipelineService.latest_health_score(db, user)
+    last_updated = None
 
     if latest_health is not None:
         payload = latest_health.health_payload or {}
@@ -640,9 +1111,22 @@ async def get_health_metrics(user: User, db: Session) -> dict:
     )
     last_updated = latest_metric_update or last_updated
     has_data = any(
-        isinstance(metric, dict) and metric.get("status") == "ready"
+        isinstance(metric, dict) and metric.get("status") in {"ready", "partial"}
         for metric in metrics.values()
     )
+
+    for metric_name, metric_payload in metrics.items():
+        if not isinstance(metric_payload, dict):
+            continue
+        logger.info(
+            "METRIC_API_RESPONSE | metric_type=%s | user_id=%s | status=%s | series_length=%s | last_updated=%s | source=%s",
+            metric_name,
+            str(user.id),
+            metric_payload.get("status"),
+            len(metric_payload.get("series", []) if isinstance(metric_payload.get("series"), list) else []),
+            metric_payload.get("last_updated"),
+            metric_payload.get("source"),
+        )
 
     return _envelope(
         {"metrics": metrics, **metrics},

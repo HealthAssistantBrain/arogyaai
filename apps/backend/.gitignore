@@ -1,2 +1,5 @@
 uploads/
 credentials/*.json
+.env
+.env.*
+!.env.template

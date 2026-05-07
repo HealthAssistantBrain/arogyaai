@@ -90,6 +90,8 @@ GOOGLE_FIT_API_REQUEST_RETRIES = 2
 GOOGLE_FIT_SYNC_LOCK_TTL_SECONDS = 300
 GOOGLE_FIT_SYNC_RATE_LIMIT_SECONDS = 60
 GOOGLE_FIT_DAILY_BUCKET_MILLIS = 24 * 60 * 60 * 1000
+GLUCOSE_MGDL_PER_MMOLL = 18.0
+GLUCOSE_MMOLL_INFERENCE_MAX = 30.0
 GOOGLE_FIT_METRIC_DATA_TYPES = {
     "heart_rate": GOOGLE_FIT_HEART_RATE_DATA_TYPE,
     "steps": GOOGLE_FIT_STEP_DATA_TYPE,
@@ -1697,8 +1699,9 @@ class GoogleFitService:
         *,
         timezone_name: str,
         unit: str,
+        **extra: Any,
     ) -> dict[str, Any]:
-        return {
+        payload = {
             "timestamp": datetime.fromtimestamp(timestamp_millis / 1000, tz=timezone.utc),
             "value": value,
             "type": metric_name,
@@ -1706,6 +1709,8 @@ class GoogleFitService:
             "source": "google_fit",
             "timezone": timezone_name,
         }
+        payload.update(extra)
+        return payload
 
     @staticmethod
     async def _list_data_sources(access_token: str) -> list[dict[str, Any]]:
@@ -3547,6 +3552,8 @@ class GoogleFitService:
                 sleep_hours = GoogleFitService._sleep_hours_from_intervals(intervals)
                 if sleep_hours <= 0:
                     continue
+                sleep_start_ms = min(interval_start for interval_start, _interval_end in intervals)
+                sleep_end_ms = max(interval_end for _interval_start, interval_end in intervals)
                 records.append(
                     {
                         "type": UserVitalTypeEnum.SLEEP.value,
@@ -3555,6 +3562,9 @@ class GoogleFitService:
                         "timestamp": datetime.fromtimestamp(timestamp / 1000, tz=timezone.utc),
                         "source": "google_fit",
                         "timezone": timezone_name,
+                        "sleep_start": datetime.fromtimestamp(sleep_start_ms / 1_000_000_000, tz=timezone.utc).isoformat(),
+                        "sleep_end": datetime.fromtimestamp(sleep_end_ms / 1_000_000_000, tz=timezone.utc).isoformat(),
+                        "duration_hours": round(float(sleep_hours), 2),
                     }
                 )
 
@@ -3641,6 +3651,10 @@ class GoogleFitService:
                     "timestamp": timestamp,
                     "source": "google_fit",
                     "timezone": timezone_name,
+                    "sleep_start": session.get("start_time").isoformat() if session.get("start_time") else None,
+                    "sleep_end": timestamp.isoformat() if isinstance(timestamp, datetime) else None,
+                    "duration_hours": round(duration_value / 60.0, 2),
+                    "stage_minutes": session.get("stage_minutes") or {},
                 }
             )
 
@@ -3703,7 +3717,26 @@ class GoogleFitService:
 
     @staticmethod
     def _normalize_glucose_mmol_to_mg_dl(value: float) -> float:
-        return round(float(value) * 18.0182, 1)
+        return round(float(value) * GLUCOSE_MGDL_PER_MMOLL, 1)
+
+    @staticmethod
+    def _infer_glucose_source_unit(value: float) -> str:
+        return "mmol/L" if float(value) <= GLUCOSE_MMOLL_INFERENCE_MAX else "mg/dL"
+
+    @staticmethod
+    def _normalize_glucose_value(value: float) -> dict[str, float | str]:
+        raw_value = round(float(value), 1)
+        raw_unit = GoogleFitService._infer_glucose_source_unit(raw_value)
+        if raw_unit == "mmol/L":
+            normalized_value = GoogleFitService._normalize_glucose_mmol_to_mg_dl(raw_value)
+        else:
+            normalized_value = raw_value
+        return {
+            "raw_value": raw_value,
+            "raw_unit": raw_unit,
+            "normalized_value": round(float(normalized_value), 1),
+            "normalized_unit": "mg/dL",
+        }
 
     @staticmethod
     def _normalize_body_temperature_celsius(value: float) -> float:
@@ -3744,6 +3777,48 @@ class GoogleFitService:
         return records
 
     @staticmethod
+    def _normalize_glucose_bucket_records(
+        response_json: dict[str, Any],
+        *,
+        metric_type: str,
+        unit: str,
+        timezone_name: str,
+        value_index: int = 0,
+        value_transform: Any = None,
+    ) -> list[dict[str, Any]]:
+        records: list[dict[str, Any]] = []
+        for bucket in response_json.get("bucket", []):
+            timestamp = GoogleFitService._extract_bucket_start_millis(bucket)
+            value = GoogleFitService._aggregate_scalar_value(bucket, value_index=value_index)
+            if timestamp is None or value is None:
+                continue
+            glucose_value = GoogleFitService._normalize_glucose_value(value)
+            records.append(
+                GoogleFitService._normalize_google_fit_record(
+                    metric_type,
+                    timestamp,
+                    glucose_value["normalized_value"],
+                    timezone_name=timezone_name,
+                    unit=str(glucose_value["normalized_unit"]),
+                    raw_value=glucose_value["raw_value"],
+                    raw_unit=str(glucose_value["raw_unit"]),
+                    normalized_value=glucose_value["normalized_value"],
+                    normalized_unit=str(glucose_value["normalized_unit"]),
+                )
+            )
+            logger.info(
+                "GLUCOSE_PIPELINE_TRACE | stage=ingestion | timestamp=%s | raw_value=%s | raw_unit=%s | normalized_value=%s | normalized_unit=%s | stored_value=%s | stored_unit=%s",
+                datetime.fromtimestamp(timestamp / 1000, tz=timezone.utc).isoformat(),
+                glucose_value["raw_value"],
+                glucose_value["raw_unit"],
+                glucose_value["normalized_value"],
+                glucose_value["normalized_unit"],
+                glucose_value["normalized_value"],
+                glucose_value["normalized_unit"],
+            )
+        return records
+
+    @staticmethod
     async def _fetch_scalar_metric(
         user: User,
         access_token: str,
@@ -3759,7 +3834,9 @@ class GoogleFitService:
         end_ts: Any = None,
         data_sources: list[dict[str, Any]] | None = None,
         value_transform: Any = None,
+        record_normalizer: Any = None,
     ) -> list[dict[str, Any]]:
+        normalizer = record_normalizer or GoogleFitService._normalize_scalar_bucket_records
         for start_millis, end_millis, window_days in GoogleFitService._build_candidate_windows(
             timezone_name,
             start_ts=start_ts,
@@ -3808,10 +3885,10 @@ class GoogleFitService:
                     data_source_id=source_id,
                 )
                 if metric_name == "glucose":
-                    logger.info("GLUCOSE RAW: %s", response_json)
+                    logger.info("GLUCOSE_RAW_PAYLOAD | source=%s | payload=%s", source_id, response_json)
                 elif metric_name == "body_temperature":
                     logger.info("TEMP RAW: %s", response_json)
-                records = GoogleFitService._normalize_scalar_bucket_records(
+                records = normalizer(
                     response_json,
                     metric_type=vital_type.value,
                     unit=unit,
@@ -3858,10 +3935,10 @@ class GoogleFitService:
                     data_source_id="all_sources",
                 )
                 if metric_name == "glucose":
-                    logger.info("GLUCOSE RAW: %s", response_json)
+                    logger.info("GLUCOSE_RAW_PAYLOAD | source=all_sources | payload=%s", response_json)
                 elif metric_name == "body_temperature":
                     logger.info("TEMP RAW: %s", response_json)
-                records = GoogleFitService._normalize_scalar_bucket_records(
+                records = normalizer(
                     response_json,
                     metric_type=vital_type.value,
                     unit=unit,
@@ -3934,7 +4011,7 @@ class GoogleFitService:
             start_ts=start_ts,
             end_ts=end_ts,
             data_sources=data_sources,
-            value_transform=GoogleFitService._normalize_glucose_mmol_to_mg_dl,
+            record_normalizer=GoogleFitService._normalize_glucose_bucket_records,
         )
 
     @staticmethod
@@ -4352,6 +4429,7 @@ class GoogleFitService:
             GoogleFitService._millis_to_nanos(fetch_start_millis),
             GoogleFitService._millis_to_nanos(fetch_end_millis),
         )
+        sync_session_id = str(uuid.uuid4())
         external_failure_detected = False
         try:
             all_data_sources = await GoogleFitService._list_data_sources(access_token)
@@ -4523,6 +4601,15 @@ class GoogleFitService:
             else:
                 metric_statuses[metric_name] = "not_available" if metric_name in optional_metrics else "empty"
                 logger.warning("[GFit] %s fetch returned empty dataset | user=%s", metric_name, user.id)
+
+        if all_records:
+            all_records = [
+                {
+                    **record,
+                    "sync_session_id": sync_session_id,
+                }
+                for record in all_records
+            ]
 
         realtime_today_steps = None
         delayed_step_details: dict[str, dict[str, int]] = {}
@@ -5199,6 +5286,14 @@ class GoogleFitService:
             end_ts=end_millis,
             data_sources=data_sources_by_metric.get("heart_rate", []),
         )
+        sync_session_id = str(uuid.uuid4())
+        normalized = [
+            {
+                **record,
+                "sync_session_id": sync_session_id,
+            }
+            for record in normalized
+        ]
         saved_rows = UserDataService.store_vitals(
             db,
             user,

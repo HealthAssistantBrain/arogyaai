@@ -116,6 +116,10 @@ def _serialize_vital(vital: UserVital) -> dict:
         "type": vital.vital_type.value,
         "value": float(vital.value),
         "unit": vital.unit,
+        "raw_value": float(vital.raw_value) if vital.raw_value is not None else None,
+        "raw_unit": vital.raw_unit,
+        "normalized_value": float(vital.normalized_value) if vital.normalized_value is not None else float(vital.value),
+        "normalized_unit": vital.normalized_unit or vital.unit,
         "timestamp": vital.timestamp.isoformat() if vital.timestamp else None,
         "source": vital.source.value,
         "created_at": vital.created_at.isoformat() if vital.created_at else None,
@@ -339,14 +343,10 @@ class UserDataService:
             query = query.filter(UserVital.vital_type == enum_value)
 
         if range_value and range_value != "all":
-            if enum_value == UserVitalTypeEnum.STEPS and range_value == "24h":
-                start_at, end_at = _current_local_day_bounds()
-                query = query.filter(UserVital.timestamp >= start_at, UserVital.timestamp <= end_at)
-            else:
-                window = RANGE_WINDOWS.get(range_value)
-                if window is None:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid range value")
-                query = query.filter(UserVital.timestamp >= _now_utc() - window)
+            window = RANGE_WINDOWS.get(range_value)
+            if window is None:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid range value")
+            query = query.filter(UserVital.timestamp >= _now_utc() - window)
 
         vitals = query.order_by(UserVital.timestamp.asc()).all()
         payload = [_serialize_vital(vital) for vital in vitals]
@@ -399,7 +399,7 @@ class UserDataService:
                 source_enum = UserVitalSourceEnum.GOOGLE_FIT
 
             timestamp = _parse_timestamp(record.get("timestamp"))
-            value_raw = record.get("value")
+            value_raw = record.get("normalized_value", record.get("value"))
             if value_raw is None:
                 continue
             try:
@@ -411,9 +411,22 @@ class UserDataService:
                 and vital_enum not in {UserVitalTypeEnum.STEPS, UserVitalTypeEnum.CALORIES_BURNED}
             ):
                 continue
-            unit = str(record.get("unit") or "")
+            unit = str(record.get("normalized_unit") or record.get("unit") or "")
             if not unit:
                 continue
+
+            raw_value_raw = record.get("raw_value")
+            if raw_value_raw is None:
+                raw_value = value
+            else:
+                try:
+                    raw_value = float(raw_value_raw)
+                except (TypeError, ValueError):
+                    raw_value = value
+
+            raw_unit = str(record.get("raw_unit") or unit)
+            normalized_value = value
+            normalized_unit = unit
 
             normalized_records[(vital_enum, timestamp, source_enum)] = {
                 "vital_type": vital_enum,
@@ -421,6 +434,10 @@ class UserDataService:
                 "timestamp": timestamp,
                 "value": value,
                 "unit": unit,
+                "raw_value": raw_value,
+                "raw_unit": raw_unit,
+                "normalized_value": normalized_value,
+                "normalized_unit": normalized_unit,
             }
 
         bp_values_by_timestamp: dict[tuple[datetime, UserVitalSourceEnum], dict[str, float]] = {}
@@ -537,6 +554,10 @@ class UserDataService:
             timestamp = item["timestamp"]
             value = item["value"]
             unit = item["unit"]
+            raw_value = item["raw_value"]
+            raw_unit = item["raw_unit"]
+            normalized_value = item["normalized_value"]
+            normalized_unit = item["normalized_unit"]
 
             existing = (
                 db.query(UserVital)
@@ -552,6 +573,10 @@ class UserDataService:
             if existing:
                 existing.value = value
                 existing.unit = unit
+                existing.raw_value = raw_value
+                existing.raw_unit = raw_unit
+                existing.normalized_value = normalized_value
+                existing.normalized_unit = normalized_unit
                 vital = existing
             else:
                 vital = UserVital(
@@ -559,10 +584,39 @@ class UserDataService:
                     vital_type=vital_enum,
                     value=value,
                     unit=unit,
+                    raw_value=raw_value,
+                    raw_unit=raw_unit,
+                    normalized_value=normalized_value,
+                    normalized_unit=normalized_unit,
                     timestamp=timestamp,
                     source=source_enum,
                 )
                 db.add(vital)
+            logger.info(
+                "METRIC_DB_WRITE | storage=user_vitals | user_id=%s | metric_type=%s | timestamp=%s | source=%s | value=%s | unit=%s | raw_value=%s | raw_unit=%s | normalized_value=%s | normalized_unit=%s",
+                str(user.id),
+                vital_enum.value,
+                timestamp.isoformat(),
+                source_enum.value,
+                value,
+                unit,
+                raw_value,
+                raw_unit,
+                normalized_value,
+                normalized_unit,
+            )
+            if vital_enum == UserVitalTypeEnum.GLUCOSE:
+                logger.info(
+                    "GLUCOSE_PIPELINE_TRACE | stage=db_write | user_id=%s | timestamp=%s | raw_value=%s | raw_unit=%s | normalized_value=%s | normalized_unit=%s | stored_value=%s | stored_unit=%s",
+                    str(user.id),
+                    timestamp.isoformat(),
+                    raw_value,
+                    raw_unit,
+                    normalized_value,
+                    normalized_unit,
+                    value,
+                    unit,
+                )
             if vital_enum in {
                 UserVitalTypeEnum.BLOOD_PRESSURE_SYSTOLIC,
                 UserVitalTypeEnum.BLOOD_PRESSURE_DIASTOLIC,
@@ -689,6 +743,16 @@ class UserDataService:
                     metric_metadata=item["metadata"],
                 )
                 db.add(wearable_metric)
+            logger.info(
+                "METRIC_DB_WRITE | storage=wearable_metrics | user_id=%s | metric_type=%s | timestamp=%s | source=%s | value=%s | unit=%s | metadata_keys=%s",
+                str(user.id),
+                item["metric_type"],
+                item["timestamp"].isoformat(),
+                item["source"],
+                item["value"],
+                item["unit"],
+                sorted(item["metadata"].keys()),
+            )
             saved.append(wearable_metric)
 
         if saved:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -15,7 +15,8 @@ for path in (REPO_ROOT, BACKEND_ROOT):
     if resolved not in sys.path:
         sys.path.insert(0, resolved)
 
-from services.dashboard_service import _build_blood_pressure_metric  # noqa: E402
+from models import UserVitalSourceEnum  # noqa: E402
+from services.dashboard_service import _build_blood_pressure_metric, _build_glucose_metric_payload  # noqa: E402
 from services.user_data_service import UserDataService  # noqa: E402
 
 
@@ -97,6 +98,41 @@ def test_store_wearable_metrics_skips_duplicate_blood_pressure_pair():
     assert saved == []
     db.add.assert_not_called()
     db.commit.assert_not_called()
+
+
+def test_store_vitals_persists_glucose_raw_and_normalized_fields():
+    timestamp = datetime(2026, 5, 1, 9, 0, tzinfo=timezone.utc)
+    records = [
+        {
+            "type": "glucose",
+            "value": 81.0,
+            "unit": "mg/dL",
+            "raw_value": 4.5,
+            "raw_unit": "mmol/L",
+            "normalized_value": 81.0,
+            "normalized_unit": "mg/dL",
+            "timestamp": timestamp,
+            "source": "google_fit",
+        }
+    ]
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = None
+    user = SimpleNamespace(id=uuid4())
+
+    with patch(
+        "services.user_data_service.IngestionPipelineService.normalize_vital_records",
+        return_value=records,
+    ):
+        saved = UserDataService.store_vitals(db, user, records)
+
+    assert len(saved) == 1
+    inserted = db.add.call_args.args[0]
+    assert inserted.value == 81.0
+    assert inserted.unit == "mg/dL"
+    assert inserted.raw_value == 4.5
+    assert inserted.raw_unit == "mmol/L"
+    assert inserted.normalized_value == 81.0
+    assert inserted.normalized_unit == "mg/dL"
 
 
 def test_dashboard_metric_uses_latest_valid_blood_pressure_pair():
@@ -199,3 +235,43 @@ def test_dashboard_metric_returns_partial_blood_pressure_when_diastolic_missing(
     assert metric["value"] == {"systolic": 120.0, "diastolic": None}
     assert metric["systolic"] == 120.0
     assert metric["diastolic"] is None
+
+
+def test_dashboard_glucose_metric_uses_source_unit_for_display_and_consistent_series():
+    now = datetime.now(timezone.utc)
+    rows = [
+        SimpleNamespace(
+            value=85.0,
+            unit="mg/dL",
+            raw_value=85.0,
+            raw_unit="mg/dL",
+            normalized_value=85.0,
+            normalized_unit="mg/dL",
+            timestamp=now - timedelta(hours=2),
+            source=UserVitalSourceEnum.GOOGLE_FIT,
+        ),
+        SimpleNamespace(
+            value=81.0,
+            unit="mg/dL",
+            raw_value=4.5,
+            raw_unit="mmol/L",
+            normalized_value=81.0,
+            normalized_unit="mg/dL",
+            timestamp=now - timedelta(hours=1),
+            source=UserVitalSourceEnum.GOOGLE_FIT,
+        ),
+    ]
+
+    with patch("services.dashboard_service._query_vital_rows", return_value=rows):
+        payload = _build_glucose_metric_payload(MagicMock(), SimpleNamespace(id="user-1"))
+
+    assert payload["raw_value"] == 4.5
+    assert payload["raw_unit"] == "mmol/L"
+    assert payload["normalized_value"] == 81.0
+    assert payload["normalized_unit"] == "mg/dL"
+    assert payload["display_value"] == 4.5
+    assert payload["display_unit"] == "mmol/L"
+    assert payload["unit"] == "mmol/L"
+    assert payload["precision"] == 1
+    assert [point["value"] for point in payload["series"]] == [4.7, 4.5]
+    assert all(point["unit"] == "mmol/L" for point in payload["series"])

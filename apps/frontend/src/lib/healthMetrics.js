@@ -73,12 +73,22 @@ export const metricConfig = {
   },
   rhr: {
     key: 'rhr',
-    label: 'RHR',
+    label: 'Resting HR',
     unit: 'BPM',
     precision: 0,
     icon: 'heart',
     color: 'red',
     caption: 'Overnight recovery signal',
+    emptyMessage: 'Waiting for sync',
+  },
+  recovery: {
+    key: 'recovery',
+    label: 'Recovery',
+    unit: '%',
+    precision: 0,
+    icon: 'sparkles',
+    color: 'teal',
+    caption: 'Recovery score from real 24h signals',
     emptyMessage: 'Waiting for sync',
   },
 };
@@ -92,6 +102,7 @@ const METRIC_ALIASES = {
   temperature: ['temperature', 'body_temperature', 'bodyTemperature', 'body_temp'],
   steps: ['steps', 'step_count', 'stepCount'],
   sleep: ['sleep', 'sleep_hours', 'sleepHours', 'duration_hours', 'sleep_duration'],
+  recovery: ['recovery', 'recovery_score', 'recoveryScore'],
 };
 
 const METRIC_KEY_BY_ALIAS = Object.entries(METRIC_ALIASES).reduce((acc, [key, aliases]) => {
@@ -136,6 +147,7 @@ const DASHBOARD_METRIC_ORDER = [
   'temperature',
   'steps',
   'sleep',
+  'recovery',
 ];
 
 const extractPayloadDate = (metric, fallback = null) => (
@@ -157,7 +169,7 @@ const normalizeUnit = (unit, spec) => {
   const normalized = String(unit || spec.unit || '').trim();
 
   if (spec.key === 'heart_rate' && normalized.toLowerCase() === 'bpm') return 'BPM';
-  if (spec.key === 'glucose' && ['mmol/l', 'mmol'].includes(normalized.toLowerCase())) return 'mg/dL';
+  if (spec.key === 'glucose' && ['mmol/l', 'mmol'].includes(normalized.toLowerCase())) return 'mmol/L';
   if (spec.key === 'temperature' && ['celsius', 'celcius'].includes(normalized.toLowerCase())) return '°C';
   if (spec.key === 'sleep' && ['hours', 'hour'].includes(normalized.toLowerCase())) return 'hrs';
   if (spec.key === 'steps' && ['count', 'step'].includes(normalized.toLowerCase())) return 'steps';
@@ -178,10 +190,6 @@ const normalizeMetricValue = (key, value, unit) => {
 
   if (parsed === null) return null;
 
-  if (key === 'glucose' && unit && ['mmol/l', 'mmol'].includes(String(unit).trim().toLowerCase())) {
-    return Number((parsed * 18.0182).toFixed(1));
-  }
-
   return parsed;
 };
 
@@ -192,6 +200,11 @@ const normalizeMetricSeries = (series = []) => safeArray(series)
     return {
       timestamp: payload.timestamp ?? payload.date ?? null,
       value,
+      unit: payload.unit ?? null,
+      rawValue: toFiniteNumber(payload.raw_value ?? payload.rawValue),
+      rawUnit: payload.raw_unit ?? payload.rawUnit ?? null,
+      normalizedValue: toFiniteNumber(payload.normalized_value ?? payload.normalizedValue),
+      normalizedUnit: payload.normalized_unit ?? payload.normalizedUnit ?? null,
       systolic: toFiniteNumber(payload.systolic),
       diastolic: toFiniteNumber(payload.diastolic),
     };
@@ -239,20 +252,41 @@ const normalizeSingleMetric = (key, metric, lastUpdatedFallback) => {
   }
 
   const payload = typeof metric === 'object' && !Array.isArray(metric) ? safeObject(metric) : { value: metric };
+  const displayUnit = normalizeUnit(payload.display_unit ?? payload.displayUnit ?? payload.unit, spec);
+  const normalizedUnit = normalizeUnit(payload.normalized_unit ?? payload.normalizedUnit ?? payload.unit, spec);
+  const rawUnit = normalizeUnit(payload.raw_unit ?? payload.rawUnit ?? displayUnit, spec);
   const value = normalizeMetricValue(
     key,
-    payload.value ?? payload.current ?? payload.latest ?? payload.reading ?? payload.amount,
-    payload.unit
+    payload.display_value ?? payload.displayValue ?? payload.value ?? payload.current ?? payload.latest ?? payload.reading ?? payload.amount,
+    displayUnit
+  );
+  const normalizedValue = normalizeMetricValue(
+    key,
+    payload.normalized_value ?? payload.normalizedValue ?? payload.value ?? payload.current ?? payload.latest ?? payload.reading ?? payload.amount,
+    normalizedUnit
+  );
+  const rawValue = normalizeMetricValue(
+    key,
+    payload.raw_value ?? payload.rawValue ?? payload.display_value ?? payload.displayValue ?? payload.value ?? payload.current ?? payload.latest ?? payload.reading ?? payload.amount,
+    rawUnit
   );
   const timestamp = value !== null ? extractPayloadDate(payload, lastUpdatedFallback) : null;
   const parsedTimestamp = parseMetricDate(timestamp);
+  const precision = Number.isFinite(Number(payload.precision))
+    ? Number(payload.precision)
+    : (key === 'glucose' && displayUnit === 'mmol/L' ? 1 : spec.precision);
 
-  return {
+  const normalizedMetric = {
     ...spec,
     value,
-    rawValue: value,
-    unit: normalizeUnit(payload.unit, spec),
-    precision: Number.isFinite(Number(payload.precision)) ? Number(payload.precision) : spec.precision,
+    rawValue,
+    rawUnit,
+    normalizedValue,
+    normalizedUnit,
+    displayValue: value,
+    displayUnit,
+    unit: displayUnit,
+    precision,
     status: payload.status ?? (value === null ? 'no_data' : 'ready'),
     source: payload.source ?? 'health_metrics',
     timestamp,
@@ -261,6 +295,22 @@ const normalizeSingleMetric = (key, metric, lastUpdatedFallback) => {
     series: normalizeMetricSeries(payload.series ?? payload.sparkline ?? payload.history ?? payload.data),
     trend: payload.trend ?? payload.change ?? null,
   };
+
+  if (key === 'glucose') {
+    console.info('GLUCOSE_PIPELINE_TRACE', {
+      raw_value: normalizedMetric.rawValue,
+      raw_unit: normalizedMetric.rawUnit,
+      normalized_value: normalizedMetric.normalizedValue,
+      normalized_unit: normalizedMetric.normalizedUnit,
+      display_value: normalizedMetric.displayValue,
+      display_unit: normalizedMetric.displayUnit,
+      rendered_value: normalizedMetric.value,
+      rendered_unit: normalizedMetric.unit,
+      timestamp,
+    });
+  }
+
+  return normalizedMetric;
 };
 
 export const normalizeHealthMetricsResponse = (payload) => {

@@ -68,7 +68,11 @@ async def get_health_history(
     current_user: User = Depends(get_current_user_from_header),
     db: Session = Depends(get_db),
 ):
-    return await svc.get_health_history(current_user, db)
+    return JSONResponse(
+        status_code=200,
+        content=await svc.get_health_history(current_user, db),
+        headers=NO_CACHE_HEADERS,
+    )
 
 
 @router.get("/health/metrics")
@@ -76,7 +80,11 @@ async def get_health_metrics(
     current_user: User = Depends(get_current_user_from_header),
     db: Session = Depends(get_db),
 ):
-    return await svc.get_health_metrics(current_user, db)
+    return JSONResponse(
+        status_code=200,
+        content=await svc.get_health_metrics(current_user, db),
+        headers=NO_CACHE_HEADERS,
+    )
 
 
 @router.get("/health/recommendation-plan")

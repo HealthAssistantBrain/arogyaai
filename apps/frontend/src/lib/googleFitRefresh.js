@@ -9,7 +9,8 @@ export async function refreshAfterGoogleFitSync() {
   const dashboardStore = useDashboardStore.getState();
   const cacheBust = `${Date.now()}-google-fit-sync`;
 
-  dashboardStore.invalidateWearableCache?.(['heart_rate', 'steps', 'sleep']);
+  dashboardStore.invalidateWearableCache?.(['heart_rate', 'steps', 'sleep', 'spo2', 'blood_pressure', 'body_temperature', 'glucose']);
+  useHealthStore.getState().invalidateMetricsCache?.();
 
   await Promise.all([
     fetchConnectedDeviceSummaries().then((summaries) => {

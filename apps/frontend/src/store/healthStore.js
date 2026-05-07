@@ -390,8 +390,7 @@ export const useHealthStore = create(
 
           metricsInFlight = (async () => {
             try {
-              const response = await api.get('/health/metrics');
-              console.log('BP RAW:', response.data);
+              const response = await api.get('/health/metrics', force ? { params: { ts: Date.now() } } : undefined);
               const snapshot = normalizeHealthMetricsResponse(response.data);
 
               if (requestId !== metricsRequestSeq) {
@@ -434,6 +433,13 @@ export const useHealthStore = create(
         },
 
         // --- Smart Sync Engine Actions ---
+        invalidateMetricsCache: () => set({
+          metrics: null,
+          metricsLoading: false,
+          metricsError: null,
+          metricsLastFetched: null,
+          lastUpdated: null,
+        }, false, 'healthMetrics/invalidate'),
         setConnection: (status) => set({ googleFitConnected: status }),
         setWearableData: (data) => {
           const now = Date.now();
@@ -446,7 +452,16 @@ export const useHealthStore = create(
         },
         setSyncing: (status) => set({ isSyncing: status }),
       }),
-      { name: 'arogyaai-health' }
+      {
+        name: 'arogyaai-health',
+        partialize: (state) => ({
+          googleFitConnected: state.googleFitConnected,
+          lastSyncTime: state.lastSyncTime,
+          googleFitData: state.googleFitData,
+          lastFetch: state.lastFetch,
+          wearableData: state.wearableData,
+        }),
+      }
     )
   )
 );

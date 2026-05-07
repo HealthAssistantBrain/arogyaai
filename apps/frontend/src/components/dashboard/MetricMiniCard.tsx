@@ -58,7 +58,7 @@ const toFiniteNumber = (value: unknown) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-export const buildChartSeries = (series: MetricSeriesPoint[] = [], seed = 72) => {
+export const buildChartSeries = (series: MetricSeriesPoint[] = [], _seed = 72) => {
   const normalized = series
     .map((point, index) => {
       const systolic = toFiniteNumber(point?.systolic);
@@ -72,23 +72,12 @@ export const buildChartSeries = (series: MetricSeriesPoint[] = [], seed = 72) =>
         value,
         systolic,
         diastolic,
+        timestamp: point?.timestamp ?? null,
       };
     })
     .filter((point) => point.value !== null || point.systolic !== null || point.diastolic !== null);
 
-  if (normalized.length >= 4) {
-    return normalized.slice(-30);
-  }
-
-  return Array.from({ length: 24 }, (_, index) => {
-    const wave = Math.sin((index + seed) / 2.7) * 3 + Math.cos((index + seed) / 4.2) * 2;
-    return {
-      index,
-      value: Math.max(1, Math.round(seed + wave + (index % 5))),
-      systolic: null,
-      diastolic: null,
-    };
-  });
+  return normalized.slice(-30);
 };
 
 const MetricMiniCard = ({ metric }: { metric: DashboardMetric }) => {
@@ -123,7 +112,7 @@ const MetricMiniCard = ({ metric }: { metric: DashboardMetric }) => {
               {metric.value}
             </span>
             {metric.unit ? (
-              <span className="mb-1 text-[10px] font-black uppercase tracking-[0.14em] text-text-muted dark:text-slate-500">
+              <span className="mb-1 text-[10px] font-black tracking-[0.14em] text-text-muted dark:text-slate-500">
                 {metric.unit}
               </span>
             ) : null}
@@ -141,27 +130,33 @@ const MetricMiniCard = ({ metric }: { metric: DashboardMetric }) => {
         </div>
 
         <div className="relative mt-6 h-[96px] overflow-hidden">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ top: 10, right: 0, bottom: 0, left: 0 }}>
-              <defs>
-                <linearGradient id={chartId} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={metric.theme.chart} stopOpacity={0.16} />
-                  <stop offset="100%" stopColor={metric.theme.chart} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <Area
-                type="monotone"
-                dataKey="value"
-                stroke={metric.theme.chart}
-                strokeWidth={2}
-                fill={`url(#${chartId})`}
-                dot={false}
-                isAnimationActive
-                animationBegin={120}
-                animationDuration={900}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
+          {chartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData} margin={{ top: 10, right: 0, bottom: 0, left: 0 }}>
+                <defs>
+                  <linearGradient id={chartId} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={metric.theme.chart} stopOpacity={0.16} />
+                    <stop offset="100%" stopColor={metric.theme.chart} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <Area
+                  type="monotone"
+                  dataKey="value"
+                  stroke={metric.theme.chart}
+                  strokeWidth={2}
+                  fill={`url(#${chartId})`}
+                  dot={false}
+                  isAnimationActive
+                  animationBegin={120}
+                  animationDuration={900}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex h-full items-center justify-center text-[11px] font-bold uppercase tracking-[0.18em] text-text-muted dark:text-slate-500">
+              No recent data
+            </div>
+          )}
         </div>
       </div>
     </article>

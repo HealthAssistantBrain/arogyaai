@@ -31,7 +31,7 @@ const MetricHeroCard = ({ metric }: { metric: DashboardMetric }) => {
   const isAbnormal = metric.status !== 'normal';
   const isSteps = metric.mode === 'steps';
   const progress = Math.max(0, Math.min(100, Number(metric.progress ?? 0)));
-  const streak = metric.streak?.length === 7 ? metric.streak : [true, true, true, true, false, true, true];
+  const streak = metric.streak?.length === 7 ? metric.streak : [];
 
   return (
     <article
@@ -60,7 +60,7 @@ const MetricHeroCard = ({ metric }: { metric: DashboardMetric }) => {
               {metric.value}
             </span>
             {metric.unit ? (
-              <span className="mb-1 text-[12px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-text-secondary">
+              <span className="mb-1 text-[12px] font-black tracking-[0.18em] text-slate-500 dark:text-text-secondary">
                 {metric.unit}
               </span>
             ) : null}
@@ -86,80 +86,94 @@ const MetricHeroCard = ({ metric }: { metric: DashboardMetric }) => {
                 {Math.round(progress)}%
               </span>
             </div>
-            <div className="mt-3 flex items-center gap-2">
-              {streak.map((active, index) => (
-                <span
-                  key={`${metric.key}-streak-${index}`}
-                  className={`size-2.5 rounded-full transition-all duration-300 ${active ? 'bg-emerald-500 shadow-[0_0_14px_rgba(16,185,129,0.45)]' : 'bg-white/80 ring-1 ring-emerald-900/10 dark:bg-white/20'}`}
-                />
-              ))}
-            </div>
-            <div className="mt-4 h-3 overflow-hidden rounded-full bg-white/80 shadow-inner dark:bg-white/10">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-lime-400 to-teal-400 shadow-[0_0_14px_rgba(16,185,129,0.35)] transition-[width] duration-1000 ease-out"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <p className="mt-2 text-[11px] font-bold text-slate-500 dark:text-text-secondary">
-              Goal {Number(metric.goal ?? 10000).toLocaleString()} steps
-            </p>
+            {streak.length === 7 ? (
+              <>
+                <div className="mt-3 flex items-center gap-2">
+                  {streak.map((active, index) => (
+                    <span
+                      key={`${metric.key}-streak-${index}`}
+                      className={`size-2.5 rounded-full transition-all duration-300 ${active ? 'bg-emerald-500 shadow-[0_0_14px_rgba(16,185,129,0.45)]' : 'bg-white/80 ring-1 ring-emerald-900/10 dark:bg-white/20'}`}
+                    />
+                  ))}
+                </div>
+                <div className="mt-4 h-3 overflow-hidden rounded-full bg-white/80 shadow-inner dark:bg-white/10">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-lime-400 to-teal-400 shadow-[0_0_14px_rgba(16,185,129,0.35)] transition-[width] duration-1000 ease-out"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                <p className="mt-2 text-[11px] font-bold text-slate-500 dark:text-text-secondary">
+                  Goal {Number(metric.goal ?? 10000).toLocaleString()} steps
+                </p>
+              </>
+            ) : (
+              <p className="mt-4 text-[11px] font-bold uppercase tracking-[0.16em] text-text-muted dark:text-slate-500">
+                No recent data
+              </p>
+            )}
           </div>
         ) : null}
 
         <div className="relative mt-auto h-[120px] overflow-hidden rounded-3xl border border-white/45 bg-white/25 dark:border-stroke dark:bg-white/[0.04]">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ top: 18, right: 6, bottom: 8, left: 6 }}>
-              <defs>
-                <linearGradient id={chartId} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={metric.theme.chart} stopOpacity={0.32} />
-                  <stop offset="65%" stopColor={metric.theme.chart} stopOpacity={0.08} />
-                  <stop offset="100%" stopColor={metric.theme.chart} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid stroke="rgba(255,255,255,0.55)" vertical={false} strokeDasharray="4 8" />
-              <Tooltip
-                cursor={{ stroke: metric.theme.chart, strokeOpacity: 0.16, strokeWidth: 1 }}
-                contentStyle={{ display: 'none' }}
-                wrapperStyle={{ outline: 'none' }}
-              />
-              {metric.mode === 'blood_pressure' ? (
-                <>
+          {chartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData} margin={{ top: 18, right: 6, bottom: 8, left: 6 }}>
+                <defs>
+                  <linearGradient id={chartId} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={metric.theme.chart} stopOpacity={0.32} />
+                    <stop offset="65%" stopColor={metric.theme.chart} stopOpacity={0.08} />
+                    <stop offset="100%" stopColor={metric.theme.chart} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke="rgba(255,255,255,0.55)" vertical={false} strokeDasharray="4 8" />
+                <Tooltip
+                  cursor={{ stroke: metric.theme.chart, strokeOpacity: 0.16, strokeWidth: 1 }}
+                  contentStyle={{ display: 'none' }}
+                  wrapperStyle={{ outline: 'none' }}
+                />
+                {metric.mode === 'blood_pressure' ? (
+                  <>
+                    <Area
+                      type="monotone"
+                      dataKey="systolic"
+                      stroke={metric.theme.chart}
+                      strokeWidth={3}
+                      fill={`url(#${chartId})`}
+                      dot={false}
+                      connectNulls
+                      isAnimationActive
+                      animationDuration={1100}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="diastolic"
+                      stroke="#fb7185"
+                      strokeWidth={2.4}
+                      dot={false}
+                      connectNulls
+                      isAnimationActive
+                      animationDuration={1100}
+                    />
+                  </>
+                ) : (
                   <Area
                     type="monotone"
-                    dataKey="systolic"
+                    dataKey="value"
                     stroke={metric.theme.chart}
                     strokeWidth={3}
                     fill={`url(#${chartId})`}
                     dot={false}
-                    connectNulls
                     isAnimationActive
                     animationDuration={1100}
                   />
-                  <Line
-                    type="monotone"
-                    dataKey="diastolic"
-                    stroke="#fb7185"
-                    strokeWidth={2.4}
-                    dot={false}
-                    connectNulls
-                    isAnimationActive
-                    animationDuration={1100}
-                  />
-                </>
-              ) : (
-                <Area
-                  type="monotone"
-                  dataKey="value"
-                  stroke={metric.theme.chart}
-                  strokeWidth={3}
-                  fill={`url(#${chartId})`}
-                  dot={false}
-                  isAnimationActive
-                  animationDuration={1100}
-                />
-              )}
-            </AreaChart>
-          </ResponsiveContainer>
+                )}
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex h-full items-center justify-center text-[11px] font-bold uppercase tracking-[0.18em] text-text-muted dark:text-slate-500">
+              No recent data
+            </div>
+          )}
         </div>
       </div>
     </article>

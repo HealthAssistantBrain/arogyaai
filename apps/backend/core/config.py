@@ -63,3 +63,73 @@ class Settings(BaseSettings):
         case_sensitive = True
 
 settings = Settings()
+
+# Placeholder patterns that indicate a value hasn't been configured
+_PLACEHOLDER_PATTERNS = [
+    "your_jwt_secret_key_here",
+    "your_encryption_key_here",
+    "your-project-id.supabase.co",
+    "your_supabase_anon_key_here",
+    "your_supabase_service_role_key_here",
+    "supersecretkey_change_in_production",
+]
+
+
+def _is_placeholder(value: str) -> bool:
+    """Check if a value is still a placeholder."""
+    if not value:
+        return True
+    return any(pattern in value for pattern in _PLACEHOLDER_PATTERNS)
+
+
+def _validate_settings():
+    """Validate critical environment variables at startup.
+    
+    Provides clear, actionable error messages telling the developer
+    exactly what to fix and how to generate the missing values.
+    """
+    missing = []
+    
+    if _is_placeholder(settings.SECRET_KEY):
+        missing.append(
+            'JWT_SECRET_KEY — Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"'
+        )
+    if _is_placeholder(settings.APP_ENCRYPTION_KEY):
+        missing.append(
+            'APP_ENCRYPTION_KEY — Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
+        )
+    if _is_placeholder(settings.SUPABASE_URL):
+        missing.append(
+            "SUPABASE_URL — Get from: Supabase Dashboard → Project Settings → API"
+        )
+    if _is_placeholder(settings.SUPABASE_ANON_KEY):
+        missing.append(
+            "SUPABASE_ANON_KEY — Get from: Supabase Dashboard → Project Settings → API → anon key"
+        )
+    if _is_placeholder(settings.SUPABASE_SERVICE_ROLE_KEY):
+        missing.append(
+            "SUPABASE_SERVICE_ROLE_KEY — Get from: Supabase Dashboard → Project Settings → API → service_role key"
+        )
+    if not os.getenv("DATABASE_URL") and not os.getenv("POSTGRES_DB"):
+        missing.append(
+            "DATABASE_URL or POSTGRES_DB — Set your PostgreSQL connection string"
+        )
+        
+    if missing:
+        border = "=" * 70
+        items = "\n".join(f"  ✗ {m}" for m in missing)
+        raise RuntimeError(
+            f"\n{border}\n"
+            f"  AROGYAAI STARTUP FAILURE — Missing Environment Variables\n"
+            f"{border}\n\n"
+            f"The following variables are missing or using placeholder values:\n\n"
+            f"{items}\n\n"
+            f"Setup instructions:\n"
+            f"  1. cp .env.template .env\n"
+            f"  2. Fill in the values listed above\n"
+            f"  3. Restart the application\n\n"
+            f"See README.md for full setup guide.\n"
+            f"{border}\n"
+        )
+
+_validate_settings()

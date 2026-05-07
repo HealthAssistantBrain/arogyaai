@@ -1,167 +1,322 @@
 # ArogyaAI 🧠⚕️
 
-ArogyaAI is a production-grade predictive health intelligence platform. It is designed to ingest continuous patient data from wearables, parse complex medical reports using AI, and deliver actionable ML-powered predictive insights.
+> **Predictive Health Intelligence Platform** — Ingest continuous patient data from wearables, parse medical reports with AI, and deliver ML-powered predictive health insights.
 
 ---
 
-## 1. Overview
-
-ArogyaAI helps users take control of their health through data-driven insights.
-
-**Key Features:**
-
-- **Automated Report Parsing:** Upload PDF or image-based medical reports; our system extracts biomarkers using OCR.
-- **AI-Powered Risk Prediction:** Advanced ML models predict health risks and trajectory based on your data.
-- **Holistic Health Tracking:** Integrate Google Fit data (steps, sleep, heart rate) alongside lab results.
-- **Smart Recommendations:** Receive personalized, clinically-grounded health advice.
-- **Secure Storage:** All medical reports are stored safely in Supabase Cloud Storage.
-
----
-
-## 2. Tech Stack
-
-The platform is built using a modern, scalable microservices architecture:
-
-- **Frontend:** React / TypeScript with Zustand for state management and Framer Motion for smooth UI.
-- **Backend:** FastAPI (Python 3.11) acting as the central orchestrator.
-- **Asynchronous Processing:** Celery + Redis for heavy ML feature computation and pipeline execution.
-- **Database:** PostgreSQL + TimescaleDB (for high-throughput time-series telemetry).
-- **Vector Search:** Qdrant (for Reranking and RAG clinical explanations).
-- **Cloud Storage:** Supabase Storage for secure medical document management.
-- **AI/ML:** Combined OCR mapping, custom Rule Engines, and SHAP explainability.
-
----
-
-## 3. Architecture (Simple Explanation)
-
-The system works in a streamlined pipeline to ensure data integrity and real-time response:
-
-1. **Upload:** User uploads a report via the React UI.
-2. **Backend:** FastAPI receives the file and securely stores it in Supabase.
-3. **Celery:** A background task is triggered to process the report.
-4. **AI Engine:** The "Prediction Service" performs OCR and evaluates health markers.
-5. **DB:** Extracted metrics and risk scores are saved to PostgreSQL.
-6. **UI:** The dashboard updates automatically to show you the new analysis and trends.
-
----
-
-## 4. Project Structure
+## Quick Start (5 minutes)
 
 ```bash
+# 1. Clone the repository
+git clone https://github.com/your-org/arogyaai.git
+cd arogyaai
+
+# 2. Create your environment file
+cp .env.template .env
+
+# 3. Fill required values (see "Environment Setup" below)
+#    At minimum: SUPABASE_URL, SUPABASE keys, JWT_SECRET_KEY, APP_ENCRYPTION_KEY
+
+# 4. Start the entire stack
+docker compose up --build
+```
+
+**That's it.** Migrations run automatically. All services start in dependency order with health checks.
+
+| Service | URL | Purpose |
+|---------|-----|---------|
+| **Frontend** | http://localhost:5173 | React Web App |
+| **Backend API** | http://localhost:8000 | FastAPI Orchestrator |
+| **Swagger Docs** | http://localhost:8000/docs | Interactive API Reference |
+| **PgAdmin** | http://localhost:5050 | Database Admin Panel |
+| **Prediction Service** | http://localhost:8001 | ML Inference Engine |
+| **RAG Service** | http://localhost:8002 | Medical Explanation System |
+
+---
+
+## Architecture
+
+```
+┌─────────────┐    ┌──────────────┐    ┌───────────────────┐
+│   React UI  │───▶│  FastAPI      │───▶│  PostgreSQL +     │
+│   (Zustand) │◀───│  Backend      │◀───│  TimescaleDB      │
+└─────────────┘    └──────┬───────┘    └───────────────────┘
+                          │
+              ┌───────────┼───────────┐
+              │           │           │
+         ┌────▼────┐ ┌────▼────┐ ┌────▼────┐
+         │Prediction│ │  RAG    │ │ Celery  │
+         │ Service  │ │ Service │ │ Workers │
+         └─────────┘ └─────────┘ └────┬────┘
+                                      │
+                                 ┌────▼────┐
+                                 │  Redis  │
+                                 └─────────┘
+```
+
+**Data Flow:**
+1. **Upload** — User uploads medical report via React UI
+2. **Backend** — FastAPI receives file, stores in Supabase Storage
+3. **Celery** — Background task triggered for report processing
+4. **AI Engine** — Prediction Service performs OCR + risk evaluation
+5. **Database** — Extracted metrics and scores saved to PostgreSQL
+6. **Dashboard** — UI updates automatically with analysis and trends
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| **Frontend** | React 19, Zustand, Framer Motion, Tailwind CSS, Recharts |
+| **Backend** | FastAPI (Python 3.11), Pydantic, SQLAlchemy |
+| **Async Processing** | Celery + Redis |
+| **Database** | PostgreSQL 15 + TimescaleDB (time-series) |
+| **Vector Search** | Qdrant (RAG + medical explanations) |
+| **Cloud Storage** | Supabase Storage |
+| **Auth** | Supabase Auth + JWT |
+| **ML/AI** | OCR, Rule Engines, SHAP Explainability, Ollama/OpenAI |
+| **Containerization** | Docker Compose (multi-stage builds) |
+
+---
+
+## Project Structure
+
+```
+arogyaai/
 ├── apps/
-│   ├── backend/          # FastAPI Orchestrator, Core Logic & API
-│   └── frontend/         # React Web Application
+│   ├── backend/              # FastAPI orchestrator, core logic & API
+│   │   ├── alembic/          # Database migrations
+│   │   ├── api/              # Versioned API routes
+│   │   ├── core/             # Config, security, middleware
+│   │   ├── database/         # SQLAlchemy session & models
+│   │   ├── docker/           # Entrypoint scripts, constraints
+│   │   ├── models/           # ORM models
+│   │   ├── routes/           # Modular API routers
+│   │   ├── services/         # Business logic layer
+│   │   └── workers/          # Background workers (Google Fit, Emergency)
+│   └── frontend/             # React web application
+│       ├── src/
+│       │   ├── components/   # Reusable UI components
+│       │   ├── pages/        # Page-level views
+│       │   ├── store/        # Zustand state stores
+│       │   ├── services/     # API client services
+│       │   └── lib/          # Utilities (axios, supabase)
+│       └── public/           # Static assets
 ├── pipelines/
-│   ├── prediction-service/ # ML Inference and Clinical Rule Engine
-│   ├── rag-service/        # RAG-based Medical Explanation System
-│   └── ingestion_pipeline/ # Backend-owned wearable ingestion normalization
-├── infra/                # Nginx and Infrastructure configurations
-└── docker-compose.yml    # Service orchestration
+│   ├── prediction-service/   # ML inference + clinical rule engine
+│   ├── rag-service/          # RAG-based medical explanation
+│   ├── wearable-service/     # Wearable data normalization
+│   └── *_pipeline/           # Specialized data pipelines
+├── infra/                    # Nginx, infrastructure configs
+├── docs/                     # Technical documentation
+├── scripts/                  # Utility scripts
+├── .env.template             # ← Copy this to .env
+└── docker-compose.yml        # Service orchestration
 ```
 
 ---
 
-## 5. Prerequisites
+## Environment Setup
 
-To run ArogyaAI locally, ensure you have the following installed:
-
-- **Git:** [Download](https://git-scm.com/downloads)
-- **Docker & Docker Compose:** [Download Docker Desktop](https://www.docker.com/products/docker-desktop/)
-- **Node.js (v18+):** [Download](https://nodejs.org/)
-- **Python (v3.11):** (Included in Docker containers)
-
----
-
-## 6. Environment Setup
-
-### Root Folder `.env`
-
-Copy the template to create your environment file:
+### Step 1: Copy Template
 
 ```bash
 cp .env.template .env
 ```
 
-Fill in the following critical variables:
+### Step 2: Fill Required Values
 
-| Variable | Description |
-| :--- | :--- |
-| `DATABASE_URL` | Connection string for Postgres (default provided in template). |
-| `REDIS_URL` | URL for the Redis messenger (default provided). |
-| `SUPABASE_URL` | Your Supabase Project URL. |
-| `SUPABASE_SERVICE_ROLE_KEY` | Your **Service Role** key (Required for backend uploads). |
-| `SUPABASE_BUCKET_NAME` | The name of your storage bucket (e.g., `reports`). |
-| `VITE_SUPABASE_URL` | Same as `SUPABASE_URL`. |
-| `VITE_SUPABASE_ANON_KEY` | Your project's **Anon/Public** key for frontend auth. |
+| Variable | Where to Get It | Required? |
+|----------|----------------|-----------|
+| `JWT_SECRET_KEY` | Generate: `python -c "import secrets; print(secrets.token_urlsafe(32))"` | ✅ Yes |
+| `APP_ENCRYPTION_KEY` | Generate: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` | ✅ Yes |
+| `SUPABASE_URL` | Supabase Dashboard → Project Settings → API | ✅ Yes |
+| `SUPABASE_ANON_KEY` | Supabase Dashboard → Project Settings → API → `anon` key | ✅ Yes |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase Dashboard → Project Settings → API → `service_role` key | ✅ Yes |
+| `VITE_SUPABASE_URL` | Same as `SUPABASE_URL` | ✅ Yes |
+| `VITE_SUPABASE_ANON_KEY` | Same as `SUPABASE_ANON_KEY` | ✅ Yes |
+| `GOOGLE_FIT_CLIENT_ID` | See [Google Fit Setup](docs/GOOGLE_FIT_SETUP.md) | Optional |
+| `GOOGLE_FIT_CLIENT_SECRET` | See [Google Fit Setup](docs/GOOGLE_FIT_SETUP.md) | Optional |
+| `OPENAI_API_KEY` | https://platform.openai.com/api-keys | Optional |
+| `OPENWEATHER_API_KEY` | https://openweathermap.org/api | Optional |
 
----
+> **⚠️ Important:** The backend will **fail to start** if required variables are missing or contain placeholder values. This is intentional — it prevents running with insecure defaults.
 
-## 7. Supabase Setup (VERY IMPORTANT)
+### Step 3: Supabase Setup
 
-Supabase is used for user authentication and file storage. Follow these steps exactly:
-
-1. **Create a Project:** Sign up at [Supabase.com](https://supabase.com/).
-2. **Setup Storage:**
-    - Go to **Storage** → **New Bucket**.
-    - Name: `reports`.
-    - Public: **Private** (Recommended for medical data).
-3. **Get API Keys:**
-    - Go to **Project Settings** → **API**.
-    - **service_role key:** Use this for `SUPABASE_SERVICE_ROLE_KEY`. (✅ Correct)
-    - **sb_secret:** ❌ **WRONG**. Do not use this; it will cause auth failures.
+1. Create a project at [supabase.com](https://supabase.com)
+2. Go to **Storage** → **New Bucket** → Name: `reports`, Access: **Private**
+3. Go to **Project Settings** → **API** to find your keys
+4. Use the `service_role` key (NOT `sb_secret`) for `SUPABASE_SERVICE_ROLE_KEY`
 
 ---
 
-## 8. Running the App
+## Running the Application
 
-Run the following commands to initialize and start the entire system:
+### Docker (Recommended)
 
 ```bash
-# 1. Clean up and build containers
-docker-compose down -v
-docker-compose up --build -d
+# Start all services (migrations run automatically)
+docker compose up --build
 
-# 2. Run Database Migrations
-# (Sets up all required tables automatically)
-docker-compose exec backend alembic upgrade head
+# Start in detached mode
+docker compose up --build -d
+
+# View logs
+docker compose logs -f backend
+
+# Stop all services
+docker compose down
+
+# Full reset (removes data volumes)
+docker compose down -v
 ```
 
-### Services Started
+### GPU Support (NVIDIA)
 
-- **backend:** Port 8000 (API)
-- **frontend:** Port 5173 (Web UI)
-- **celery-worker:** Handles background AI tasks
-- **postgres:** Primary data store
-- **redis:** Message queue for Celery tasks
-- **prediction-service:** ML prediction node
+```bash
+docker compose --profile gpu up --build
+```
 
----
+### Seed Demo Data (Optional)
 
-## 9. How to Use
+Preview the dashboard without a wearable device or real reports:
 
-1. Navigate to `http://localhost:5173`.
-2. Create an account and log in.
-3. Go to the **Reports** section.
-4. Upload a medical report (PDF/JPG).
-5. Wait a few seconds for the AI to parse the data.
-6. View your updated **Health Score** and **Timeline**!
+```bash
+docker compose exec backend python /app/scripts/seed_demo_data.py
+```
 
 ---
 
-## 10. Common Errors (REAL WORLD FIXES)
+## Service Health
 
-- **Invalid API Key:** Occurs if you use the `anon` key instead of the `service_role` key in the backend `.env`.
-- **Bucket Not Found:** Ensure `SUPABASE_BUCKET_NAME` exactly matches the bucket name you created in the Supabase Dashboard.
-- **Migration Deadlock:** Fixed. We ensured that migrations only run from the main backend container, not the celery workers.
-- **Postgres Connection Failed:** Docker may need a moment. Run `docker-compose logs -f postgres` to check if it's healthy.
+The backend exposes a health endpoint that checks all dependencies:
+
+```bash
+curl http://localhost:8000/health
+```
+
+Response shows status of: `db`, `redis`, `prediction_service`, `rag_service`
 
 ---
 
-## 11. Future Improvements
+## Development
 
-- **Supabase DB Migration:** Move metadata storage fully to Supabase.
-- **Mobile Integration:** Dedicated React Native application.
-- **Real-time Engine:** WebSocket-based live ingestion updates.
+### Frontend Only (outside Docker)
+
+```bash
+cd apps/frontend
+npm install
+npm run dev
+```
+
+### Backend Only (outside Docker)
+
+```bash
+cd apps/backend
+pip install -r requirements.txt
+# Set DATABASE_URL to point to your local postgres
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### Running Migrations Manually
+
+```bash
+docker compose exec backend alembic upgrade head
+```
+
+---
+
+## Google Fit Integration
+
+See the full setup guide: **[docs/GOOGLE_FIT_SETUP.md](docs/GOOGLE_FIT_SETUP.md)**
+
+Quick summary:
+1. Create a Google Cloud project with Fitness API enabled
+2. Create OAuth 2.0 credentials (Web Application type)
+3. Set redirect URI to `http://localhost:8000/api/v1/google-fit/oauth/callback`
+4. Copy Client ID and Client Secret to your `.env` file
+
+---
+
+## Troubleshooting
+
+### Backend won't start — "CRITICAL STARTUP FAILURE"
+
+**Cause:** Required environment variables are missing or contain placeholder values.
+
+**Fix:** Open `.env` and replace all `your_..._here` values with real credentials.
+
+### "Invalid API Key" from Supabase
+
+**Cause:** Using the wrong key type.
+
+**Fix:** Use the `service_role` key (from Project Settings → API), not the `sb_secret` or `anon` key for backend operations.
+
+### Database connection failed
+
+**Cause:** PostgreSQL container isn't ready yet.
+
+**Fix:** Wait 10–15 seconds after `docker compose up`. Check with:
+```bash
+docker compose logs -f postgres
+```
+
+### Frontend shows "Configuration Error"
+
+**Cause:** `VITE_SUPABASE_URL` or `VITE_SUPABASE_ANON_KEY` is missing.
+
+**Fix:** Ensure these are set in the root `.env` file. The Docker Compose passes them to the frontend container.
+
+### Migrations fail
+
+**Cause:** Schema mismatch or stale migration state.
+
+**Fix:**
+```bash
+docker compose exec backend alembic upgrade head
+# If that fails, try stamping to current:
+docker compose exec backend alembic stamp head
+docker compose exec backend alembic upgrade head
+```
+
+### Port conflicts
+
+**Fix:** Change the port mappings in `docker-compose.yml`. Default ports:
+- `5173` → Frontend
+- `8000` → Backend
+- `5432` → PostgreSQL
+- `6379` → Redis
+- `6333` → Qdrant
+- `5050` → PgAdmin
+
+---
+
+## CI/CD
+
+GitHub Actions runs on every push to `master`/`develop`:
+
+1. **Validate** — Docker Compose config check
+2. **Build** — Frontend build + Docker image builds + backend health check
+3. **Test Backend** — Alembic migrations + pytest
+4. **Test ML** — ML pipeline unit tests
+5. **Test RAG** — RAG pipeline unit tests
+6. **Smoke** — Compile-check prediction/rag/wearable services
+
+---
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/my-feature`
+3. Copy and fill environment: `cp .env.template .env`
+4. Start the stack: `docker compose up --build`
+5. Make your changes
+6. Run tests: `docker compose exec backend python -m pytest`
+7. Submit a pull request
+
+> **Never commit `.env` files.** The `.gitignore` prevents this, but always double-check.
 
 ---
 

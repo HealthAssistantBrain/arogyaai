@@ -158,6 +158,16 @@ const formatMetricNumber = (value, precision = 0) => {
   return fixed.endsWith('.0') ? fixed.slice(0, -2) : fixed;
 };
 
+const metricHasRecentData = (metric = {}) => {
+  const status = String(metric?.status || '').toLowerCase();
+  if (status === 'insufficient_data' || status === 'no_data' || status === 'fallback') return false;
+  return toFiniteNumber(metric?.value) !== null || safeArray(metric?.series).length > 0;
+};
+
+const displayMetricNumber = (metric = {}, precision = 0) => (
+  metricHasRecentData(metric) ? formatMetricNumber(metric.value, precision) : 'No recent data'
+);
+
 const getMetricStatus = (key, value, raw = {}) => {
   const numeric = toFiniteNumber(value);
 
@@ -223,9 +233,11 @@ const getTrend = (series = []) => {
 const getMetric = (healthMetrics, key) => safeObject(healthMetrics?.metrics?.[key]);
 
 const formatBloodPressureValue = (bp = {}) => {
+  if (!metricHasRecentData(bp)) {
+    return 'No recent data';
+  }
   const { systolic, diastolic } = extractBloodPressureValues(bp);
   const displayValue = formatBloodPressureReading(bp);
-  console.log('BP FINAL:', { systolic, diastolic, value: displayValue });
   return displayValue;
 };
 
@@ -238,20 +250,12 @@ const buildPremiumMetricGroups = (healthMetrics, dashboardData) => {
   const spo2 = getMetric(healthMetrics, 'spo2');
   const sleep = getMetric(healthMetrics, 'sleep');
   const rhr = getMetric(healthMetrics, 'rhr');
-  const featureSnapshot = safeObject(dashboardData?.prediction?.data?.feature_snapshot);
-  const recoveryValue = toFiniteNumber(
-    featureSnapshot.hrv ??
-    featureSnapshot.avg_hrv ??
-    featureSnapshot.recovery_score ??
-    featureSnapshot.sleep_efficiency
-  );
-  const recoveryIsScore = recoveryValue !== null && recoveryValue <= 100 && featureSnapshot.sleep_efficiency !== undefined;
+  const recovery = getMetric(healthMetrics, 'recovery');
+  const recoveryValue = toFiniteNumber(recovery.value);
   const stepsValue = toFiniteNumber(steps.value);
   const stepGoal = 10000;
   const stepProgress = stepsValue === null ? 0 : Math.min(100, (stepsValue / stepGoal) * 100);
-  const stepSeries = safeArray(steps.series);
-  const activeStepDays = stepSeries.slice(-7).map((point) => toFiniteNumber(point?.value) !== null && Number(point.value) > 0);
-  const streak = activeStepDays.length === 7 ? activeStepDays : [true, true, true, false, true, true, stepsValue !== null && stepsValue > 0];
+  const streak = safeArray(steps.streak).filter((item) => typeof item === 'boolean');
   const bpTrend = getTrend(bp.series);
   const stepsTrend = getTrend(steps.series);
   const sleepTrend = getTrend(sleep.series);
@@ -263,10 +267,10 @@ const buildPremiumMetricGroups = (healthMetrics, dashboardData) => {
         key: 'blood_pressure',
         title: 'Blood Pressure',
         value: formatBloodPressureValue(bp),
-        unit: 'mmHg',
+        unit: metricHasRecentData(bp) ? 'mmHg' : '',
         status: getMetricStatus('blood_pressure', null, bp),
         trend: bpTrend.trend,
-        trendLabel: bpTrend.trendLabel,
+        trendLabel: metricHasRecentData(bp) ? bpTrend.trendLabel : 'awaiting sync',
         series: safeArray(bp.series),
         Icon: Activity,
         theme: metricThemes.bp,
@@ -276,9 +280,9 @@ const buildPremiumMetricGroups = (healthMetrics, dashboardData) => {
         {
           key: 'glucose',
           title: 'Glucose',
-          value: formatMetricNumber(glucose.value, glucose.precision ?? 0),
-          unit: glucose.unit ?? 'mg/dL',
-          status: getMetricStatus('glucose', glucose.value),
+          value: displayMetricNumber(glucose, glucose.precision ?? 0),
+          unit: metricHasRecentData(glucose) ? (glucose.unit ?? 'mg/dL') : '',
+          status: getMetricStatus('glucose', glucose.normalizedValue ?? glucose.value),
           ...getTrend(glucose.series),
           series: safeArray(glucose.series),
           Icon: Zap,
@@ -287,8 +291,8 @@ const buildPremiumMetricGroups = (healthMetrics, dashboardData) => {
         {
           key: 'temperature',
           title: 'Body Temperature',
-          value: formatMetricNumber(temperature.value, temperature.precision ?? 1),
-          unit: temperature.unit === 'celsius' ? '°C' : (temperature.unit ?? '°C'),
+          value: displayMetricNumber(temperature, temperature.precision ?? 1),
+          unit: metricHasRecentData(temperature) ? (temperature.unit === 'celsius' ? '°C' : (temperature.unit ?? '°C')) : '',
           status: getMetricStatus('temperature', temperature.value),
           ...getTrend(temperature.series),
           series: safeArray(temperature.series),
@@ -302,25 +306,25 @@ const buildPremiumMetricGroups = (healthMetrics, dashboardData) => {
       hero: {
         key: 'steps',
         title: 'Steps',
-        value: stepsValue === null ? '--' : Math.round(stepsValue).toLocaleString(),
-        unit: 'steps',
+        value: metricHasRecentData(steps) && stepsValue !== null ? Math.round(stepsValue).toLocaleString() : 'No recent data',
+        unit: metricHasRecentData(steps) ? 'steps' : '',
         status: getMetricStatus('steps', steps.value),
         trend: stepsTrend.trend,
-        trendLabel: stepsTrend.trendLabel,
+        trendLabel: metricHasRecentData(steps) ? stepsTrend.trendLabel : 'awaiting sync',
         series: safeArray(steps.series),
         Icon: TrendingUp,
         theme: metricThemes.steps,
         mode: 'steps',
         goal: stepGoal,
         progress: stepProgress,
-        streak,
+        streak: streak.length === 7 ? streak : [],
       },
       mini: [
         {
           key: 'heart_rate',
           title: 'Heart Rate',
-          value: formatMetricNumber(heartRate.value, heartRate.precision ?? 0),
-          unit: heartRate.unit ?? 'BPM',
+          value: displayMetricNumber(heartRate, heartRate.precision ?? 0),
+          unit: metricHasRecentData(heartRate) ? (heartRate.unit ?? 'BPM') : '',
           status: getMetricStatus('heart_rate', heartRate.value),
           ...getTrend(heartRate.series),
           series: safeArray(heartRate.series),
@@ -330,8 +334,8 @@ const buildPremiumMetricGroups = (healthMetrics, dashboardData) => {
         {
           key: 'spo2',
           title: 'SpO2',
-          value: formatMetricNumber(spo2.value, spo2.precision ?? 1),
-          unit: spo2.unit ?? '%',
+          value: displayMetricNumber(spo2, spo2.precision ?? 1),
+          unit: metricHasRecentData(spo2) ? (spo2.unit ?? '%') : '',
           status: getMetricStatus('spo2', spo2.value),
           ...getTrend(spo2.series),
           series: safeArray(spo2.series),
@@ -345,11 +349,11 @@ const buildPremiumMetricGroups = (healthMetrics, dashboardData) => {
       hero: {
         key: 'sleep',
         title: 'Sleep',
-        value: formatMetricNumber(sleep.value, sleep.precision ?? 1),
-        unit: sleep.unit ?? 'hrs',
+        value: displayMetricNumber(sleep, sleep.precision ?? 1),
+        unit: metricHasRecentData(sleep) ? (sleep.unit ?? 'hrs') : '',
         status: getMetricStatus('sleep', sleep.value),
         trend: sleepTrend.trend,
-        trendLabel: sleepTrend.trendLabel,
+        trendLabel: metricHasRecentData(sleep) ? sleepTrend.trendLabel : 'awaiting sync',
         series: safeArray(sleep.series),
         Icon: Moon,
         theme: metricThemes.sleep,
@@ -358,8 +362,8 @@ const buildPremiumMetricGroups = (healthMetrics, dashboardData) => {
         {
           key: 'rhr',
           title: 'Resting HR',
-          value: formatMetricNumber(rhr.value, rhr.precision ?? 0),
-          unit: rhr.unit ?? 'BPM',
+          value: displayMetricNumber(rhr, rhr.precision ?? 0),
+          unit: metricHasRecentData(rhr) ? (rhr.unit ?? 'BPM') : '',
           status: getMetricStatus('rhr', rhr.value),
           ...getTrend(rhr.series),
           series: safeArray(rhr.series),
@@ -367,14 +371,14 @@ const buildPremiumMetricGroups = (healthMetrics, dashboardData) => {
           theme: metricThemes.heart,
         },
         {
-          key: 'recovery_hrv',
-          title: recoveryIsScore ? 'Recovery' : 'Recovery / HRV',
-          value: formatMetricNumber(recoveryValue, recoveryIsScore ? 0 : 1),
-          unit: recoveryIsScore ? '%' : 'ms',
-          status: recoveryValue !== null && recoveryValue < (recoveryIsScore ? 55 : 35) ? 'low' : 'normal',
-          trend: 'flat',
-          trendLabel: 'stable',
-          series: [],
+          key: 'recovery',
+          title: 'Recovery',
+          value: metricHasRecentData(recovery) && recoveryValue !== null ? formatMetricNumber(recoveryValue, recovery.precision ?? 0) : 'No recent data',
+          unit: metricHasRecentData(recovery) ? (recovery.unit ?? '%') : '',
+          status: recoveryValue !== null && recoveryValue < 55 ? 'low' : 'normal',
+          trend: recovery.trend ?? 'flat',
+          trendLabel: metricHasRecentData(recovery) ? (recovery.delta !== null && recovery.delta !== undefined ? `${recovery.delta > 0 ? '+' : ''}${Math.round(recovery.delta)}` : 'stable') : 'awaiting sync',
+          series: safeArray(recovery.series),
           Icon: Sparkles,
           theme: metricThemes.recovery,
         },
@@ -493,6 +497,18 @@ const Dashboard = () => {
       socket.close();
     };
   }, [authReady, authToken, authUserId, fetchHealthMetrics, setDashboardData]);
+
+  useEffect(() => {
+    if (!healthMetrics?.metrics) return;
+    const payload = Object.entries(healthMetrics.metrics).map(([metricType, metric]) => ({
+      metric_type: metricType,
+      status: metric?.status ?? 'unknown',
+      last_updated: metric?.lastUpdated ?? metric?.last_updated ?? null,
+      series_length: safeArray(metric?.series).length,
+      source: metric?.source ?? 'unknown',
+    }));
+    console.info('METRIC_FRONTEND_RENDER', payload);
+  }, [healthMetrics]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;

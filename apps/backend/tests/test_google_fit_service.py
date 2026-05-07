@@ -481,7 +481,7 @@ def test_fetch_spo2_ignores_summary_aggregate_client_error_after_empty_primary()
     assert aggregate.await_args_list[1].args[1] == "com.google.oxygen_saturation.summary"
 
 
-def test_fetch_glucose_normalizes_google_fit_mmol_to_mg_dl():
+def test_fetch_glucose_preserves_raw_mmol_and_normalizes_to_mg_dl():
     start_millis = int(datetime(2026, 4, 30, tzinfo=timezone.utc).timestamp() * 1000)
     end_millis = int(datetime(2026, 5, 1, tzinfo=timezone.utc).timestamp() * 1000)
     response = {
@@ -509,7 +509,46 @@ def test_fetch_glucose_normalizes_google_fit_mmol_to_mg_dl():
     assert aggregate.await_args.args[1] == "com.google.blood_glucose"
     assert records[0]["type"] == "glucose"
     assert records[0]["unit"] == "mg/dL"
-    assert records[0]["value"] == 104.5
+    assert records[0]["value"] == 104.4
+    assert records[0]["raw_value"] == 5.8
+    assert records[0]["raw_unit"] == "mmol/L"
+    assert records[0]["normalized_value"] == 104.4
+    assert records[0]["normalized_unit"] == "mg/dL"
+
+
+def test_fetch_glucose_preserves_raw_mgdl_without_double_conversion():
+    start_millis = int(datetime(2026, 4, 30, tzinfo=timezone.utc).timestamp() * 1000)
+    end_millis = int(datetime(2026, 5, 1, tzinfo=timezone.utc).timestamp() * 1000)
+    response = {
+        "bucket": [
+            {
+                "startTimeMillis": str(start_millis),
+                "dataset": [{"point": [{"value": [{"fpVal": 85.0}]}]}],
+            }
+        ]
+    }
+
+    with patch.object(GoogleFitService, "_aggregate_fit_data", new=AsyncMock(return_value=response)) as aggregate:
+        records = asyncio.run(
+            GoogleFitService.fetch_glucose(
+                SimpleNamespace(id="user-1"),
+                "token",
+                days=1,
+                timezone_name="UTC",
+                start_ts=start_millis,
+                end_ts=end_millis,
+            )
+        )
+
+    aggregate.assert_awaited_once()
+    assert aggregate.await_args.args[1] == "com.google.blood_glucose"
+    assert records[0]["type"] == "glucose"
+    assert records[0]["unit"] == "mg/dL"
+    assert records[0]["value"] == 85.0
+    assert records[0]["raw_value"] == 85.0
+    assert records[0]["raw_unit"] == "mg/dL"
+    assert records[0]["normalized_value"] == 85.0
+    assert records[0]["normalized_unit"] == "mg/dL"
 
 
 def test_fetch_blood_pressure_splits_systolic_and_diastolic_records():

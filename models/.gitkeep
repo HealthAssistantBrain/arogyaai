@@ -1,0 +1,2 @@
+# This file exists to ensure the models/ directory is tracked by git.
+# ML model files (*.pkl, *.pt, *.onnx, *.bin) are excluded via .gitignore.

@@ -49,8 +49,6 @@ services:
     env_file:
       - path: .env
         required: false
-      - path: ./apps/frontend/.env
-        required: false
     environment:
       - VITE_API_URL=http://127.0.0.1:8000
       - VITE_GOOGLE_FIT_DEFAULT_TIMEZONE=Asia/Kolkata
@@ -65,6 +63,12 @@ services:
       - ./apps/frontend/postcss.config.js:/app/postcss.config.js
       - ./apps/frontend/eslint.config.js:/app/eslint.config.js
       - ./apps/frontend/tsconfig.json:/app/tsconfig.json
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5173/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   backend:
     image: arogyaai-backend:dev
@@ -72,7 +76,7 @@ services:
     ports:
       - "8000:8000"
     env_file:
-      - path: ./apps/backend/.env
+      - path: .env
         required: false
     environment:
       RUN_MIGRATIONS: "true"
@@ -87,8 +91,12 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_healthy
+      prediction-service:
+        condition: service_healthy
+      rag-service:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8000/health"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -123,7 +131,7 @@ services:
     build: *backend-build
     command: ["celery", "-A", "core.celery_app", "worker", "--loglevel=info"]
     env_file:
-      - path: ./apps/backend/.env
+      - path: .env
         required: false
     environment:
       RUN_MIGRATIONS: "false"
@@ -155,6 +163,12 @@ services:
       - arogyaai_net
     volumes:
       - ./pipelines/prediction-service:/app
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 30s
 
   rag-service:
     image: arogyaai-rag-service:dev
@@ -172,6 +186,12 @@ services:
       - arogyaai_net
     volumes:
       - ./pipelines/rag-service:/app
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 30s
 
   postgres:
     image: timescale/timescaledb:latest-pg15
@@ -252,8 +272,10 @@ services:
     volumes:
       - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
-      - frontend
-      - backend
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
     networks:
       - arogyaai_net
 

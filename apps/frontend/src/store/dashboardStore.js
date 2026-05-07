@@ -28,6 +28,18 @@ const emptySlice = () => ({ data: null, status: 'fallback', source: 'db', last_u
 const vitalKey = (type, range) => `${type}:${range}`;
 const isPlainObject = (value) => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 const getCurrentDashboardUserId = () => useAuthStore.getState()?.user?.id ?? null;
+const isVitalPoint = (value) => isPlainObject(value) && value.timestamp && (
+    value.value !== undefined || value.systolic !== undefined || value.diastolic !== undefined
+);
+const isVitalSlicePayload = (value) => (
+    (Array.isArray(value) && value.every((item) => item == null || isVitalPoint(item))) ||
+    (isPlainObject(value) && (
+        Array.isArray(value.data) ||
+        typeof value.type === 'string' ||
+        typeof value.range === 'string' ||
+        isVitalPoint(value)
+    ))
+);
 
 const buildNoCacheConfig = (cacheBust, params = {}) => ({
     params: { ...params, ts: cacheBust },
@@ -138,13 +150,13 @@ const buildDashboardState = (currentState, payload = {}, replace = false) => {
         });
     }
 
-    if (payload.steps !== undefined) {
+    if (payload.steps !== undefined && isVitalSlicePayload(payload.steps)) {
         currentVitals[vitalKey('steps', DEFAULT_VITAL_RANGE)] = coerceVitalSlice(payload.steps, 'steps', DEFAULT_VITAL_RANGE);
     }
-    if (payload.heart_rate !== undefined) {
+    if (payload.heart_rate !== undefined && isVitalSlicePayload(payload.heart_rate)) {
         currentVitals[vitalKey('heart_rate', DEFAULT_VITAL_RANGE)] = coerceVitalSlice(payload.heart_rate, 'heart_rate', DEFAULT_VITAL_RANGE);
     }
-    if (payload.sleep !== undefined) {
+    if (payload.sleep !== undefined && isVitalSlicePayload(payload.sleep)) {
         currentVitals[vitalKey('sleep', DEFAULT_VITAL_RANGE)] = coerceVitalSlice(payload.sleep, 'sleep', DEFAULT_VITAL_RANGE);
     }
 

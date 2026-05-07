@@ -135,7 +135,11 @@ jobs:
           QDRANT_TIMEOUT_SECONDS=5.0
           QDRANT_URL=http://qdrant:6333
           VITE_API_URL=http://localhost:8000
+          VITE_SUPABASE_URL=https://supabase.invalid
+          VITE_SUPABASE_ANON_KEY=ci-only-anon-key
           EOF
+          # Strip leading whitespace from heredoc
+          sed -i 's/^[[:space:]]*//' .env
 
           cat > apps/backend/.env <<'EOF'
           APP_ENCRYPTION_KEY=ci-only-encryption-key
@@ -151,7 +155,9 @@ jobs:
           SUPABASE_BUCKET_NAME=medical-reports
           SUPABASE_SERVICE_ROLE_KEY=ci-only-service-role-key
           SUPABASE_URL=https://supabase.invalid
+          SUPABASE_ANON_KEY=ci-only-anon-key
           EOF
+          sed -i 's/^[[:space:]]*//' apps/backend/.env
 
       - name: Build Docker services
         shell: bash

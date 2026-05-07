@@ -1,17 +1,23 @@
-# ENV FILES
+# ══════════════════════════════════════════════════
+# ArogyaAI — .gitignore
+# ══════════════════════════════════════════════════
+
+# ── ENV FILES (NEVER commit secrets) ─────────────
 .env
 .env.*
 !.env.template
 !.env.example
 
-# FRONTEND (Node/Vite)
+# ── FRONTEND (Node / Vite) ───────────────────────
 node_modules/
 dist/
 build/
 .vite/
 coverage/
+package-lock.json
+package.json
 
-# BACKEND (Python/FastAPI)
+# ── BACKEND (Python / FastAPI) ───────────────────
 __pycache__/
 *.pyc
 *.pyo
@@ -19,70 +25,72 @@ __pycache__/
 *.db
 .Python
 venv/
-.env/
+.venv/
 Pipfile.lock
 poetry.lock
+.pytest_cache/
 
-# DOCKER / VOLUMES
+# ── DOCKER / VOLUMES ────────────────────────────
 postgres_data/
 redis_data/
 qdrant_data/
 pgadmin_data/
 docker-compose.override.yml
 
-# SYSTEM FILES
+# ── ML / MODELS ─────────────────────────────────
+models/*.pkl
+models/*.pt
+models/*.onnx
+models/*.bin
+!models/.gitkeep
+
+# ── LOGS / TEMP FILES ───────────────────────────
+*.log
+tmp/
+temp/
+uploads/
+
+
+# ── SECURITY / CREDENTIALS ──────────────────────
+*.pem
+*.key
+*.crt
+credentials/*.json
+
+# ── SYSTEM FILES ────────────────────────────────
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
 
-# LOGS / TEMP FILES
-*.log
-tmp/
-temp/
-
-# SECURITY FILES
-*.pem
-*.key
-*.crt
-
-# AGENT FILES
-.agent/
-.gemini/
-.gsd/
-adapters/
-scripts/
-GSD-STYLE.md 
-model_capabilities.yaml
-PROJECT_RULES.md 
-.memory/
-gsd-template/
-package-lock.json
+# ── AGENT / TOOL FILES ─────────────────────────
 .agent/
 .agents/
 .gemini/
 .gsd/
+.claude/
+.memory/
 adapters/
 scripts/
-.pycache/
-.claude/
+gsd-template/
+skills-lock.json
+GSD-STYLE.md
+PROJECT_RULES.md
+model_capabilities.yaml
 
-
-# Files 
+# ── SCRATCH / TEST FILES ────────────────────────
 verify_api.py
 verify_log.txt
 verify_pred_fail.txt
 verify_redis_fail.txt
 verify_final.txt
-GSD-STYLE.md
-
-# tasks
+audit_routes.py
+fix_search.js
+remove_headers.py
+remove_profiles.js
+scaffold.py
+migrate_frontend.ps1
+test_all_routes.mjs
+test_auth_nav.mjs
+test_nav.mjs
 TASK.md
-
-# Jsons 
-skills-lock.json
-package-lock.json
-package.json 
-
-# Documents
-docs/
