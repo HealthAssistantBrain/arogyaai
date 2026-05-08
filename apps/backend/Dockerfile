@@ -68,7 +68,7 @@ COPY apps/backend/docker/install-ml-deps.sh /tmp/install-ml-deps.sh
 RUN chmod +x /tmp/install-ml-deps.sh
 
 # ── Install Python dependencies (platform-aware) ────────────────────────────
-RUN --mount=type=cache,target=/root/.cache/pip \
+RUN --mount=type=cache,id=pip-cache,target=/root/.cache/pip \
     bash /tmp/install-ml-deps.sh
 
 
