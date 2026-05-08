@@ -27,6 +27,7 @@ from database.session import SessionLocal
 from integrations.ocr_service import OCRInput, OCRResult, OCRService
 from integrations.prediction_client import PredictionClient
 from integrations.supabase_storage import delete_report as _supabase_delete_report
+from integrations.supabase_storage import resolve_secure_file_access as _resolve_secure_file_access
 from integrations.supabase_storage import upload_report as _supabase_upload_report
 from models import Report, ReportStatusEnum, ReportTypeEnum, User
 from services.notification_service import trigger_notification
@@ -50,6 +51,7 @@ class ReportService:
         original_filename: str,
         stored_filename: str | None,
         storage_path: str,
+        storage_reference: str | None,
         file_size: int,
         file_hash: str,
         date_of_report: str | None = None,
@@ -61,6 +63,7 @@ class ReportService:
             "stored_filename": stored_filename,
             "file_size": file_size,
             "storage_path": str(storage_path),
+            "storage_reference": storage_reference,
             "file_hash": file_hash,
         }
 
@@ -110,6 +113,7 @@ class ReportService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Only PDF, JPG, JPEG, and PNG files are supported.",
             )
+        cls._validate_upload_mime(original_filename, file.content_type)
 
         file_bytes = await file.read()
         if not file_bytes:
@@ -133,14 +137,14 @@ class ReportService:
             return cls._build_upload_response(existing_report)
 
         log_pipeline("report", step="upload_file", status="running", data="pending")
-        storage_path, public_url = cls._persist_file(current_user.id, original_filename, file_bytes)
-        stored_filename = cls._stored_filename(storage_path, public_url)
+        storage_path, storage_reference = cls._persist_file(current_user.id, original_filename, file_bytes)
+        stored_filename = cls._stored_filename(storage_path, storage_reference)
         log_pipeline("report", step="upload_file", status="healthy", data="stored")
 
         report = Report(
             user_id=current_user.id,
             report_type=ReportTypeEnum(report_type),
-            file_url=public_url,
+            file_url=storage_reference,
             file_hash=file_hash,
             original_filename=original_filename,
             stored_filename=stored_filename,
@@ -150,6 +154,7 @@ class ReportService:
                     original_filename=original_filename,
                     stored_filename=stored_filename,
                     storage_path=str(storage_path),
+                    storage_reference=storage_reference,
                     file_size=len(file_bytes),
                     file_hash=file_hash,
                     date_of_report=normalized_report_date,
@@ -481,7 +486,7 @@ class ReportService:
     def _persist_file(cls, user_id: Any, original_name: str, file_bytes: bytes) -> tuple[str, str]:
         """
         Upload a file to Supabase Storage.
-        Returns (storage_path, public_url) — same contract as before.
+        Returns (storage_path, storage_reference).
         """
         return _supabase_upload_report(user_id, original_name, file_bytes)
 
@@ -492,6 +497,7 @@ class ReportService:
         storage_path_value = (
             getattr(report, "storage_path", None)
             or upload_metadata.get("storage_path")
+            or upload_metadata.get("storage_reference")
             or cls._storage_path_from_public_url(getattr(report, "file_url", None))
         )
         storage_path = cls._storage_path_from_public_url(storage_path_value) or storage_path_value
@@ -538,12 +544,70 @@ class ReportService:
     def _storage_path_from_public_url(file_url: str | None) -> str | None:
         if not file_url:
             return None
-        parsed_path = urlparse(file_url).path
+        value = str(file_url).strip()
+        if value.startswith("supabase://"):
+            parsed = urlparse(value)
+            return parsed.path.lstrip("/") or None
+        parsed_path = urlparse(value).path
         bucket = settings.SUPABASE_BUCKET_NAME
-        marker = f"/storage/v1/object/public/{bucket}/"
-        if marker in parsed_path:
-            return parsed_path.split(marker, 1)[1] or None
+        public_marker = f"/storage/v1/object/public/{bucket}/"
+        signed_marker = f"/storage/v1/object/sign/{bucket}/"
+        if public_marker in parsed_path:
+            return parsed_path.split(public_marker, 1)[1] or None
+        if signed_marker in parsed_path:
+            return parsed_path.split(signed_marker, 1)[1] or None
         return None
+
+    @staticmethod
+    def _validate_upload_mime(filename: str, content_type: str | None) -> None:
+        if not content_type:
+            return
+
+        normalized_type = str(content_type).split(";", 1)[0].strip().lower()
+        extension = Path(filename).suffix.lower()
+        allowed_mime_types = {
+            ".pdf": {"application/pdf"},
+            ".jpg": {"image/jpeg", "image/jpg"},
+            ".jpeg": {"image/jpeg", "image/jpg"},
+            ".png": {"image/png"},
+        }
+        allowed = allowed_mime_types.get(extension, set())
+        if allowed and normalized_type not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Uploaded file type does not match the file extension.",
+            )
+
+    @classmethod
+    def get_report_file_access(
+        cls,
+        db: Session,
+        current_user: User,
+        report_id: str,
+    ) -> dict[str, Any]:
+        report = cls._get_user_report(db, current_user, report_id)
+        summary_data = report.summary_data if isinstance(report.summary_data, dict) else {}
+        upload_metadata = summary_data.get("upload_metadata") if isinstance(summary_data.get("upload_metadata"), dict) else {}
+        access = _resolve_secure_file_access(
+            storage_path=getattr(report, "storage_path", None) or upload_metadata.get("storage_path"),
+            storage_reference=upload_metadata.get("storage_reference") or getattr(report, "file_url", None),
+            public_url=None if str(getattr(report, "file_url", "")).startswith("supabase://") else getattr(report, "file_url", None),
+            bucket_name=getattr(report, "storage_bucket", None),
+            download_filename=report.original_filename or upload_metadata.get("original_filename"),
+        )
+        return {
+            "success": True,
+            "status": "ready",
+            "error": None,
+            "data": {
+                "report_id": str(report.id),
+                "file_name": report.original_filename or upload_metadata.get("original_filename"),
+                "url": access["url"],
+                "expires_at": access["expires_at"],
+                "expires_in": access["expires_in"],
+                "legacy_public_url": bool(access.get("legacy_public_url")),
+            },
+        }
 
     @classmethod
     async def _analyze_report(cls, filename: str, content_type: str | None, file_bytes: bytes) -> dict[str, Any]:
@@ -1764,8 +1828,9 @@ Return ONLY valid JSON. Use risk_level as one of LOW, MODERATE, HIGH.
             or cls._strip_uuid_prefix(stored_filename or "")
             or cls._report_name(report.file_url)
         )
-        file_size = None
-        parsed_path = urlparse(report.file_url or "").path.lstrip("/")
+        file_size = upload_metadata.get("file_size")
+        stored_file_reference = upload_metadata.get("storage_reference") or report.file_url
+        exposed_file_url = None if str(stored_file_reference or "").startswith("supabase://") else report.file_url
         parsed_text = (report.parsed_text or "").strip()
         if summary_data:
             ocr_text = summary_data.get("ocr_text", parsed_text)
@@ -1849,24 +1914,21 @@ Return ONLY valid JSON. Use risk_level as one of LOW, MODERATE, HIGH.
             }
             summary_view = cls._build_summary_view("", [], [], file_name, "stored-empty")
             date_of_report = None
-        if parsed_path:
-            # File is now in Supabase Storage — cannot stat remote files.
-            # file_size was already captured at upload time and stored by callers.
-            file_size = upload_metadata.get("file_size")
-
         return {
             "id": str(report.id),
             "name": file_name,
             "file_name": file_name,
             "original_filename": file_name,
             "stored_filename": stored_filename,
-            "file_url": report.file_url,
+            "file_url": exposed_file_url,
+            "file_access_required": bool(report.storage_path or upload_metadata.get("storage_path") or stored_file_reference),
             "report_type": report.report_type.value,
             "status": report.status.value,
             "created_at": report.created_at.isoformat() if report.created_at else None,
             "updated_at": report.updated_at.isoformat() if report.updated_at else None,
             "file_size": file_size,
             "storage_path": report.storage_path or upload_metadata.get("storage_path"),
+            "storage_reference": stored_file_reference,
             "parsed_text": report.parsed_text,
             "ocr_text": analysis["ocr_text"],
             "summary": analysis["summary"],

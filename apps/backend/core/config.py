@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     # SUPABASE STORAGE
     SUPABASE_BUCKET_NAME: str = os.getenv("SUPABASE_BUCKET_NAME", "medical-reports")
     SUPABASE_SERVICE_ROLE_KEY: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+    SUPABASE_STORAGE_SIGNED_URL_TTL_SECONDS: int = int(os.getenv("SUPABASE_STORAGE_SIGNED_URL_TTL_SECONDS", "900"))
 
     # GOOGLE FIT
     GOOGLE_FIT_CLIENT_ID: str = os.getenv("GOOGLE_FIT_CLIENT_ID", "")
@@ -58,6 +59,7 @@ class Settings(BaseSettings):
         .removeprefix("supabase_anon_key=")
     )
     SUPABASE_AUDIENCE: str = os.getenv("SUPABASE_AUDIENCE", "authenticated")
+    SUPABASE_JWT_ISSUER: str = os.getenv("SUPABASE_JWT_ISSUER", "").strip()
     
     class Config:
         case_sensitive = True

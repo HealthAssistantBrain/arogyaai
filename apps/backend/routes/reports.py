@@ -154,6 +154,15 @@ def download_report(
     )
 
 
+@router.get("/{report_id}/access")
+def get_report_access(
+    report_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_header),
+):
+    return ReportService.get_report_file_access(db, current_user, report_id)
+
+
 @router.get("/{report_id}/status")
 def get_report_status(
     report_id: str,

@@ -101,7 +101,49 @@ const triggerBlobDownload = (blob, fileName) => {
 };
 
 const DocumentPreview = ({ report }) => {
-    const previewUrl = report?.localPreviewUrl || report?.fileUrl;
+    const [previewUrl, setPreviewUrl] = useState(report?.localPreviewUrl || report?.fileUrl || '');
+
+    useEffect(() => {
+        let cancelled = false;
+
+        if (report?.localPreviewUrl) {
+            setPreviewUrl(report.localPreviewUrl);
+            return () => {
+                cancelled = true;
+            };
+        }
+
+        if (report?.fileUrl) {
+            setPreviewUrl(report.fileUrl);
+            return () => {
+                cancelled = true;
+            };
+        }
+
+        if (!report?.id || String(report.id).startsWith('local-') || !report?.fileAccessRequired) {
+            setPreviewUrl('');
+            return () => {
+                cancelled = true;
+            };
+        }
+
+        setPreviewUrl('');
+        void apiClient.get(`/reports/${report.id}/access`, { timeout: 12000 })
+            .then((response) => {
+                if (cancelled) return;
+                const signedUrl = response?.data?.data?.url || '';
+                setPreviewUrl(signedUrl);
+            })
+            .catch((error) => {
+                if (cancelled) return;
+                console.warn('[Reports] Unable to resolve secure preview URL:', error);
+                setPreviewUrl('');
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [report?.fileAccessRequired, report?.fileUrl, report?.id, report?.localPreviewUrl]);
 
     if (!previewUrl) {
         return (

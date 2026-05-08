@@ -33,6 +33,40 @@ const clearGoogleFitClientSyncState = () => {
   }).catch(() => {})
 }
 
+const syncCanonicalProfileFromLegacyUser = async (legacyUser) => {
+  if (!legacyUser?.id) return null
+
+  try {
+    const { useProfileStore } = await import('./profileStore')
+    return useProfileStore.getState().hydrateFromLegacyUser(legacyUser)
+  } catch (error) {
+    console.warn('[authStore] Unable to sync canonical profile store from legacy user:', error?.message || error)
+    return null
+  }
+}
+
+const fetchCanonicalLegacyUser = async ({ force = true } = {}) => {
+  try {
+    const { buildLegacyUserFromProfileBundle, useProfileStore } = await import('./profileStore')
+    const bundle = await useProfileStore.getState().fetchProfileBundle({ force })
+    if (!bundle) return null
+    return buildLegacyUserFromProfileBundle(bundle)
+  } catch (error) {
+    console.warn('[authStore] Unable to fetch canonical profile bundle:', error?.message || error)
+    return null
+  }
+}
+
+const clearCanonicalProfileStores = () => {
+  void import('./profileStore').then(({ useProfileStore }) => {
+    useProfileStore.getState().clear()
+  }).catch(() => {})
+
+  void import('./userStore').then(({ useUserStore }) => {
+    useUserStore.getState().clear?.()
+  }).catch(() => {})
+}
+
 const isWriteMethod = (method = 'GET') => ['POST', 'PUT', 'PATCH', 'DELETE'].includes(String(method).toUpperCase())
 
 export const clearLegacyAuthStorage = () => {
@@ -398,6 +432,7 @@ export const useAuthStore = create(
           role: dbUser.role ?? get().role ?? 'patient',
           profileError: null,
         }, false, 'applyBackendUser')
+        void syncCanonicalProfileFromLegacyUser(dbUser)
       },
 
       setAuth: (data) => {
@@ -443,6 +478,7 @@ export const useAuthStore = create(
         }, false, 'reset')
         clearGoogleFitClientSyncState()
         clearLegacyAuthStorage()
+        clearCanonicalProfileStores()
       },
 
       clearUser: () => {
@@ -489,100 +525,44 @@ export const useAuthStore = create(
         try {
           console.debug('[authStore] refreshSession start')
           const client = getSupabase()
-
-          if (client) {
-            try {
-              console.debug('[authStore] checking Supabase session first')
-              let { data, error } = await client.auth.getSession()
-              if (error) throw error
-
-              if (!data?.session) {
-                const refreshed = await client.auth.refreshSession()
-                if (refreshed.error) throw refreshed.error
-                data = refreshed.data
-              }
-
-              if (data?.session?.access_token) {
-                const syncedUser = await syncUser({ session: data.session })
-                if (!syncedUser?.id) {
-                  throw new Error('Unable to synchronize Supabase user')
-                }
-
-                set({ isHydrated: true, isHydratingAuth: false, profileError: null }, false, 'refreshSession_SUPABASE_SUCCESS')
-                return data.session
-              }
-            } catch (supabaseRefreshError) {
-              console.warn('[authStore] Supabase session refresh failed; trying backend refresh:', supabaseRefreshError?.message)
-            }
-          }
-
-          const envelope = await fetchJson(`${API_BASE_URL}/auth/refresh-token`, {
-            method: 'POST',
-            body: {},
-            token: null,
-            retryOn401: false,
-          })
-          const data = extractAuthData(envelope)
-          const token = data?.access_token ?? data?.token ?? null
-
-          if (!token) {
-            throw new Error('Refresh endpoint did not return an access token')
-          }
-
-          get().setAccessToken(token)
-          console.debug('[authStore] token set from refresh')
-
-          if (data?.user?.id) {
-            get().applyBackendUser(data.user)
-          } else {
-            const userEnvelope = await fetchJson(`${API_BASE_URL}/users/me`, {
-              method: 'GET',
-              token,
-              retryOn401: false,
-            })
-            const user = withOnboardingAliases(userEnvelope.data || userEnvelope || {})
-            if (!user?.id) throw new Error('Unable to fetch user after refresh')
-            get().applyBackendUser(user)
-          }
-
-          set({ isHydrated: true, isHydratingAuth: false }, false, 'refreshSession_SUCCESS')
-          console.debug('[authStore] refreshSession success', { hasUser: !!get().user?.id })
-          return true
-        } catch (backendRefreshError) {
-          const client = getSupabase()
           if (!client) {
-            console.warn('[authStore] Backend refresh failed and no Supabase fallback is configured:', backendRefreshError?.message)
+            throw new Error('Supabase Auth is not configured')
+          }
+
+          console.debug('[authStore] checking Supabase session')
+          let { data, error } = await client.auth.getSession()
+          if (error) throw error
+
+          if (!data?.session) {
+            const refreshed = await client.auth.refreshSession()
+            if (refreshed.error) throw refreshed.error
+            data = refreshed.data
+          }
+
+          if (!data?.session?.access_token) {
             get().reset()
-            set({ isHydrated: true, isHydratingAuth: false }, false, 'refreshSession_FAIL')
+            set({ isHydrated: true, isHydratingAuth: false }, false, 'refreshSession_no_session')
             return false
           }
 
-          try {
-            console.debug('[authStore] falling back to Supabase refresh')
-            let { data, error } = await client.auth.getSession()
-            if (error) throw error
-
-            if (!data?.session) {
-              const refreshed = await client.auth.refreshSession()
-              if (refreshed.error) throw refreshed.error
-              data = refreshed.data
-            }
-
-            if (!data?.session?.access_token) {
-              get().reset()
-              set({ isHydrated: true, isHydratingAuth: false }, false, 'refreshSession_no_session')
-              return false
-            }
-
-            get().setSupabaseSession(data.session)
-            set({ isHydrated: true, isHydratingAuth: false }, false, 'refreshSession_SUCCESS')
-            return data.session
-          } catch (err) {
-            console.error('[authStore] Supabase refresh failed:', err)
-            get().reset()
-            set({ isHydrated: true, isHydratingAuth: false }, false, 'refreshSession_FAIL')
-            return false
+          const syncedUser = await syncUser({ session: data.session, force: true })
+          if (!syncedUser?.id) {
+            throw new Error('Unable to synchronize Supabase user')
           }
+
+          const canonicalUser = await fetchCanonicalLegacyUser({ force: true })
+          if (canonicalUser?.id) {
+            get().applyBackendUser(canonicalUser, data.session)
+          }
+
+          set({ isHydrated: true, isHydratingAuth: false, profileError: null }, false, 'refreshSession_SUCCESS')
+          console.debug('[authStore] refreshSession success', { hasUser: !!get().user?.id })
+          return data.session
+        } catch (err) {
+          console.error('[authStore] Supabase refresh failed:', err)
+          get().reset()
+          set({ isHydrated: true, isHydratingAuth: false }, false, 'refreshSession_FAIL')
+          return false
         }
       },
 
@@ -591,16 +571,12 @@ export const useAuthStore = create(
 
         set({ profileLoading: true, profileError: null })
         try {
-          console.debug('[authStore] /users/me request')
-          const envelope = await fetchJson(`${API_BASE_URL}/users/me`, {
-            method: 'GET',
-            token: get().token,
-            retryOn401: true,
-          })
-          const data = withOnboardingAliases(envelope.data || envelope || {})
+          console.debug('[authStore] /profile request')
+          const data = withOnboardingAliases(await fetchCanonicalLegacyUser({ force: true }))
+          if (!data?.id) throw new Error('Unable to load canonical profile bundle')
           get().applyBackendUser(data)
           set({ profileLoading: false }, false, 'fetchProfile_SUCCESS')
-          console.debug('[authStore] /users/me response', { id: data?.id, onboardingDone: data?.onboardingCompleted })
+          console.debug('[authStore] /profile response', { id: data?.id, onboardingDone: data?.onboardingCompleted })
           return true
         } catch (err) {
           console.error('fetchProfile error:', err)
@@ -670,6 +646,7 @@ export const useAuthStore = create(
               : get().pendingWelcome,
             profileLoading: false,
           }, false, 'updateProfile_SUCCESS')
+          void syncCanonicalProfileFromLegacyUser(data)
           return true
         } catch (err) {
           console.error('updateProfile error:', err)

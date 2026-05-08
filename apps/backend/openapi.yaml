@@ -506,7 +506,8 @@ paths:
   /auth/login:
     post:
       tags: [Authentication]
-      summary: Authenticate and receive JWT tokens
+      summary: Deprecated legacy backend login
+      deprecated: true
       security: []
       requestBody:
         required: true
@@ -515,16 +516,8 @@ paths:
             schema:
               $ref: '#/components/schemas/LoginRequest'
       responses:
-        '200':
-          description: Login successful
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TokenResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          description: Invalid email or password
+        '410':
+          description: Deprecated. Use Supabase Auth on the frontend and pass the Supabase bearer token to backend APIs.
           content:
             application/json:
               schema:
@@ -551,7 +544,8 @@ paths:
   /auth/refresh-token:
     post:
       tags: [Authentication]
-      summary: Issue a new access token using a valid refresh token
+      summary: Deprecated legacy backend refresh
+      deprecated: true
       security: []
       requestBody:
         required: true
@@ -560,18 +554,59 @@ paths:
             schema:
               $ref: '#/components/schemas/RefreshTokenRequest'
       responses:
-        '200':
-          description: New access token issued
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TokenResponse'
-        '401':
-          description: Refresh token expired or revoked
+        '410':
+          description: Deprecated. Refresh the Supabase session in the frontend client instead.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDetail'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /profile:
+    get:
+      tags: [Users]
+      summary: Return the canonical normalized profile bundle for the authenticated user
+      responses:
+        '200':
+          description: Canonical profile bundle
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  status:
+                    type: string
+                  source:
+                    type: string
+                  error:
+                    nullable: true
+                  data:
+                    type: object
+                    properties:
+                      user:
+                        type: object
+                      profile:
+                        type: object
+                      onboarding:
+                        type: object
+                      medical_history:
+                        type: object
+                      wearable:
+                        type: object
+                      settings:
+                        type: object
+                      preferences:
+                        type: object
+                      health_baseline:
+                        type: object
+                  last_updated:
+                    type: string
+                    nullable: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -927,6 +962,52 @@ paths:
                     properties:
                       id:
                         $ref: '#/components/schemas/UUIDField'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /reports/{id}/access:
+    get:
+      tags: [Medical Records]
+      summary: Resolve a temporary signed access URL for a private medical report
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUIDField'
+      responses:
+        '200':
+          description: Temporary signed access URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  status:
+                    type: string
+                  error:
+                    nullable: true
+                  data:
+                    type: object
+                    properties:
+                      report_id:
+                        $ref: '#/components/schemas/UUIDField'
+                      file_name:
+                        type: string
+                      url:
+                        type: string
+                      expires_at:
+                        type: string
+                      expires_in:
+                        type: integer
+                      legacy_public_url:
+                        type: boolean
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':

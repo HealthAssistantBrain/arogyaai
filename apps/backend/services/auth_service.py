@@ -327,7 +327,7 @@ class AuthService:
             else:
                 raise HTTPException(401, f"Unsupported algorithm: {alg}")
 
-            issuer = f"{supabase_url.rstrip('/')}/auth/v1"
+            issuer = settings.SUPABASE_JWT_ISSUER or f"{supabase_url.rstrip('/')}/auth/v1"
             decoded = jwt.decode(
                 token,
                 public_key,

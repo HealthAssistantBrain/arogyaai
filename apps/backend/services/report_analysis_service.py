@@ -268,8 +268,8 @@ def _persist_analyzed_report(
             "summary_source": serialized["summary_source"],
         }
 
-    storage_path, public_url = ReportService._persist_file(current_user.id, original_filename, file_bytes)
-    stored_filename = ReportService._stored_filename(storage_path, public_url)
+    storage_path, storage_reference = ReportService._persist_file(current_user.id, original_filename, file_bytes)
+    stored_filename = ReportService._stored_filename(storage_path, storage_reference)
     normalized_type = _coerce_report_type(report_type, original_filename)
     structured_summary = ReportService._normalize_structured_summary(
         prediction_data.get("structured_summary") or prediction_data.get("summary"),
@@ -288,7 +288,7 @@ def _persist_analyzed_report(
     report = Report(
         user_id=current_user.id,
         report_type=normalized_type,
-        file_url=public_url,
+        file_url=storage_reference,
         file_hash=file_hash,
         original_filename=original_filename,
         stored_filename=stored_filename,
@@ -298,6 +298,7 @@ def _persist_analyzed_report(
                 original_filename=original_filename,
                 stored_filename=stored_filename,
                 storage_path=str(storage_path),
+                storage_reference=storage_reference,
                 file_size=len(file_bytes),
                 file_hash=file_hash,
             ),

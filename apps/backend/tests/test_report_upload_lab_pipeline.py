@@ -58,7 +58,7 @@ def test_upload_and_summarize_returns_uploaded_report_and_queues_processing():
     with patch.object(
         ReportService,
         "_persist_file",
-        return_value=("reports/user/cbc-report.pdf", "https://example.test/cbc-report.pdf"),
+        return_value=("reports/user/cbc-report.pdf", "supabase://medical-reports/reports/user/cbc-report.pdf"),
     ):
         result = asyncio.run(
             ReportService.upload_and_summarize(
@@ -117,6 +117,7 @@ def test_upload_and_summarize_returns_existing_report_for_duplicate_hash():
                 "file_name": "cbc-report.pdf",
                 "file_size": len(file_bytes),
                 "storage_path": "reports/user/cbc-report.pdf",
+                "storage_reference": "supabase://medical-reports/reports/user/cbc-report.pdf",
                 "file_hash": file_hash,
             },
         },
@@ -157,11 +158,11 @@ def test_serialize_report_prefers_original_filename_over_uuid_storage_name():
         id=report_id,
         report_type=SimpleNamespace(value="BLOOD_TEST"),
         status=ReportStatusEnum.COMPLETED,
-        file_url="https://example.test/storage/123e4567-e89b-12d3-a456-426614174000-blood_test_may.pdf",
+        file_url="supabase://medical-reports/reports/user/123e4567-e89b-12d3-a456-426614174000-blood_test_may.pdf",
         original_filename="blood_test_may.pdf",
         stored_filename="123e4567-e89b-12d3-a456-426614174000-blood_test_may.pdf",
         storage_path="reports/user/123e4567-e89b-12d3-a456-426614174000-blood_test_may.pdf",
-        summary_data={"summary": ["Ready"], "upload_metadata": {"file_size": 128}},
+        summary_data={"summary": ["Ready"], "upload_metadata": {"file_size": 128, "storage_reference": "supabase://medical-reports/reports/user/123e4567-e89b-12d3-a456-426614174000-blood_test_may.pdf"}},
         parsed_text="",
         created_at=created_at,
         updated_at=created_at,
@@ -182,7 +183,7 @@ def test_serialize_report_returns_saved_summary_payload_for_detail_view():
         id=report_id,
         report_type=SimpleNamespace(value="BLOOD_TEST"),
         status=ReportStatusEnum.COMPLETED,
-        file_url="https://example.test/storage/cbc.pdf",
+        file_url="supabase://medical-reports/reports/user/cbc.pdf",
         original_filename="cbc.pdf",
         stored_filename="cbc.pdf",
         storage_path="reports/user/cbc.pdf",
@@ -193,7 +194,7 @@ def test_serialize_report_returns_saved_summary_payload_for_detail_view():
             "recommendations": ["Continue routine follow-up."],
             "abnormal_values": [{"name": "Hemoglobin", "value": "13.8", "status": "Optimal"}],
             "summary_source": "prediction-service",
-            "upload_metadata": {"file_size": 128},
+            "upload_metadata": {"file_size": 128, "storage_reference": "supabase://medical-reports/reports/user/cbc.pdf"},
         },
         parsed_text="Hemoglobin 13.8 g/dL",
         created_at=created_at,
@@ -222,7 +223,7 @@ def test_delete_report_removes_storage_before_db_record():
         is_deleted=False,
         storage_path="reports/user/cbc.pdf",
         storage_bucket=None,
-        file_url="https://example.test/storage/cbc.pdf",
+        file_url="supabase://medical-reports/reports/user/cbc.pdf",
         summary_data={},
     )
     query = MagicMock()
@@ -237,6 +238,48 @@ def test_delete_report_removes_storage_before_db_record():
     delete_stored_file.assert_called_once_with(report)
     db.delete.assert_called_once_with(report)
     db.commit.assert_called_once()
+
+
+def test_get_report_file_access_returns_signed_url_payload():
+    report_id = uuid4()
+    user_id = uuid4()
+    db = MagicMock()
+    current_user = SimpleNamespace(id=user_id)
+    report = SimpleNamespace(
+        id=report_id,
+        user_id=user_id,
+        is_deleted=False,
+        original_filename="cbc.pdf",
+        storage_path="reports/user/cbc.pdf",
+        storage_bucket=None,
+        file_url="supabase://medical-reports/reports/user/cbc.pdf",
+        summary_data={
+            "upload_metadata": {
+                "original_filename": "cbc.pdf",
+                "storage_path": "reports/user/cbc.pdf",
+                "storage_reference": "supabase://medical-reports/reports/user/cbc.pdf",
+            }
+        },
+    )
+    query = MagicMock()
+    query.filter.return_value.first.return_value = report
+    db.query.return_value = query
+
+    with patch("services.report_service._resolve_secure_file_access", return_value={
+        "url": "https://signed.example.test/cbc.pdf?token=abc",
+        "expires_at": "2026-05-08T12:34:56+00:00",
+        "expires_in": 900,
+        "legacy_public_url": False,
+    }):
+        result = ReportService.get_report_file_access(db, current_user, str(report_id))
+
+    assert result["success"] is True
+    assert result["status"] == "ready"
+    assert result["data"]["report_id"] == str(report_id)
+    assert result["data"]["file_name"] == "cbc.pdf"
+    assert result["data"]["url"] == "https://signed.example.test/cbc.pdf?token=abc"
+    assert result["data"]["expires_in"] == 900
+    assert result["data"]["legacy_public_url"] is False
 
 
 def test_delete_stored_file_removes_existing_local_file():

@@ -75,6 +75,7 @@ export const hasSummaryContent = (summaryView = {}) => (
 
 export const normalizeReport = (report) => {
   const fileUrl = report?.fileUrl ?? report?.file_url ?? report?.url ?? '';
+  const fileAccessRequired = Boolean(report?.fileAccessRequired ?? report?.file_access_required ?? !fileUrl);
   const fileName =
     toText(report?.originalFilename ?? report?.original_filename) ||
     stripUuidPrefix(toText(report?.fileName ?? report?.file_name)) ||
@@ -114,6 +115,7 @@ export const normalizeReport = (report) => {
     storedFilename,
     title: report?.title ?? fileName,
     fileUrl,
+    fileAccessRequired,
     reportType,
     reportKind: inferReportType(fileName, fileUrl, reportType),
     status: String(report?.status ?? 'COMPLETED').toUpperCase(),

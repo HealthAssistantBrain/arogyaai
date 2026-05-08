@@ -14,8 +14,9 @@ import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { ROUTES } from '../router/routes';
 import { getProtectedRouteRedirect } from '../router/authRedirects';
-import api, { setAuthFlow } from '../lib/axios';
+import { setAuthFlow } from '../lib/axios';
 import { lockSystem, unlockSystem } from '../lib/systemLock';
+import { syncUser } from '../lib/authSync';
 import { startSupabaseOAuth } from '../lib/supabaseOAuth';
 import { getSupabaseClient, supabase } from '../lib/supabaseClient';
 
@@ -63,26 +64,20 @@ const Login = () => {
     try {
       const authStore = useAuthStore.getState();
       authStore.reset();
+      const client = getSupabaseClient() ?? supabase;
+      if (!client) throw new Error('Supabase Auth is not configured');
 
-      const response = await api.post('/auth/login', data, { timeout: 15000 });
-      const payload = response.data?.data || response.data || {};
-      const token = payload.access_token || payload.token || null;
+      const { data: authData, error } = await client.auth.signInWithPassword({
+        email: data.email,
+        password: data.password,
+      });
 
-      if (!token) {
-        throw new Error('Login completed without an access token.');
+      if (error) throw error;
+      if (!authData?.session?.access_token) {
+        throw new Error('Login completed without a Supabase session.');
       }
 
-      authStore.setAccessToken(token);
-      console.debug('[Login] token set in memory');
-
-      if (payload.user?.id) {
-        authStore.applyBackendUser?.(payload.user);
-      }
-
-      const fetchedUser = await useAuthStore.getState().fetchUser?.();
-      if (!fetchedUser) {
-        throw new Error('Unable to load the authenticated user.');
-      }
+      await syncUser({ session: authData.session, force: true });
 
       // Read resolved state
       const currentState = useAuthStore.getState();
