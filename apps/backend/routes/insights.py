@@ -11,16 +11,16 @@ router = APIRouter(prefix="/api/v1", tags=["Insights"])
 
 
 @router.get("/insights", response_model=None)
-def get_insights(
+async def get_insights(
     current_user: User = Depends(get_current_user_from_header),
     db: Session = Depends(get_db),
 ):
-    return InsightsService.get_insights(db, current_user)
+    return await InsightsService.get_insights_async(db, current_user)
 
 
 @router.get("/health/insights", response_model=None)
-def get_health_insights(
+async def get_health_insights(
     current_user: User = Depends(get_current_user_from_header),
     db: Session = Depends(get_db),
 ):
-    return InsightsService.get_health_insights(db, current_user)
+    return await InsightsService.get_health_insights_async(db, current_user)

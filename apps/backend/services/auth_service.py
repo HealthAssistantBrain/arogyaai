@@ -1,38 +1,21 @@
 import uuid
-import secrets
 import logging
-from functools import lru_cache
 from datetime import datetime, timezone
-from typing import Optional, Tuple
 
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
-import jwt
-from jwt import algorithms
-import requests
-import json
 from sqlalchemy.exc import IntegrityError
 
 from models import User, UserProfile, UserSetting, Session as DBSession
 from models.user import ROLE_DOCTOR, ROLE_PATIENT
-from schemas.api_models import OAuthLoginRequest, UserCreate, UserLogin, TokenResponse
+from schemas.api_models import OAuthLoginRequest, UserCreate, UserLogin
 from core.security import verify_password, get_password_hash, create_access_token, create_refresh_token
-from core.config import settings
 from core.utils import safe_input
 from services.audit_service import log_event
 from services.event_service import emit_event
-from services.user_service import UserService
+from services.supabase_jwt_verifier import supabase_jwt_verifier
 
 logger = logging.getLogger("auth_service")
-
-
-@lru_cache(maxsize=4)
-def _fetch_supabase_jwks(supabase_url: str, anon_key: str) -> dict:
-    jwks_url = f"{supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
-    headers = {"apikey": anon_key} if anon_key else {}
-    response = requests.get(jwks_url, headers=headers, timeout=10)
-    response.raise_for_status()
-    return response.json()
 
 
 
@@ -297,63 +280,12 @@ class AuthService:
         return user
 
     @staticmethod
-    def _decode_supabase_token(token: str) -> dict:
-        supabase_url = settings.SUPABASE_URL or ''
-        audience = settings.SUPABASE_AUDIENCE or ''
-
-        if not supabase_url:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Supabase OAuth is not configured (SUPABASE_URL missing)",
-            )
-
-        try:
-            jwks = _fetch_supabase_jwks(supabase_url, settings.SUPABASE_ANON_KEY or "")
-            unverified_header = jwt.get_unverified_header(token)
-            alg = unverified_header.get("alg", "RS256")
-            kid = unverified_header.get("kid")
-            
-            matching_key = next(
-                (k for k in jwks.get("keys", []) if k.get("kid") == kid),
-                None
-            )
-            if not matching_key:
-                raise HTTPException(401, "JWK not found")
-            
-            if alg.startswith("RS"):
-                public_key = algorithms.RSAAlgorithm.from_jwk(json.dumps(matching_key))
-            elif alg.startswith("ES"):
-                public_key = algorithms.ECAlgorithm.from_jwk(json.dumps(matching_key))
-            else:
-                raise HTTPException(401, f"Unsupported algorithm: {alg}")
-
-            issuer = settings.SUPABASE_JWT_ISSUER or f"{supabase_url.rstrip('/')}/auth/v1"
-            decoded = jwt.decode(
-                token,
-                public_key,
-                algorithms=[alg],
-                audience=audience,
-                issuer=issuer,
-            )
-        except HTTPException:
-            raise
-        except jwt.PyJWTError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"Invalid Supabase OAuth token: {exc}",
-            ) from exc
-        except Exception as exc:
-            logger.exception("[Auth] Failed to decode Supabase OAuth token")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"Invalid Supabase OAuth token: {exc}",
-            ) from exc
-
-        return decoded
+    async def _decode_supabase_token(token: str) -> dict:
+        return await supabase_jwt_verifier.decode_token(token)
 
     @staticmethod
-    def oauth_login(db: Session, oauth_data: OAuthLoginRequest) -> dict:
-        decoded = AuthService._decode_supabase_token(oauth_data.access_token)
+    async def oauth_login(db: Session, oauth_data: OAuthLoginRequest) -> dict:
+        decoded = await AuthService._decode_supabase_token(oauth_data.access_token)
 
         provider = str(
             oauth_data.provider

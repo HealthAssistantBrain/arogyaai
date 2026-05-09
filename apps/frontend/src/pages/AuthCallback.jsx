@@ -19,6 +19,7 @@ const AuthCallback = () => {
     let cancelled = false
 
     const run = async () => {
+      const startedAt = performance.now()
       let didError = false
       const callbackUrl = new URL(window.location.href)
       const oauthContext = consumeSupabaseOAuthContext()
@@ -34,6 +35,9 @@ const AuthCallback = () => {
           didError = true
           setStatus('error')
           setError('OAuth sign-in could not be completed. Please try again.')
+          console.warn('[AuthCallback] OAuth callback completed without synchronized user', {
+            durationMs: Math.round(performance.now() - startedAt),
+          })
           return
         }
       } catch (err) {
@@ -56,10 +60,17 @@ const AuthCallback = () => {
       if (latestState.isAuthenticated) {
         setStatus('ready')
         useAuthStore.getState().setPendingWelcome(!latestState.onboardingDone && wantsWelcome)
+        console.info('[AuthCallback] OAuth callback succeeded', {
+          durationMs: Math.round(performance.now() - startedAt),
+          onboardingDone: latestState.onboardingDone,
+        })
         navigate(getAuthenticatedHomeRoute(useAuthStore.getState()), { replace: true, state: { fromOAuth: true } })
       } else {
         setStatus('error')
         setError('OAuth sign-in could not be completed. Please try again.')
+        console.warn('[AuthCallback] OAuth callback ended without authenticated state', {
+          durationMs: Math.round(performance.now() - startedAt),
+        })
       }
     }
 

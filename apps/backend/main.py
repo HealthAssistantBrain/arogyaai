@@ -3,6 +3,7 @@ import logging
 import os
 import sys
 import secrets
+import time
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -15,15 +16,18 @@ from fastapi.responses import JSONResponse
 from starlette.requests import Request
 
 # Import modular routers
-from routes import aqi, auth, intelligence, users, prediction, dashboard, google_fit, vitals, notifications, user_data, reports, sleep, insights, lab_results, timeline, dashboard_ws, clinical_history, settings as settings_routes, devices as devices_routes, chat, rag, feedback, profile
+from routes import aqi, auth, intelligence, users, prediction, dashboard, google_fit, vitals, notifications, user_data, reports, sleep, insights, lab_results, timeline, dashboard_ws, clinical_history, settings as settings_routes, devices as devices_routes, chat, rag, feedback, profile, symptoms, report_generation, orchestrator as orchestrator_routes
 from api.v1 import doctor as doctor_routes
 from api.v1 import emergency as emergency_routes
 
-from database.session import engine
+from database.session import analytics_runtime_enabled, dispose_engines, engine, log_pool_snapshot
 from core.config import settings
 from core.pipeline_logger import log_pipeline, log_pipeline_section
+from pipelines.rag_pipeline.config import RagSettings
 from services.dashboard_realtime import start_dashboard_realtime_listener, stop_dashboard_realtime_listener
-from services.health_service import get_system_readiness
+from services.health_service import get_neon_health, get_ollama_health, get_qdrant_health, get_system_readiness, get_timescale_health
+from services.ollama_client import probe_ollama_health
+from services.supabase_jwt_verifier import supabase_jwt_verifier
 from workers.emergency_worker import start_emergency_worker, stop_emergency_worker
 from workers.google_fit_worker import start_google_fit_worker, stop_google_fit_worker
 
@@ -202,6 +206,46 @@ async def health_api():
         )
 
 
+@app.get("/health/neon", tags=["System"])
+async def health_neon_root():
+    return JSONResponse(status_code=200, content=await get_neon_health())
+
+
+@app.get("/api/v1/health/neon", tags=["System"])
+async def health_neon_api():
+    return JSONResponse(status_code=200, content=await get_neon_health())
+
+
+@app.get("/health/timescale", tags=["System"])
+async def health_timescale_root():
+    return JSONResponse(status_code=200, content=await get_timescale_health())
+
+
+@app.get("/api/v1/health/timescale", tags=["System"])
+async def health_timescale_api():
+    return JSONResponse(status_code=200, content=await get_timescale_health())
+
+
+@app.get("/health/qdrant", tags=["System"])
+async def health_qdrant_root():
+    return JSONResponse(status_code=200, content=await get_qdrant_health())
+
+
+@app.get("/api/v1/health/qdrant", tags=["System"])
+async def health_qdrant_api():
+    return JSONResponse(status_code=200, content=await get_qdrant_health())
+
+
+@app.get("/health/ollama", tags=["System"])
+async def health_ollama_root():
+    return JSONResponse(status_code=200, content=await get_ollama_health())
+
+
+@app.get("/api/v1/health/ollama", tags=["System"])
+async def health_ollama_api():
+    return JSONResponse(status_code=200, content=await get_ollama_health())
+
+
 def _env_bool(name: str, default: str = "false") -> bool:
     return os.getenv(name, default).lower() in {"1", "true", "yes", "on"}
 
@@ -218,6 +262,9 @@ def _env_float(name: str, default: float) -> float:
         return float(os.getenv(name, str(default)))
     except (TypeError, ValueError):
         return default
+
+
+OPTIONAL_STARTUP_TIMEOUT_SECONDS = max(5.0, _env_float("OPTIONAL_STARTUP_TIMEOUT_SECONDS", 45.0))
 
 
 async def safe_init_rag():
@@ -249,6 +296,39 @@ async def safe_init_rag():
     return None
 
 
+async def _run_optional_startup_task(task_name: str, task_coro, *, timeout_seconds: float) -> None:
+    started_at = time.perf_counter()
+    logger.info("[Startup] Optional task started | task=%s timeout=%ss", task_name, timeout_seconds)
+    try:
+        await asyncio.wait_for(task_coro, timeout=timeout_seconds)
+        logger.info(
+            "[Startup] Optional task completed | task=%s duration_ms=%s",
+            task_name,
+            round((time.perf_counter() - started_at) * 1000, 2),
+        )
+    except asyncio.TimeoutError:
+        logger.warning(
+            "[Startup] Optional task timed out | task=%s timeout=%ss",
+            task_name,
+            timeout_seconds,
+        )
+    except Exception as exc:
+        logger.exception("[Startup] Optional task failed | task=%s error=%s", task_name, exc)
+
+
+def _launch_optional_startup_task(app: FastAPI, task_name: str, task_coro, *, timeout_seconds: float) -> None:
+    task = asyncio.create_task(
+        _run_optional_startup_task(task_name, task_coro, timeout_seconds=timeout_seconds),
+        name=f"startup:{task_name}",
+    )
+    app.state.optional_startup_tasks.add(task)
+
+    def _cleanup(finished_task: asyncio.Task) -> None:
+        app.state.optional_startup_tasks.discard(finished_task)
+
+    task.add_done_callback(_cleanup)
+
+
 # Mount modular routers (prefixes now managed in routers)
 app.include_router(auth.router)
 app.include_router(aqi.router)
@@ -272,9 +352,12 @@ app.include_router(sleep.router)
 app.include_router(insights.router)
 app.include_router(timeline.router)
 app.include_router(clinical_history.router)
+app.include_router(symptoms.router)
+app.include_router(report_generation.router)
 app.include_router(chat.router)
 app.include_router(rag.router)
 app.include_router(feedback.router)
+app.include_router(orchestrator_routes.router)
 app.include_router(doctor_routes.router)
 app.include_router(emergency_routes.router)
 
@@ -287,6 +370,8 @@ async def _startup_scheduler():
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
 
+    startup_started_at = time.perf_counter()
+    app.state.optional_startup_tasks = set()
     log_pipeline_section("PIPELINE STARTUP")
     log_pipeline("system", step="initializing", status="running", data="pending")
 
@@ -298,21 +383,91 @@ async def _startup_scheduler():
         logger.warning("DB Connected check failed during startup: %s", exc)
         log_pipeline("database", step="connection_check", status="unhealthy", data="failed")
 
+    if analytics_runtime_enabled():
+        try:
+            neon_status = await get_neon_health()
+            logger.info("Analytics DB status: %s", neon_status.get("status"))
+            log_pipeline(
+                "analytics_database",
+                step="neon_connection_check",
+                status="healthy" if neon_status.get("status") == "ok" else "degraded",
+                data=neon_status.get("provider", "neon"),
+            )
+        except Exception as exc:
+            logger.warning("Analytics DB check failed during startup: %s", exc)
+            log_pipeline("analytics_database", step="neon_connection_check", status="unhealthy", data="failed")
+
     app.state.rag_state = None
     if _env_bool("RAG_STARTUP_INDEX_CHECK", "true"):
-        try:
-            rag_state = await safe_init_rag()
-            app.state.rag_state = rag_state
-            if rag_state is None:
-                logger.warning("RAG Qdrant index unavailable during startup; continuing in degraded mode")
+        async def _rag_startup() -> None:
+            try:
+                rag_state = await safe_init_rag()
+                app.state.rag_state = rag_state
+                if rag_state is None:
+                    logger.warning("RAG Qdrant index unavailable during startup; continuing in degraded mode")
+                    log_pipeline("rag", step="qdrant_index_check", status="degraded", data="fallback")
+                else:
+                    logger.info("RAG Qdrant index ready | %s", rag_state)
+                    log_pipeline("rag", step="qdrant_index_check", status="healthy", data=str(rag_state))
+            except Exception as exc:
+                print(f"Startup warning: RAG initialization failed unexpectedly: {exc}")
+                logger.exception("Startup warning: RAG initialization failed unexpectedly: %s", exc)
                 log_pipeline("rag", step="qdrant_index_check", status="degraded", data="fallback")
-            else:
-                logger.info("RAG Qdrant index ready | %s", rag_state)
-                log_pipeline("rag", step="qdrant_index_check", status="healthy", data=str(rag_state))
-        except Exception as exc:
-            print(f"Startup warning: RAG initialization failed unexpectedly: {exc}")
-            logger.exception("Startup warning: RAG initialization failed unexpectedly: %s", exc)
-            log_pipeline("rag", step="qdrant_index_check", status="degraded", data="fallback")
+
+        _launch_optional_startup_task(
+            app,
+            "rag_index_check",
+            _rag_startup(),
+            timeout_seconds=OPTIONAL_STARTUP_TIMEOUT_SECONDS,
+        )
+
+    if _env_bool("OLLAMA_WARMUP_ON_STARTUP", "false"):
+        async def _ollama_startup() -> None:
+            try:
+                ollama_state = await probe_ollama_health(
+                    RagSettings(),
+                    warmup=True,
+                )
+                logger.info("Ollama warmup status: %s", ollama_state.get("status"))
+                log_pipeline(
+                    "ollama",
+                    step="warmup",
+                    status="healthy" if ollama_state.get("status") == "ok" else "degraded",
+                    data=ollama_state.get("configured_model", "unknown"),
+                )
+            except Exception as exc:
+                logger.warning("Ollama warmup failed during startup: %s", exc)
+                log_pipeline("ollama", step="warmup", status="unhealthy", data="failed")
+
+        _launch_optional_startup_task(
+            app,
+            "ollama_warmup",
+            _ollama_startup(),
+            timeout_seconds=OPTIONAL_STARTUP_TIMEOUT_SECONDS,
+        )
+
+    if settings.SUPABASE_JWKS_STARTUP_WARMUP:
+        async def _supabase_auth_startup() -> None:
+            snapshot = await supabase_jwt_verifier.warm_cache(reason="startup")
+            logger.info(
+                "Supabase auth warmup completed | status=%s cache_state=%s keys_cached=%s",
+                snapshot.get("status"),
+                snapshot.get("cache_state"),
+                snapshot.get("keys_cached"),
+            )
+            log_pipeline(
+                "auth",
+                step="supabase_jwks_warmup",
+                status="healthy" if snapshot.get("status") == "ok" else "degraded",
+                data=snapshot.get("cache_state", "unknown"),
+            )
+
+        _launch_optional_startup_task(
+            app,
+            "supabase_auth_warmup",
+            _supabase_auth_startup(),
+            timeout_seconds=max(1.0, settings.SUPABASE_AUTH_STARTUP_TIMEOUT_SECONDS),
+        )
 
     try:
         start_google_fit_worker()
@@ -338,12 +493,26 @@ async def _startup_scheduler():
         logger.exception("Emergency worker failed to start: %s", exc)
         log_pipeline("realtime", step="emergency_worker", status="unhealthy", data="failed")
 
+    log_pool_snapshot(force=True)
     log_pipeline("system", step="all_pipelines_initialized", status="healthy", data="ready")
-    logger.info("App Ready")
+    logger.info(
+        "App Ready | startup_duration_ms=%s optional_tasks=%s",
+        round((time.perf_counter() - startup_started_at) * 1000, 2),
+        len(app.state.optional_startup_tasks),
+    )
 
 
 @app.on_event("shutdown")
-def _shutdown_scheduler():
+async def _shutdown_scheduler():
+    optional_tasks = list(getattr(app.state, "optional_startup_tasks", set()))
+    for task in optional_tasks:
+        task.cancel()
+    if optional_tasks:
+        await asyncio.gather(*optional_tasks, return_exceptions=True)
+
     stop_google_fit_worker()
     stop_dashboard_realtime_listener()
     stop_emergency_worker()
+    await supabase_jwt_verifier.aclose()
+    log_pool_snapshot(force=True)
+    dispose_engines()

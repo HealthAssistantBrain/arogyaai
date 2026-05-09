@@ -3,9 +3,12 @@ import type { ComponentType } from 'react';
 import {
   Area,
   AreaChart,
+  CartesianGrid,
   ResponsiveContainer,
+  Tooltip,
 } from 'recharts';
 import { ArrowDownRight, ArrowRight, ArrowUpRight } from 'lucide-react';
+import MetricRangeToggle, { type MetricRangeOption } from './MetricRangeToggle';
 
 export type MetricStatus = 'normal' | 'high' | 'low';
 
@@ -66,13 +69,23 @@ export const buildChartSeries = (series: MetricSeriesPoint[] = [], _seed = 72) =
       const value = toFiniteNumber(point?.value) ?? (
         systolic !== null && diastolic !== null ? Math.round((systolic + diastolic) / 2) : null
       );
+      const timestamp = point?.timestamp ?? null;
+      const date = timestamp ? new Date(timestamp) : null;
+      const safeDate = date && !Number.isNaN(date.getTime()) ? date : null;
 
       return {
         index,
         value,
         systolic,
         diastolic,
-        timestamp: point?.timestamp ?? null,
+        timestamp,
+        xLabel: safeDate
+          ? safeDate.toLocaleString([], {
+              month: 'short',
+              day: 'numeric',
+              hour: 'numeric',
+            })
+          : `${index + 1}`,
       };
     })
     .filter((point) => point.value !== null || point.systolic !== null || point.diastolic !== null);
@@ -80,7 +93,15 @@ export const buildChartSeries = (series: MetricSeriesPoint[] = [], _seed = 72) =
   return normalized.slice(-30);
 };
 
-const MetricMiniCard = ({ metric }: { metric: DashboardMetric }) => {
+const MetricMiniCard = ({
+  metric,
+  selectedRange,
+  onRangeChange,
+}: {
+  metric: DashboardMetric;
+  selectedRange: MetricRangeOption;
+  onRangeChange: (next: MetricRangeOption) => void;
+}) => {
   const Icon = metric.Icon;
   const TrendIcon = trendIcons[metric.trend ?? 'flat'];
   const chartId = `miniGradient-${metric.key.replace(/[^a-z0-9]/gi, '-')}`;
@@ -104,6 +125,9 @@ const MetricMiniCard = ({ metric }: { metric: DashboardMetric }) => {
           <p className="text-xs font-bold uppercase tracking-wide text-text-muted dark:text-slate-500">
             {metric.title}
           </p>
+          <div className="mt-4">
+            <MetricRangeToggle value={selectedRange} onChange={onRangeChange} compact highlightId={metric.key} />
+          </div>
         </div>
 
         <div className="mt-5 flex flex-wrap items-end gap-3">
@@ -139,6 +163,20 @@ const MetricMiniCard = ({ metric }: { metric: DashboardMetric }) => {
                     <stop offset="100%" stopColor={metric.theme.chart} stopOpacity={0} />
                   </linearGradient>
                 </defs>
+                <CartesianGrid vertical={false} stroke="rgba(148,163,184,0.14)" strokeDasharray="5 7" />
+                <Tooltip
+                  cursor={{ stroke: metric.theme.chart, strokeOpacity: 0.18, strokeWidth: 1 }}
+                  formatter={(pointValue) => [pointValue, metric.unit ?? '']}
+                  labelFormatter={(_value, payload) => payload?.[0]?.payload?.xLabel ?? ''}
+                  contentStyle={{
+                    borderRadius: 16,
+                    border: '1px solid rgba(255,255,255,0.24)',
+                    background: 'rgba(15,23,42,0.86)',
+                    color: '#f8fafc',
+                    boxShadow: '0 14px 34px rgba(15,23,42,0.24)',
+                  }}
+                  wrapperStyle={{ outline: 'none' }}
+                />
                 <Area
                   type="monotone"
                   dataKey="value"

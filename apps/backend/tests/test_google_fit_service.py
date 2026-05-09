@@ -217,6 +217,59 @@ def test_aggregate_fit_data_can_bucket_steps_by_local_day_period():
     }
 
 
+def test_get_valid_user_device_access_token_releases_db_before_refresh():
+    db = MagicMock()
+    user_device = SimpleNamespace(
+        id="device-1",
+        user_id="user-1",
+        token_expiry=datetime(2020, 1, 1, tzinfo=timezone.utc),
+        access_token="encrypted-access",
+        refresh_token="encrypted-refresh",
+    )
+    connection = SimpleNamespace(id="conn-1", user_id="user-1", refresh_token_encrypted="encrypted-conn-refresh")
+    refreshed_device = SimpleNamespace(id="device-1", user_id="user-1")
+    refreshed_connection = SimpleNamespace(id="conn-1", user_id="user-1")
+
+    connection_query = MagicMock()
+    connection_query.filter.return_value.first.return_value = connection
+    refreshed_device_query = MagicMock()
+    refreshed_device_query.filter.return_value.first.return_value = refreshed_device
+    refreshed_connection_query = MagicMock()
+    refreshed_connection_query.filter.return_value.first.return_value = refreshed_connection
+    db.query.side_effect = [
+        connection_query,
+        refreshed_device_query,
+        refreshed_connection_query,
+    ]
+
+    response = SimpleNamespace(
+        is_error=False,
+        json=lambda: {"access_token": "fresh-token", "expires_in": 3600},
+    )
+
+    with patch.object(GoogleFitService, "_google_api_request", new=AsyncMock(return_value=response)), patch.object(
+        google_fit_service_module,
+        "decrypt_secret",
+        side_effect=["refresh-token"],
+    ), patch.object(
+        GoogleFitService,
+        "_persist_refreshed_access_token",
+    ) as persist:
+        token = asyncio.run(GoogleFitService._get_valid_user_device_access_token(db, user_device))
+
+    assert token == "fresh-token"
+    db.close.assert_called_once()
+    persist.assert_called_once_with(
+        db,
+        refreshed_device,
+        "fresh-token",
+        3600,
+        refresh_token="refresh-token",
+        connection=refreshed_connection,
+    )
+    db.commit.assert_called_once()
+
+
 def test_google_api_request_retries_once_after_timeout(monkeypatch):
     response = SimpleNamespace(
         status_code=200,

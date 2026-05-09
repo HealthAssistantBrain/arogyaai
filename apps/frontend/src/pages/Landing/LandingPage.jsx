@@ -17,13 +17,14 @@ import { FinalCTA } from "@/components/landing/FinalCTA";
 const LandingPage = () => {
   const navigate = useNavigate();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const hasUser = useAuthStore((s) => !!s.user?.id);
 
   // STEP 7 — AUTH GUARD
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && hasUser) {
       navigate('/dashboard', { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [hasUser, isAuthenticated, navigate]);
 
   return (
     <main className="min-h-screen relative overflow-x-hidden bg-background text-foreground">

@@ -3,15 +3,18 @@ import { motion as Motion } from 'framer-motion';
 import MetricHeroCard from './MetricHeroCard';
 import MetricMiniCard from './MetricMiniCard';
 import type { DashboardMetric } from './MetricMiniCard';
+import type { MetricRangeOption } from './MetricRangeToggle';
 
 type MetricGroupProps = {
   title: string;
   hero: DashboardMetric;
   mini: DashboardMetric[];
   index?: number;
+  selectedRange: MetricRangeOption;
+  onRangeChange: (next: MetricRangeOption) => void;
 };
 
-const MetricGroup = ({ title, hero, mini, index = 0 }: MetricGroupProps) => {
+const MetricGroup = ({ title, hero, mini, index = 0, selectedRange, onRangeChange }: MetricGroupProps) => {
   const cards = mini.slice(0, 2);
 
   return (
@@ -32,10 +35,10 @@ const MetricGroup = ({ title, hero, mini, index = 0 }: MetricGroupProps) => {
       </div>
 
       <div>
-        <MetricHeroCard metric={hero} />
+        <MetricHeroCard metric={hero} selectedRange={selectedRange} onRangeChange={onRangeChange} />
         <div className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-2">
           {cards.map((metric) => (
-            <MetricMiniCard key={metric.key} metric={metric} />
+            <MetricMiniCard key={metric.key} metric={metric} selectedRange={selectedRange} onRangeChange={onRangeChange} />
           ))}
         </div>
       </div>

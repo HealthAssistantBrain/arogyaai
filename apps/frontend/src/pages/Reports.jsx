@@ -7,6 +7,7 @@ import {
     Eye,
     Download,
     Trash2,
+    Sparkles,
     Image as LucideImage,
     Loader2,
     AlertCircle,
@@ -477,16 +478,34 @@ const Reports = () => {
                         <div className="flex flex-col md:flex-row md:items-center justify-between px-10 py-10 shrink-0 gap-6">
                             <div>
                                 <h2 className="text-4xl lg:text-5xl font-black tracking-tighter uppercase text-text-primary dark:text-text-primary leading-none italic">Medical Reports Hub</h2>
-                                <p className="text-text-muted font-bold uppercase tracking-[0.25em] text-[11px] mt-4 opacity-80 leading-none">Manage and analyze clinical diagnostics via AI Extraction engines</p>
+                                <p className="text-text-muted font-bold uppercase tracking-[0.25em] text-[11px] mt-4 opacity-80 leading-none">Upload, review, preview, and manage extracted medical report intelligence</p>
                             </div>
-                            <button
-                                onClick={() => navigate(ROUTES.UPLOAD)}
-                                disabled={uploadInProgress}
-                                className="bg-primary hover:bg-[#4a34c1] text-white px-9 py-5 rounded-[1.5rem] font-black text-[11px] uppercase tracking-[0.25em] flex items-center gap-4 transition-all shadow-2xl shadow-primary/40 active:scale-95 group leading-none disabled:opacity-60 disabled:cursor-not-allowed"
-                            >
-                                {uploadInProgress ? <Loader2 size={18} strokeWidth={3} className="animate-spin" /> : <Plus size={18} strokeWidth={3} className="group-hover:rotate-90 transition-transform" />}
-                                {uploadInProgress ? 'Analyzing Report' : 'Upload New Report'}
-                            </button>
+                            <div className="flex flex-wrap items-center gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => navigate(ROUTES.SYMPTOM_ANALYSIS)}
+                                    className="inline-flex items-center gap-3 rounded-[1.35rem] border border-slate-200 bg-white px-5 py-4 text-[10px] font-black uppercase tracking-[0.24em] text-slate-700 transition-all hover:border-primary/25 hover:text-primary hover:shadow-xl hover:shadow-primary/10 dark:border-stroke dark:bg-background/60 dark:text-text-secondary dark:hover:text-text-primary"
+                                >
+                                    <Sparkles size={16} />
+                                    Analyze Symptoms
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => navigate(ROUTES.REPORT_GENERATION)}
+                                    className="inline-flex items-center gap-3 rounded-[1.35rem] border border-slate-200 bg-white px-5 py-4 text-[10px] font-black uppercase tracking-[0.24em] text-slate-700 transition-all hover:border-secondary/25 hover:text-secondary hover:shadow-xl hover:shadow-secondary/10 dark:border-stroke dark:bg-background/60 dark:text-text-secondary dark:hover:text-text-primary"
+                                >
+                                    <FileText size={16} />
+                                    Generate Report
+                                </button>
+                                <button
+                                    onClick={() => navigate(ROUTES.UPLOAD)}
+                                    disabled={uploadInProgress}
+                                    className="bg-primary hover:bg-[#4a34c1] text-white px-9 py-5 rounded-[1.5rem] font-black text-[11px] uppercase tracking-[0.25em] flex items-center gap-4 transition-all shadow-2xl shadow-primary/40 active:scale-95 group leading-none disabled:opacity-60 disabled:cursor-not-allowed"
+                                >
+                                    {uploadInProgress ? <Loader2 size={18} strokeWidth={3} className="animate-spin" /> : <Plus size={18} strokeWidth={3} className="group-hover:rotate-90 transition-transform" />}
+                                    {uploadInProgress ? 'Analyzing Report' : 'Upload New Report'}
+                                </button>
+                            </div>
                         </div>
 
                         <div className="relative flex flex-1 gap-10 px-10 pb-10 overflow-hidden">
@@ -595,6 +614,14 @@ const Reports = () => {
                                             </span>
                                         </div>
                                         <div className="flex items-center gap-4">
+                                            <button
+                                                type="button"
+                                                onClick={() => navigate(ROUTES.SYMPTOM_ANALYSIS)}
+                                                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-600 transition hover:border-primary/25 hover:text-primary dark:border-stroke dark:bg-white/5 dark:text-text-secondary dark:hover:text-text-primary"
+                                            >
+                                                <Sparkles size={14} />
+                                                Analyze Symptoms
+                                            </button>
                                             <button
                                                 type="button"
                                                 onClick={handleDownloadSummary}

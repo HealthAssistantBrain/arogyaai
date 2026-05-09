@@ -4,6 +4,7 @@ import { getApiUrl } from '../lib/apiBaseUrl'
 import { syncUser } from '../lib/authSync'
 import { getCsrfToken } from '../lib/csrf'
 import { getSupabaseClient, supabase } from '../lib/supabaseClient'
+import { buildBootstrapErrorSummary, isRecoverableBootstrapError } from '../lib/systemReadiness'
 
 const API_BASE_URL = getApiUrl(import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000')
 const AUTH_STORAGE_KEY = 'auth-storage'
@@ -16,9 +17,30 @@ const COMPLETE_ONBOARDING_ENDPOINTS = [
 ]
 
 const isBrowser = () => typeof window !== 'undefined'
+const AUTH_HYDRATION_RETRY_DELAY_MS = 5000
 
 const getSupabase = () => getSupabaseClient() ?? supabase
 let authStateSubscription = null
+let hydrationRetryTimer = null
+
+const clearHydrationRetryTimer = () => {
+  if (!isBrowser() || hydrationRetryTimer === null) return
+  window.clearTimeout(hydrationRetryTimer)
+  hydrationRetryTimer = null
+}
+
+const scheduleHydrationRetry = (delayMs = AUTH_HYDRATION_RETRY_DELAY_MS) => {
+  if (!isBrowser()) return
+  if (hydrationRetryTimer !== null) return
+
+  hydrationRetryTimer = window.setTimeout(() => {
+    hydrationRetryTimer = null
+    const store = useAuthStore.getState()
+    if (store.isHydratingAuth || store.authBootstrapStatus === 'ready') return
+    console.info('[authStore] Retrying auth hydration after transient failure')
+    void store.hydrateAuth()
+  }, delayMs)
+}
 
 const clearGoogleFitClientSyncState = () => {
   if (!isBrowser()) return
@@ -45,7 +67,7 @@ const syncCanonicalProfileFromLegacyUser = async (legacyUser) => {
   }
 }
 
-const fetchCanonicalLegacyUser = async ({ force = true } = {}) => {
+const fetchCanonicalLegacyUser = async ({ force = true, throwOnError = false } = {}) => {
   try {
     const { buildLegacyUserFromProfileBundle, useProfileStore } = await import('./profileStore')
     const bundle = await useProfileStore.getState().fetchProfileBundle({ force })
@@ -53,8 +75,24 @@ const fetchCanonicalLegacyUser = async ({ force = true } = {}) => {
     return buildLegacyUserFromProfileBundle(bundle)
   } catch (error) {
     console.warn('[authStore] Unable to fetch canonical profile bundle:', error?.message || error)
+    if (throwOnError) throw error
     return null
   }
+}
+
+const hydrateCanonicalUserFromSession = async (session, { force = true } = {}) => {
+  const syncedUser = await syncUser({ session, force })
+  if (!syncedUser?.id) {
+    throw new Error('Unable to synchronize authenticated user')
+  }
+
+  const canonicalUser = await fetchCanonicalLegacyUser({ force, throwOnError: true })
+  if (!canonicalUser?.id) {
+    throw new Error('Unable to load canonical profile bundle')
+  }
+
+  useAuthStore.getState().applyBackendUser(canonicalUser, session)
+  return canonicalUser
 }
 
 const clearCanonicalProfileStores = () => {
@@ -372,6 +410,9 @@ export const useAuthStore = create(
       role: 'patient',
       isHydrated: false,
       isHydratingAuth: false,
+      authBootstrapStatus: 'idle',
+      authRetryCount: 0,
+      lastHydrationError: null,
 
       setUser: (user) =>
         set({ user: user ?? null }, false, 'setUser'),
@@ -388,6 +429,7 @@ export const useAuthStore = create(
       setEmailVerified: (isEmailVerified = true) => set({ isEmailVerified: !!isEmailVerified }, false, 'setEmailVerified'),
       setHydrated: () => set({ isHydrated: true }, false, 'setHydrated'),
       setPendingWelcome: (pendingWelcome = false) => set({ pendingWelcome: !!pendingWelcome }, false, 'setPendingWelcome'),
+      scheduleHydrationRetry: (delayMs = AUTH_HYDRATION_RETRY_DELAY_MS) => scheduleHydrationRetry(delayMs),
 
       setSupabaseSession: (session) => {
         const token = session?.access_token ?? null
@@ -399,6 +441,8 @@ export const useAuthStore = create(
           refreshToken: session?.refresh_token ?? null,
           isAuthenticated: !!token,
           isEmailVerified: getSessionVerificationStatus(session),
+          authBootstrapStatus: token ? 'hydrating' : 'idle',
+          lastHydrationError: null,
         }, false, 'setSupabaseSession')
       },
 
@@ -431,6 +475,9 @@ export const useAuthStore = create(
           pendingWelcome: onboardingDone || onboardingStep > 1 ? false : get().pendingWelcome,
           role: dbUser.role ?? get().role ?? 'patient',
           profileError: null,
+          authBootstrapStatus: 'ready',
+          authRetryCount: 0,
+          lastHydrationError: null,
         }, false, 'applyBackendUser')
         void syncCanonicalProfileFromLegacyUser(dbUser)
       },
@@ -454,10 +501,33 @@ export const useAuthStore = create(
           onboardingStep,
           pendingWelcome: shouldClearPendingWelcome ? false : !!(data?.pendingWelcome ?? get().pendingWelcome),
           role: data?.role ?? user?.role ?? 'patient',
+          authBootstrapStatus: token ? 'ready' : 'idle',
+          authRetryCount: 0,
+          lastHydrationError: null,
         }, false, 'setAuth')
       },
 
+      markAuthDegraded: (session, summary) => {
+        const nextSession = session ?? get().session ?? null
+        const token = nextSession?.access_token ?? get().token ?? null
+        set({
+          session: nextSession,
+          token,
+          accessToken: token,
+          refreshToken: nextSession?.refresh_token ?? get().refreshToken ?? null,
+          isAuthenticated: !!token,
+          isEmailVerified: !!(getSessionVerificationStatus(nextSession) || get().isEmailVerified),
+          isHydrated: true,
+          isHydratingAuth: false,
+          authBootstrapStatus: token ? 'degraded' : 'idle',
+          authRetryCount: (get().authRetryCount || 0) + 1,
+          lastHydrationError: summary,
+        }, false, 'markAuthDegraded')
+        scheduleHydrationRetry()
+      },
+
       reset: () => {
+        clearHydrationRetryTimer()
         set({
           user: null,
           session: null,
@@ -475,6 +545,9 @@ export const useAuthStore = create(
           pendingWelcome: false,
           role: 'patient',
           isHydratingAuth: false,
+          authBootstrapStatus: 'idle',
+          authRetryCount: 0,
+          lastHydrationError: null,
         }, false, 'reset')
         clearGoogleFitClientSyncState()
         clearLegacyAuthStorage()
@@ -483,7 +556,7 @@ export const useAuthStore = create(
 
       clearUser: () => {
         get().reset()
-        set({ isHydrated: true, isHydratingAuth: false }, false, 'clearUser')
+        set({ isHydrated: true, isHydratingAuth: false, authBootstrapStatus: 'idle', authRetryCount: 0, lastHydrationError: null }, false, 'clearUser')
         clearPersistedAuthStorage()
       },
 
@@ -520,7 +593,9 @@ export const useAuthStore = create(
       },
 
       refreshSession: async () => {
-        set({ isHydratingAuth: true }, false, 'refreshSession_start')
+        const startedAt = Date.now()
+        let resolvedSession = null
+        set({ isHydratingAuth: true, authBootstrapStatus: 'hydrating', lastHydrationError: null }, false, 'refreshSession_start')
 
         try {
           console.debug('[authStore] refreshSession start')
@@ -539,53 +614,62 @@ export const useAuthStore = create(
             data = refreshed.data
           }
 
+          resolvedSession = data?.session ?? null
+
           if (!data?.session?.access_token) {
             get().reset()
-            set({ isHydrated: true, isHydratingAuth: false }, false, 'refreshSession_no_session')
+            set({ isHydrated: true, isHydratingAuth: false, authBootstrapStatus: 'idle', lastHydrationError: null }, false, 'refreshSession_no_session')
             return false
           }
 
-          const syncedUser = await syncUser({ session: data.session, force: true })
-          if (!syncedUser?.id) {
-            throw new Error('Unable to synchronize Supabase user')
-          }
+          await hydrateCanonicalUserFromSession(data.session, { force: true })
 
-          const canonicalUser = await fetchCanonicalLegacyUser({ force: true })
-          if (canonicalUser?.id) {
-            get().applyBackendUser(canonicalUser, data.session)
-          }
-
-          set({ isHydrated: true, isHydratingAuth: false, profileError: null }, false, 'refreshSession_SUCCESS')
-          console.debug('[authStore] refreshSession success', { hasUser: !!get().user?.id })
+          clearHydrationRetryTimer()
+          set({ isHydrated: true, isHydratingAuth: false, authBootstrapStatus: 'ready', authRetryCount: 0, profileError: null, lastHydrationError: null }, false, 'refreshSession_SUCCESS')
+          console.debug('[authStore] refreshSession success', { hasUser: !!get().user?.id, durationMs: Date.now() - startedAt })
           return data.session
         } catch (err) {
+          const summary = buildBootstrapErrorSummary('auth_sync', err)
+          if (resolvedSession?.access_token && isRecoverableBootstrapError(summary)) {
+            console.warn('[authStore] refreshSession degraded; preserving Supabase session', {
+              message: summary.message,
+              status: summary.status ?? null,
+              durationMs: Date.now() - startedAt,
+            })
+            get().markAuthDegraded(resolvedSession, summary)
+            return resolvedSession
+          }
+
           console.error('[authStore] Supabase refresh failed:', err)
           get().reset()
-          set({ isHydrated: true, isHydratingAuth: false }, false, 'refreshSession_FAIL')
+          set({ isHydrated: true, isHydratingAuth: false, authBootstrapStatus: 'idle', lastHydrationError: summary }, false, 'refreshSession_FAIL')
           return false
         }
       },
 
-      fetchProfile: async () => {
+      fetchProfile: async ({ throwOnError = false } = {}) => {
         if (!get().token) return false
 
-        set({ profileLoading: true, profileError: null })
+        set({ profileLoading: true, profileError: null, lastHydrationError: null })
         try {
           console.debug('[authStore] /profile request')
-          const data = withOnboardingAliases(await fetchCanonicalLegacyUser({ force: true }))
+          const data = withOnboardingAliases(await fetchCanonicalLegacyUser({ force: true, throwOnError: true }))
           if (!data?.id) throw new Error('Unable to load canonical profile bundle')
           get().applyBackendUser(data)
-          set({ profileLoading: false }, false, 'fetchProfile_SUCCESS')
+          set({ profileLoading: false, lastHydrationError: null }, false, 'fetchProfile_SUCCESS')
           console.debug('[authStore] /profile response', { id: data?.id, onboardingDone: data?.onboardingCompleted })
           return true
         } catch (err) {
+          const summary = buildBootstrapErrorSummary('profile_bundle', err)
           console.error('fetchProfile error:', err)
           set({
             profile: {},
             healthProfile: {},
-            profileError: err.message,
+            profileError: summary.message,
             profileLoading: false,
+            lastHydrationError: summary,
           }, false, 'fetchProfile_FAIL')
+          if (throwOnError) throw err
           return false
         }
       },
@@ -708,28 +792,44 @@ export const useAuthStore = create(
 
       hydrateAuth: async (tokenOverride = null) => {
         const client = getSupabase()
-        set({ isHydratingAuth: true }, false, 'hydrateAuth_start')
+        let resolvedSession = null
+        const startedAt = Date.now()
+        set({ isHydratingAuth: true, authBootstrapStatus: 'hydrating', lastHydrationError: null }, false, 'hydrateAuth_start')
 
         try {
           console.debug('[authStore] hydrateAuth start')
           const memoryToken = tokenOverride ?? get().token ?? null
           if (memoryToken) {
             get().setAccessToken(memoryToken)
-            const fetched = await get().fetchProfile()
+            const fetched = await get().fetchProfile({ throwOnError: true })
             if (!fetched) throw new Error('Unable to fetch user with in-memory token')
-            set({ isHydrated: true, isHydratingAuth: false, profileError: null }, false, 'hydrateAuth_MEMORY_SUCCESS')
+            clearHydrationRetryTimer()
+            set({ isHydrated: true, isHydratingAuth: false, authBootstrapStatus: 'ready', authRetryCount: 0, profileError: null, lastHydrationError: null }, false, 'hydrateAuth_MEMORY_SUCCESS')
             return useAuthStore.getState()
           }
 
           const refreshed = await get().refreshSession()
-          if (refreshed && useAuthStore.getState().user?.id) {
-            set({ isHydrated: true, isHydratingAuth: false, profileError: null }, false, 'hydrateAuth_REFRESH_SUCCESS')
-            return useAuthStore.getState()
+          if (refreshed) {
+            const latestState = useAuthStore.getState()
+            if (latestState.user?.id || latestState.authBootstrapStatus === 'degraded') {
+              set({
+                isHydrated: true,
+                isHydratingAuth: false,
+                authBootstrapStatus: latestState.authBootstrapStatus,
+                profileError: null,
+                lastHydrationError: latestState.lastHydrationError,
+              }, false, 'hydrateAuth_REFRESH_SUCCESS')
+              console.debug('[authStore] hydrateAuth finished via refreshSession', {
+                authBootstrapStatus: latestState.authBootstrapStatus,
+                durationMs: Date.now() - startedAt,
+              })
+              return latestState
+            }
           }
 
           if (!client) {
             get().reset()
-            set({ isHydrated: true, isHydratingAuth: false }, false, 'hydrateAuth_no_session')
+            set({ isHydrated: true, isHydratingAuth: false, authBootstrapStatus: 'idle', lastHydrationError: null }, false, 'hydrateAuth_no_session')
             return null
           }
 
@@ -741,16 +841,19 @@ export const useAuthStore = create(
             const { data, error } = await client.auth.getSession()
             if (error) throw error
             session = data?.session ?? null
+            resolvedSession = session
           }
 
           if (!session && code && client) {
             const exchanged = await client.auth.exchangeCodeForSession(code)
             if (exchanged.error) throw exchanged.error
             session = exchanged.data?.session ?? null
+            resolvedSession = session
 
             const { data, error } = await client.auth.getSession()
             if (error) throw error
             session = data?.session ?? session
+            resolvedSession = session
 
             window.history.replaceState({}, '', window.location.pathname)
           }
@@ -760,31 +863,44 @@ export const useAuthStore = create(
               ...(get().session || {}),
               access_token: tokenOverride,
             }
+            resolvedSession = session
           }
 
           if (!session?.access_token) {
             get().reset()
-            set({ isHydrated: true, isHydratingAuth: false }, false, 'hydrateAuth_no_session')
+            set({ isHydrated: true, isHydratingAuth: false, authBootstrapStatus: 'idle', lastHydrationError: null }, false, 'hydrateAuth_no_session')
             return null
           }
 
-          const syncedUser = await syncUser({ session, force: true })
+          await hydrateCanonicalUserFromSession(session, { force: true })
 
-          if (!syncedUser?.id) {
-            throw new Error('Unable to synchronize authenticated user')
-          }
-
+          clearHydrationRetryTimer()
           set({
             isHydrated: true,
             isHydratingAuth: false,
+            authBootstrapStatus: 'ready',
+            authRetryCount: 0,
             profileError: null,
+            lastHydrationError: null,
           }, false, 'hydrateAuth_SUCCESS')
 
+          console.debug('[authStore] hydrateAuth success', { durationMs: Date.now() - startedAt })
           return useAuthStore.getState()
         } catch (err) {
+          const summary = buildBootstrapErrorSummary('hydrate_auth', err)
+          if (resolvedSession?.access_token && isRecoverableBootstrapError(summary)) {
+            console.warn('[authStore] Auth hydration degraded; preserving session and scheduling retry', {
+              message: summary.message,
+              status: summary.status ?? null,
+              durationMs: Date.now() - startedAt,
+            })
+            get().markAuthDegraded(resolvedSession, summary)
+            return useAuthStore.getState()
+          }
+
           console.error('[authStore] Auth hydration failed:', err)
           get().reset()
-          set({ isHydrated: true, isHydratingAuth: false }, false, 'hydrateAuth_FAIL')
+          set({ isHydrated: true, isHydratingAuth: false, authBootstrapStatus: 'idle', lastHydrationError: summary }, false, 'hydrateAuth_FAIL')
           return null
         } finally {
           clearLegacyAuthStorage()
@@ -823,7 +939,7 @@ export const useAuthStore = create(
 
       hardReset: () => {
         get().reset()
-        set({ isHydrated: true }, false, 'hardReset')
+        set({ isHydrated: true, authBootstrapStatus: 'idle', authRetryCount: 0, lastHydrationError: null }, false, 'hardReset')
       },
     })),
     {
@@ -864,17 +980,33 @@ export const initializeAuthStateListener = () => {
 
     store.setSupabaseSession?.(session)
 
-    if (event !== 'SIGNED_IN') {
+    if (event !== 'SIGNED_IN' && event !== 'TOKEN_REFRESHED') {
       return
     }
 
-    useAuthStore.setState({ isHydratingAuth: true })
-    void syncUser({ session })
+    useAuthStore.setState({ isHydratingAuth: true, isHydrated: false, authBootstrapStatus: 'hydrating' })
+    void hydrateCanonicalUserFromSession(session, { force: event === 'SIGNED_IN' })
       .catch((error) => {
+        const summary = buildBootstrapErrorSummary('auth_sync', error)
+        if (session?.access_token && isRecoverableBootstrapError(summary)) {
+          console.warn('[authStore] Auth listener degraded; preserving session', {
+            message: summary.message,
+            status: summary.status ?? null,
+          })
+          useAuthStore.getState().markAuthDegraded?.(session, summary)
+          return
+        }
+
         console.error('[authStore] Auth listener sync failed:', error)
+        useAuthStore.getState().reset?.()
       })
       .finally(() => {
-        useAuthStore.setState({ isHydrated: true, isHydratingAuth: false })
+        const latestState = useAuthStore.getState()
+        useAuthStore.setState({
+          isHydrated: true,
+          isHydratingAuth: false,
+          authBootstrapStatus: latestState.authBootstrapStatus ?? 'idle',
+        })
       })
   })
 

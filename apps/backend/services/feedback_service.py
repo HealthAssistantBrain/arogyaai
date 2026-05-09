@@ -5,9 +5,9 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
+from database.session import analytics_read_session_scope
 from models import Alert, AlertTypeEnum, Feedback, FeedbackEntityType, FeedbackType, Recommendation, RiskScore, User
 from schemas.feedback import FeedbackCreate
 
@@ -187,21 +187,38 @@ def aggregate_feedback_stats(
 
 
 def average_rating_per_model(db: Session, user: User | None = None) -> dict[str, float]:
-    filters = [
+    feedback_query = db.query(Feedback.entity_id, Feedback.rating).filter(
         Feedback.entity_type.in_([FeedbackEntityType.PREDICTION, FeedbackEntityType.EXPLANATION]),
         Feedback.rating.isnot(None),
-    ]
-    if user is not None:
-        filters.append(Feedback.user_id == user.id)
-
-    rows = (
-        db.query(RiskScore.model_version, func.avg(Feedback.rating))
-        .join(RiskScore, Feedback.entity_id == RiskScore.id)
-        .filter(and_(*filters))
-        .group_by(RiskScore.model_version)
-        .all()
     )
-    return {str(model_version or "unknown"): round(float(avg_rating), 3) for model_version, avg_rating in rows}
+    if user is not None:
+        feedback_query = feedback_query.filter(Feedback.user_id == user.id)
+
+    feedback_rows = feedback_query.all()
+    if not feedback_rows:
+        return {}
+
+    prediction_ids = [row.entity_id for row in feedback_rows]
+    with analytics_read_session_scope() as analytics_db:
+        predictions = (
+            analytics_db.query(RiskScore.id, RiskScore.model_version)
+            .filter(RiskScore.id.in_(prediction_ids))
+            .all()
+        )
+
+    model_by_prediction = {prediction_id: str(model_version or "unknown") for prediction_id, model_version in predictions}
+    totals: dict[str, list[float]] = {}
+    for row in feedback_rows:
+        model_key = model_by_prediction.get(row.entity_id)
+        if not model_key:
+            continue
+        totals.setdefault(model_key, []).append(float(row.rating))
+
+    return {
+        model_key: round(sum(values) / len(values), 3)
+        for model_key, values in totals.items()
+        if values
+    }
 
 
 def incorrect_prediction_rate(db: Session, user: User | None = None) -> float | None:

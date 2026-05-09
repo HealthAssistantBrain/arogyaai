@@ -50,6 +50,18 @@ const buildNoCacheHeadersConfig = () => ({
     headers: NO_CACHE_HEADERS,
 });
 
+const getLocalDayKey = () => {
+    try {
+        return new Intl.DateTimeFormat('en-CA', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        }).format(new Date());
+    } catch {
+        return new Date().toISOString().slice(0, 10);
+    }
+};
+
 const toTimestampMs = (value) => {
     if (!value) return null;
     const parsed = Date.parse(value);
@@ -245,6 +257,8 @@ const useDashboardStore = create(
             dashboardData: null,
             dashboardSignature: null,
             dashboardUpdatedAt: null,
+            selectedMetricRange: '24h',
+            cacheDayKey: getLocalDayKey(),
 
             loading: false,
             isFetching: false,
@@ -256,6 +270,29 @@ const useDashboardStore = create(
             _pollTimer: null,
 
             setHasHydratedCache: (value = true) => set({ hasHydratedCache: !!value }, false, 'dashboard/cacheHydrated'),
+            setSelectedMetricRange: (range = '24h') => set({
+                selectedMetricRange: range === '7d' ? '7d' : '24h',
+            }, false, `dashboard/setMetricRange:${range}`),
+
+            invalidateDailyDashboardCache: () => set((state) => ({
+                dashboardData: null,
+                dashboardSignature: null,
+                dashboardUpdatedAt: null,
+                lastFetched: null,
+                lastFetchedAt: null,
+                cacheDayKey: getLocalDayKey(),
+                vitals: {},
+                healthScore: emptySlice(),
+                history: emptySlice(),
+                prediction: emptySlice(),
+                profile: emptySlice(),
+                alerts: emptySlice(),
+                recommendedTests: emptySlice(),
+                googleFit: emptySlice(),
+                loading: state.loading,
+                isFetching: state.isFetching,
+                error: null,
+            }), false, 'dashboard/invalidate-daily'),
 
             invalidateWearableCache: (types = ['heart_rate', 'steps', 'sleep'], range = DEFAULT_VITAL_RANGE) => {
                 const keys = safeArray(types).map((type) => vitalKey(type, range));
@@ -292,6 +329,7 @@ const useDashboardStore = create(
                         lastFetched: null,
                         lastFetchedAt: null,
                         dashboardUpdatedAt: null,
+                        cacheDayKey: getLocalDayKey(),
                     };
                 }, false, 'dashboard/invalidate-wearables');
             },
@@ -375,14 +413,15 @@ const useDashboardStore = create(
                         {
                             loading: false,
                             isFetching: false,
-                            error: null,
-                            lastFetched: Date.now(),
-                            lastFetchedAt: Date.now(),
-                            cacheOwnerId: currentUserId,
-                            dashboardUpdatedAt: next.dashboardUpdatedAt ?? current.dashboardUpdatedAt ?? null,
-                        },
-                        false,
-                        `dashboard/${source}:unchanged`
+                        error: null,
+                        lastFetched: Date.now(),
+                        lastFetchedAt: Date.now(),
+                        cacheOwnerId: currentUserId,
+                        dashboardUpdatedAt: next.dashboardUpdatedAt ?? current.dashboardUpdatedAt ?? null,
+                        cacheDayKey: getLocalDayKey(),
+                    },
+                    false,
+                    `dashboard/${source}:unchanged`
                     );
                     return current.dashboardData;
                 }
@@ -397,6 +436,7 @@ const useDashboardStore = create(
                         lastFetched: Date.now(),
                         lastFetchedAt: Date.now(),
                         cacheOwnerId: currentUserId,
+                        cacheDayKey: getLocalDayKey(),
                     },
                     false,
                     `dashboard/${source}`
@@ -405,9 +445,12 @@ const useDashboardStore = create(
             },
 
             fetchDashboardData: async ({ force = false, silent = false } = {}) => {
-                const { lastFetched, loading, cacheOwnerId } = get();
+                const { lastFetched, loading, cacheOwnerId, cacheDayKey } = get();
                 const currentUserId = getCurrentDashboardUserId();
                 if (loading && !force) return;
+                if (cacheDayKey && cacheDayKey !== getLocalDayKey()) {
+                    get().invalidateDailyDashboardCache?.();
+                }
                 if (
                     !force &&
                     currentUserId &&
@@ -481,6 +524,8 @@ const useDashboardStore = create(
                         dashboardData: null,
                         dashboardSignature: null,
                         dashboardUpdatedAt: null,
+                        selectedMetricRange: '24h',
+                        cacheDayKey: getLocalDayKey(),
                         loading: false,
                         isFetching: false,
                         error: null,
@@ -510,13 +555,34 @@ const useDashboardStore = create(
                 dashboardData: state.dashboardData,
                 dashboardSignature: state.dashboardSignature,
                 dashboardUpdatedAt: state.dashboardUpdatedAt,
+                selectedMetricRange: state.selectedMetricRange,
                 lastFetched: state.lastFetched,
                 lastFetchedAt: state.lastFetchedAt,
                 cacheOwnerId: state.cacheOwnerId,
+                cacheDayKey: state.cacheDayKey,
             }),
             onRehydrateStorage: () => (state, error) => {
                 if (error) {
                     console.warn('[dashboardStore] Persist rehydration failed:', error);
+                }
+                if (state) {
+                    const currentDayKey = getLocalDayKey();
+                    if (state.cacheDayKey && state.cacheDayKey !== currentDayKey) {
+                        state.dashboardData = null;
+                        state.dashboardSignature = null;
+                        state.dashboardUpdatedAt = null;
+                        state.lastFetched = null;
+                        state.lastFetchedAt = null;
+                        state.vitals = {};
+                        state.healthScore = emptySlice();
+                        state.history = emptySlice();
+                        state.prediction = emptySlice();
+                        state.profile = emptySlice();
+                        state.alerts = emptySlice();
+                        state.recommendedTests = emptySlice();
+                        state.googleFit = emptySlice();
+                        state.cacheDayKey = currentDayKey;
+                    }
                 }
                 state?.setHasHydratedCache?.(true);
             },

@@ -2,17 +2,44 @@ from __future__ import annotations
 
 import uuid
 import logging
+import time
+import threading
 from typing import Any
 
 from .config import RagSettings
 from .corpus import load_corpus_chunks
 from .embedder import EmbeddingService
 from .keyword import keyword_retrieve
+from .qdrant import (
+    batch_upsert_points,
+    count_qdrant_points,
+    ensure_qdrant_collection,
+    get_cached_qdrant_collection_state,
+    is_missing_collection_error,
+    mark_qdrant_collection_state,
+    query_qdrant_points,
+    read_qdrant_collection_state,
+    recreate_qdrant_collection,
+    scroll_qdrant_points,
+)
 from .reranker import HybridReranker
 from .schemas import RetrievedDocument
 from .text_cleaning import clean_label_text, clean_rag_text, clean_retrieved_document
 
 logger = logging.getLogger("uvicorn.error")
+_WARNING_CACHE: dict[str, float] = {}
+_WARNING_CACHE_LOCK = threading.Lock()
+
+
+def _log_warning_throttled(key: str, message: str, *args: Any) -> None:
+    now = time.monotonic()
+    interval_seconds = 20.0
+    with _WARNING_CACHE_LOCK:
+        last_logged_at = _WARNING_CACHE.get(key, 0.0)
+        if now - last_logged_at < interval_seconds:
+            return
+        _WARNING_CACHE[key] = now
+    logger.warning(message, *args)
 
 
 class MedicalKnowledgeRetriever:
@@ -24,42 +51,14 @@ class MedicalKnowledgeRetriever:
             sparse_weight=self.settings.sparse_weight,
         )
 
-    def _client(self):
-        try:
-            from qdrant_client import QdrantClient
-        except ImportError as exc:
-            raise RuntimeError(
-                "qdrant-client is required for the RAG retrieval pipeline. "
-                "Install backend dependencies before using explanations."
-            ) from exc
-
-        return QdrantClient(
-            url=self.settings.qdrant_url,
-            api_key=self.settings.qdrant_api_key,
-            timeout=self.settings.qdrant_timeout_seconds,
-        )
-
-    def _vector_size(self, collection: Any) -> int | None:
-        try:
-            vectors = collection.config.params.vectors
-            if hasattr(vectors, "size"):
-                return int(vectors.size)
-            if isinstance(vectors, dict) and vectors:
-                first_vector = next(iter(vectors.values()))
-                return int(getattr(first_vector, "size", 0) or 0)
-        except Exception:
-            return None
-        return None
-
-    def _create_collection(self, client: Any) -> None:
-        from qdrant_client.http import models as rest
-
-        client.create_collection(
+    def _create_collection(self) -> None:
+        ensure_qdrant_collection(
+            self.settings,
+            vector_size=self.settings.embedding_dimensions,
             collection_name=self.settings.collection_name,
-            vectors_config=rest.VectorParams(
-                size=self.settings.embedding_dimensions,
-                distance=rest.Distance.COSINE,
-            ),
+            distance_name=self.settings.qdrant_distance_metric,
+            recreate_on_mismatch=self.settings.recreate_on_dimension_mismatch,
+            allow_fallback=True,
         )
         logger.info(
             "RAG Qdrant collection ready | collection=%s dimensions=%s",
@@ -68,53 +67,72 @@ class MedicalKnowledgeRetriever:
         )
 
     def ensure_collection(self) -> None:
-        client = self._client()
+        self._create_collection()
+
+    def _runtime_collection_state(self) -> dict[str, Any] | None:
+        cached = get_cached_qdrant_collection_state(
+            self.settings,
+            collection_name=self.settings.collection_name,
+            max_age_seconds=self.settings.qdrant_collection_state_ttl_seconds,
+            allow_fallback=True,
+        )
+        if cached is not None:
+            return cached
+        if not self.settings.qdrant_runtime_existence_check_enabled:
+            return None
         try:
-            exists = client.collection_exists(self.settings.collection_name)
-        except Exception:
-            exists = False
-
-        if not exists:
-            self._create_collection(client)
-            return
-
-        collection = client.get_collection(self.settings.collection_name)
-        vector_size = self._vector_size(collection)
-        if vector_size and vector_size != self.settings.embedding_dimensions:
-            if not self.settings.recreate_on_dimension_mismatch:
-                raise RuntimeError(
-                    f"Qdrant collection {self.settings.collection_name!r} has vector size {vector_size}, "
-                    f"but {self.settings.embedding_dimensions} is required by {self.settings.embedding_model_name}."
-                )
-            client.delete_collection(self.settings.collection_name)
-            self._create_collection(client)
-            logger.warning(
-                "RAG Qdrant collection recreated after dimension mismatch | collection=%s old_dimensions=%s expected_dimensions=%s",
+            return read_qdrant_collection_state(
+                self.settings,
+                collection_name=self.settings.collection_name,
+                max_age_seconds=self.settings.qdrant_collection_state_ttl_seconds,
+                allow_fallback=True,
+            )
+        except Exception as exc:
+            logger.debug(
+                "RAG runtime collection metadata check failed | collection=%s error=%s",
                 self.settings.collection_name,
-                vector_size,
-                self.settings.embedding_dimensions,
+                exc,
+                exc_info=True,
+            )
+            return None
+
+    def _assert_runtime_collection_ready(self) -> None:
+        state = self._runtime_collection_state()
+        if state is None:
+            return
+        if state.get("exists") is False:
+            raise RuntimeError(
+                f"RAG Qdrant collection is not initialized for runtime retrieval: {self.settings.collection_name!r}."
             )
 
     def _point_id(self, chunk_id: str) -> str:
         return str(uuid.uuid5(uuid.NAMESPACE_URL, f"arogyaai-rag:{chunk_id}"))
 
-    def _existing_index_state(self, client: Any) -> dict[str, Any]:
+    def _existing_index_state(self) -> dict[str, Any]:
         try:
-            count_result = client.count(collection_name=self.settings.collection_name, exact=True)
-            vector_count = int(getattr(count_result, "count", 0) or 0)
+            vector_count = int(
+                count_qdrant_points(
+                    self.settings,
+                    collection_name=self.settings.collection_name,
+                    exact=True,
+                    allow_fallback=True,
+                ).value
+            )
         except Exception:
             vector_count = 0
 
         payload: dict[str, Any] = {}
         if vector_count:
             try:
-                scroll_result = client.scroll(
+                scroll_result = scroll_qdrant_points(
+                    self.settings,
                     collection_name=self.settings.collection_name,
                     limit=1,
                     with_payload=True,
                     with_vectors=False,
+                    allow_fallback=True,
                 )
-                points = scroll_result[0] if isinstance(scroll_result, tuple) else getattr(scroll_result, "points", [])
+                points, _ = scroll_result.value
                 if points:
                     payload = dict(getattr(points[0], "payload", {}) or {})
             except Exception:
@@ -131,9 +149,8 @@ class MedicalKnowledgeRetriever:
         from qdrant_client.http import models as rest
 
         self.ensure_collection()
-        client = self._client()
         chunks = load_corpus_chunks(self.settings)
-        existing_state = self._existing_index_state(client)
+        existing_state = self._existing_index_state()
         existing_count = int(existing_state["vector_count"])
         index_is_current = (
             existing_count == len(chunks)
@@ -148,9 +165,14 @@ class MedicalKnowledgeRetriever:
                 existing_count,
             )
             return existing_count
-        if existing_count > 0:
-            client.delete_collection(self.settings.collection_name)
-            self._create_collection(client)
+        if existing_count > 0 or force:
+            recreate_qdrant_collection(
+                self.settings,
+                vector_size=self.settings.embedding_dimensions,
+                collection_name=self.settings.collection_name,
+                distance_name=self.settings.qdrant_distance_metric,
+                allow_fallback=True,
+            )
 
         vectors = self.embedder.embed_texts([chunk.text for chunk in chunks])
         if len(vectors) != len(chunks):
@@ -185,7 +207,13 @@ class MedicalKnowledgeRetriever:
                 )
             )
 
-        client.upsert(collection_name=self.settings.collection_name, points=points, wait=True)
+        batch_upsert_points(
+            self.settings,
+            collection_name=self.settings.collection_name,
+            points=points,
+            wait=True,
+            allow_fallback=True,
+        )
         logger.info(
             "RAG ingestion success | collection=%s documents=%s chunks=%s vectors=%s",
             self.settings.collection_name,
@@ -201,8 +229,8 @@ class MedicalKnowledgeRetriever:
         if auto_index:
             indexed_vectors = self.ensure_corpus_indexed()
         else:
-            self.ensure_collection()
-            indexed_vectors = int(self._existing_index_state(self._client())["vector_count"])
+            self._assert_runtime_collection_ready()
+            indexed_vectors = int(self._existing_index_state()["vector_count"])
 
         if indexed_vectors < required_vectors:
             raise RuntimeError(
@@ -214,6 +242,7 @@ class MedicalKnowledgeRetriever:
             "indexed_vectors": indexed_vectors,
             "expected_chunks": expected_chunks,
             "index_version": self.settings.index_version,
+            "qdrant_mode": self.settings.qdrant_mode,
         }
 
     def _fallback_documents(self, query: str, *, limit: int) -> list[RetrievedDocument]:
@@ -257,27 +286,32 @@ class MedicalKnowledgeRetriever:
         return fallback_documents
 
     def _dense_retrieve(self, query: str, *, limit: int) -> list[RetrievedDocument]:
-        self.ensure_corpus_indexed()
-        client = self._client()
+        started_at = time.perf_counter()
+        self._assert_runtime_collection_ready()
         query_vector = self.embedder.embed_query(query)
         if not query_vector:
             return []
 
-        if hasattr(client, "search"):
-            results = client.search(
+        try:
+            results = query_qdrant_points(
+                self.settings,
                 collection_name=self.settings.collection_name,
                 query_vector=query_vector,
                 limit=limit,
                 with_payload=True,
-            )
-        else:
-            response = client.query_points(
-                collection_name=self.settings.collection_name,
-                query=query_vector,
-                limit=limit,
-                with_payload=True,
-            )
-            results = getattr(response, "points", response)
+                allow_fallback=True,
+            ).value
+        except Exception as exc:
+            if is_missing_collection_error(exc):
+                mark_qdrant_collection_state(
+                    self.settings,
+                    collection_name=self.settings.collection_name,
+                    exists=False,
+                    source="runtime_query_failure",
+                    error=str(exc),
+                    allow_fallback=True,
+                )
+            raise
 
         documents: list[RetrievedDocument] = []
         for item in results:
@@ -306,9 +340,10 @@ class MedicalKnowledgeRetriever:
             )
         if documents:
             logger.info(
-                "RAG vector retrieval success | collection=%s results=%s",
+                "RAG vector retrieval success | collection=%s results=%s latency_ms=%s",
                 self.settings.collection_name,
                 len(documents),
+                round((time.perf_counter() - started_at) * 1000, 2),
             )
         return documents
 
@@ -325,13 +360,19 @@ class MedicalKnowledgeRetriever:
                 "dense_error": None,
             }
 
+        started_at = time.perf_counter()
         dense_documents: list[RetrievedDocument] = []
         dense_error = None
         try:
             dense_documents = self._dense_retrieve(query, limit=self.settings.dense_top_k)
         except Exception as exc:
             dense_error = str(exc)
-            logger.warning("RAG vector retrieval unavailable; using sparse fallback: %s", exc)
+            _log_warning_throttled(
+                f"dense:{self.settings.collection_name}",
+                "RAG vector retrieval unavailable; using sparse fallback | collection=%s error=%s",
+                self.settings.collection_name,
+                exc,
+            )
 
         sparse_documents: list[RetrievedDocument] = []
         sparse_error = None
@@ -339,7 +380,7 @@ class MedicalKnowledgeRetriever:
             sparse_documents = self._sparse_retrieve(query, limit=self.settings.sparse_top_k)
         except Exception as exc:
             sparse_error = str(exc)
-            logger.warning("RAG sparse retrieval unavailable; using corpus fallback: %s", exc)
+            _log_warning_throttled("sparse:fallback", "RAG sparse retrieval unavailable; using corpus fallback: %s", exc)
 
         reranked = self.reranker.rerank(
             query,
@@ -352,11 +393,22 @@ class MedicalKnowledgeRetriever:
         if not reranked:
             reranked = self._fallback_documents(query, limit=self.settings.top_k)
             if reranked:
-                logger.warning(
+                _log_warning_throttled(
+                    f"fallback:{self.settings.collection_name}",
                     "RAG fallback usage | collection=%s source=corpus_fallback results=%s",
                     self.settings.collection_name,
                     len(reranked),
                 )
+        logger.info(
+            "RAG retrieval completed | collection=%s dense_results=%s sparse_results=%s final_results=%s dense_error=%s sparse_error=%s latency_ms=%s",
+            self.settings.collection_name,
+            len(dense_documents),
+            len(sparse_documents),
+            len(reranked),
+            bool(dense_error),
+            bool(sparse_error),
+            round((time.perf_counter() - started_at) * 1000, 2),
+        )
         return {
             "dense": dense_documents,
             "sparse": sparse_documents,

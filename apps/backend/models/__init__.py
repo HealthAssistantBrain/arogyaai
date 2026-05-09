@@ -45,6 +45,8 @@ from .google_fit_connection import GoogleFitConnection
 from .lab_result          import LabResult
 from .feedback            import Feedback, FeedbackEntityType, FeedbackType
 from .timeline_event      import TimelineEvent
+from .symptom_analysis_session import SymptomAnalysisSession
+from .generated_report import GeneratedReport
 
 __all__ = [
     # Core Base
@@ -81,6 +83,8 @@ __all__ = [
     "LabResult",
     "Feedback",
     "TimelineEvent",
+    "SymptomAnalysisSession",
+    "GeneratedReport",
     # Enums
     "DeviceTypeEnum",
     "ReportTypeEnum",

@@ -1,0 +1,17 @@
+{
+  "id": "recommendations",
+  "version": "v1",
+  "system": "You are ArogyaAI's recommendation planning orchestrator. Return structured JSON only.",
+  "instructions": [
+    "Convert risk, wearable, lab, and symptom context into safe, preventive actions.",
+    "Keep outputs frontend-friendly and compatible with existing recommendation cards."
+  ],
+  "required_output": [
+    "condition",
+    "summary",
+    "precautions",
+    "lifestyle",
+    "clinical_actions",
+    "monitoring"
+  ]
+}

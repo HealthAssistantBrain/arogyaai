@@ -1,13 +1,15 @@
 """Persistence helpers shared by the pipeline stack."""
 from __future__ import annotations
 
+import logging
 from typing import Any, Iterable
 from uuid import UUID, uuid4
 
 from sqlalchemy import desc, func
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
+from database.session import analytics_dual_write_enabled, analytics_session_scope
 from models import (
     BaselineMetricRecord,
     ClinicalHistory,
@@ -25,6 +27,8 @@ from models import (
 from pipelines.contracts import PipelineContract
 from pipelines.schemas import BaselineMetricDTO
 from pipelines.storage_pipeline.utils import ensure_json_safe
+
+logger = logging.getLogger(__name__)
 
 
 def _as_float(value: Any, default: float | None = None) -> float | None:
@@ -66,6 +70,35 @@ def _recommendation_priority(value: Any) -> PriorityEnum:
     return PriorityEnum.MEDIUM
 
 
+def _resolve_user_id(user: User | UUID | str | Any) -> UUID | str:
+    user_id = getattr(user, "id", user)
+    if user_id is None:
+        raise ValueError("A user identifier is required for pipeline persistence.")
+    return user_id
+
+
+def _resolve_session_user(
+    db: Session,
+    user: User | UUID | str | Any,
+    *,
+    allow_lookup: bool = True,
+) -> User | None:
+    if not isinstance(user, User):
+        return None
+
+    if object_session(user) is db:
+        return user
+
+    if not allow_lookup:
+        return None
+
+    user_id = _resolve_user_id(user)
+    try:
+        return db.get(User, user_id)
+    except Exception:
+        return None
+
+
 class StoragePipelineService:
     """Central DB write/read utility for all pipeline stages."""
 
@@ -91,11 +124,14 @@ class StoragePipelineService:
     @staticmethod
     def store_feature_snapshot(
         db: Session,
-        user: User,
+        user: User | UUID | str | Any,
         snapshot: Any,
         *,
         report_id: UUID | str | None = None,
+        _mirror_to_analytics: bool = True,
     ) -> FeatureSnapshotRecord:
+        mirror_writes = analytics_dual_write_enabled() and _mirror_to_analytics
+        user_id = _resolve_user_id(user)
         feature_payload = ensure_json_safe(getattr(snapshot, "to_dict", lambda: {})())
         if not isinstance(feature_payload, dict):
             feature_payload = {}
@@ -105,7 +141,7 @@ class StoragePipelineService:
         feature_payload.setdefault("data_availability", getattr(snapshot, "data_availability", None) or {"steps": False, "heart_rate": False, "sleep": False})
 
         record = FeatureSnapshotRecord(
-            user_id=user.id,
+            user_id=user_id,
             report_id=report_id,
             hr_mean_7d=float(getattr(snapshot, "hr_mean_7d", 0.0) or 0.0),
             steps_avg_7d=float(getattr(snapshot, "steps_avg_7d", 0.0) or 0.0),
@@ -122,14 +158,30 @@ class StoragePipelineService:
         db.add(record)
         db.commit()
         db.refresh(record)
+        if mirror_writes:
+            try:
+                with analytics_session_scope() as analytics_db:
+                    StoragePipelineService.store_feature_snapshot(
+                        analytics_db,
+                        user_id,
+                        snapshot,
+                        report_id=report_id,
+                        _mirror_to_analytics=False,
+                    )
+            except Exception:
+                logger.exception("Analytics mirror write failed for feature_snapshots | user_id=%s", str(user_id))
         return record
 
     @staticmethod
     def store_baseline_metrics(
         db: Session,
-        user: User,
+        user: User | UUID | str | Any,
         metrics: Iterable[BaselineMetricDTO | dict[str, Any]],
+        *,
+        _mirror_to_analytics: bool = True,
     ) -> list[BaselineMetricRecord]:
+        mirror_writes = analytics_dual_write_enabled() and _mirror_to_analytics
+        user_id = _resolve_user_id(user)
         metric_list = list(metrics)
         validated_metrics: list[BaselineMetricDTO] = []
         for metric in metric_list:
@@ -138,7 +190,7 @@ class StoragePipelineService:
                 continue
 
             payload = dict(metric)
-            payload.setdefault("user_id", user.id)
+            payload.setdefault("user_id", user_id)
             validated_metrics.append(BaselineMetricDTO.model_validate(payload))
 
         PipelineContract.validate_baseline(validated_metrics)
@@ -153,13 +205,13 @@ class StoragePipelineService:
             record = (
                 db.query(BaselineMetricRecord)
                 .filter(
-                    BaselineMetricRecord.user_id == user.id,
+                    BaselineMetricRecord.user_id == user_id,
                     BaselineMetricRecord.metric_name == metric_name,
                 )
                 .one_or_none()
             )
             if record is None:
-                record = BaselineMetricRecord(user_id=user.id, metric_name=metric_name)
+                record = BaselineMetricRecord(user_id=user_id, metric_name=metric_name)
                 db.add(record)
 
             record.mean_7d = metric.get("mean_7d")
@@ -178,6 +230,17 @@ class StoragePipelineService:
             raise
         for record in persisted:
             db.refresh(record)
+        if mirror_writes:
+            try:
+                with analytics_session_scope() as analytics_db:
+                    StoragePipelineService.store_baseline_metrics(
+                        analytics_db,
+                        user_id,
+                        metric_list,
+                        _mirror_to_analytics=False,
+                    )
+            except Exception:
+                logger.exception("Analytics mirror write failed for baseline_metrics | user_id=%s", str(user_id))
         return persisted
 
     @staticmethod
@@ -235,7 +298,7 @@ class StoragePipelineService:
     @staticmethod
     def store_risk_score(
         db: Session,
-        user: User,
+        user: User | UUID | str | Any,
         *,
         risk_payload: dict[str, Any],
         feature_snapshot_id: UUID | str | None = None,
@@ -244,7 +307,10 @@ class StoragePipelineService:
         source: str = "rule_engine",
         status: str = "ready",
         run_id: str | None = None,
+        _mirror_to_analytics: bool = True,
     ) -> RiskScore:
+        mirror_writes = analytics_dual_write_enabled() and _mirror_to_analytics
+        user_id = _resolve_user_id(user)
         score = _as_float(
             risk_payload.get("overall_score")
             or risk_payload.get("risk_score")
@@ -264,11 +330,11 @@ class StoragePipelineService:
         effective_run_id = run_id or str(uuid4())
         record = (
             db.query(RiskScore)
-            .filter(RiskScore.user_id == user.id, RiskScore.run_id == effective_run_id)
+            .filter(RiskScore.user_id == user_id, RiskScore.run_id == effective_run_id)
             .one_or_none()
         )
         if record is None:
-            record = RiskScore(user_id=user.id)
+            record = RiskScore(user_id=user_id)
             db.add(record)
         else:
             db.query(Recommendation).filter(Recommendation.risk_score_id == record.id).delete(synchronize_session=False)
@@ -282,7 +348,7 @@ class StoragePipelineService:
                 db.query(FeatureSnapshotRecord)
                 .filter(
                     FeatureSnapshotRecord.id == risk_payload.get("feature_snapshot_id"),
-                    FeatureSnapshotRecord.user_id == user.id,
+                    FeatureSnapshotRecord.user_id == user_id,
                 )
                 .one_or_none()
             )
@@ -305,6 +371,23 @@ class StoragePipelineService:
 
         recommendations = (record.risk_payload or {}).get("recommendations") or []
         StoragePipelineService.store_recommendations(db, record, recommendations)
+        if mirror_writes:
+            try:
+                with analytics_session_scope() as analytics_db:
+                    StoragePipelineService.store_risk_score(
+                        analytics_db,
+                        user_id,
+                        risk_payload=risk_payload,
+                        feature_snapshot_id=feature_snapshot_id,
+                        report_id=report_id,
+                        model_version=model_version,
+                        source=source,
+                        status=status,
+                        run_id=run_id,
+                        _mirror_to_analytics=False,
+                    )
+            except Exception:
+                logger.exception("Analytics mirror write failed for risk_scores | user_id=%s", str(user_id))
         return record
 
     @staticmethod
@@ -354,15 +437,19 @@ class StoragePipelineService:
     @staticmethod
     def store_shap_values(
         db: Session,
-        user: User,
+        user: User | UUID | str | Any,
         *,
         risk_score: RiskScore,
         shap_entries: Iterable[dict[str, Any]],
         source_type: str = "rule_fallback",
+        _mirror_to_analytics: bool = True,
     ) -> list[ShapValueRecord]:
+        mirror_writes = analytics_dual_write_enabled() and _mirror_to_analytics
+        user_id = _resolve_user_id(user)
+        shap_entries_list = list(shap_entries)
         normalized_entries: dict[str, dict[str, Any]] = {}
         ordered_feature_names: list[str] = []
-        for item in shap_entries:
+        for item in shap_entries_list:
             feature_name = str(item.get("feature_name") or item.get("label") or item.get("key") or "").strip()
             if not feature_name:
                 continue
@@ -374,7 +461,7 @@ class StoragePipelineService:
 
             normalized_entries[feature_name] = {
                 "prediction_id": risk_score.id,
-                "user_id": user.id,
+                "user_id": user_id,
                 "feature_name": feature_name,
                 "shap_value": value,
                 "abs_shap_value": abs(value),
@@ -418,21 +505,42 @@ class StoragePipelineService:
             .all()
         )
         persisted_by_feature = {record.feature_name: record for record in persisted}
-        return [
+        ordered = [
             persisted_by_feature[feature_name]
             for feature_name in ordered_feature_names
             if feature_name in persisted_by_feature
         ]
+        if mirror_writes:
+            try:
+                with analytics_session_scope() as analytics_db:
+                    mirrored_risk = analytics_db.query(RiskScore).filter(RiskScore.id == risk_score.id).one_or_none()
+                    if mirrored_risk is not None:
+                        StoragePipelineService.store_shap_values(
+                            analytics_db,
+                            user_id,
+                            risk_score=mirrored_risk,
+                            shap_entries=shap_entries_list,
+                            source_type=source_type,
+                            _mirror_to_analytics=False,
+                        )
+            except Exception:
+                logger.exception("Analytics mirror write failed for shap_values | user_id=%s", str(user_id))
+        return ordered
 
     @staticmethod
     def store_health_score(
         db: Session,
-        user: User,
+        user: User | UUID | str | Any,
         *,
         risk_score: RiskScore | None,
         health_payload: dict[str, Any],
         source: str = "pipeline",
+        _mirror_to_analytics: bool = True,
+        _update_user_aggregate: bool = True,
     ) -> HealthScoreRecord:
+        mirror_writes = analytics_dual_write_enabled() and _mirror_to_analytics
+        user_id = _resolve_user_id(user)
+        session_user = _resolve_session_user(db, user, allow_lookup=_update_user_aggregate) if _update_user_aggregate else None
         score = _as_float(health_payload.get("score") or health_payload.get("health_score"), default=0.0) or 0.0
         risk_component = _as_float(health_payload.get("risk_component"), default=None)
         lifestyle_component = _as_float(health_payload.get("lifestyle_component"), default=None)
@@ -441,17 +549,21 @@ class StoragePipelineService:
 
         latest_previous = (
             db.query(HealthScoreRecord)
-            .filter(HealthScoreRecord.user_id == user.id)
+            .filter(HealthScoreRecord.user_id == user_id)
             .order_by(desc(HealthScoreRecord.calculated_at))
             .first()
         )
-        previous_score = _as_float(latest_previous.score if latest_previous else user.health_score, default=None)
+        fallback_user_score = getattr(session_user, "health_score", None) if session_user is not None else getattr(user, "health_score", None)
+        previous_score = _as_float(
+            latest_previous.score if latest_previous else fallback_user_score,
+            default=None,
+        )
         score_change = 0.0
         if previous_score is not None and previous_score != 0:
             score_change = round(score - previous_score, 2)
 
         record = HealthScoreRecord(
-            user_id=user.id,
+            user_id=user_id,
             risk_score_id=risk_score.id if risk_score else None,
             score=round(score, 2),
             risk_component=risk_component,
@@ -462,37 +574,64 @@ class StoragePipelineService:
             source=source,
         )
         db.add(record)
-        user.health_score = round(score, 2)
-        user.score_change_percent = score_change
+        if session_user is not None:
+            session_user.health_score = round(score, 2)
+            session_user.score_change_percent = score_change
         if risk_score is not None:
             risk_score.health_score = round(score, 2)
 
         db.commit()
         db.refresh(record)
-        db.refresh(user)
+        if session_user is not None:
+            db.refresh(session_user)
         if risk_score is not None:
             db.refresh(risk_score)
+        if mirror_writes:
+            try:
+                with analytics_session_scope() as analytics_db:
+                    mirrored_risk = None
+                    if risk_score is not None:
+                        mirrored_risk = analytics_db.query(RiskScore).filter(RiskScore.id == risk_score.id).one_or_none()
+                    StoragePipelineService.store_health_score(
+                        analytics_db,
+                        user_id,
+                        risk_score=mirrored_risk,
+                        health_payload=health_payload,
+                        source=source,
+                        _mirror_to_analytics=False,
+                        _update_user_aggregate=False,
+                    )
+            except Exception:
+                logger.exception("Analytics mirror write failed for health_scores | user_id=%s", str(user_id))
         return record
 
     @staticmethod
     def store_health_insights(
         db: Session,
-        user: User,
+        user: User | UUID | str | Any,
         insights_payload: dict[str, Any] | None,
         *,
         prediction_id: UUID | str | None = None,
+        _mirror_to_analytics: bool = True,
     ) -> RiskScore | None:
+        mirror_writes = analytics_dual_write_enabled() and _mirror_to_analytics
+        user_id = _resolve_user_id(user)
         normalized = StoragePipelineService._normalize_health_insights_payload(insights_payload)
         record = None
         if prediction_id is not None:
             record = (
                 db.query(RiskScore)
-                .filter(RiskScore.id == prediction_id, RiskScore.user_id == user.id)
+                .filter(RiskScore.id == prediction_id, RiskScore.user_id == user_id)
                 .one_or_none()
             )
 
         if record is None:
-            record = StoragePipelineService.latest_risk_score(db, user)
+            record = (
+                db.query(RiskScore)
+                .filter(RiskScore.user_id == user_id)
+                .order_by(desc(RiskScore.calculated_at), desc(RiskScore.created_at))
+                .first()
+            )
 
         if record is None:
             return None
@@ -508,6 +647,18 @@ class StoragePipelineService:
         record.risk_payload = ensure_json_safe(risk_payload)
         db.commit()
         db.refresh(record)
+        if mirror_writes:
+            try:
+                with analytics_session_scope() as analytics_db:
+                    StoragePipelineService.store_health_insights(
+                        analytics_db,
+                        user_id,
+                        insights_payload,
+                        prediction_id=prediction_id,
+                        _mirror_to_analytics=False,
+                    )
+            except Exception:
+                logger.exception("Analytics mirror write failed for health_insights | user_id=%s", str(user_id))
         return record
 
     @staticmethod

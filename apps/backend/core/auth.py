@@ -18,7 +18,7 @@ def _get_bearer_token(authorization: str | None) -> str | None:
     return None
 
 
-def get_supabase_claims_from_header(
+async def get_supabase_claims_from_header(
     authorization: str | None = Header(default=None),
 ) -> dict:
     token = _get_bearer_token(authorization)
@@ -29,7 +29,7 @@ def get_supabase_claims_from_header(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    claims = AuthService._decode_supabase_token(token)
+    claims = await AuthService._decode_supabase_token(token)
     return {**claims, "auth_provider": "supabase"}
 
 

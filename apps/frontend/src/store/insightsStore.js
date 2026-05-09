@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { createJSONStorage, devtools, persist } from 'zustand/middleware';
 import api from '../lib/axios';
 import { normalizeClinicalCards } from '../lib/clinicalCards';
+import { fetchPredictionExplanation } from '../services/predictionExplanationService';
 import { safeArray, safeObject, safeText } from '../utils/safeData';
 import { useAuthStore } from './authStore';
 
@@ -833,9 +834,7 @@ export const useInsightsStore = create(
         );
 
         const [explanationResult, dashboardResult, metricsResult] = await Promise.allSettled([
-          api.get('/prediction/explanation', {
-            params: force ? { force_refresh: true } : {},
-          }),
+          fetchPredictionExplanation({ force }).then((data) => ({ data })),
           api.get('/dashboard'),
           api.get('/health/metrics'),
         ]);

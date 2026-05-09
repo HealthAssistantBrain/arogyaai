@@ -18,7 +18,7 @@ from fastapi import WebSocket
 from sqlalchemy.orm import Session
 
 from core.config import settings
-from database.session import SessionLocal, engine
+from database.session import SessionLocal, get_listener_engines
 from models import User
 from services.google_fit_service import GoogleFitService
 from services import dashboard_service as dashboard_svc
@@ -236,8 +236,8 @@ async def build_realtime_payload(db: Session, current_user: User) -> dict[str, A
     return _dashboard_flat_contract(payload)
 
 
-def _build_psycopg2_kwargs() -> dict[str, Any]:
-    url = engine.url
+def _build_psycopg2_kwargs(source_engine) -> dict[str, Any]:
+    url = source_engine.url
     kwargs: dict[str, Any] = {}
     if url.database:
         kwargs["dbname"] = url.database
@@ -250,8 +250,9 @@ def _build_psycopg2_kwargs() -> dict[str, Any]:
     if url.port:
         kwargs["port"] = url.port
     kwargs["connect_timeout"] = int(os.getenv("DB_CONNECT_TIMEOUT_SECONDS", "3"))
-    if url.query.get("sslmode"):
-        kwargs["sslmode"] = url.query["sslmode"]
+    for key in ("sslmode", "channel_binding", "application_name", "options"):
+        if url.query.get(key):
+            kwargs[key] = url.query[key]
     return kwargs
 
 
@@ -307,7 +308,7 @@ class DashboardConnectionManager:
 
 dashboard_connection_manager = DashboardConnectionManager()
 
-_listener_thread: threading.Thread | None = None
+_listener_threads: list[threading.Thread] = []
 _listener_stop = threading.Event()
 _listener_loop: asyncio.AbstractEventLoop | None = None
 _pending_user_tasks: dict[str, asyncio.Task] = {}
@@ -360,8 +361,9 @@ def _enqueue_broadcast(user_id: str) -> None:
     loop.call_soon_threadsafe(_schedule_broadcast, user_id)
 
 
-def _listen_for_dashboard_updates() -> None:
-    kwargs = _build_psycopg2_kwargs()
+def _listen_for_dashboard_updates(source_engine) -> None:
+    kwargs = _build_psycopg2_kwargs(source_engine)
+    listener_name = f"{source_engine.url.host or 'db'}:{source_engine.url.database or 'database'}"
     while not _listener_stop.is_set():
         conn = None
         try:
@@ -369,7 +371,7 @@ def _listen_for_dashboard_updates() -> None:
             conn.set_isolation_level(extensions.ISOLATION_LEVEL_AUTOCOMMIT)
             cursor = conn.cursor()
             cursor.execute("LISTEN dashboard_updates;")
-            logger.info("[Dashboard WS] LISTEN dashboard_updates active")
+            logger.info("[Dashboard WS] LISTEN dashboard_updates active | target=%s", listener_name)
 
             while not _listener_stop.is_set():
                 if select.select([conn], [], [], 1) == ([], [], []):
@@ -388,7 +390,7 @@ def _listen_for_dashboard_updates() -> None:
                     _enqueue_broadcast(user_id)
         except Exception as exc:
             if not _listener_stop.is_set():
-                logger.warning("[Dashboard WS] Listener error: %s", exc)
+                logger.warning("[Dashboard WS] Listener error | target=%s error=%s", listener_name, exc)
                 time.sleep(2)
         finally:
             if conn is not None:
@@ -397,23 +399,31 @@ def _listen_for_dashboard_updates() -> None:
 
 
 def start_dashboard_realtime_listener(loop: asyncio.AbstractEventLoop) -> None:
-    global _listener_thread, _listener_loop
-    if _listener_thread and _listener_thread.is_alive():
+    global _listener_threads, _listener_loop
+    if any(thread.is_alive() for thread in _listener_threads):
         _listener_loop = loop
         return
 
     _listener_stop.clear()
     _listener_loop = loop
-    _listener_thread = threading.Thread(target=_listen_for_dashboard_updates, name="dashboard-realtime-listener", daemon=True)
-    _listener_thread.start()
-    logger.info("[Dashboard WS] Realtime listener started")
+    _listener_threads = []
+    for index, listener_engine in enumerate(get_listener_engines(), start=1):
+        thread = threading.Thread(
+            target=_listen_for_dashboard_updates,
+            args=(listener_engine,),
+            name=f"dashboard-realtime-listener-{index}",
+            daemon=True,
+        )
+        thread.start()
+        _listener_threads.append(thread)
+    logger.info("[Dashboard WS] Realtime listener started | listeners=%s", len(_listener_threads))
 
 
 def stop_dashboard_realtime_listener() -> None:
-    global _listener_thread, _listener_loop
+    global _listener_threads, _listener_loop
     _listener_stop.set()
-    thread = _listener_thread
-    if thread and thread.is_alive():
-        thread.join(timeout=3)
-    _listener_thread = None
+    for thread in _listener_threads:
+        if thread.is_alive():
+            thread.join(timeout=3)
+    _listener_threads = []
     _listener_loop = None

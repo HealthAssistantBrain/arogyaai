@@ -84,7 +84,7 @@ async def logout(request: Request, response: Response, db: Session = Depends(get
             token = auth_header.replace("Bearer ", "").strip()
             if token:
                 try:
-                    claims = AuthService._decode_supabase_token(token)
+                    claims = await AuthService._decode_supabase_token(token)
                     current_user = AuthService.get_user_from_supabase_claims(db, claims)
                     if current_user:
                         GoogleFitService.stop_sync_on_logout(db, str(current_user.id))

@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
+import asyncio
 import sys
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -16,7 +17,7 @@ for path in (REPO_ROOT, BACKEND_ROOT):
         sys.path.insert(0, resolved)
 
 from models import UserVitalSourceEnum  # noqa: E402
-from services.dashboard_service import _build_blood_pressure_metric, _build_glucose_metric_payload  # noqa: E402
+from services.dashboard_service import _build_blood_pressure_metric, _build_glucose_metric_payload, get_health_metrics  # noqa: E402
 from services.user_data_service import UserDataService  # noqa: E402
 
 
@@ -275,3 +276,59 @@ def test_dashboard_glucose_metric_uses_source_unit_for_display_and_consistent_se
     assert payload["precision"] == 1
     assert [point["value"] for point in payload["series"]] == [4.7, 4.5]
     assert all(point["unit"] == "mmol/L" for point in payload["series"])
+
+
+def test_health_metrics_24h_range_returns_full_hourly_payload():
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = None
+    db.query.return_value.filter.return_value.order_by.return_value.first.return_value = None
+    user = SimpleNamespace(id=uuid4(), full_name="Test User", email="test@example.com")
+
+    with patch("services.dashboard_service._query_metric_rows", return_value=[]), patch(
+        "services.dashboard_service.StoragePipelineService.latest_health_score",
+        return_value=None,
+    ):
+        payload = asyncio.run(
+            get_health_metrics(
+                user,
+                db,
+                range_value="24h",
+                timezone_name="Asia/Kolkata",
+            )
+        )
+
+    assert payload["status"] == "ready"
+    assert payload["source"] == "health_metrics"
+    assert payload["data"]["range"] == "24h"
+    assert payload["data"]["timezone"] == "Asia/Kolkata"
+    assert payload["data"]["bucket_count"] == 24
+    assert len(payload["data"]["metrics"]["heart_rate"]["series"]) == 24
+    assert len(payload["data"]["metrics"]["steps"]["series"]) == 24
+    assert payload["data"]["metrics"]["recovery"]["value"] is not None
+
+
+def test_health_metrics_7d_range_returns_daily_payload():
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = None
+    db.query.return_value.filter.return_value.order_by.return_value.first.return_value = None
+    user = SimpleNamespace(id=uuid4(), full_name="Test User", email="test@example.com")
+
+    with patch("services.dashboard_service._query_metric_rows", return_value=[]), patch(
+        "services.dashboard_service.StoragePipelineService.latest_health_score",
+        return_value=None,
+    ):
+        payload = asyncio.run(
+            get_health_metrics(
+                user,
+                db,
+                range_value="7d",
+                timezone_name="UTC",
+            )
+        )
+
+    assert payload["status"] == "ready"
+    assert payload["data"]["range"] == "7d"
+    assert payload["data"]["timezone"] == "UTC"
+    assert payload["data"]["bucket_count"] == 7
+    assert len(payload["data"]["metrics"]["glucose"]["series"]) == 7
+    assert len(payload["data"]["metrics"]["blood_pressure"]["series"]) == 7

@@ -201,6 +201,8 @@ const normalizeMetricSeries = (series = []) => safeArray(series)
       timestamp: payload.timestamp ?? payload.date ?? null,
       value,
       unit: payload.unit ?? null,
+      source: payload.source ?? null,
+      bucketLabel: payload.bucket_label ?? payload.bucketLabel ?? null,
       rawValue: toFiniteNumber(payload.raw_value ?? payload.rawValue),
       rawUnit: payload.raw_unit ?? payload.rawUnit ?? null,
       normalizedValue: toFiniteNumber(payload.normalized_value ?? payload.normalizedValue),
@@ -294,6 +296,8 @@ const normalizeSingleMetric = (key, metric, lastUpdatedFallback) => {
     isRecent: parsedTimestamp ? Date.now() - parsedTimestamp.getTime() <= RECENT_DATA_MS : false,
     series: normalizeMetricSeries(payload.series ?? payload.sparkline ?? payload.history ?? payload.data),
     trend: payload.trend ?? payload.change ?? null,
+    range: payload.window ?? payload.range ?? null,
+    timezone: payload.timezone ?? null,
   };
 
   if (key === 'glucose') {
@@ -345,6 +349,10 @@ export const normalizeHealthMetricsResponse = (payload) => {
     source: envelope.source ?? payload?.source ?? 'health_metrics',
     error: envelope.error ?? payload?.error ?? null,
     lastUpdated: latestCardUpdate ?? envelopeLastUpdated ?? null,
+    range: envelope.range ?? payload?.range ?? null,
+    timezone: envelope.timezone ?? payload?.timezone ?? null,
+    availableRanges: safeArray(envelope.available_ranges ?? payload?.available_ranges),
+    dayKey: envelope.day_key ?? payload?.day_key ?? null,
   };
 };
 

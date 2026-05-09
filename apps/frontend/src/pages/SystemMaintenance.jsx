@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../router/routes';
 import { useSystemHealthStore } from '../store/systemHealthStore';
@@ -19,17 +18,24 @@ const SystemMaintenance = () => {
   const navigate = useNavigate();
   const checkHealth = useSystemHealthStore((state) => state.checkHealth);
   const healthStatus = useSystemHealthStore((state) => state.status);
-
-  useEffect(() => {
-    void checkHealth();
-  }, [checkHealth]);
+  const maintenanceCause = useSystemHealthStore((state) => state.cause);
+  const lastCheckedAt = useSystemHealthStore((state) => state.lastCheckedAt);
 
   const handleRetry = async () => {
-    const result = await checkHealth();
-    if (result.status === 'ready') {
+    const result = await checkHealth({ mode: 'manual', source: 'maintenance_retry' });
+    if (result.status !== 'down') {
       navigate(ROUTES.HOME, { replace: true });
     }
   };
+
+  const diagnosticLabel = maintenanceCause || 'Awaiting a fresh core health confirmation.';
+  const lastCheckedLabel = lastCheckedAt
+    ? new Date(lastCheckedAt).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      })
+    : null;
 
   return (
     <div className="bg-background dark:bg-card text-text-primary font-display min-h-screen flex flex-col antialiased transition-colors duration-500 overflow-hidden h-screen">
@@ -65,6 +71,9 @@ const SystemMaintenance = () => {
                 </h1>
                 <p className="text-slate-500 dark:text-text-muted text-xl font-bold leading-relaxed max-w-xl uppercase tracking-tight italic opacity-80 decoration-primary/20 underline underline-offset-[12px] decoration-4">
                   We're currently performing scheduled diagnostic maintenance to ensure peak performance of our predictive health engine.
+                </p>
+                <p className="max-w-xl text-xs font-black uppercase tracking-[0.28em] text-slate-400 dark:text-text-muted/80">
+                  Latest Diagnostic: {diagnosticLabel}{lastCheckedLabel ? ` • Last check ${lastCheckedLabel}` : ''}
                 </p>
               </div>
 

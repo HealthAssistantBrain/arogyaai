@@ -39,6 +39,8 @@ const PreventiveRecs = lazy(() => import('../pages/PreventiveRecommendations'))
 const AQIMonitor = lazy(() => import('../pages/AQIMonitor'))
 const LabTestResults = lazy(() => import('../pages/LabResults'))
 const MedicalReports = lazy(() => import('../pages/Reports'))
+const SymptomAnalysisWorkspace = lazy(() => import('../pages/SymptomAnalysisWorkspace'))
+const ReportGenerationWorkspace = lazy(() => import('../pages/ReportGenerationWorkspace'))
 const SleepAnalysis = lazy(() => import('../pages/SleepAnalysisLive'))
 const DeviceManager = lazy(() => import('../pages/DeviceManagement'))
 const DeviceSettings = lazy(() => import('../pages/DeviceSettings'))
@@ -80,7 +82,7 @@ function RootRedirect() {
   const { isAuthenticated, isHydrated } = authState
   const isSignedIn = isAuthenticated && !!authState.user?.id
 
-  if (!isHydrated) return null
+  if (!isHydrated) return <LoadingScreen />
 
   return isSignedIn
     ? <Navigate to={getAuthenticatedHomeRoute(authState)} replace />
@@ -140,6 +142,8 @@ export default function AppRouter() {
               <Route path={ROUTES.AQI_MONITOR} element={<AQIMonitor />} />
               <Route path={ROUTES.LAB_RESULTS} element={<LabTestResults />} />
               <Route path={ROUTES.MEDICAL_REPORTS} element={<MedicalReports />} />
+              <Route path={ROUTES.SYMPTOM_ANALYSIS} element={<SymptomAnalysisWorkspace />} />
+              <Route path={ROUTES.REPORT_GENERATION} element={<ReportGenerationWorkspace />} />
               <Route path={ROUTES.SLEEP} element={<SleepAnalysis />} />
               <Route path={ROUTES.DEVICES} element={<DeviceManager />} />
               <Route path={ROUTES.GOOGLE_FIT_SETTINGS} element={<GoogleFitSettings />} />

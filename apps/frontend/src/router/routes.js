@@ -26,6 +26,8 @@ export const ROUTES = {
   RECOMMENDATIONS: '/recommendations',
   LAB_RESULTS: '/lab-results',
   MEDICAL_REPORTS: '/medical-reports',
+  SYMPTOM_ANALYSIS: '/symptom-analysis',
+  REPORT_GENERATION: '/report-generation',
   SLEEP: '/sleep',
   DEVICES: '/devices',
   GOOGLE_FIT_SETTINGS: '/device-settings/google-fit',

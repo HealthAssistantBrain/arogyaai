@@ -2,16 +2,25 @@ import { create } from 'zustand';
 import { persist, devtools } from 'zustand/middleware';
 import api from '../lib/axios';
 import { normalizeClinicalCards } from '../lib/clinicalCards';
+import { clearPredictionExplanationMemo, fetchPredictionExplanation } from '../services/predictionExplanationService';
 import useDashboardStore from './dashboardStore';
 import { normalizeHealthMetricsResponse } from '../lib/healthMetrics';
 import { safeArray, safeObject, safeText } from '../utils/safeData';
 
 const METRICS_STALE_MS = 45_000;
 const EXPLANATION_STALE_MS = 60_000;
+const DEFAULT_METRIC_RANGE = '24h';
 let metricsRequestSeq = 0;
-let metricsInFlight = null;
+const metricsInFlightByRange = new Map();
 let explanationRequestSeq = 0;
-let explanationInFlight = null;
+
+const getResolvedTimezone = () => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Calcutta';
+  } catch {
+    return 'Asia/Calcutta';
+  }
+};
 
 const toFiniteNumber = (value) => {
   const parsed = Number(value);
@@ -258,9 +267,12 @@ export const useHealthStore = create(
         explanationPredictionId: null,
 
         metrics: null,
+        metricsByRange: {},
+        metricsRange: DEFAULT_METRIC_RANGE,
         metricsLoading: false,
         metricsError: null,
         metricsLastFetched: null,
+        metricsLastFetchedByRange: {},
         lastUpdated: null,
 
         // --- Smart Sync Engine State ---
@@ -297,24 +309,18 @@ export const useHealthStore = create(
             return state.explanation;
           }
 
-          if (explanationInFlight) {
-            return explanationInFlight;
-          }
-
           if (!silent) {
             set({ loading: true, error: null }, false, 'predictionExplanation/fetchStart');
           }
 
           const requestId = ++explanationRequestSeq;
-          explanationInFlight = (async () => {
+          return (async () => {
             try {
-              const response = await api.get('/prediction/explanation', {
-                params: {
-                  ...(resolvedPredictionId ? { prediction_id: resolvedPredictionId } : {}),
-                  ...(force ? { force_refresh: true } : {}),
-                },
+              const responsePayload = await fetchPredictionExplanation({
+                predictionId: resolvedPredictionId,
+                force,
               });
-              const normalized = normalizeExplanationPayload(response.data);
+              const normalized = normalizeExplanationPayload(responsePayload);
 
               if (requestId !== explanationRequestSeq) {
                 return normalized;
@@ -364,82 +370,144 @@ export const useHealthStore = create(
               }
 
               return get().explanation ?? fallbackExplanation;
-            } finally {
-              explanationInFlight = null;
             }
           })();
-
-          return explanationInFlight;
         },
 
-        fetchHealthMetrics: async ({ force = false, silent = false } = {}) => {
+        setMetricsRange: (range = DEFAULT_METRIC_RANGE) => {
+          const normalizedRange = range === '7d' ? '7d' : DEFAULT_METRIC_RANGE;
+          const cachedSnapshot = get().metricsByRange?.[normalizedRange] ?? null;
+          set({
+            metricsRange: normalizedRange,
+            metrics: cachedSnapshot ?? get().metrics,
+            lastUpdated: cachedSnapshot?.lastUpdated ?? get().lastUpdated,
+          }, false, `healthMetrics/setRange:${normalizedRange}`);
+        },
+
+        fetchHealthMetrics: async ({ force = false, silent = false, range = DEFAULT_METRIC_RANGE } = {}) => {
           const state = get();
-          if (!force && state.metrics && state.metricsLastFetched && (Date.now() - state.metricsLastFetched) < METRICS_STALE_MS) {
-            return state.metrics;
+          const normalizedRange = range === '7d' ? '7d' : DEFAULT_METRIC_RANGE;
+          const cachedSnapshot = state.metricsByRange?.[normalizedRange] ?? null;
+          const cachedFetchedAt = state.metricsLastFetchedByRange?.[normalizedRange] ?? null;
+
+          if (!force && cachedSnapshot && cachedFetchedAt && (Date.now() - cachedFetchedAt) < METRICS_STALE_MS) {
+            if (state.metricsRange !== normalizedRange || state.metrics !== cachedSnapshot) {
+              set({
+                metricsRange: normalizedRange,
+                metrics: cachedSnapshot,
+                metricsLastFetched: cachedFetchedAt,
+                lastUpdated: cachedSnapshot.lastUpdated ?? state.lastUpdated,
+              }, false, `healthMetrics/cacheHit:${normalizedRange}`);
+            }
+            return cachedSnapshot;
           }
 
-          if (metricsInFlight) {
-            return metricsInFlight;
+          if (metricsInFlightByRange.has(normalizedRange)) {
+            return metricsInFlightByRange.get(normalizedRange);
           }
 
           if (!silent) {
-            set({ metricsLoading: true, metricsError: null }, false, 'healthMetrics/fetchStart');
+            set({ metricsLoading: true, metricsError: null, metricsRange: normalizedRange }, false, `healthMetrics/fetchStart:${normalizedRange}`);
           }
 
           const requestId = ++metricsRequestSeq;
+          const timezone = getResolvedTimezone();
 
-          metricsInFlight = (async () => {
+          const inFlight = (async () => {
             try {
-              const response = await api.get('/health/metrics', force ? { params: { ts: Date.now() } } : undefined);
+              const response = await api.get('/health/metrics', {
+                params: {
+                  range: normalizedRange,
+                  timezone,
+                  ...(force ? { ts: Date.now() } : {}),
+                },
+              });
               const snapshot = normalizeHealthMetricsResponse(response.data);
 
               if (requestId !== metricsRequestSeq) {
                 return snapshot;
               }
 
+              const fetchedAt = Date.now();
               set(
-                {
-                  metrics: snapshot,
+                (current) => ({
+                  metrics: current.metricsRange === normalizedRange ? snapshot : (current.metricsByRange?.[current.metricsRange] ?? current.metrics),
+                  metricsByRange: {
+                    ...(current.metricsByRange ?? {}),
+                    [normalizedRange]: snapshot,
+                  },
+                  metricsRange: normalizedRange,
                   metricsLoading: false,
                   metricsError: null,
-                  metricsLastFetched: Date.now(),
+                  metricsLastFetched: fetchedAt,
+                  metricsLastFetchedByRange: {
+                    ...(current.metricsLastFetchedByRange ?? {}),
+                    [normalizedRange]: fetchedAt,
+                  },
                   lastUpdated: snapshot.lastUpdated,
-                },
+                }),
                 false,
-                'healthMetrics/fetchSuccess'
+                `healthMetrics/fetchSuccess:${normalizedRange}`
               );
               return snapshot;
             } catch (error) {
               const message = error?.response?.data?.detail || error?.response?.data?.message || error?.message || 'Unable to load health metrics.';
               if (requestId === metricsRequestSeq) {
-                set(
-                  {
-                    metricsLoading: false,
-                    metricsError: message,
-                  },
-                  false,
-                  'healthMetrics/fetchError'
-                );
+                set((current) => ({
+                  metricsLoading: false,
+                  metricsError: message,
+                  metrics: current.metricsByRange?.[normalizedRange] ?? current.metrics,
+                  metricsRange: normalizedRange,
+                }),
+                false,
+                `healthMetrics/fetchError:${normalizedRange}`);
               }
-              return get().metrics;
+              return get().metricsByRange?.[normalizedRange] ?? get().metrics;
+            } finally {
+              metricsInFlightByRange.delete(normalizedRange);
             }
           })();
 
+          metricsInFlightByRange.set(normalizedRange, inFlight);
+
           try {
-            return await metricsInFlight;
+            return await inFlight;
           } finally {
-            metricsInFlight = null;
+            metricsInFlightByRange.delete(normalizedRange);
           }
         },
 
         // --- Smart Sync Engine Actions ---
-        invalidateMetricsCache: () => set({
-          metrics: null,
-          metricsLoading: false,
-          metricsError: null,
-          metricsLastFetched: null,
-          lastUpdated: null,
-        }, false, 'healthMetrics/invalidate'),
+        invalidateMetricsCache: (range = null) => set((current) => {
+          if (!range) {
+            return {
+              metrics: null,
+              metricsByRange: {},
+              metricsLoading: false,
+              metricsError: null,
+              metricsLastFetched: null,
+              metricsLastFetchedByRange: {},
+              lastUpdated: null,
+            };
+          }
+
+          const normalizedRange = range === '7d' ? '7d' : DEFAULT_METRIC_RANGE;
+          const nextByRange = { ...(current.metricsByRange ?? {}) };
+          const nextFetchedByRange = { ...(current.metricsLastFetchedByRange ?? {}) };
+          delete nextByRange[normalizedRange];
+          delete nextFetchedByRange[normalizedRange];
+
+          return {
+            metrics: current.metricsRange === normalizedRange ? null : current.metrics,
+            metricsByRange: nextByRange,
+            metricsLoading: false,
+            metricsError: null,
+            metricsLastFetched: current.metricsRange === normalizedRange ? null : current.metricsLastFetched,
+            metricsLastFetchedByRange: nextFetchedByRange,
+            lastUpdated: current.metricsRange === normalizedRange ? null : current.lastUpdated,
+          };
+        }, false, range ? `healthMetrics/invalidate:${range}` : 'healthMetrics/invalidate'),
+        clearExplanationMemo: (predictionId = null) => clearPredictionExplanationMemo(predictionId),
         setConnection: (status) => set({ googleFitConnected: status }),
         setWearableData: (data) => {
           const now = Date.now();

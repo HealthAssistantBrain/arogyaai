@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from models import User
 from pipelines.storage_pipeline.service import StoragePipelineService
+from services.orchestrator import OrchestratorRequest, get_orchestrator
 from services.insight_formatter import sanitize_ai_insight_payload
 
 
@@ -94,13 +96,23 @@ class InsightsService:
         return insights
 
     @staticmethod
-    def get_insights(db: Session, user: User) -> dict[str, Any]:
-        stored = StoragePipelineService.fetch_health_insights(db, user)
+    async def get_insights_async(db: Session, user: User) -> dict[str, Any]:
+        orchestrated = await get_orchestrator().run(
+            OrchestratorRequest(
+                workflow="ai_insights",
+                user_id=str(user.id),
+                db=db,
+                current_user=user,
+                payload={"mode": "dashboard"},
+            )
+        )
+        payload = orchestrated.get("data") if isinstance(orchestrated.get("data"), dict) else {}
+        stored = payload.get("stored")
         if not stored:
             return {
                 "success": True,
                 "status": "insufficient_data",
-                "source": "db",
+                "source": "ai_orchestrator",
                 "error": None,
                 "data": {
                     "risks": {},
@@ -120,13 +132,13 @@ class InsightsService:
         return {
             "success": True,
             "status": "ready",
-            "source": "db",
+            "source": "ai_orchestrator",
             "error": None,
             "data": {
                 "risks": stored.get("risk", {}) if isinstance(stored.get("risk"), dict) else {},
                 "drivers": stored.get("drivers", []) if isinstance(stored.get("drivers"), list) else [],
                 "analysis": stored.get("analysis") or "",
-                "explanation": sanitize_ai_insight_payload(stored.get("explanation")),
+                "explanation": payload.get("explanation") or sanitize_ai_insight_payload(stored.get("explanation")),
                 "recommendations": stored.get("recommendations", []) if isinstance(stored.get("recommendations"), list) else [],
                 "confidence": stored.get("confidence") or 0,
                 "data_points": stored.get("data_points") or 0,
@@ -138,13 +150,31 @@ class InsightsService:
         }
 
     @staticmethod
-    def get_health_insights(db: Session, user: User) -> dict[str, Any]:
-        data = StoragePipelineService.fetch_health_insights(db, user)
+    def get_insights(db: Session, user: User) -> dict[str, Any]:
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(InsightsService.get_insights_async(db, user))
+        raise RuntimeError("Use get_insights_async inside an active event loop.")
+
+    @staticmethod
+    async def get_health_insights_async(db: Session, user: User) -> dict[str, Any]:
+        orchestrated = await get_orchestrator().run(
+            OrchestratorRequest(
+                workflow="ai_insights",
+                user_id=str(user.id),
+                db=db,
+                current_user=user,
+                payload={"mode": "dashboard"},
+            )
+        )
+        payload = orchestrated.get("data") if isinstance(orchestrated.get("data"), dict) else {}
+        data = payload.get("stored")
         if not data:
             return {
                 "success": True,
                 "status": "fallback",
-                "source": "db",
+                "source": "ai_orchestrator",
                 "error": None,
                 "data": {
                     "risk_scores": {},
@@ -164,7 +194,7 @@ class InsightsService:
         return {
             "success": True,
             "status": "ready",
-            "source": "db",
+            "source": "ai_orchestrator",
             "error": None,
             "data": {
                 "risk_scores": data.get("risk", {}) if isinstance(data.get("risk"), dict) else {},
@@ -173,6 +203,15 @@ class InsightsService:
                 "recommendations": data.get("recommendations", []) if isinstance(data.get("recommendations"), list) else [],
                 "availability": data.get("availability", {}) if isinstance(data.get("availability"), dict) else {},
                 "clinical_history": data.get("clinical_history") if isinstance(data.get("clinical_history"), dict) else None,
+                "recommendation_plan": payload.get("recommendation_plan"),
             },
             "last_updated": data.get("last_updated"),
         }
+
+    @staticmethod
+    def get_health_insights(db: Session, user: User) -> dict[str, Any]:
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(InsightsService.get_health_insights_async(db, user))
+        raise RuntimeError("Use get_health_insights_async inside an active event loop.")

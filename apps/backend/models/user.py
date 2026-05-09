@@ -56,6 +56,8 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     health_scores        = relationship("HealthScoreRecord", back_populates="user")
     feedback             = relationship("Feedback", back_populates="user", cascade="all, delete-orphan")
     timeline_events      = relationship("TimelineEvent", back_populates="user", cascade="all, delete-orphan")
+    symptom_analysis_sessions = relationship("SymptomAnalysisSession", back_populates="user", cascade="all, delete-orphan")
+    generated_reports    = relationship("GeneratedReport", back_populates="user", cascade="all, delete-orphan")
 
     @property
     def health_profile(self):

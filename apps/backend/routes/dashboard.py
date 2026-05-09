@@ -77,12 +77,14 @@ async def get_health_history(
 
 @router.get("/health/metrics")
 async def get_health_metrics(
+    range: str = Query(default="24h", pattern="^(24h|7d)$"),
+    timezone: str | None = Query(default=None),
     current_user: User = Depends(get_current_user_from_header),
     db: Session = Depends(get_db),
 ):
     return JSONResponse(
         status_code=200,
-        content=await svc.get_health_metrics(current_user, db),
+        content=await svc.get_health_metrics(current_user, db, range_value=range, timezone_name=timezone),
         headers=NO_CACHE_HEADERS,
     )
 

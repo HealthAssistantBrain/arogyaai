@@ -8,12 +8,14 @@ import uuid
 from sqlalchemy.orm import Session
 
 from models.clinical_history import ClinicalHistory
+from models.generated_report import GeneratedReport
 from models.lab_result import LabResult
 from models.notification import Notification, NotificationTypeEnum
 from models.report import Report
 from models.timeline_event import TimelineEvent
 from models.user_vital import UserVital, UserVitalTypeEnum
 from services.clinical_history_service import ClinicalHistoryService
+from services.timeline import build_report_event_payload
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -59,26 +61,47 @@ def _event_metadata(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _event_confidence_value(value: Any) -> float | None:
+    try:
+        if value in (None, ""):
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def serialize_timeline_event(event: TimelineEvent) -> dict[str, Any]:
     metadata = _event_metadata(getattr(event, "event_metadata", None))
     event_type = str(getattr(event, "type", "") or "event")
+    canonical_event_type = str(getattr(event, "event_type", "") or event_type or "event")
+    normalized_type = event_type.strip().lower()
     timestamp = getattr(event, "timestamp", None)
-    reference_id = getattr(event, "reference_id", None)
+    reference_id = getattr(event, "source_id", None) or getattr(event, "reference_id", None)
+    summary = getattr(event, "summary", None) or metadata.get("summary")
+    severity = getattr(event, "severity", None) or metadata.get("severity")
+    confidence = _event_confidence_value(getattr(event, "confidence", None) or metadata.get("confidence"))
 
     payload = {
         "id": f"timeline_{event.id}",
         "type": event_type,
+        "event_type": canonical_event_type,
+        "source_type": getattr(event, "source_type", None) or metadata.get("source_type") or canonical_event_type,
         "source": metadata.get("source") or "timeline_events",
         "category": metadata.get("category") or ("report" if event_type == "report" else event_type),
         "title": getattr(event, "title", None) or metadata.get("title") or "Timeline event",
-        "description": metadata.get("description") or metadata.get("filename") or metadata.get("summary") or "Clinical timeline event.",
+        "summary": summary,
+        "description": metadata.get("description") or metadata.get("filename") or summary or "Clinical timeline event.",
         "timestamp": timestamp.isoformat() if timestamp else None,
         "event_date": timestamp.isoformat() if timestamp else None,
         "reference_id": str(reference_id) if reference_id else None,
+        "source_id": str(reference_id) if reference_id else None,
+        "severity": severity,
+        "confidence": confidence,
+        "created_at": event.created_at.isoformat() if getattr(event, "created_at", None) else None,
         "metadata": metadata,
     }
 
-    if event_type == "report":
+    if normalized_type == "report":
         filename = metadata.get("filename") or metadata.get("original_filename") or "Medical report"
         report_type = str(metadata.get("report_type") or "OTHER").replace("_", " ").title()
         status = str(metadata.get("status") or "UPLOADED").upper()
@@ -95,6 +118,46 @@ def serialize_timeline_event(event: TimelineEvent) -> dict[str, Any]:
                 ],
             }
         )
+    elif normalized_type == "symptom analysis":
+        risk_level = metadata.get("risk_level")
+        urgency_level = metadata.get("urgency_level")
+        payload.update(
+            {
+                "source": metadata.get("source") or "ai symptom analysis",
+                "category": "symptom",
+                "description": metadata.get("description") or summary or "AI symptom analysis saved.",
+                "insights": summary,
+                "possible_conditions": metadata.get("possible_causes") or [],
+                "recommendations": metadata.get("recommendations") or [],
+                "metrics": [
+                    item
+                    for item in [
+                        {"label": "Severity", "value": severity} if severity else None,
+                        {"label": "Risk", "value": risk_level} if risk_level else None,
+                        {"label": "Urgency", "value": urgency_level} if urgency_level else None,
+                        {"label": "Confidence", "value": f"{int(confidence * 100)}%"} if confidence is not None else None,
+                    ]
+                    if item is not None
+                ],
+            }
+        )
+    elif normalized_type == "ai report":
+        payload.update(
+            {
+                "source": metadata.get("source") or "ai report generation",
+                "category": "report_generation",
+                "description": metadata.get("description") or summary or "AI-generated report saved.",
+                "insights": summary,
+                "recommendations": metadata.get("recommendations") or [],
+                "metrics": [
+                    item
+                    for item in [
+                        {"label": "Confidence", "value": f"{int(confidence * 100)}%"} if confidence is not None else None,
+                    ]
+                    if item is not None
+                ],
+            }
+        )
 
     return payload
 
@@ -105,8 +168,9 @@ def create_timeline_event(db: Session, data: dict[str, Any], *, commit: bool = T
         timestamp = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
 
     user_id = _coerce_uuid(data.get("user_id"))
-    reference_id = _coerce_uuid(data.get("reference_id"))
+    reference_id = _coerce_uuid(data.get("source_id") or data.get("reference_id"))
     event_type = str(data.get("type") or "").strip()
+    canonical_event_type = str(data.get("event_type") or event_type).strip()
     title = str(data.get("title") or "").strip()
 
     if user_id is None:
@@ -129,9 +193,19 @@ def create_timeline_event(db: Session, data: dict[str, Any], *, commit: bool = T
         )
 
     metadata = _event_metadata(data.get("metadata"))
+    source_type = str(data.get("source_type") or "").strip() or None
+    summary = str(data.get("summary") or "").strip() or None
+    severity = str(data.get("severity") or "").strip() or None
+    confidence = data.get("confidence")
     if existing:
         existing.title = title
+        existing.event_type = canonical_event_type or existing.event_type
+        existing.source_type = source_type or existing.source_type
+        existing.summary = summary or existing.summary
+        existing.severity = severity or existing.severity
+        existing.confidence = confidence if confidence is not None else existing.confidence
         existing.timestamp = timestamp
+        existing.source_id = reference_id or existing.source_id
         existing.event_metadata = {
             **_event_metadata(existing.event_metadata),
             **metadata,
@@ -153,8 +227,14 @@ def create_timeline_event(db: Session, data: dict[str, Any], *, commit: bool = T
     event = TimelineEvent(
         user_id=user_id,
         type=event_type,
+        event_type=canonical_event_type or event_type,
+        source_type=source_type,
         title=title,
+        summary=summary,
+        severity=severity,
+        confidence=confidence,
         reference_id=reference_id,
+        source_id=reference_id,
         timestamp=timestamp,
         event_metadata=metadata,
     )
@@ -175,40 +255,7 @@ def create_timeline_event(db: Session, data: dict[str, Any], *, commit: bool = T
 
 
 def create_report_timeline_event(db: Session, report: Report, *, commit: bool = True) -> TimelineEvent:
-    summary_data = report.summary_data if isinstance(report.summary_data, dict) else {}
-    upload_metadata = summary_data.get("upload_metadata") if isinstance(summary_data.get("upload_metadata"), dict) else {}
-    filename = (
-        getattr(report, "original_filename", None)
-        or upload_metadata.get("original_filename")
-        or upload_metadata.get("file_name")
-        or getattr(report, "stored_filename", None)
-        or "Medical report"
-    )
-    report_type = report.report_type.value if hasattr(report.report_type, "value") else str(report.report_type)
-    status = report.status.value if hasattr(report.status, "value") else str(report.status)
-
-    return create_timeline_event(
-        db,
-        {
-            "user_id": report.user_id,
-            "type": "report",
-            "title": "Medical report uploaded",
-            "reference_id": report.id,
-            "timestamp": report.created_at or datetime.now(timezone.utc),
-            "metadata": {
-                "report_id": str(report.id),
-                "filename": filename,
-                "original_filename": getattr(report, "original_filename", None) or upload_metadata.get("original_filename"),
-                "stored_filename": getattr(report, "stored_filename", None) or upload_metadata.get("stored_filename"),
-                "file_url": getattr(report, "file_url", None),
-                "report_type": report_type,
-                "status": status,
-                "source": "report upload",
-                "url": "/medical-reports",
-            },
-        },
-        commit=commit,
-    )
+    return create_timeline_event(db, build_report_event_payload(report), commit=commit)
 
 
 def build_timeline_events(
@@ -218,7 +265,7 @@ def build_timeline_events(
     include_vitals: bool = True,
     limit_per_type: int = 30,
 ) -> list[dict[str, Any]]:
-    vitals, labs, alerts, reports, histories, persisted_events = [], [], [], [], [], []
+    vitals, labs, alerts, reports, histories, generated_reports, persisted_events = [], [], [], [], [], [], []
 
     try:
         persisted_events = (
@@ -289,6 +336,17 @@ def build_timeline_events(
         )
     except Exception as e:
         print(f"Error fetching clinical_history for timeline: {e}")
+
+    try:
+        generated_reports = (
+            db.query(GeneratedReport)
+            .filter(GeneratedReport.user_id == user_id)
+            .order_by(GeneratedReport.created_at.desc())
+            .limit(limit_per_type)
+            .all()
+        )
+    except Exception as e:
+        print(f"Error fetching generated_reports for timeline: {e}")
 
     timeline_events: list[dict[str, Any]] = []
     persisted_report_ids = set()
@@ -427,6 +485,46 @@ def build_timeline_events(
 
     for history in histories:
         timeline_events.append(ClinicalHistoryService.build_timeline_event(history))
+
+    persisted_generated_ids = {
+        serialized_event.get("reference_id")
+        for serialized_event in timeline_events
+        if str(serialized_event.get("type") or "").lower() == "ai report"
+    }
+    for generated_report in generated_reports:
+        if str(generated_report.id) in persisted_generated_ids:
+            continue
+
+        payload = generated_report.report_payload if isinstance(generated_report.report_payload, dict) else {}
+        sections = payload.get("sections") if isinstance(payload.get("sections"), list) else []
+        first_section = sections[0] if sections else {}
+        first_content = first_section.get("content", [None]) if isinstance(first_section, dict) else [None]
+        summary = generated_report.summary or (first_content[0] if isinstance(first_content, list) else None)
+        timeline_events.append(
+            {
+                "id": f"generated_report_{generated_report.id}",
+                "type": "AI Report",
+                "event_type": "generated_report",
+                "source": "ai report generation",
+                "source_type": "report_generation",
+                "category": "report_generation",
+                "title": generated_report.title,
+                "summary": summary,
+                "description": summary or "AI-generated report created.",
+                "timestamp": generated_report.created_at.isoformat() if generated_report.created_at else None,
+                "event_date": generated_report.created_at.isoformat() if generated_report.created_at else None,
+                "reference_id": str(generated_report.id),
+                "source_id": str(generated_report.id),
+                "confidence": float(generated_report.confidence_score) if generated_report.confidence_score is not None else None,
+                "recommendations": generated_report.recommendations if isinstance(generated_report.recommendations, list) else [],
+                "metadata": {
+                    "generated_report_id": str(generated_report.id),
+                    "summary": summary,
+                    "source": "ai report generation",
+                    "url": "/report-generation",
+                },
+            }
+        )
 
     timeline_events.sort(key=lambda item: _event_sort_key(item.get("event_date") or item.get("timestamp")))
     return timeline_events

@@ -5,7 +5,7 @@ import { ROUTES } from "../../router/routes";
 
 export default function AuthGuard() {
   const authState = useAuthStore();
-  const { isAuthenticated, isHydrated, isHydratingAuth } = authState;
+  const { isAuthenticated, isHydrated, isHydratingAuth, authBootstrapStatus, lastHydrationError } = authState;
   const location = useLocation();
   const hasToken = !!authState.token;
   const hasAuthUser = !!authState.user?.id;
@@ -24,6 +24,11 @@ export default function AuthGuard() {
   }
 
   if (!hasAuthUser) {
+    if (authBootstrapStatus === 'degraded' || lastHydrationError) {
+      console.warn('[AuthGuard] auth degraded without synchronized user; redirecting to home', { path: location.pathname });
+      return <Navigate to={ROUTES.HOME} replace />;
+    }
+
     console.debug('[AuthGuard] token present; waiting for /users/me', { path: location.pathname });
     return (
       <div className="flex min-h-screen items-center justify-center bg-background dark:bg-background text-sm font-bold text-slate-500">

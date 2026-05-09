@@ -102,6 +102,36 @@ def test_rag_agent_caches_retrieval_results():
     assert second["cache_hit"] is True
 
 
+def test_rag_agent_accepts_precomputed_sync_retrieve_payload():
+    _RAG_CACHE.clear()
+    agent = RAGKnowledgeAgent()
+    symptoms = {"symptom_names": ["chest pain"], "possible_categories": ["cardiovascular"]}
+
+    result = asyncio.run(
+        agent.run(
+            "I have chest pain",
+            symptoms,
+            retrieve_fn=lambda query, **_kwargs: {
+                "query": query,
+                "source": "precomputed",
+                "summary": [
+                    {
+                        "title": "Precomputed chest pain context",
+                        "source": "cache.md",
+                        "category": "cardiovascular",
+                        "excerpt": "Precomputed context was reused.",
+                        "score": 0.88,
+                    }
+                ],
+                "documents": [],
+            },
+        )
+    )
+
+    assert result["source"] == "precomputed"
+    assert result["summary"][0]["title"] == "Precomputed chest pain context"
+
+
 def test_full_medical_pipeline_runs_and_triggers_safety_guard():
     result = asyncio.run(
         run_medical_pipeline(

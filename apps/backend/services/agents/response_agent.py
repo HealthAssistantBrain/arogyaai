@@ -39,6 +39,17 @@ def _dedupe(items: list[str], *, limit: int | None = None) -> list[str]:
     return merged
 
 
+def _trim_text(value: Any, *, limit: int = 240) -> str:
+    text = _clean_text(value)
+    if len(text) <= limit:
+        return text
+    return text[: limit - 12].rstrip() + " ...trimmed"
+
+
+def _trim_list(items: list[str], *, limit: int, item_limit: int = 160) -> list[str]:
+    return [_trim_text(item, limit=item_limit) for item in items[:limit] if _trim_text(item, limit=item_limit)]
+
+
 def _normalize_risk_level(value: Any) -> str:
     candidate = _clean_text(value).upper()
     if candidate == "CRITICAL":
@@ -154,20 +165,128 @@ def _build_message(
     return "\n\n".join(_dedupe(paragraphs, limit=7))
 
 
+def _compact_vitals(vitals: dict[str, Any]) -> dict[str, Any]:
+    compact: dict[str, Any] = {}
+    for key, value in list(vitals.items())[:6]:
+        if isinstance(value, dict):
+            compact[key] = {
+                inner_key: value.get(inner_key)
+                for inner_key in ("latest", "avg_7d", "unit", "trend")
+                if value.get(inner_key) not in (None, "", [])
+            }
+        elif value not in (None, "", []):
+            compact[key] = value
+    return compact
+
+
+def _compact_labs(user_context: dict[str, Any]) -> list[dict[str, Any]]:
+    compact: list[dict[str, Any]] = []
+    abnormal_labs = user_context.get("abnormal_labs") if isinstance(user_context.get("abnormal_labs"), list) else []
+    for item in abnormal_labs[:4]:
+        if not isinstance(item, dict):
+            continue
+        compact.append(
+            {
+                "name": _trim_text(item.get("name") or item.get("test_name"), limit=80),
+                "value": item.get("value"),
+                "unit": _trim_text(item.get("unit"), limit=24),
+                "status": _trim_text(item.get("status"), limit=32),
+            }
+        )
+    return compact
+
+
+def _compact_rag_summary(rag_data: dict[str, Any]) -> list[dict[str, Any]]:
+    summary = rag_data.get("summary") if isinstance(rag_data.get("summary"), list) else []
+    compact: list[dict[str, Any]] = []
+    for item in summary[:3]:
+        if not isinstance(item, dict):
+            continue
+        compact.append(
+            {
+                "title": _trim_text(item.get("title"), limit=120),
+                "source": _trim_text(item.get("source"), limit=80),
+                "excerpt": _trim_text(item.get("excerpt"), limit=180),
+            }
+        )
+    return compact
+
+
+def _compact_top_drivers(ml_interpretation: dict[str, Any]) -> list[dict[str, Any]]:
+    drivers = ml_interpretation.get("top_drivers") if isinstance(ml_interpretation.get("top_drivers"), list) else []
+    compact: list[dict[str, Any]] = []
+    for item in drivers[:4]:
+        if not isinstance(item, dict):
+            continue
+        compact.append(
+            {
+                "label": _trim_text(item.get("label") or item.get("feature_name"), limit=80),
+                "direction": _trim_text(item.get("patient_direction") or item.get("direction"), limit=80),
+                "impact": item.get("impact"),
+            }
+        )
+    return compact
+
+
 def _build_response_prompt(context: dict[str, Any], fallback: dict[str, Any]) -> str:
+    user_context = context.get("user_context") if isinstance(context.get("user_context"), dict) else {}
+    clinical_reasoning = context.get("clinical_reasoning") if isinstance(context.get("clinical_reasoning"), dict) else {}
+    ml_interpretation = context.get("ml_interpretation") if isinstance(context.get("ml_interpretation"), dict) else {}
+    safety = context.get("safety") if isinstance(context.get("safety"), dict) else {}
+    symptom_payload = context.get("symptoms") if isinstance(context.get("symptoms"), dict) else {}
+    rag_data = context.get("rag_data") if isinstance(context.get("rag_data"), dict) else {}
+
     prompt_payload = {
-        "user_query": context.get("query"),
-        "context_builder": {
-            "user_data": context.get("user_context"),
-            "ml_output": context.get("ml_data"),
-            "rag_context": context.get("rag_data"),
+        "user_query": _trim_text(context.get("query"), limit=300),
+        "patient_context": {
+            "profile": {
+                "age": (user_context.get("profile") or {}).get("age") if isinstance(user_context.get("profile"), dict) else None,
+                "gender": (user_context.get("profile") or {}).get("gender") if isinstance(user_context.get("profile"), dict) else None,
+            },
+            "symptoms_history": _trim_list(_coerce_list(user_context.get("symptoms_history")), limit=6, item_limit=80),
+            "vitals": _compact_vitals(user_context.get("vitals") if isinstance(user_context.get("vitals"), dict) else {}),
+            "abnormal_labs": _compact_labs(user_context),
+            "vital_highlights": _trim_list(_coerce_list(user_context.get("vital_highlights")), limit=3, item_limit=140),
         },
-        "symptom_agent": context.get("symptoms"),
-        "ml_agent": context.get("ml_interpretation"),
-        "rag_agent": context.get("rag_data"),
-        "clinical_reasoning_agent": context.get("clinical_reasoning"),
-        "safety_guard_agent": context.get("safety"),
-        "deterministic_fallback": fallback,
+        "symptom_agent": {
+            "symptom_names": _trim_list(_coerce_list(symptom_payload.get("symptom_names")), limit=6, item_limit=60),
+            "severity": _trim_text(symptom_payload.get("severity"), limit=24),
+            "possible_categories": _trim_list(_coerce_list(symptom_payload.get("possible_categories")), limit=4, item_limit=40),
+            "red_flags": _trim_list(_coerce_list(symptom_payload.get("red_flags")), limit=4, item_limit=120),
+        },
+        "ml_agent": {
+            "risk_level": _trim_text(ml_interpretation.get("risk_level"), limit=24),
+            "interpretation": _trim_text(ml_interpretation.get("interpretation"), limit=220),
+            "top_drivers": _compact_top_drivers(ml_interpretation),
+        },
+        "rag_agent": {
+            "source": _trim_text(rag_data.get("source"), limit=40),
+            "summary": _compact_rag_summary(rag_data),
+        },
+        "clinical_reasoning_agent": {
+            "clinical_interpretation": _trim_text(clinical_reasoning.get("clinical_interpretation"), limit=320),
+            "possible_causes": _trim_list(_coerce_list(clinical_reasoning.get("possible_causes")), limit=4, item_limit=120),
+            "uncertainty_reasoning": _trim_list(_coerce_list(clinical_reasoning.get("uncertainty_reasoning")), limit=3, item_limit=120),
+            "evidence": _trim_list(_coerce_list(clinical_reasoning.get("evidence")), limit=4, item_limit=120),
+            "risk_level": _trim_text(clinical_reasoning.get("risk_level"), limit=24),
+            "confidence_score": clinical_reasoning.get("confidence_score"),
+        },
+        "safety_guard_agent": {
+            "risk_level": _trim_text(safety.get("risk_level"), limit=24),
+            "requires_immediate_care": bool(safety.get("requires_immediate_care")),
+            "red_flags": _trim_list(_coerce_list(safety.get("red_flags")), limit=4, item_limit=120),
+            "safety_notes": _trim_list(_coerce_list(safety.get("safety_notes")), limit=2, item_limit=180),
+            "recommendations": _trim_list(_coerce_list(safety.get("recommendations")), limit=4, item_limit=140),
+        },
+        "deterministic_fallback": {
+            "understanding": _trim_text(fallback.get("understanding"), limit=220),
+            "clinical_interpretation": _trim_text(fallback.get("clinical_interpretation"), limit=320),
+            "possible_causes": _trim_list(_coerce_list(fallback.get("possible_causes")), limit=4, item_limit=120),
+            "follow_up_questions": _trim_list(_coerce_list(fallback.get("follow_up_questions")), limit=2, item_limit=140),
+            "recommendations": _trim_list(_coerce_list(fallback.get("recommendations")), limit=4, item_limit=140),
+            "risk_level": _trim_text(fallback.get("risk_level"), limit=24),
+            "message": _trim_text(fallback.get("message"), limit=700),
+        },
     }
     return f"""
 You are the ArogyaAI response generator agent. Use the specialized agent outputs below.

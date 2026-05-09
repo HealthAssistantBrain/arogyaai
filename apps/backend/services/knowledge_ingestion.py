@@ -15,6 +15,11 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from pipelines.rag_pipeline.config import RagSettings
+from pipelines.rag_pipeline.qdrant import (
+    batch_upsert_points,
+    ensure_qdrant_collection,
+    query_qdrant_points,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -263,49 +268,15 @@ def generate_embeddings(
     return SentenceTransformerEmbeddingService(resolved_model).embed(texts)
 
 
-def _client(settings: RagSettings):
-    try:
-        from qdrant_client import QdrantClient
-    except ImportError as exc:
-        raise RuntimeError("qdrant-client is required for Qdrant storage.") from exc
-    return QdrantClient(
-        url=settings.qdrant_url,
-        api_key=settings.qdrant_api_key,
-        timeout=settings.qdrant_timeout_seconds,
-    )
-
-
 def _ensure_collection(settings: RagSettings, vector_size: int) -> None:
-    from qdrant_client.http import models as rest
-
-    client = _client(settings)
-    try:
-        exists = client.collection_exists(settings.collection_name)
-    except Exception:
-        exists = False
-
-    if exists:
-        collection = client.get_collection(settings.collection_name)
-        existing_size = None
-        try:
-            vectors = collection.config.params.vectors
-            existing_size = int(getattr(vectors, "size", 0) or 0)
-        except Exception:
-            existing_size = None
-        if existing_size and existing_size != vector_size:
-            if not settings.recreate_on_dimension_mismatch:
-                raise RuntimeError(
-                    f"Qdrant collection {settings.collection_name!r} has vector size {existing_size}, "
-                    f"but generated embeddings have size {vector_size}."
-                )
-            client.delete_collection(settings.collection_name)
-            exists = False
-
-    if not exists:
-        client.create_collection(
-            collection_name=settings.collection_name,
-            vectors_config=rest.VectorParams(size=vector_size, distance=rest.Distance.COSINE),
-        )
+    ensure_qdrant_collection(
+        settings,
+        vector_size=vector_size,
+        collection_name=settings.collection_name,
+        distance_name=settings.qdrant_distance_metric,
+        recreate_on_mismatch=settings.recreate_on_dimension_mismatch,
+        allow_fallback=True,
+    )
 
 
 def _point_id(chunk: dict[str, Any]) -> str:
@@ -356,8 +327,20 @@ def store_in_qdrant(
         }
         points.append(rest.PointStruct(id=_point_id(chunk), vector=vector, payload=payload))
 
-    _client(cfg).upsert(collection_name=cfg.collection_name, points=points, wait=True)
-    logger.info("Stored medical knowledge chunks in Qdrant collection=%s count=%s", cfg.collection_name, len(points))
+    upsert_result = batch_upsert_points(
+        cfg,
+        collection_name=cfg.collection_name,
+        points=points,
+        wait=True,
+        allow_fallback=True,
+    )
+    logger.info(
+        "Stored medical knowledge chunks in Qdrant collection=%s count=%s target=%s fallback=%s",
+        cfg.collection_name,
+        upsert_result.value,
+        upsert_result.active_target.url,
+        upsert_result.fallback_used,
+    )
     return len(points)
 
 
@@ -373,22 +356,15 @@ def retrieve_from_qdrant(
     if not vectors:
         return []
 
-    client = _client(cfg)
-    if hasattr(client, "search"):
-        results = client.search(
-            collection_name=cfg.collection_name,
-            query_vector=vectors[0],
-            limit=limit,
-            with_payload=True,
-        )
-    else:
-        response = client.query_points(
-            collection_name=cfg.collection_name,
-            query=vectors[0],
-            limit=limit,
-            with_payload=True,
-        )
-        results = getattr(response, "points", response)
+    query_result = query_qdrant_points(
+        cfg,
+        collection_name=cfg.collection_name,
+        query_vector=vectors[0],
+        limit=limit,
+        with_payload=True,
+        allow_fallback=True,
+    )
+    results = query_result.value
 
     documents: list[dict[str, Any]] = []
     for item in results:

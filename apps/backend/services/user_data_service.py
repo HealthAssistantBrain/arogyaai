@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from core.config import settings
 from core.utils import safe_input
+from database.session import analytics_dual_write_enabled, analytics_session_scope
 from models import (
     User,
     UserProfile,
@@ -375,10 +376,13 @@ class UserDataService:
         overwrite_types: Iterable[UserVitalTypeEnum | str] | None = None,
         window_start: Any = None,
         window_end: Any = None,
+        _mirror_to_analytics: bool = True,
     ) -> list[UserVital]:
+        mirror_writes = analytics_dual_write_enabled() and _mirror_to_analytics
+        raw_records = list(records or [])
         saved: list[UserVital] = []
         normalized_records: dict[tuple[UserVitalTypeEnum, datetime, UserVitalSourceEnum], dict[str, Any]] = {}
-        record_payloads = list(records or [])
+        record_payloads = list(raw_records)
         validated_payloads = IngestionPipelineService.normalize_vital_records(record_payloads)
         if validated_payloads:
             record_payloads = validated_payloads
@@ -636,14 +640,41 @@ class UserDataService:
             for item in saved:
                 db.refresh(item)
 
+        if mirror_writes:
+            try:
+                with analytics_session_scope() as analytics_db:
+                    UserDataService.store_vitals(
+                        analytics_db,
+                        user,
+                        raw_records,
+                        overwrite_window=overwrite_window,
+                        overwrite_types=overwrite_types,
+                        window_start=window_start,
+                        window_end=window_end,
+                        _mirror_to_analytics=False,
+                    )
+            except Exception:
+                logger.exception(
+                    "Analytics mirror write failed for user_vitals | user_id=%s",
+                    str(user.id),
+                )
+
         return saved
 
     @staticmethod
-    def store_wearable_metrics(db: Session, user: User, records: Iterable[dict]) -> list[WearableMetric]:
+    def store_wearable_metrics(
+        db: Session,
+        user: User,
+        records: Iterable[dict],
+        *,
+        _mirror_to_analytics: bool = True,
+    ) -> list[WearableMetric]:
+        mirror_writes = analytics_dual_write_enabled() and _mirror_to_analytics
+        raw_records = list(records or [])
         saved: list[WearableMetric] = []
         normalized_records: dict[tuple[str, datetime, str], dict[str, Any]] = {}
 
-        for record in records or []:
+        for record in raw_records:
             metric_type = str(record.get("metric_type") or record.get("type") or "").strip().lower()
             if not metric_type:
                 continue
@@ -759,6 +790,21 @@ class UserDataService:
             db.commit()
             for item in saved:
                 db.refresh(item)
+
+        if mirror_writes:
+            try:
+                with analytics_session_scope() as analytics_db:
+                    UserDataService.store_wearable_metrics(
+                        analytics_db,
+                        user,
+                        raw_records,
+                        _mirror_to_analytics=False,
+                    )
+            except Exception:
+                logger.exception(
+                    "Analytics mirror write failed for wearable_metrics | user_id=%s",
+                    str(user.id),
+                )
 
         return saved
 

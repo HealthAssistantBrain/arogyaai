@@ -15,6 +15,7 @@ for path in (REPO_ROOT, BACKEND_ROOT):
         sys.path.insert(0, resolved)
 
 from services.prediction_explanation_service import PredictionExplanationService
+from models import RiskLevelEnum, RiskScore
 
 
 def test_hydrate_prediction_response_embeds_generated_explanation():
@@ -298,3 +299,222 @@ def test_get_prediction_explanation_merges_latest_clinical_history():
     assert payload["clinical_context"]["summary"].startswith("22-year-old user reports chest pain")
     assert "Cardiac risk" in payload["possible_conditions"]
     assert any(item["feature"] == "clinical_history" for item in payload["recommendations"])
+
+
+def test_store_cache_persists_with_owned_session_scope():
+    route_db = MagicMock()
+    route_db.info = {"session_id": "session-123"}
+    cache_db = MagicMock()
+    attached_risk_score = SimpleNamespace(risk_payload={"existing": True})
+    cache_db.get.return_value = attached_risk_score
+
+    class _Scope:
+        def __enter__(self):
+            return ("primary", cache_db)
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    with patch.object(PredictionExplanationService, "_cache_write_scope", return_value=_Scope()), \
+        patch.object(PredictionExplanationService, "_assert_active_session_entity", return_value=None), \
+        patch("services.prediction_explanation_service.analytics_dual_write_enabled", return_value=False):
+        PredictionExplanationService._store_cache(
+            route_db,
+            "prediction-1",
+            "cache-key-1",
+            {"summary": "Cached explanation"},
+        )
+
+    route_db.commit.assert_not_called()
+    cache_db.get.assert_called_once()
+    cache_db.commit.assert_called_once()
+    assert attached_risk_score.risk_payload["existing"] is True
+    assert attached_risk_score.risk_payload["rag_explanation"]["cache_key"] == "cache-key-1"
+
+
+def test_store_cache_skips_detached_risk_score_instance():
+    route_db = MagicMock()
+    route_db.info = {"session_id": "session-detached"}
+    detached_risk_score = RiskScore(
+        id="prediction-1",
+        user_id="user-1",
+        risk_level=RiskLevelEnum.HIGH,
+        overall_score=0.42,
+    )
+
+    PredictionExplanationService._store_cache(
+        route_db,
+        detached_risk_score,
+        "cache-key-1",
+        {"summary": "Cached explanation"},
+    )
+
+    route_db.commit.assert_not_called()
+
+
+def test_get_prediction_explanation_returns_degraded_payload_on_service_error():
+    risk_score = SimpleNamespace(
+        id="prediction-1",
+        overall_score=0.42,
+        risk_level=SimpleNamespace(value="HIGH"),
+        risk_payload={},
+    )
+    shap_rows = [
+        SimpleNamespace(
+            feature_name="activity",
+            shap_value=0.21,
+            abs_shap_value=0.21,
+            direction="increase",
+            shap_payload={"feature_value": 5200},
+        )
+    ]
+    generated_payload = {
+        "summary": "Generated summary",
+        "factors": [],
+        "recommendations": [],
+        "sources": [],
+        "retrieval": {},
+        "top_features": [],
+    }
+    db = MagicMock()
+    db.info = {"session_id": "session-degraded"}
+
+    with patch.object(PredictionExplanationService, "_risk_record", return_value=risk_score), \
+        patch("services.prediction_explanation_service.StoragePipelineService.latest_shap_values", return_value=shap_rows), \
+        patch("services.prediction_explanation_service.RagExplanationPipeline") as pipeline_cls, \
+        patch("services.prediction_explanation_service.ClinicalInsightService.enrich_payload", side_effect=RuntimeError("clinical payload broke")):
+        pipeline_cls.return_value.explain = AsyncMock(return_value=generated_payload)
+        result = asyncio.run(
+            PredictionExplanationService.get_prediction_explanation(
+                db,
+                SimpleNamespace(id="user-1"),
+            )
+        )
+
+    assert result["success"] is False
+    assert result["status"] == "fallback"
+    assert result["source"] == "service_degraded"
+    assert result["data"]["prediction_id"] == "prediction-1"
+    assert result["data"]["summary"]
+
+
+def test_get_prediction_explanation_does_not_close_route_session():
+    risk_score = SimpleNamespace(
+        id="prediction-1",
+        overall_score=0.42,
+        risk_level=SimpleNamespace(value="HIGH"),
+        risk_payload={},
+    )
+    shap_rows = [
+        SimpleNamespace(
+            feature_name="activity",
+            shap_value=0.21,
+            abs_shap_value=0.21,
+            direction="increase",
+            shap_payload={"feature_value": 5200},
+        )
+    ]
+    generated_payload = {
+        "summary": "Generated summary",
+        "factors": [],
+        "recommendations": [],
+        "sources": [],
+        "retrieval": {},
+        "top_features": [],
+    }
+    db = MagicMock()
+    db.info = {"session_id": "session-abc"}
+
+    with patch.object(PredictionExplanationService, "_risk_record", return_value=risk_score), \
+        patch("services.prediction_explanation_service.StoragePipelineService.latest_shap_values", return_value=shap_rows), \
+        patch("services.prediction_explanation_service.RagExplanationPipeline") as pipeline_cls, \
+        patch.object(PredictionExplanationService, "_store_cache", return_value=None):
+        pipeline_cls.return_value.explain = AsyncMock(return_value=generated_payload)
+        asyncio.run(
+            PredictionExplanationService.get_prediction_explanation(
+                db,
+                SimpleNamespace(id="user-1"),
+            )
+        )
+
+    db.close.assert_not_called()
+
+
+def test_get_prediction_explanation_does_not_touch_risk_score_after_await():
+    detached = False
+
+    class _GuardedRiskScore:
+        def __init__(self):
+            self._id = "prediction-1"
+            self._overall_score = 0.42
+            self._risk_level = SimpleNamespace(value="HIGH")
+            self._risk_payload = {"feature_snapshot": {"activity_level": 5200}}
+
+        @property
+        def id(self):
+            if detached:
+                raise AssertionError("RiskScore.id accessed after async boundary")
+            return self._id
+
+        @property
+        def overall_score(self):
+            if detached:
+                raise AssertionError("RiskScore.overall_score accessed after async boundary")
+            return self._overall_score
+
+        @property
+        def risk_level(self):
+            if detached:
+                raise AssertionError("RiskScore.risk_level accessed after async boundary")
+            return self._risk_level
+
+        @property
+        def risk_payload(self):
+            if detached:
+                raise AssertionError("RiskScore.risk_payload accessed after async boundary")
+            return self._risk_payload
+
+        @property
+        def feature_snapshot(self):
+            if detached:
+                raise AssertionError("RiskScore.feature_snapshot accessed after async boundary")
+            return self._risk_payload["feature_snapshot"]
+
+    async def _explain(**_kwargs):
+        nonlocal detached
+        detached = True
+        return {
+            "summary": "Generated summary",
+            "factors": [],
+            "recommendations": [],
+            "sources": [],
+            "retrieval": {},
+            "top_features": [],
+        }
+
+    shap_rows = [
+        SimpleNamespace(
+            feature_name="activity",
+            shap_value=0.21,
+            abs_shap_value=0.21,
+            direction="increase",
+            shap_payload={"feature_value": 5200},
+        )
+    ]
+    db = MagicMock()
+    db.info = {"session_id": "session-guarded"}
+
+    with patch.object(PredictionExplanationService, "_risk_record", return_value=_GuardedRiskScore()), \
+        patch("services.prediction_explanation_service.StoragePipelineService.latest_shap_values", return_value=shap_rows), \
+        patch("services.prediction_explanation_service.RagExplanationPipeline") as pipeline_cls, \
+        patch.object(PredictionExplanationService, "_store_cache", return_value=None):
+        pipeline_cls.return_value.explain = _explain
+        result = asyncio.run(
+            PredictionExplanationService.get_prediction_explanation(
+                db,
+                SimpleNamespace(id="user-1"),
+            )
+        )
+
+    assert result["success"] is True
+    assert result["data"]["prediction_id"] == "prediction-1"

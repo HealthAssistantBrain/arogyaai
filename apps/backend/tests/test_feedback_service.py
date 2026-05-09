@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -90,3 +91,40 @@ def test_aggregate_feedback_stats_counts_feedback_categories():
     assert stats["by_entity_type"]["prediction"] == 2
     assert stats["incorrect_prediction_rate"] == 0.5
     assert stats["explanation_helpfulness_score"] == 1.0
+
+
+def test_average_rating_per_model_uses_analytics_read_scope():
+    prediction_id = uuid4()
+    explanation_id = uuid4()
+    feedback_rows = [
+        SimpleNamespace(entity_id=prediction_id, rating=5),
+        SimpleNamespace(entity_id=explanation_id, rating=3),
+    ]
+    feedback_query = MagicMock()
+    feedback_query.filter.return_value = feedback_query
+    feedback_query.all.return_value = feedback_rows
+
+    analytics_query = MagicMock()
+    analytics_query.filter.return_value = analytics_query
+    analytics_query.all.return_value = [
+        (prediction_id, "cardio-v2"),
+        (explanation_id, None),
+    ]
+    analytics_db = MagicMock()
+    analytics_db.query.return_value = analytics_query
+
+    db = MagicMock()
+    db.query.return_value = feedback_query
+
+    @contextmanager
+    def _analytics_scope():
+        yield analytics_db
+
+    with patch.object(feedback_service, "analytics_read_session_scope", _analytics_scope):
+        result = feedback_service.average_rating_per_model(db)
+
+    assert result == {
+        "cardio-v2": 5.0,
+        "unknown": 3.0,
+    }
+    analytics_db.query.assert_called_once()

@@ -16,7 +16,6 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse, urlunparse
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
@@ -25,6 +24,7 @@ if str(REPO_ROOT) not in sys.path:
 from pipelines.rag_pipeline.config import RagSettings
 from pipelines.rag_pipeline.corpus import ensure_corpus_seeded, highest_severity, load_corpus_chunks, load_corpus_documents, normalize_severity
 from pipelines.rag_pipeline.embedder import EmbeddingService
+from pipelines.rag_pipeline.qdrant import batch_upsert_points, recreate_qdrant_collection
 from pipelines.rag_pipeline.retriever import MedicalKnowledgeRetriever
 from pipelines.rag_pipeline.text_cleaning import clean_label_text, clean_rag_text, extract_clinical_fields
 
@@ -33,7 +33,6 @@ BACKEND_ROOT = REPO_ROOT / "apps" / "backend"
 CORPUS_DIR = BACKEND_ROOT / "data" / "medical_corpus"
 DEFAULT_MODEL_NAME = "BAAI/bge-small-en-v1.5"
 DEFAULT_COLLECTION_NAME = "medical_knowledge"
-DEFAULT_QDRANT_URL = "http://localhost:6333"
 INDEX_VERSION = "fastembed-bge-small-v1"
 CHUNK_MIN_WORDS = int(os.getenv("RAG_CHUNK_MIN_WORDS", "300"))
 CHUNK_MAX_WORDS = int(os.getenv("RAG_CHUNK_MAX_WORDS", "500"))
@@ -87,26 +86,6 @@ def _load_env_files() -> None:
     for env_path in (BACKEND_ROOT / ".env", REPO_ROOT / ".env"):
         if env_path.exists():
             load_dotenv(env_path, override=False)
-
-
-def _running_inside_container() -> bool:
-    return Path("/.dockerenv").exists() or os.getenv("AROGYAAI_CONTAINER", "").lower() == "true"
-
-
-def _qdrant_url() -> str:
-    raw_url = os.getenv("QDRANT_URL", DEFAULT_QDRANT_URL).strip() or DEFAULT_QDRANT_URL
-    parsed = urlparse(raw_url)
-    if parsed.hostname == "qdrant" and not _running_inside_container():
-        netloc = f"localhost:{parsed.port or 6333}"
-        return urlunparse(parsed._replace(netloc=netloc))
-    return raw_url
-
-
-def _qdrant_timeout_seconds() -> float:
-    try:
-        return float(os.getenv("QDRANT_TIMEOUT_SECONDS", "5.0"))
-    except (TypeError, ValueError):
-        return 5.0
 
 
 def _clean_text(value: str) -> str:
@@ -329,22 +308,6 @@ def embed_chunks(chunks: list[Chunk], settings: RagSettings) -> list[list[float]
     return EmbeddingService(settings).embed_texts([chunk.text for chunk in chunks])
 
 
-def _connect_qdrant():
-    try:
-        from qdrant_client import QdrantClient
-    except ImportError as exc:
-        raise RuntimeError(
-            "qdrant-client is required for RAG ingestion. "
-            "Install backend dependencies, then rerun: python pipelines/rag_pipeline/ingest.py"
-        ) from exc
-
-    return QdrantClient(
-        url=_qdrant_url(),
-        api_key=os.getenv("QDRANT_API_KEY") or None,
-        timeout=_qdrant_timeout_seconds(),
-    )
-
-
 def _point_id(chunk_id: str) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f"arogyaai-rag:{chunk_id}"))
 
@@ -352,22 +315,17 @@ def _point_id(chunk_id: str) -> str:
 def upload_to_qdrant(chunks: list[Chunk], vectors: list[list[float]], vector_size: int) -> None:
     from qdrant_client.http import models as rest
 
-    collection_name = os.getenv("QDRANT_COLLECTION_NAME", DEFAULT_COLLECTION_NAME)
-    client = _connect_qdrant()
-    try:
-        exists = client.collection_exists(collection_name)
-    except Exception:
-        exists = False
-
-    if exists:
-        client.delete_collection(collection_name)
-
-    client.create_collection(
+    settings = RagSettings()
+    collection_name = settings.collection_name
+    recreate_qdrant_collection(
+        settings,
+        vector_size=vector_size,
         collection_name=collection_name,
-        vectors_config=rest.VectorParams(size=vector_size, distance=rest.Distance.COSINE),
+        distance_name=settings.qdrant_distance_metric,
+        allow_fallback=True,
     )
 
-    model_name = os.getenv("RAG_EMBEDDING_MODEL", DEFAULT_MODEL_NAME)
+    model_name = settings.embedding_model_name or DEFAULT_MODEL_NAME
     points = [
         rest.PointStruct(
             id=_point_id(chunk.chunk_id),
@@ -395,15 +353,21 @@ def upload_to_qdrant(chunks: list[Chunk], vectors: list[list[float]], vector_siz
         for chunk, vector in zip(chunks, vectors, strict=True)
     ]
 
-    client.upsert(collection_name=collection_name, points=points, wait=True)
+    batch_upsert_points(
+        settings,
+        collection_name=collection_name,
+        points=points,
+        wait=True,
+        allow_fallback=True,
+    )
 
 
 def main() -> int:
     _load_env_files()
     os.environ.setdefault("RAG_EMBEDDING_MODEL", DEFAULT_MODEL_NAME)
-    os.environ.setdefault("QDRANT_COLLECTION_NAME", DEFAULT_COLLECTION_NAME)
+    os.environ.setdefault("QDRANT_COLLECTION_MEDICAL", DEFAULT_COLLECTION_NAME)
     os.environ.setdefault("RAG_EMBEDDING_DIMENSIONS", "384")
-    settings = RagSettings(qdrant_url=_qdrant_url())
+    settings = RagSettings()
 
     documents = load_corpus_documents(settings)
     if not documents:

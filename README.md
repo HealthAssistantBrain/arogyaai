@@ -37,17 +37,17 @@ docker compose up --build
 ## Architecture
 
 ```
-┌─────────────┐    ┌──────────────┐    ┌───────────────────┐
-│   React UI  │───▶│  FastAPI      │───▶│  PostgreSQL +     │
-│   (Zustand) │◀───│  Backend      │◀───│  TimescaleDB      │
-└─────────────┘    └──────┬───────┘    └───────────────────┘
+┌─────────────┐    ┌──────────────┐    ┌──────────────────────┐
+│   React UI  │───▶│  FastAPI      │───▶│  Primary PostgreSQL  │
+│   (Zustand) │◀───│  Backend      │◀───│  auth + metadata     │
+└─────────────┘    └──────┬───────┘    └──────────────────────┘
                           │
               ┌───────────┼───────────┐
               │           │           │
-         ┌────▼────┐ ┌────▼────┐ ┌────▼────┐
-         │Prediction│ │  RAG    │ │ Celery  │
-         │ Service  │ │ Service │ │ Workers │
-         └─────────┘ └─────────┘ └────┬────┘
+         ┌────▼────┐ ┌────▼────┐ ┌────▼──────────────┐
+         │Prediction│ │  RAG    │ │ Neon + Timescale │
+         │ Service  │ │ Service │ │ vitals + scores  │
+         └─────────┘ └─────────┘ └────┬──────────────┘
                                       │
                                  ┌────▼────┐
                                  │  Redis  │
@@ -149,6 +149,14 @@ cp .env.template .env
 2. Go to **Storage** → **New Bucket** → Name: `reports`, Access: **Private**
 3. Go to **Project Settings** → **API** to find your keys
 4. Use the `service_role` key (NOT `sb_secret`) for `SUPABASE_SERVICE_ROLE_KEY`
+
+### Analytics Migration Docs
+
+- [docs/NEON_SETUP.md](docs/NEON_SETUP.md)
+- [docs/TIMESCALE_ARCHITECTURE.md](docs/TIMESCALE_ARCHITECTURE.md)
+- [docs/ANALYTICS_DB_GUIDE.md](docs/ANALYTICS_DB_GUIDE.md)
+- [docs/MIGRATION_GUIDE.md](docs/MIGRATION_GUIDE.md)
+- [docs/ENVIRONMENT_SETUP.md](docs/ENVIRONMENT_SETUP.md)
 
 ---
 

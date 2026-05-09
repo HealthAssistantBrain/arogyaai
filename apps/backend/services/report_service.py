@@ -247,21 +247,25 @@ class ReportService:
             analysis = await cls._analyze_report(filename or "report", content_type, file_bytes)
             cls.persist_report(db, report_id, analysis.get("full_text") or analysis.get("ocr_text", ""), analysis)
             cls._schedule_lab_pipeline(report_id)
-            db.refresh(report)
+            report = cls._get_report_by_id(db, report_id)
             try:
-                await trigger_notification(
-                    user_id=str(report.user_id),
-                    event_type="health_alert",
-                    title="Lab Report Processed",
-                    message="Your medical report has been analyzed.",
-                    data={
-                        "report_id": report_id,
-                        "report_type": report.report_type.value,
-                        "summary": "Your uploaded report is ready for review in ArogyaAI.",
-                        "url": "/lab-results",
-                        "severity": "info",
-                    },
-                )
+                if report is not None:
+                    notification_user_id = str(report.user_id)
+                    notification_report_type = report.report_type.value
+                    db.close()
+                    await trigger_notification(
+                        user_id=notification_user_id,
+                        event_type="health_alert",
+                        title="Lab Report Processed",
+                        message="Your medical report has been analyzed.",
+                        data={
+                            "report_id": report_id,
+                            "report_type": notification_report_type,
+                            "summary": "Your uploaded report is ready for review in ArogyaAI.",
+                            "url": "/lab-results",
+                            "severity": "info",
+                        },
+                    )
             except Exception:
                 logger.exception("Failed to trigger processed-report notification for report %s", report_id)
             log_pipeline(
@@ -1167,35 +1171,9 @@ class ReportService:
 
     @classmethod
     async def _retrieve_report_rag_context(cls, structured_data: dict[str, Any]) -> dict[str, Any]:
-        query = cls._build_report_rag_query(structured_data)
-        try:
-            from pipelines.rag_pipeline.config import RagSettings
-            from pipelines.rag_pipeline.corpus import load_corpus_chunks
-            from pipelines.rag_pipeline.keyword import keyword_retrieve
-            from pipelines.rag_pipeline.text_cleaning import clean_source_payload
+        from services.orchestrator import get_orchestrator
 
-            settings = RagSettings()
-            chunks = await asyncio.to_thread(load_corpus_chunks, settings)
-            documents = await asyncio.to_thread(keyword_retrieve, query, chunks, limit=min(settings.top_k, 4))
-            context = {
-                "query": query,
-                "source": "rag_keyword",
-                "documents": [clean_source_payload(doc.as_dict()) for doc in documents],
-                "summary": [clean_source_payload(doc.as_dict()) for doc in documents],
-                "top_chunks": [clean_source_payload(doc.as_dict()) for doc in documents],
-                "error": None,
-            }
-        except Exception as exc:
-            logger.warning("Report summary RAG retrieval failed: %s", exc)
-            context = {
-                "query": query,
-                "source": "rag_unavailable",
-                "documents": [],
-                "summary": [],
-                "top_chunks": [],
-                "error": str(exc),
-            }
-
+        context = await get_orchestrator().rag_pipeline.retrieve_report_context(structured_data)
         cls._log_summary_json("rag_context", context)
         return context
 
@@ -1224,16 +1202,29 @@ class ReportService:
         structured_data: dict[str, Any],
         rag_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        from services.orchestrator import OrchestratorRequest, get_orchestrator
+
+        orchestrated = await get_orchestrator().run(
+            OrchestratorRequest(
+                workflow="report_summary",
+                user_id="report-summary",
+                db=None,
+                payload=structured_data,
+                metadata={"rag_context": rag_context or {}},
+            )
+        )
+        payload = orchestrated.get("data") if isinstance(orchestrated.get("data"), dict) else None
+        if isinstance(payload, dict):
+            return payload
+
         risk_level = cls._compute_lab_risk_level(structured_data)
         deterministic_payload = cls._fallback_clinical_summary_payload(
             structured_data,
             rag_context or {},
             risk_level=risk_level,
         )
-        prompt = cls._clinical_summary_prompt(structured_data, rag_context or {}, risk_level=risk_level)
-        llm_payload = await cls._call_report_summary_llm(prompt)
         return cls._normalize_clinical_summary_payload(
-            llm_payload,
+            None,
             fallback=deterministic_payload,
             structured_data=structured_data,
             computed_risk_level=risk_level,

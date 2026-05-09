@@ -111,6 +111,7 @@ const getTimelineKind = (event) => {
   const category = safeText(event?.category).toLowerCase();
 
   if (type === 'report' || type === 'reports' || category === 'report') return 'report';
+  if (type === 'ai report' || category === 'report_generation') return 'report';
   if (type === 'alerts' || type === 'alert') return 'alert';
   if (type === 'tests' || type === 'test') return 'test';
   if (type === 'clinical history' || type === 'symptom' || category === 'symptom') return 'symptom';
@@ -620,10 +621,28 @@ const Timeline = () => {
                   <CalendarDays size={15} className="text-text-muted" />
                   <span>Year-based Clinical View</span>
                 </div>
-                <button className="inline-flex items-center justify-center gap-2 rounded-2xl bg-background px-5 py-3 text-sm font-bold text-text-primary transition hover:bg-card dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200">
-                  <Download size={15} />
-                  <span>Export Summary</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => navigate(ROUTES.SYMPTOM_ANALYSIS)}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-600 transition hover:border-primary/25 hover:text-primary dark:border-stroke dark:bg-background/60 dark:text-text-secondary dark:hover:text-text-primary"
+                  >
+                    <Sparkles size={15} />
+                    <span>Analyze Symptoms</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => navigate(ROUTES.REPORT_GENERATION)}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-600 transition hover:border-primary/25 hover:text-primary dark:border-stroke dark:bg-background/60 dark:text-text-secondary dark:hover:text-text-primary"
+                  >
+                    <FileText size={15} />
+                    <span>Generate Report</span>
+                  </button>
+                  <button className="inline-flex items-center justify-center gap-2 rounded-2xl bg-background px-5 py-3 text-sm font-bold text-text-primary transition hover:bg-card dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200">
+                    <Download size={15} />
+                    <span>Export Summary</span>
+                  </button>
+                </div>
               </div>
             </div>
 

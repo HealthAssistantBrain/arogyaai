@@ -37,6 +37,7 @@ from services.agents import run_medical_pipeline
 from services.clinical_analysis_service import ClinicalAnalysisService
 from services.clinical_history_service import ClinicalHistoryService
 from services.insight_formatter import build_clinical_card
+from services.ollama_client import ollama_generate_json
 from services.prediction_explanation_service import PredictionExplanationService
 
 logger = logging.getLogger("uvicorn.error")
@@ -2008,6 +2009,7 @@ async def build_patient_context(
     retrieval_query = _clean_text(query)
     if not retrieval_query:
         retrieval_query = " ".join(_coerce_list(user_context.get("symptoms_history"))) or "general preventive health context"
+    db.close()
     rag_context = await retrieve_medical_context(retrieval_query, ml_data=ml_data, user_context=user_context)
     clinical_context = build_clinical_context(
         query=retrieval_query,
@@ -2261,23 +2263,17 @@ Return ONLY valid JSON in this exact format:
 
 
 async def _call_ollama_model(prompt: str, settings: RagSettings, model_name: str) -> dict[str, Any] | None:
-    async with httpx.AsyncClient(timeout=settings.llm_timeout_seconds) as client:
-        response = await client.post(
-            f"{settings.ollama_base_url.rstrip('/')}/api/generate",
-            json={
-                "model": model_name,
-                "prompt": prompt,
-                "stream": False,
-                "format": "json",
-                "options": {
-                    "temperature": 0.2,
-                    "top_p": 0.85,
-                },
-            },
-        )
-        response.raise_for_status()
-        payload = response.json()
-        return _extract_json_object(str(payload.get("response") or ""))
+    result = await ollama_generate_json(
+        prompt=prompt,
+        settings=settings,
+        model_name=model_name,
+        workflow="chat_service",
+        options={
+            "temperature": 0.2,
+            "top_p": 0.85,
+        },
+    )
+    return _extract_json_object(result.get("payload"))
 
 
 async def _call_ollama(prompt: str, settings: RagSettings) -> dict[str, Any] | None:
@@ -2825,97 +2821,39 @@ async def generate_chat_response(
     ) -> dict[str, Any]:
         context = await get_user_health_context(db, user_id, current_user=current_user)
         return _merge_session_context(context, chat_session)
+    from services.orchestrator import OrchestratorRequest, get_orchestrator
 
-    pipeline_result = await run_medical_pipeline(
-        user_id,
-        cleaned_query,
-        db=db,
-        current_user=user,
-        conversation_history=normalized_history,
-        fetch_ml=get_ml_prediction,
-        fetch_user_context=_fetch_user_context_for_pipeline,
-        retrieve_rag=retrieve_medical_context,
-        llm_callable=call_llm,
+    orchestrated = await get_orchestrator().run(
+        OrchestratorRequest(
+            workflow="chatbot",
+            user_id=user_id,
+            db=db,
+            current_user=user,
+            query=cleaned_query,
+            conversation_history=normalized_history,
+            metadata={"chat_session": chat_session},
+        )
     )
-
-    raw_context = pipeline_result["raw_context"]
-    ml_data = raw_context["ml_data"]
-    user_context = raw_context["user_context"]
-    rag_context = raw_context["rag_context"]
-    intent = _understand_user_intent(cleaned_query)
-    turn_symptoms = _extract_symptoms_for_turn(
-        cleaned_query,
-        user_context=user_context,
-        conversation_history=normalized_history,
-        ml_data=ml_data,
-    )
-
-    agent_fallback = pipeline_result.get("final_response")
-    if not isinstance(agent_fallback, dict):
-        agent_fallback = _build_fallback_response(
+    structured = orchestrated.get("data") if isinstance(orchestrated.get("data"), dict) else {}
+    raw_context = structured.get("orchestrator_context") if isinstance(structured.get("orchestrator_context"), dict) else {}
+    ml_data = raw_context.get("ml_data") if isinstance(raw_context.get("ml_data"), dict) else {}
+    user_context = raw_context.get("user_context") if isinstance(raw_context.get("user_context"), dict) else {}
+    rag_context = raw_context.get("rag_context") if isinstance(raw_context.get("rag_context"), dict) else {}
+    final_symptoms = structured.get("symptoms") if isinstance(structured.get("symptoms"), list) else []
+    if not structured:
+        user_context = await _fetch_user_context_for_pipeline(db=db, user_id=user_id, current_user=user)
+        ml_data = await get_ml_prediction(user_id, db=db, current_user=user, user_context=user_context)
+        rag_context = await retrieve_medical_context(cleaned_query, ml_data=ml_data, user_context=user_context)
+        structured = _build_fallback_response(
             query=cleaned_query,
             ml_data=ml_data,
             user_context=user_context,
             rag_context=rag_context,
             conversation_history=normalized_history,
         )
-    agent_fallback = _apply_response_format(agent_fallback)
-    llm_response = pipeline_result.get("llm_response")
-    structured = _normalize_llm_response(llm_response, fallback=agent_fallback) if llm_response else agent_fallback
+        final_symptoms = structured.get("symptoms") if isinstance(structured.get("symptoms"), list) else []
 
-    agent_symptoms = []
-    symptom_analysis = pipeline_result.get("symptom_analysis")
-    if isinstance(symptom_analysis, dict):
-        agent_symptoms = _coerce_list(symptom_analysis.get("symptom_names"))
-    final_symptoms = structured.get("symptoms") or agent_symptoms or turn_symptoms
-    confidence_score = compute_confidence_score(
-        query=cleaned_query,
-        ml_data=ml_data,
-        user_context=user_context,
-        rag_context=rag_context,
-        symptoms=final_symptoms,
-    )
-    structured = _apply_response_format({**structured, "confidence_score": confidence_score})
-    structured["sources"] = [clean_source_payload(item) for item in rag_context.get("summary") or []]
     structured["generated_at"] = _iso(_now_utc())
-    structured["reasoning"] = pipeline_result.get("reasoning") or {}
-    structured["reasoning_steps"] = pipeline_result.get("reasoning_steps") or _build_reasoning_steps(
-        intent=intent,
-        symptoms=final_symptoms,
-        ml_data=ml_data,
-        rag_context=rag_context,
-        risk_level=structured.get("risk_level") or "low",
-        confidence_score=confidence_score,
-    )
-    structured["agent_trace"] = pipeline_result.get("agent_trace") or []
-    structured["pipeline_source"] = pipeline_result.get("source") or "multi_agent_deterministic"
-    structured["agent_outputs"] = {
-        "symptom_analysis": pipeline_result.get("symptom_analysis") or {},
-        "ml_interpretation": pipeline_result.get("ml_interpretation") or {},
-        "rag": {
-            "source": rag_context.get("source"),
-            "cache_hit": bool(rag_context.get("cache_hit")),
-            "documents_used": len(rag_context.get("summary") or []),
-        },
-        "clinical_reasoning": pipeline_result.get("clinical_reasoning") or {},
-        "safety": pipeline_result.get("safety") or {},
-    }
-    structured["used_context"] = {
-        "has_ml_prediction": bool(ml_data),
-        "has_clinical_history": bool(user_context.get("clinical_history")),
-        "has_vitals": bool(user_context.get("vitals")),
-        "has_labs": bool(user_context.get("lab_results")),
-        "history_messages_used": len(normalized_history),
-        "session_messages_used": len(_normalize_history(_session_messages(chat_session))),
-        "symptoms_remembered": _session_symptoms(chat_session),
-        "follow_up_pending": bool(getattr(chat_session, "follow_up_pending", False)),
-        "retrieval_source": rag_context.get("source"),
-        "rag_cache_hit": bool(rag_context.get("cache_hit")),
-        "prediction_id": ml_data.get("prediction_id"),
-        "ml_source": ml_data.get("source"),
-        "ml_fallback_used": ml_data.get("source") == "baseline_logic",
-        "safety_override": bool((pipeline_result.get("safety") or {}).get("override")),
-    }
     _append_chat_session_turn(
         db,
         chat_session,
@@ -2934,15 +2872,15 @@ async def generate_chat_response(
             user_context=user_context,
             rag_context=rag_context,
             conversation_history=normalized_history,
-            structured_output=structured,
-        )
+        structured_output=structured,
+    )
     except Exception as exc:
         logger.warning("Failed to write chat training log for user=%s: %s", user_id, exc)
 
     return {
         "success": True,
-        "status": "ready",
-        "source": "llm+rag" if llm_response else "grounded_fallback",
+        "status": orchestrated.get("status") if isinstance(orchestrated, dict) else "ready",
+        "source": orchestrated.get("source") if isinstance(orchestrated, dict) else "ai_orchestrator",
         "error": None,
         "data": structured,
     }

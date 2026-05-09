@@ -1,12 +1,11 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 import { isSystemLocked } from './systemLock';
-import { getApiRootUrl, getApiUrl } from './apiBaseUrl';
+import { getApiUrl } from './apiBaseUrl';
 import { applyCsrfHeader } from './csrf';
 import { getSupabaseClient, supabase } from './supabaseClient';
 import { useSystemHealthStore } from '../store/systemHealthStore';
 
-const BASE_URL = getApiRootUrl(import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000');
 const API_URL = getApiUrl(import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000');
 
 console.log('[ArogyaAI] API Base URL configured:', API_URL);
@@ -14,7 +13,7 @@ console.log('[ArogyaAI] API Base URL configured:', API_URL);
 const api = axios.create({
   baseURL: API_URL,
   withCredentials: true,
-  timeout: 60000,
+  timeout: 120000,
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -80,11 +79,6 @@ export function setAuthFlow(active) {
   }
 }
 
-// ── Maintenance mode state ────────────────────────────────────────────────────
-// Activated only after TWO consecutive /health failures — not on single errors.
-let consecutiveHealthFailures = 0;
-const MAX_HEALTH_FAILURES = 2;
-
 // Patterns that must NEVER trigger the maintenance redirect.
 // /auth/ covers login, signup, logout, refresh-token, verify-email.
 // /users covers /users/me (profile fetch/update) used during auth hydration.
@@ -120,31 +114,18 @@ async function checkAndTriggerMaintenance() {
   }
 
   try {
-    const response = await axios.get(`${BASE_URL}/health`, { timeout: 5000 });
-    const backendStatus = String(response.data?.status || '').toLowerCase();
-
-    if (response.status === 503 || response.status < 200 || response.status >= 300 || backendStatus === 'down') {
-      throw new Error(`Health check returned ${response.status}${backendStatus ? `/${backendStatus}` : ''}`);
-    }
-
-    consecutiveHealthFailures = 0; // reset on success
-    useSystemHealthStore.getState().setMaintenance(false);
-  } catch {
-    consecutiveHealthFailures += 1;
-    console.warn(`[Maintenance] Health failure #${consecutiveHealthFailures}/${MAX_HEALTH_FAILURES}`);
-    if (consecutiveHealthFailures >= MAX_HEALTH_FAILURES) {
-      console.warn('[Maintenance] TRIGGERED — backend health is down');
-      useSystemHealthStore.getState().setMaintenance(true, 'Backend health check failed');
-    }
+    await useSystemHealthStore.getState().checkHealth({
+      mode: 'interceptor',
+      source: 'api_interceptor',
+    });
+  } catch (healthError) {
+    console.warn('[Maintenance] Health recheck failed unexpectedly:', healthError?.message || healthError);
   }
 }
 
 // ── Response interceptor: classify errors, retry, isolate failures ────────────
 api.interceptors.response.use(
-  (response) => {
-    consecutiveHealthFailures = 0; // any 2xx resets the failure counter
-    return response;
-  },
+  (response) => response,
   async (error) => {
     const config = error.config;
 
@@ -217,10 +198,12 @@ api.interceptors.response.use(
     // ── Classify error ────────────────────────────────────────────────────────
     const isNetworkError = !error.response;              // no response at all
     const isServerError = error.response?.status >= 500; // 5xx
+    const maxRetries = Number.isFinite(Number(config?.maxRetries)) ? Number(config.maxRetries) : 1;
+    const retryCount = Number.isFinite(Number(config?._retryCount)) ? Number(config._retryCount) : 0;
 
     // ── ONE automatic retry for network errors and 5xx ───────────────────────
-    if ((isNetworkError || isServerError) && !config._retried) {
-      config._retried = true;
+    if ((isNetworkError || isServerError) && !config?.__skipAutoRetry && retryCount < maxRetries) {
+      config._retryCount = retryCount + 1;
       await new Promise((r) => setTimeout(r, 800)); // brief back-off
       try {
         return await api(config);

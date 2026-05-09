@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import hashlib
+import inspect
 import json
 import logging
 import time
@@ -290,7 +291,8 @@ class RAGKnowledgeAgent:
 
         if retrieve_fn is not None:
             try:
-                raw = await retrieve_fn(search_query, ml_data=ml_data or {}, user_context=user_context or {})
+                raw_result = retrieve_fn(search_query, ml_data=ml_data or {}, user_context=user_context or {})
+                raw = await raw_result if inspect.isawaitable(raw_result) else raw_result
             except Exception as exc:
                 logger.warning("RAG retrieval failed, using minimal medical context: %s", exc)
                 raw = _minimal_rag_context(search_query, error=str(exc))

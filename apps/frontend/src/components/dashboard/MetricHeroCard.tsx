@@ -10,6 +10,7 @@ import {
 import { ArrowDownRight, ArrowRight, ArrowUpRight, Footprints, Target } from 'lucide-react';
 import { buildChartSeries } from './MetricMiniCard';
 import type { DashboardMetric, MetricStatus } from './MetricMiniCard';
+import MetricRangeToggle, { type MetricRangeOption } from './MetricRangeToggle';
 
 const statusStyles: Record<MetricStatus, string> = {
   normal: 'bg-emerald-500/10 text-emerald-700 ring-emerald-500/20 dark:text-emerald-300',
@@ -23,7 +24,15 @@ const trendIcons = {
   flat: ArrowRight,
 };
 
-const MetricHeroCard = ({ metric }: { metric: DashboardMetric }) => {
+const MetricHeroCard = ({
+  metric,
+  selectedRange,
+  onRangeChange,
+}: {
+  metric: DashboardMetric;
+  selectedRange: MetricRangeOption;
+  onRangeChange: (next: MetricRangeOption) => void;
+}) => {
   const Icon = metric.Icon;
   const TrendIcon = trendIcons[metric.trend ?? 'flat'];
   const chartId = `heroGradient-${metric.key.replace(/[^a-z0-9]/gi, '-')}`;
@@ -45,6 +54,7 @@ const MetricHeroCard = ({ metric }: { metric: DashboardMetric }) => {
             <p className="mb-2 text-[11px] font-black uppercase tracking-[0.22em] text-slate-500/85 dark:text-text-secondary">
               {metric.title}
             </p>
+            <MetricRangeToggle value={selectedRange} onChange={onRangeChange} highlightId={metric.key} />
           </div>
           <div
             className="flex size-14 shrink-0 items-center justify-center rounded-3xl border border-white/80 bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_10px_22px_rgba(15,23,42,0.08)] dark:border-stroke dark:bg-white/10"
@@ -128,7 +138,15 @@ const MetricHeroCard = ({ metric }: { metric: DashboardMetric }) => {
                 <CartesianGrid stroke="rgba(255,255,255,0.55)" vertical={false} strokeDasharray="4 8" />
                 <Tooltip
                   cursor={{ stroke: metric.theme.chart, strokeOpacity: 0.16, strokeWidth: 1 }}
-                  contentStyle={{ display: 'none' }}
+                  formatter={(pointValue) => [pointValue, metric.unit ?? '']}
+                  labelFormatter={(_value, payload) => payload?.[0]?.payload?.xLabel ?? ''}
+                  contentStyle={{
+                    borderRadius: 18,
+                    border: '1px solid rgba(255,255,255,0.22)',
+                    background: 'rgba(15,23,42,0.88)',
+                    color: '#f8fafc',
+                    boxShadow: '0 18px 44px rgba(15,23,42,0.24)',
+                  }}
                   wrapperStyle={{ outline: 'none' }}
                 />
                 {metric.mode === 'blood_pressure' ? (

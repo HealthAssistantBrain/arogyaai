@@ -1,20 +1,24 @@
 import { useAuthStore } from '../store/authStore';
 import { isSystemLocked } from '../lib/systemLock';
 import { shouldRevalidate, consumeAuthRevalidation } from '../lib/authRevalidator';
-import { getApiRootUrl } from '../lib/apiBaseUrl';
+import {
+  buildBootstrapErrorSummary,
+  formatBootstrapFailureCause,
+  isCriticalBootstrapError,
+  summarizeHealthResult,
+} from '../lib/systemReadiness';
 import { useSystemHealthStore } from '../store/systemHealthStore';
 import { ROUTES } from './routes';
 import { getAuthenticatedHomeRoute, getProtectedRouteRedirect } from './authRedirects';
 
 export type InitResult = { route: string | null; cause: string } | null;
-type HealthResult = { status: 'ready' | 'degraded' | 'down'; cause?: string };
+type InitResolverOptions = {
+  trigger?: string;
+  skipHealthCheck?: boolean;
+};
 
-const INIT_TIMEOUT_MS = 10000;
-const HEALTH_TIMEOUT_MS = 2500;
-
-const API_ROOT_URL = getApiRootUrl(
-  (import.meta as any).env?.VITE_API_URL || (import.meta as any).env?.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
-);
+const INIT_TIMEOUT_MS = 15000;
+let activeInitPromise: Promise<InitResult> | null = null;
 
 const PROTECTED_ROUTE_BASES = [
   ROUTES.ACCOUNT_CREATED,
@@ -85,49 +89,62 @@ const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, label: st
   }
 };
 
-const checkHealth = async (): Promise<HealthResult> => {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
+const logInit = (phase: string, payload: Record<string, unknown>, level: 'debug' | 'info' | 'warn' = 'debug') => {
+  const logger =
+    level === 'warn'
+      ? console.warn.bind(console)
+      : level === 'info'
+        ? console.info.bind(console)
+        : console.debug.bind(console);
 
-  try {
-    const response = await fetch(`${API_ROOT_URL}/health`, {
-      method: 'GET',
-      credentials: 'include',
-      signal: controller.signal,
-    });
-
-    if (response.status >= 500) {
-      return { status: 'down', cause: `Health check returned ${response.status}` };
-    }
-
-    let payload: any = null;
-    try {
-      payload = await response.json();
-    } catch {
-      payload = null;
-    }
-
-    if (!response.ok) {
-      return { status: 'degraded', cause: `Health check returned ${response.status}` };
-    }
-
-    if (payload?.status === 'down') {
-      return { status: 'down', cause: 'Backend health status is down' };
-    }
-
-    if (payload?.status === 'degraded' || payload?.success === false) {
-      return { status: 'degraded', cause: 'Backend health status is degraded' };
-    }
-
-    return { status: 'ready' };
-  } catch (error: any) {
-    return { status: 'down', cause: error?.name === 'AbortError' ? 'Health check timed out' : error?.message };
-  } finally {
-    window.clearTimeout(timeout);
-  }
+  logger(`[STARTUP] ${phase}`, payload);
 };
 
-export async function INIT_RESOLVER(): Promise<InitResult> {
+const getStableHealthSnapshot = () => {
+  const state = useSystemHealthStore.getState();
+  if (!['ready', 'degraded', 'down'].includes(state.status)) return null;
+
+  return {
+    status: state.status,
+    cause: state.cause,
+    maintenanceEligible: state.status === 'down',
+    durationMs: state.lastProbe?.durationMs ?? null,
+    attempt: state.lastProbe?.attempt ?? null,
+    httpStatus: state.lastProbe?.httpStatus ?? null,
+    criticalServices: state.lastProbe?.criticalServices ?? [],
+    optionalServices: state.lastProbe?.optionalServices ?? [],
+    mode: 'cached',
+  };
+};
+
+const buildAuthRecoveryResult = ({
+  pathname,
+  isProtectedPath,
+  isMaintenancePath,
+  cause,
+}: {
+  pathname: string;
+  isProtectedPath: boolean;
+  isMaintenancePath: boolean;
+  cause: string;
+}): InitResult => {
+  logInit('auth.degraded', { pathname, isProtectedPath, cause }, 'warn');
+
+  if (isMaintenancePath) {
+    return { route: ROUTES.HOME, cause };
+  }
+
+  if (isProtectedPath) {
+    return { route: ROUTES.HOME, cause };
+  }
+
+  return null;
+};
+
+const runInitResolver = async ({
+  trigger = 'startup',
+  skipHealthCheck = false,
+}: InitResolverOptions = {}): Promise<InitResult> => {
   if (isSystemLocked() && !shouldRevalidate()) return null;
 
   if (shouldRevalidate()) consumeAuthRevalidation();
@@ -137,32 +154,88 @@ export async function INIT_RESOLVER(): Promise<InitResult> {
   const isAuthCallbackPath = pathname === ROUTES.AUTH_CALLBACK;
   const isMaintenancePath = pathname === ROUTES.MAINTENANCE;
   const store = useAuthStore.getState();
+  const systemHealthStore = useSystemHealthStore.getState();
 
   try {
-    console.debug('[INIT_RESOLVER] start', { pathname, isProtectedPath });
+    logInit('resolver.start', { trigger, pathname, isProtectedPath, skipHealthCheck });
     await waitForStoreHydration();
+    logInit('persist.hydrated', { trigger }, 'info');
 
     if (isAuthCallbackPath) {
       useAuthStore.setState({ isHydrated: true, isHydratingAuth: false });
       return null;
     }
 
-    const health = await checkHealth();
-    console.debug('[INIT_RESOLVER] health', health);
-    if (health.status === 'down') {
-      useSystemHealthStore.getState().setMaintenance(true, health.cause || 'Backend health check failed');
-      return { route: ROUTES.MAINTENANCE, cause: health.cause || 'Backend health check failed' };
-    }
-    useSystemHealthStore.getState().setMaintenance(false);
+    const healthPromise = async () => {
+      if (skipHealthCheck) {
+        const cachedHealth = getStableHealthSnapshot();
+        if (cachedHealth) {
+          logInit('health.reuse', summarizeHealthResult(cachedHealth) || {}, 'info');
+          return cachedHealth;
+        }
+      }
 
-    const state = await withTimeout(store.hydrateAuth(), INIT_TIMEOUT_MS, 'Auth initialization');
-    const currentState = state || useAuthStore.getState();
-    console.debug('[INIT_RESOLVER] /users/me resolved', {
+      return await systemHealthStore.checkHealth({
+        mode: 'startup',
+        source: trigger,
+      });
+    };
+
+    const [resolvedHealth, hydratedState] = await Promise.all([
+      healthPromise(),
+      withTimeout(store.hydrateAuth(), INIT_TIMEOUT_MS, 'Auth initialization'),
+    ]);
+
+    const currentState = hydratedState || useAuthStore.getState();
+    const hydrationError = currentState.lastHydrationError;
+
+    logInit('health.resolved', summarizeHealthResult(resolvedHealth) || {}, resolvedHealth?.status === 'down' ? 'warn' : 'info');
+
+    if (resolvedHealth.status === 'down') {
+      logInit(
+        'maintenance.enter',
+        {
+          trigger,
+          reason: resolvedHealth.cause || 'Core backend unavailable.',
+          criticalServices: resolvedHealth.criticalServices || [],
+        },
+        'warn'
+      );
+      return {
+        route: ROUTES.MAINTENANCE,
+        cause: resolvedHealth.cause || 'Core backend unavailable.',
+      };
+    }
+
+    if (
+      hydrationError &&
+      currentState.authBootstrapStatus === 'degraded' &&
+      currentState.isAuthenticated &&
+      !!currentState.user?.id
+    ) {
+      logInit('auth.degraded.continuing', {
+        trigger,
+        pathname,
+        message: hydrationError.message,
+        status: hydrationError.status ?? null,
+      }, 'warn');
+    } else if (isCriticalBootstrapError(hydrationError)) {
+      const cause = formatBootstrapFailureCause(hydrationError);
+      return buildAuthRecoveryResult({
+        pathname,
+        isProtectedPath,
+        isMaintenancePath,
+        cause,
+      });
+    }
+
+    logInit('auth.hydrated', {
+      trigger,
       isAuthenticated: currentState.isAuthenticated,
       hasUser: !!currentState.user?.id,
       onboardingDone: currentState.onboardingDone,
       onboardingStep: currentState.onboardingStep,
-    });
+    }, 'info');
 
     if (!currentState.isAuthenticated) {
       if (isMaintenancePath) {
@@ -198,14 +271,36 @@ export async function INIT_RESOLVER(): Promise<InitResult> {
       if (redirect && redirect !== pathname) {
         return { route: redirect, cause: 'Protected route onboarding gate' };
       }
-      console.debug('[INIT_RESOLVER] route allowed', { pathname });
+      logInit('route.allowed', { trigger, pathname });
     }
 
     return null;
   } catch (err: any) {
+    const hydrationError = buildBootstrapErrorSummary('hydrate_auth', err);
+
+    if (isCriticalBootstrapError(hydrationError)) {
+      const cause = formatBootstrapFailureCause(hydrationError);
+      return buildAuthRecoveryResult({
+        pathname,
+        isProtectedPath,
+        isMaintenancePath,
+        cause,
+      });
+    }
+
     console.warn('[INIT_RESOLVER] Auth bootstrap failed:', err?.message);
     store.reset();
     store.setHydrated();
     return isProtectedPath ? { route: ROUTES.HOME, cause: `Failed auth check: ${err?.message}` } : null;
   }
+};
+
+export async function INIT_RESOLVER(options: InitResolverOptions = {}): Promise<InitResult> {
+  if (activeInitPromise) return activeInitPromise;
+
+  activeInitPromise = runInitResolver(options).finally(() => {
+    activeInitPromise = null;
+  });
+
+  return activeInitPromise;
 }

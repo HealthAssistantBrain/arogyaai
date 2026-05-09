@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, LayoutDashboard, Sparkles, FlaskConical, FileText, Moon, Watch, TrendingUp, History, Upload, Settings, Bell, Wind } from 'lucide-react';
+import { Search, LayoutDashboard, Sparkles, FlaskConical, FileText, Moon, Watch, TrendingUp, History, Upload, Settings, Bell, Wind, Stethoscope } from 'lucide-react';
 import { ROUTES } from '../router/routes';
 
 // ── Command registry ─────────────────────────────────────────────────────────
@@ -9,6 +9,8 @@ const COMMANDS = [
     { name: 'AI Insights', icon: Sparkles, path: ROUTES.INSIGHTS, keywords: ['ai', 'analytics', 'predict'] },
     { name: 'Lab Results', icon: FlaskConical, path: ROUTES.LAB_RESULTS, keywords: ['lab', 'test', 'blood', 'results'] },
     { name: 'Medical Reports', icon: FileText, path: ROUTES.MEDICAL_REPORTS, keywords: ['report', 'pdf', 'document', 'scan'] },
+    { name: 'Symptom Analysis', icon: Stethoscope, path: ROUTES.SYMPTOM_ANALYSIS, keywords: ['symptom', 'analysis', 'intake', 'reasoning'] },
+    { name: 'Report Generation', icon: FileText, path: ROUTES.REPORT_GENERATION, keywords: ['generated report', 'clinical summary', 'pdf export'] },
     { name: 'Sleep Analysis', icon: Moon, path: ROUTES.SLEEP, keywords: ['sleep', 'rest', 'night'] },
     { name: 'Device Manager', icon: Watch, path: ROUTES.DEVICES, keywords: ['device', 'watch', 'google fit', 'wearable'] },
     { name: 'Disease Simulator', icon: TrendingUp, path: ROUTES.SIMULATOR, keywords: ['simulator', 'risk', 'disease'] },

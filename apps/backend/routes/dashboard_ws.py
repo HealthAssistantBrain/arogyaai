@@ -4,19 +4,20 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
 from database.session import SessionLocal
+from models import User
 from services.auth_service import AuthService
 from services.dashboard_realtime import build_realtime_payload, dashboard_connection_manager
 
 router = APIRouter(tags=["Dashboard Realtime"])
 
 
-def _authenticate_dashboard_socket(websocket: WebSocket, user_id: str) -> User | None:
+async def _authenticate_dashboard_socket(websocket: WebSocket, user_id: str) -> User | None:
     token = websocket.query_params.get("token")
     if not token:
         return None
 
     try:
-        payload = AuthService._decode_supabase_token(token)
+        payload = await AuthService._decode_supabase_token(token)
     except Exception:
         return None
 
@@ -34,16 +35,24 @@ def _authenticate_dashboard_socket(websocket: WebSocket, user_id: str) -> User |
 
 @router.websocket("/ws/dashboard/{user_id}")
 async def dashboard_socket(websocket: WebSocket, user_id: str):
-    current_user = _authenticate_dashboard_socket(websocket, user_id)
+    current_user = await _authenticate_dashboard_socket(websocket, user_id)
     if not current_user:
         await websocket.close(code=1008)
         return
 
     await dashboard_connection_manager.connect(str(current_user.id), websocket)
 
-    db: Session = SessionLocal()
     try:
-        initial_payload = await build_realtime_payload(db, current_user)
+        db: Session = SessionLocal()
+        try:
+            fresh_user = db.query(User).filter(User.id == current_user.id, User.is_deleted == False).first()
+            if not fresh_user:
+                await websocket.close(code=1008)
+                return
+            initial_payload = await build_realtime_payload(db, fresh_user)
+        finally:
+            db.close()
+
         await websocket.send_json(
             {
                 "type": "dashboard.update",
@@ -59,4 +68,3 @@ async def dashboard_socket(websocket: WebSocket, user_id: str):
         pass
     finally:
         await dashboard_connection_manager.disconnect(str(current_user.id), websocket)
-        db.close()

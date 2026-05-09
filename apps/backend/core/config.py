@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     SUPABASE_SERVICE_ROLE_KEY: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
     SUPABASE_STORAGE_SIGNED_URL_TTL_SECONDS: int = int(os.getenv("SUPABASE_STORAGE_SIGNED_URL_TTL_SECONDS", "900"))
 
+    # ANALYTICS DATABASE ROUTING
+    ANALYTICS_DB_MODE: str = os.getenv("ANALYTICS_DB_MODE", "primary").strip().lower()
+    NEON_DATABASE_URL: str = os.getenv("NEON_DATABASE_URL", os.getenv("ANALYTICS_DATABASE_URL", "")).strip()
+    NEON_DIRECT_URL: str = os.getenv("NEON_DIRECT_URL", os.getenv("ANALYTICS_DIRECT_URL", "")).strip()
+    TIMESCALE_ENABLED: bool = os.getenv("TIMESCALE_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+    ANALYTICS_DB_READ_FALLBACK: bool = os.getenv("ANALYTICS_DB_READ_FALLBACK", "true").strip().lower() in {"1", "true", "yes", "on"}
+
     # GOOGLE FIT
     GOOGLE_FIT_CLIENT_ID: str = os.getenv("GOOGLE_FIT_CLIENT_ID", "")
     GOOGLE_FIT_CLIENT_SECRET: str = os.getenv("GOOGLE_FIT_CLIENT_SECRET", "")
@@ -60,6 +67,13 @@ class Settings(BaseSettings):
     )
     SUPABASE_AUDIENCE: str = os.getenv("SUPABASE_AUDIENCE", "authenticated")
     SUPABASE_JWT_ISSUER: str = os.getenv("SUPABASE_JWT_ISSUER", "").strip()
+    SUPABASE_JWKS_CACHE_TTL_SECONDS: int = int(os.getenv("SUPABASE_JWKS_CACHE_TTL_SECONDS", "600"))
+    SUPABASE_JWKS_STALE_TTL_SECONDS: int = int(os.getenv("SUPABASE_JWKS_STALE_TTL_SECONDS", "86400"))
+    SUPABASE_JWKS_FETCH_TIMEOUT_SECONDS: float = float(os.getenv("SUPABASE_JWKS_FETCH_TIMEOUT_SECONDS", "3.0"))
+    SUPABASE_JWKS_FETCH_RETRIES: int = int(os.getenv("SUPABASE_JWKS_FETCH_RETRIES", "2"))
+    SUPABASE_JWKS_RETRY_BACKOFF_SECONDS: float = float(os.getenv("SUPABASE_JWKS_RETRY_BACKOFF_SECONDS", "0.75"))
+    SUPABASE_JWKS_STARTUP_WARMUP: bool = os.getenv("SUPABASE_JWKS_STARTUP_WARMUP", "true").strip().lower() in {"1", "true", "yes", "on"}
+    SUPABASE_AUTH_STARTUP_TIMEOUT_SECONDS: float = float(os.getenv("SUPABASE_AUTH_STARTUP_TIMEOUT_SECONDS", "5.0"))
     
     class Config:
         case_sensitive = True
@@ -116,6 +130,16 @@ def _validate_settings():
         missing.append(
             "DATABASE_URL or POSTGRES_DB — Set your PostgreSQL connection string"
         )
+    analytics_mode = (settings.ANALYTICS_DB_MODE or "primary").strip().lower().replace("-", "_")
+    if analytics_mode in {"dual_write", "analytics"}:
+        if not settings.NEON_DATABASE_URL:
+            missing.append(
+                "NEON_DATABASE_URL — Get the pooled Neon connection string from Neon Console → Project → Connection Details"
+            )
+        if not settings.NEON_DIRECT_URL:
+            missing.append(
+                "NEON_DIRECT_URL — Get the direct Neon connection string from Neon Console → Project → Connection Details"
+            )
         
     if missing:
         border = "=" * 70

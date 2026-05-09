@@ -857,7 +857,9 @@ class GoogleFitService:
             if cached_access_token:
                 return cached_access_token
 
+        user_device_id = user_device.id
         connection = db.query(GoogleFitConnection).filter(GoogleFitConnection.user_id == user_device.user_id).first()
+        connection_id = getattr(connection, "id", None)
         refresh_token = decrypt_secret(user_device.refresh_token)
         if not refresh_token and connection:
             refresh_token = decrypt_secret(connection.refresh_token_encrypted)
@@ -868,6 +870,7 @@ class GoogleFitService:
             )
 
         logger.info("[GFit] TOKEN REFRESH STARTED | user=%s", user_device.user_id)
+        db.close()
         response = await GoogleFitService._google_api_request(
             "POST",
             GOOGLE_TOKEN_URL,
@@ -898,13 +901,24 @@ class GoogleFitService:
 
         expires_in = token_data.get("expires_in") or 3600
         refresh_token = token_data.get("refresh_token") or refresh_token
+        refreshed_user_device = db.query(UserDevice).filter(UserDevice.id == user_device_id).first()
+        refreshed_connection = (
+            db.query(GoogleFitConnection).filter(GoogleFitConnection.id == connection_id).first()
+            if connection_id is not None
+            else None
+        )
+        if refreshed_user_device is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Google Fit device connection no longer exists.",
+            )
         GoogleFitService._persist_refreshed_access_token(
             db,
-            user_device,
+            refreshed_user_device,
             access_token,
             int(expires_in),
             refresh_token=refresh_token,
-            connection=connection,
+            connection=refreshed_connection,
         )
         logger.info("[GFit] TOKEN REFRESHED | user=%s | expires_in=%s", user_device.user_id, expires_in)
         db.commit()
@@ -4431,6 +4445,7 @@ class GoogleFitService:
         )
         sync_session_id = str(uuid.uuid4())
         external_failure_detected = False
+        db.close()
         try:
             all_data_sources = await GoogleFitService._list_data_sources(access_token)
         except HTTPException as exc:
@@ -4754,6 +4769,7 @@ class GoogleFitService:
             if background_sync is not None:
                 no_data_raw_response["background_sync"] = background_sync
 
+            connection.default_timezone = resolved_timezone
             connection.raw_last_response = no_data_raw_response
             connection.last_synced_at = sync_timestamp
             connection.last_sync_status = "failed" if has_external_failure else ("partial" if partial else "no_data")
@@ -4872,6 +4888,7 @@ class GoogleFitService:
             }
         else:
             background_sync = None
+        connection.default_timezone = resolved_timezone
         connection.raw_last_response = {
             "vitals_synced": len(saved_records),
             "wearable_metrics_synced": len(saved_wearable_metrics),
@@ -4976,6 +4993,7 @@ class GoogleFitService:
             logger.exception("[GFit] Alert generation failed for user=%s", user.id)
         if saved_records:
             try:
+                db.close()
                 await run_in_threadpool(run_pipeline, str(user.id))
             except Exception:
                 logger.exception("[GFit] Auto pipeline run failed for user=%s", user.id)
@@ -5109,6 +5127,7 @@ class GoogleFitService:
                 start_millis,
                 end_millis,
             )
+            db.close()
             result = await GoogleFitService.sync_steps(
                 db,
                 user,

@@ -161,6 +161,7 @@ const PreventiveRecommendations = () => {
     const predictionId = useDashboardStore((state) => state.prediction?.data?.prediction_id ?? null);
 
     const [selectedPlanIndex, setSelectedPlanIndex] = useState(0);
+    const loadKeyRef = useRef(null);
     const refreshKeyRef = useRef(null);
     const plans = useMemo(
         () => (recommendationPlans?.length ? recommendationPlans : (recommendationPlan ? [recommendationPlan] : [])),
@@ -177,6 +178,10 @@ const PreventiveRecommendations = () => {
     );
 
     useEffect(() => {
+        const loadKey = predictionId ?? 'latest';
+        if (loadKeyRef.current === loadKey) return;
+
+        loadKeyRef.current = loadKey;
         const silent = hasExplanationSnapshot || hasPlan;
         const loadPage = async () => {
             try {
@@ -191,7 +196,7 @@ const PreventiveRecommendations = () => {
         };
 
         void loadPage();
-    }, [fetchDashboardData, fetchHealthMetrics, fetchExplanation, hasExplanationSnapshot, hasPlan, predictionId]);
+    }, [fetchDashboardData, fetchHealthMetrics, fetchExplanation, predictionId, hasExplanationSnapshot, hasPlan]);
 
     useEffect(() => {
         if (!dashboardUpdatedAt) return;

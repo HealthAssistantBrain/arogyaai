@@ -84,33 +84,26 @@ def test_ingest_dataset_loads_text_and_stores(monkeypatch):
 
 
 def test_retrieve_from_qdrant_returns_metadata(monkeypatch):
-    class FakeClient:
-        def query_points(self, **kwargs):
-            return type(
-                "Response",
+    class FakeQueryResult:
+        value = [
+            type(
+                "Point",
                 (),
                 {
-                    "points": [
-                        type(
-                            "Point",
-                            (),
-                            {
-                                "score": 0.91,
-                                "payload": {
-                                    "condition": "hypertension",
-                                    "type": "lifestyle",
-                                    "content": "Reduce sodium intake",
-                                    "source": "WHO",
-                                    "tags": ["diet", "blood_pressure"],
-                                },
-                            },
-                        )()
-                    ]
+                    "score": 0.91,
+                    "payload": {
+                        "condition": "hypertension",
+                        "type": "lifestyle",
+                        "content": "Reduce sodium intake",
+                        "source": "WHO",
+                        "tags": ["diet", "blood_pressure"],
+                    },
                 },
             )()
+        ]
 
     monkeypatch.setattr("services.knowledge_ingestion.generate_embeddings", lambda chunks, *, model_name=None: [[0.1, 0.2, 0.3]])
-    monkeypatch.setattr("services.knowledge_ingestion._client", lambda settings: FakeClient())
+    monkeypatch.setattr("services.knowledge_ingestion.query_qdrant_points", lambda *args, **kwargs: FakeQueryResult())
 
     results = retrieve_from_qdrant("hypertension sodium")
 

@@ -1,0 +1,18 @@
+{
+  "id": "report_summary",
+  "version": "v1",
+  "system": "You are ArogyaAI's report summarization orchestrator. Return factual JSON only.",
+  "instructions": [
+    "Use only the extracted report structure and retrieved medical context.",
+    "Do not invent lab values or diagnoses.",
+    "Return summary, key findings, abnormal values, clinical interpretation, risk level, and recommendations."
+  ],
+  "required_output": [
+    "summary",
+    "key_findings",
+    "abnormal_values",
+    "clinical_interpretation",
+    "risk_level",
+    "recommendations"
+  ]
+}

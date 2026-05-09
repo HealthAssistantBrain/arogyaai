@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from core.celery_app import celery_app
-from database.session import SessionLocal
+from database.session import session_scope
 from models import GoogleFitConnection, User
 from services.google_fit_service import (
     GOOGLE_FIT_DEFAULT_FETCH_WINDOW_DAYS,
@@ -94,8 +94,7 @@ def sync_google_fit_for_user_task(
     )
 
     # ── AUTH GUARD ──────────────────────────────────────────────
-    db = SessionLocal()
-    try:
+    with session_scope(label="google_fit_task.auth_guard") as db:
         user_uuid = uuid.UUID(str(user_id))
         user = db.query(User).filter(User.id == user_uuid, User.is_deleted == False).first()
         if not user:
@@ -115,8 +114,6 @@ def sync_google_fit_for_user_task(
         )
         if blocked_result is not None:
             return blocked_result
-    finally:
-        db.close()
 
     # ── CANCELLATION CHECK ─────────────────────────────────────
     if _is_sync_cancelled(user_id):
@@ -138,33 +135,32 @@ def sync_google_fit_for_user_task(
             "user_id": user_id,
         }
 
-    db = SessionLocal()
     try:
-        user_uuid = uuid.UUID(str(user_id))
-        user = db.query(User).filter(User.id == user_uuid, User.is_deleted == False).first()
-        if not user:
-            return {
-                "success": False,
-                "status": "not_found",
-                "message": "User not found for Google Fit sync",
-                "user_id": user_id,
-            }
+        with session_scope(label=f"google_fit_task.sync:{user_id}") as db:
+            user_uuid = uuid.UUID(str(user_id))
+            user = db.query(User).filter(User.id == user_uuid, User.is_deleted == False).first()
+            if not user:
+                return {
+                    "success": False,
+                    "status": "not_found",
+                    "message": "User not found for Google Fit sync",
+                    "user_id": user_id,
+                }
 
-        logger.info("SYNC_START | task_id=%s | user=%s | source=celery | days=%s", task_id, user_id, requested_days)
-        result = asyncio.run(
-            GoogleFitService.sync_steps_paginated(
-                db,
-                user,
-                timezone_name=timezone_name,
-                days=requested_days,
-                page_size_days=GOOGLE_FIT_PAGE_SIZE_DAYS,
+            logger.info("SYNC_START | task_id=%s | user=%s | source=celery | days=%s", task_id, user_id, requested_days)
+            result = asyncio.run(
+                GoogleFitService.sync_steps_paginated(
+                    db,
+                    user,
+                    timezone_name=timezone_name,
+                    days=requested_days,
+                    page_size_days=GOOGLE_FIT_PAGE_SIZE_DAYS,
+                )
             )
-        )
 
-        logger.info("SYNC_COMPLETE | user=%s | source=celery | status=%s", user_id, result.get("status"))
-        return result
+            logger.info("SYNC_COMPLETE | user=%s | source=celery | status=%s", user_id, result.get("status"))
+            return result
     except Exception as exc:
-        db.rollback()
         logger.exception(
             "SYNC_FAILED | user=%s | retry_count=%s | error=%s",
             user_id,
@@ -172,19 +168,19 @@ def sync_google_fit_for_user_task(
             exc,
         )
         try:
-            user_uuid = uuid.UUID(str(user_id))
-            user = db.query(User).filter(User.id == user_uuid, User.is_deleted == False).first()
-            return GoogleFitService.build_fault_tolerant_sync_failure_response(
-                db,
-                user,
-                exc,
-                timezone_name=timezone_name,
-                retry_count=retry_count,
-                operation="celery_sync",
-                fallback_used=True,
-            )
+            with session_scope(label=f"google_fit_task.failure:{user_id}") as db:
+                user_uuid = uuid.UUID(str(user_id))
+                user = db.query(User).filter(User.id == user_uuid, User.is_deleted == False).first()
+                return GoogleFitService.build_fault_tolerant_sync_failure_response(
+                    db,
+                    user,
+                    exc,
+                    timezone_name=timezone_name,
+                    retry_count=retry_count,
+                    operation="celery_sync",
+                    fallback_used=True,
+                )
         except Exception:
-            db.rollback()
             logger.exception("[GFitTask] Failed to build isolated failure response | user=%s", user_id)
             return {
                 "success": True,
@@ -208,4 +204,3 @@ def sync_google_fit_for_user_task(
             time.perf_counter() - start_perf,
         )
         _release_sync_lock(user_id)
-        db.close()

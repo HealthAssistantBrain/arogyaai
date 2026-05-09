@@ -33,6 +33,7 @@ import { ROUTES } from '../router/routes';
 import useDashboardStore from '../store/dashboardStore';
 import { useAuthStore } from '../store/authStore';
 import useHealthStore from '../store/healthStore';
+import { useSystemHealthStore } from '../store/systemHealthStore';
 import HealthSummary from '../components/HealthSummary';
 import { fetchConnectedDeviceSummaries, GOOGLE_FIT_PROVIDER } from '../lib/deviceApi';
 import { runGoogleFitSyncOnce } from '../lib/googleFitSyncController';
@@ -149,6 +150,33 @@ const metricThemes = {
 const toFiniteNumber = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+};
+
+const getBrowserTimezone = () => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Calcutta';
+  } catch {
+    return 'Asia/Calcutta';
+  }
+};
+
+const getLocalDayKey = () => {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+};
+
+const msUntilNextMidnight = () => {
+  const now = new Date();
+  const next = new Date(now);
+  next.setHours(24, 0, 0, 0);
+  return Math.max(1000, next.getTime() - now.getTime());
 };
 
 const formatMetricNumber = (value, precision = 0) => {
@@ -393,6 +421,7 @@ const Dashboard = () => {
   const { acquireLock, releaseLock } = useFetchLock();
   const syncLockRef = useRef(false);
   const metricsLoadedForUserRef = useRef(null);
+  const localDayKeyRef = useRef(getLocalDayKey());
 
   // ── Store ─────────────────────────────────────────────────────────────────
   const { healthScore, alerts,
@@ -402,9 +431,14 @@ const Dashboard = () => {
   const lastFetchedAt = useDashboardStore((s) => s.lastFetchedAt);
   const cacheOwnerId = useDashboardStore((s) => s.cacheOwnerId);
   const hasHydratedCache = useDashboardStore((s) => s.hasHydratedCache);
+  const selectedMetricRange = useDashboardStore((s) => s.selectedMetricRange);
+  const setSelectedMetricRange = useDashboardStore((s) => s.setSelectedMetricRange);
+  const invalidateDailyDashboardCache = useDashboardStore((s) => s.invalidateDailyDashboardCache);
   const healthMetrics = useHealthStore((s) => s.metrics);
   const metricsLoading = useHealthStore((s) => s.metricsLoading);
   const fetchHealthMetrics = useHealthStore((s) => s.fetchHealthMetrics);
+  const setMetricsRange = useHealthStore((s) => s.setMetricsRange);
+  const invalidateMetricsCache = useHealthStore((s) => s.invalidateMetricsCache);
   const authUser = useAuthStore((s) => s.user);
   const authToken = useAuthStore((s) => s.token || s.accessToken);
 
@@ -414,6 +448,8 @@ const Dashboard = () => {
   const isHydrated = useAuthStore((s) => s.isHydrated);
   const isHydratingAuth = useAuthStore((s) => s.isHydratingAuth);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const systemHealthStatus = useSystemHealthStore((s) => s.status);
+  const systemHealthCause = useSystemHealthStore((s) => s.cause);
   const hasAuthUser = !!authUser?.id;
   const authReady = isHydrated && !isHydratingAuth && isAuthenticated && hasAuthUser;
   const authUserId = authUser?.id ?? null;
@@ -428,13 +464,17 @@ const Dashboard = () => {
     if (!acquireLock('dashboard_refresh')) return;
 
     try {
-      await fetchDashboardData({ force: true, silent });
+      const timezone = getBrowserTimezone();
+      await Promise.all([
+        fetchDashboardData({ force: true, silent }),
+        fetchHealthMetrics({ force: true, silent: true, range: selectedMetricRange, timezone }),
+      ]);
     } catch (err) {
       console.error('Refresh dashboard error:', err);
     } finally {
       releaseLock('dashboard_refresh');
     }
-  }, [acquireLock, fetchDashboardData, releaseLock]);
+  }, [acquireLock, fetchDashboardData, fetchHealthMetrics, releaseLock, selectedMetricRange]);
 
   useEffect(() => {
     if (!authReady) return;
@@ -457,18 +497,21 @@ const Dashboard = () => {
   useEffect(() => {
     if (!authReady) return;
 
+    localDayKeyRef.current = getLocalDayKey();
     setHasAttemptedDashboardLoad(true);
     void refreshDashboard({ silent: false });
-  }, [authReady, refreshDashboard]);
+  }, [authReady, authUserId]);
 
   useEffect(() => {
     if (!authReady) return;
 
-    if (metricsLoadedForUserRef.current === authUserId) return;
+    const metricsScopeKey = `${authUserId || 'anon'}:${selectedMetricRange}`;
+    if (metricsLoadedForUserRef.current === metricsScopeKey) return;
 
-    metricsLoadedForUserRef.current = authUserId;
-    void fetchHealthMetrics({ force: true, silent: true });
-  }, [authReady, authUserId, fetchHealthMetrics]);
+    metricsLoadedForUserRef.current = metricsScopeKey;
+    setMetricsRange(selectedMetricRange);
+    void fetchHealthMetrics({ force: true, silent: true, range: selectedMetricRange });
+  }, [authReady, authUserId, fetchHealthMetrics, selectedMetricRange, setMetricsRange]);
 
   useEffect(() => {
     if (!authReady || !authUserId || !authToken || typeof WebSocket === 'undefined') return undefined;
@@ -485,7 +528,7 @@ const Dashboard = () => {
         const message = JSON.parse(event.data);
         if (message?.type === 'dashboard.update' && message?.data) {
           setDashboardData(message.data, { replace: false, source: 'ws' });
-          void fetchHealthMetrics({ force: true, silent: true });
+          void fetchHealthMetrics({ force: true, silent: true, range: selectedMetricRange });
         }
       } catch (err) {
         console.warn('Dashboard realtime payload ignored', err);
@@ -496,7 +539,51 @@ const Dashboard = () => {
       window.clearInterval(pingTimer);
       socket.close();
     };
-  }, [authReady, authToken, authUserId, fetchHealthMetrics, setDashboardData]);
+  }, [authReady, authToken, authUserId, fetchHealthMetrics, selectedMetricRange, setDashboardData]);
+
+  useEffect(() => {
+    if (!authReady || typeof window === 'undefined') return undefined;
+
+    let midnightTimer = null;
+    const refreshForDayBoundary = () => {
+      const nextDayKey = getLocalDayKey();
+      if (nextDayKey !== localDayKeyRef.current) {
+        localDayKeyRef.current = nextDayKey;
+        invalidateDailyDashboardCache();
+        invalidateMetricsCache();
+      }
+      void refreshDashboard({ silent: true });
+      midnightTimer = window.setTimeout(refreshForDayBoundary, msUntilNextMidnight() + 1500);
+    };
+
+    const handleVisibilityRefresh = () => {
+      if (document.visibilityState !== 'visible') return;
+      const nextDayKey = getLocalDayKey();
+      if (nextDayKey !== localDayKeyRef.current) {
+        localDayKeyRef.current = nextDayKey;
+        invalidateDailyDashboardCache();
+        invalidateMetricsCache();
+      }
+      void refreshDashboard({ silent: true });
+    };
+
+    const pollTimer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void refreshDashboard({ silent: true });
+      }
+    }, 60_000);
+
+    window.addEventListener('focus', handleVisibilityRefresh);
+    document.addEventListener('visibilitychange', handleVisibilityRefresh);
+    midnightTimer = window.setTimeout(refreshForDayBoundary, msUntilNextMidnight() + 1500);
+
+    return () => {
+      if (midnightTimer) window.clearTimeout(midnightTimer);
+      window.clearInterval(pollTimer);
+      window.removeEventListener('focus', handleVisibilityRefresh);
+      document.removeEventListener('visibilitychange', handleVisibilityRefresh);
+    };
+  }, [authReady, invalidateDailyDashboardCache, invalidateMetricsCache, refreshDashboard]);
 
   useEffect(() => {
     if (!healthMetrics?.metrics) return;
@@ -548,6 +635,9 @@ const Dashboard = () => {
 
     try {
       await runGoogleFitSyncOnce({ requireConnected: false });
+      invalidateMetricsCache();
+      invalidateDailyDashboardCache();
+      void refreshDashboard({ silent: true });
     } catch (err) {
       console.error('Sync failed', err);
     } finally {
@@ -589,6 +679,7 @@ const Dashboard = () => {
       minute: '2-digit',
     })
     : 'Waiting for sync';
+  const showSystemDegradedBanner = systemHealthStatus === 'degraded';
   const riskScoreData = [
     { name: 'Score', value: score },
     { name: 'Remaining', value: 100 - score },
@@ -684,6 +775,29 @@ const Dashboard = () => {
                 </div>
                 {/* Error Banner — Added Post-Audit */}
                 <AnimatePresence>
+                  {showSystemDegradedBanner && (
+                    <Motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="bg-amber-50 dark:bg-amber-500/10 border-l-4 border-amber-500 p-4 rounded-r-xl flex items-center gap-4"
+                    >
+                      <AlertTriangle className="text-amber-500 shrink-0" size={24} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-amber-900 dark:text-amber-100 font-bold text-sm">Degraded startup detected</p>
+                        <p className="text-amber-800 dark:text-amber-100/80 text-xs font-medium leading-relaxed">
+                          Core dashboard flows are available. Optional services may load slowly or retry in the background.
+                          {systemHealthCause ? ` ${systemHealthCause}` : ''}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => void refreshDashboard({ silent: true })}
+                        className="bg-amber-500 text-white px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-amber-600 transition-colors"
+                      >
+                        Refresh
+                      </button>
+                    </Motion.div>
+                  )}
                   {error && (
                     <Motion.div
                       initial={{ opacity: 0, height: 0 }}
@@ -719,7 +833,7 @@ const Dashboard = () => {
                         </h3>
                       </div>
                       <span className="rounded-full bg-white/75 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 shadow-sm dark:bg-white/10 dark:text-text-secondary">
-                        {metricsLoading && !healthMetrics ? 'Syncing' : metricsUpdatedAt}
+                        {metricsLoading && !healthMetrics ? 'Syncing' : `${selectedMetricRange.toUpperCase()} • ${metricsUpdatedAt}`}
                       </span>
                     </div>
                     <div className="grid grid-cols-1 gap-8">
@@ -730,6 +844,12 @@ const Dashboard = () => {
                           hero={group.hero}
                           mini={group.mini}
                           index={index}
+                          selectedRange={selectedMetricRange}
+                          onRangeChange={(nextRange) => {
+                            setSelectedMetricRange(nextRange);
+                            setMetricsRange(nextRange);
+                            void fetchHealthMetrics({ force: false, silent: true, range: nextRange });
+                          }}
                         />
                       ))}
                     </div>
