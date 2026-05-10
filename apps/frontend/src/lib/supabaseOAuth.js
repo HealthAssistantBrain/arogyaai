@@ -1,6 +1,7 @@
 import { triggerAuthRevalidation } from './authRevalidator'
-import { syncUser } from './authSync'
+import { logOrchestration } from './orchestrationDebug'
 import { getSupabaseClient, supabase } from './supabaseClient'
+import { useAuthStore } from '../store/authStore'
 
 const OAUTH_CONTEXT_KEY = 'arogyaai-oauth-context'
 
@@ -128,7 +129,12 @@ export async function completeSupabaseOAuthSession(sessionOverride = null) {
     return null
   }
 
-  const result = await syncUser({ session, force: true })
+  const store = useAuthStore.getState()
+  store.setSupabaseSession?.(session)
+  await store.bootstrapCanonicalProfile?.({ session, force: false })
+  logOrchestration('auth', 'oauth.session_completed', {
+    userId: useAuthStore.getState().user?.id ?? session?.user?.id ?? null,
+  }, 'info')
 
   // ── 6. Clean up URL bar ───────────────────────────────────────────────────
   if (window.location.search.includes('code=') || window.location.search.includes('access_token=')) {
@@ -137,5 +143,5 @@ export async function completeSupabaseOAuthSession(sessionOverride = null) {
 
   triggerAuthRevalidation()
 
-  return result
+  return useAuthStore.getState().user ?? session.user ?? null
 }

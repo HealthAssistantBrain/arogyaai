@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 import sys
+
+os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-not-placeholder")
+os.environ.setdefault("APP_ENCRYPTION_KEY", "test-encryption-key-not-placeholder")
+os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
+os.environ.setdefault("SUPABASE_ANON_KEY", "test-supabase-anon-key")
+os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-supabase-service-role-key")
+os.environ.setdefault("DATABASE_URL", "postgresql://user:pass@localhost:5432/arogyaai_test")
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -88,6 +96,8 @@ def test_simulation_recomputes_multi_condition_risk_and_insights():
     assert data["simulated_risk"]["cardiovascular"] < data["current_risk"]["cardiovascular"]
     assert data["risk_comparison"][0]["delta"] < 0
     assert data["outcome"]["headline"]
+    assert data["structured_sections"][0]["title"] == "Scenario Overview"
+    assert data["rendering"]["charts"][0]["id"] == "risk-comparison"
     assert "Type 2 diabetes risk" in data["possible_conditions"]
     assert any(item["feature"] == "glucose" for item in data["recommendations"])
     assert data["key_drivers"]

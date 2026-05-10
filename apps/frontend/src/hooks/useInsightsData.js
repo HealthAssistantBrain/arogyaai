@@ -1,5 +1,8 @@
 import { useEffect } from 'react';
 import useInsightsStore from '../store/insightsStore';
+import useHealthStore from '../store/healthStore';
+import useDashboardStore from '../store/dashboardStore';
+import { composeInsightsSnapshot } from '../store/insightsStore';
 
 export const useInsightsData = () => {
   const {
@@ -13,12 +16,21 @@ export const useInsightsData = () => {
     hasHydratedCache,
     fetchInsights,
   } = useInsightsStore();
+  const explanation = useHealthStore((state) => state.explanation);
+  const metrics = useHealthStore((state) => state.metrics);
+  const dashboardData = useDashboardStore((state) => state.dashboardData);
 
   useEffect(() => {
     void fetchInsights();
   }, [fetchInsights]);
 
-  const payload = insights || data || null;
+  const liveSnapshot = composeInsightsSnapshot({
+    explanationResponse: explanation ?? {},
+    dashboardResponse: dashboardData ?? {},
+    metricsResponse: metrics ?? {},
+  });
+
+  const payload = insights || data || (liveSnapshot?.hasAnyData ? liveSnapshot : null);
 
   return {
     loading,

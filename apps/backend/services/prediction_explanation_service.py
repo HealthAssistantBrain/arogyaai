@@ -17,7 +17,6 @@ from database.session import (
     primary_session_scope,
 )
 from models import RiskScore, ShapValueRecord, User
-from pipelines.rag_pipeline import RagExplanationPipeline
 from pipelines.storage_pipeline.service import StoragePipelineService
 from services.clinical_insight_service import ClinicalInsightService
 from services.clinical_history_service import ClinicalHistoryService
@@ -25,6 +24,51 @@ from services.insight_formatter import sanitize_ai_insight_payload
 from services.recommendation_engine import generate_recommendation_plans
 
 logger = logging.getLogger("uvicorn.error")
+
+
+class RagExplanationPipeline:
+    async def explain(
+        self,
+        *,
+        risk_score: float,
+        risk_level: str,
+        shap_values: list[dict[str, Any]],
+        db: Session | None = None,
+        user: User | None = None,
+        prediction_id: str | None = None,
+        feature_payload: dict[str, Any] | None = None,
+        clinical_history: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        from services.orchestrator import OrchestratorRequest, get_orchestrator
+
+        orchestrated = await get_orchestrator().run(
+            OrchestratorRequest(
+                workflow="ai_insights",
+                user_id=str(getattr(user, "id", "") or ""),
+                db=db,
+                current_user=user,
+                payload={
+                    "mode": "explanation",
+                    "prediction_id": prediction_id,
+                    "risk_score": risk_score,
+                    "risk_level": risk_level,
+                    "shap_values": shap_values,
+                    "feature_payload": feature_payload or {},
+                    "clinical_history": clinical_history or {},
+                },
+                endpoint_type="dashboard_explanation",
+                intent="explain_risk",
+                medical_complexity="high",
+                latency_tier="interactive",
+                metadata={"prediction_id": prediction_id},
+            )
+        )
+        payload = orchestrated.get("data") if isinstance(orchestrated.get("data"), dict) else {}
+        if not payload:
+            raise RuntimeError(orchestrated.get("error") or "Explanation workflow returned no payload")
+        payload = dict(payload)
+        payload["_orchestrator_source"] = orchestrated.get("source") or "ai_orchestrator"
+        return payload
 
 
 class PredictionExplanationService:
@@ -554,6 +598,37 @@ class PredictionExplanationService:
         return sanitize_ai_insight_payload(payload) or payload
 
     @staticmethod
+    def _processing_explanation_payload(
+        risk_score_snapshot: dict[str, Any],
+    ) -> dict[str, Any]:
+        resolved_prediction_id = str(risk_score_snapshot.get("id") or "")
+        resolved_risk_score = PredictionExplanationService._safe_float(
+            risk_score_snapshot.get("overall_score_raw")
+        )
+        resolved_risk_level = str(risk_score_snapshot.get("risk_level") or "UNKNOWN")
+        payload = {
+            "prediction_id": resolved_prediction_id,
+            "explanation_id": resolved_prediction_id,
+            "risk_score": resolved_risk_score,
+            "risk_percent": round(float(resolved_risk_score or 0.0) * 100, 2) if resolved_risk_score is not None else None,
+            "confidence": resolved_risk_score,
+            "risk_level": resolved_risk_level,
+            "summary": "Personalized AI explanation is being prepared in the background.",
+            "clinical_insight": "Core risk data is available now. A deeper explanation will hydrate progressively when the AI pass completes.",
+            "symptoms": [],
+            "factors": [],
+            "recommendations": [],
+            "sources": [],
+            "retrieval": {
+                "query": "",
+                "source": "pending_background_generation",
+                "documents_used": 0,
+            },
+            "top_features": [],
+        }
+        return sanitize_ai_insight_payload(payload) or payload
+
+    @staticmethod
     def _attach_recommendation_plans_safe(
         db: Session,
         user: User,
@@ -945,6 +1020,7 @@ class PredictionExplanationService:
         *,
         prediction_id: str | None = None,
         force_refresh: bool = False,
+        allow_generation: bool = True,
     ) -> dict[str, Any]:
         started_at = time.perf_counter()
         session_id = db.info.get("session_id")
@@ -1013,6 +1089,24 @@ class PredictionExplanationService:
                         "error": None,
                         "data": PredictionExplanationService._attach_recommendation_plans_safe(db, user, cached),
                     }
+            if not allow_generation:
+                logger.info(
+                    "Prediction explanation deferred to background | prediction_id=%s session_id=%s force_refresh=%s",
+                    resolved_prediction_id,
+                    session_id,
+                    force_refresh,
+                )
+                return {
+                    "success": True,
+                    "status": "processing",
+                    "source": "background_refresh",
+                    "error": None,
+                    "data": PredictionExplanationService._attach_recommendation_plans_safe(
+                        db,
+                        user,
+                        PredictionExplanationService._processing_explanation_payload(risk_score_snapshot),
+                    ),
+                }
             logger.info(
                 "Prediction explanation cache miss | prediction_id=%s session_id=%s force_refresh=%s",
                 resolved_prediction_id,
@@ -1026,6 +1120,11 @@ class PredictionExplanationService:
                     risk_score=resolved_risk_score,
                     risk_level=resolved_risk_level,
                     shap_values=shap_values,
+                    db=db,
+                    user=user,
+                    prediction_id=resolved_prediction_id,
+                    feature_payload=feature_payload,
+                    clinical_history=latest_clinical_history,
                 )
             except Exception as exc:
                 fallback_payload = PredictionExplanationService._fallback_explanation_payload(
@@ -1044,6 +1143,7 @@ class PredictionExplanationService:
                     "data": PredictionExplanationService._attach_recommendation_plans_safe(db, user, fallback_payload),
                 }
 
+            explanation_source = generated.pop("_orchestrator_source", "ai_orchestrator") if isinstance(generated, dict) else "ai_orchestrator"
             explanation = {
                 "prediction_id": resolved_prediction_id,
                 "explanation_id": resolved_prediction_id,
@@ -1113,15 +1213,16 @@ class PredictionExplanationService:
             explanation = PredictionExplanationService._attach_recommendation_plans_safe(db, user, explanation) or explanation
             PredictionExplanationService._store_cache(db, risk_score_snapshot, cache_key, explanation)
             logger.info(
-                "Prediction explanation ready | prediction_id=%s session_id=%s source=rag_pipeline duration_ms=%s",
+                "Prediction explanation ready | prediction_id=%s session_id=%s source=%s duration_ms=%s",
                 resolved_prediction_id,
                 session_id,
+                explanation_source,
                 round((time.perf_counter() - started_at) * 1000, 2),
             )
             return {
                 "success": True,
                 "status": "ready",
-                "source": "rag_pipeline",
+                "source": explanation_source,
                 "error": None,
                 "data": explanation,
             }

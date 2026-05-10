@@ -30,7 +30,7 @@ export default function OnboardingGuard() {
   const onboardingDone = useAuthStore((s) => s.onboardingDone)
   const onboardingStep = useAuthStore((s) => s.onboardingStep)
   const isHydrated = useAuthStore((s) => s.isHydrated)
-  const isHydratingAuth = useAuthStore((s) => s.isHydratingAuth)
+  const hasBootstrappedAuth = useAuthStore((s) => s.hasBootstrappedAuth)
   const token = useAuthStore((s) => s.token)
   const logout = useAuthStore((s) => s.logout)
   const location = useLocation()
@@ -51,7 +51,7 @@ export default function OnboardingGuard() {
   if (locked) return <Outlet />
 
   // ── SECTION 3: HYDRATION LOCK ──
-  if (!isHydrated || isHydratingAuth) {
+  if (!isHydrated || !hasBootstrappedAuth) {
     return <LoadingScreen />
   }
 

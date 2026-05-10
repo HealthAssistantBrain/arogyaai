@@ -4,8 +4,8 @@ import { getSupabaseClient, supabase } from './supabaseClient';
 const API_BASE_URL = getApiUrl(
   import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 );
-const AUTH_SYNC_TIMEOUT_MS = 7000;
-const AUTH_SYNC_RETRIES = 2;
+const AUTH_SYNC_TIMEOUT_MS = 12000;
+const AUTH_SYNC_RETRIES = 3;
 const AUTH_SYNC_RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 
 let inFlightToken: string | null = null;

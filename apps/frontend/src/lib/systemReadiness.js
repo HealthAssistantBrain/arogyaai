@@ -5,7 +5,7 @@ const API_URL = getApiUrl(
 );
 
 const timerApi = typeof window !== 'undefined' ? window : globalThis;
-const HEALTHY_STATUSES = new Set(['ok', 'ready', 'healthy', 'skipped']);
+const HEALTHY_STATUSES = new Set(['ok', 'ready', 'healthy', 'warming', 'skipped']);
 const RETRYABLE_HTTP_STATUSES = new Set([502, 503, 504]);
 const CRITICAL_SERVICE_KEYS = new Set(['db']);
 const CRITICAL_BOOTSTRAP_404_STAGES = new Set(['auth_sync', 'profile_bundle']);
@@ -84,9 +84,15 @@ const collectServiceIssues = (payload) => {
   const services = payload?.services && typeof payload.services === 'object' ? payload.services : {};
   const critical = [];
   const optional = [];
+  const warming = [];
 
   Object.entries(services).forEach(([key, rawStatus]) => {
-    if (isHealthyStatus(rawStatus)) return;
+    const normalized = toStatus(rawStatus);
+    if (normalized === 'warming') {
+      warming.push(formatOptionalServiceLabel(key));
+      return;
+    }
+    if (isHealthyStatus(normalized)) return;
     if (CRITICAL_SERVICE_KEYS.has(key)) {
       critical.push(key);
       return;
@@ -94,10 +100,15 @@ const collectServiceIssues = (payload) => {
     optional.push(formatOptionalServiceLabel(key));
   });
 
-  return { critical, optional };
+  return { critical, optional, warming };
 };
 
-const formatOptionalCause = (optionalServices = []) => {
+const formatOptionalCause = (optionalServices = [], warmingServices = []) => {
+  if (!optionalServices.length && warmingServices.length) {
+    const services = warmingServices.join(', ');
+    return `${services} ${warmingServices.length === 1 ? 'is' : 'are'} still warming up. Core flows remain available.`;
+  }
+
   if (!optionalServices.length) {
     return 'Optional services are still warming up, but the core app is available.';
   }
@@ -119,7 +130,7 @@ const classifyHealthResponse = (response, payload) => {
   const status = toStatus(payload?.status);
   const coreStatus = toStatus(payload?.core_system);
   const maintenanceEligible = Boolean(payload?.maintenance_eligible) || coreStatus === 'down' || status === 'down';
-  const { critical, optional } = collectServiceIssues(payload);
+  const { critical, optional, warming } = collectServiceIssues(payload);
 
   if (httpStatus >= 500) {
     return {
@@ -131,6 +142,7 @@ const classifyHealthResponse = (response, payload) => {
       payload,
       criticalServices: critical,
       optionalServices: optional,
+      warmingServices: warming,
     };
   }
 
@@ -145,6 +157,7 @@ const classifyHealthResponse = (response, payload) => {
       payload,
       criticalServices: critical,
       optionalServices: optional,
+      warmingServices: warming,
     };
   }
 
@@ -158,31 +171,34 @@ const classifyHealthResponse = (response, payload) => {
       payload,
       criticalServices: critical,
       optionalServices: optional,
+      warmingServices: warming,
     };
   }
 
   if (status === 'degraded' || payload?.success === false || optional.length > 0) {
     return {
       status: 'degraded',
-      cause: formatOptionalCause(optional),
+      cause: formatOptionalCause(optional, warming),
       maintenanceEligible: false,
       retryable: false,
       httpStatus,
       payload,
       criticalServices: critical,
       optionalServices: optional,
+      warmingServices: warming,
     };
   }
 
   return {
     status: 'ready',
-    cause: null,
+    cause: warming.length > 0 ? formatOptionalCause([], warming) : null,
     maintenanceEligible: false,
     retryable: false,
     httpStatus,
     payload,
     criticalServices: critical,
     optionalServices: optional,
+    warmingServices: warming,
   };
 };
 
@@ -198,6 +214,7 @@ const classifyTransportFailure = (error, timeoutMs) => {
       payload: null,
       criticalServices: [],
       optionalServices: [],
+      warmingServices: [],
     };
   }
 
@@ -211,6 +228,7 @@ const classifyTransportFailure = (error, timeoutMs) => {
     payload: null,
     criticalServices: ['gateway'],
     optionalServices: [],
+    warmingServices: [],
   };
 };
 

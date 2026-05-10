@@ -148,6 +148,7 @@ const PreventiveRecommendations = () => {
     const recommendationPlans = useHealthStore((state) => state.recommendationPlans);
     const recommendationPlan = useHealthStore((state) => state.recommendationPlan);
     const loading = useHealthStore((state) => state.loading);
+    const explanationHydrating = useHealthStore((state) => state.explanationHydrating);
     const error = useHealthStore((state) => state.error);
     const metrics = useHealthStore((state) => state.metrics);
     const metricsLoading = useHealthStore((state) => state.metricsLoading);
@@ -170,9 +171,9 @@ const PreventiveRecommendations = () => {
     const activePlan = plans[Math.min(selectedPlanIndex, Math.max(plans.length - 1, 0))] ?? null;
     const hasPlan = Boolean(activePlan);
     const hasExplanationSnapshot = Boolean(explanation);
-    const showSkeleton = !hasExplanationSnapshot && !hasPlan && (loading || metricsLoading || dashboardIsFetching || !dashboardHydrated);
+    const showSkeleton = !hasExplanationSnapshot && !hasPlan && (loading || !dashboardHydrated);
     const showRefreshOverlay = useSmartFetchOverlay(
-        loading || metricsLoading || dashboardIsFetching,
+        explanationHydrating || metricsLoading || dashboardIsFetching,
         hasExplanationSnapshot || hasPlan,
         { exitDelayMs: 200 }
     );
@@ -185,11 +186,9 @@ const PreventiveRecommendations = () => {
         const silent = hasExplanationSnapshot || hasPlan;
         const loadPage = async () => {
             try {
-                await Promise.all([
-                    fetchDashboardData({ silent }),
-                    fetchHealthMetrics({ silent }),
-                    fetchExplanation({ silent, predictionId }),
-                ]);
+                void fetchDashboardData({ silent });
+                void fetchHealthMetrics({ silent });
+                void fetchExplanation({ silent, predictionId });
             } catch (loadError) {
                 console.error('Failed to load recommendations page:', loadError);
             }
@@ -205,10 +204,8 @@ const PreventiveRecommendations = () => {
         if (refreshKeyRef.current === refreshKey) return;
 
         refreshKeyRef.current = refreshKey;
-        void Promise.all([
-            fetchHealthMetrics({ force: true, silent: true }),
-            fetchExplanation({ force: true, silent: true, predictionId }),
-        ]);
+        void fetchHealthMetrics({ force: true, silent: true });
+        void fetchExplanation({ force: true, silent: true, predictionId });
     }, [dashboardUpdatedAt, fetchExplanation, fetchHealthMetrics, predictionId]);
 
     useEffect(() => {
@@ -227,11 +224,9 @@ const PreventiveRecommendations = () => {
     }, [metricCards]);
 
     const handleRetry = () => {
-        void Promise.all([
-            fetchDashboardData({ force: true }),
-            fetchHealthMetrics({ force: true }),
-            fetchExplanation({ force: true, predictionId }),
-        ]);
+        void fetchDashboardData({ force: true });
+        void fetchHealthMetrics({ force: true });
+        void fetchExplanation({ force: true, predictionId });
     };
 
     if (showSkeleton) {

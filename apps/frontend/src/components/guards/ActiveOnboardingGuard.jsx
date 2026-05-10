@@ -1,6 +1,9 @@
 import { useEffect } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
-import { useAuthStore } from '../../store/authStore'
+import { useAuthStore, selectAuthRoutingState } from '../../store/authStore'
+import { useShallow } from 'zustand/shallow'
+import { logOrchestration } from '../../lib/orchestrationDebug'
+import { getAuthLifecycle } from '../../router/authRedirects'
 import { ROUTES } from '../../router/routes'
 import LoadingScreen from '../../pages/LoadingScreen'
 import SafeNavigate from './SafeNavigate'
@@ -18,39 +21,39 @@ const STEP_ROUTES = {
 }
 
 export default function ActiveOnboardingGuard() {
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
-  const isEmailVerified = useAuthStore((s) => s.isEmailVerified)
-  const onboardingDone = useAuthStore((s) => s.onboardingDone)
-  const onboardingStep = useAuthStore((s) => s.onboardingStep)
-  const isHydrated = useAuthStore((s) => s.isHydrated)
-  const isHydratingAuth = useAuthStore((s) => s.isHydratingAuth)
+  const authState = useAuthStore(useShallow(selectAuthRoutingState))
+  const { onboardingDone, onboardingStep } = authState
   const location = useLocation()
+  const lifecycle = getAuthLifecycle(authState)
 
-  // ── SECTION 11: DEBUG MODE ──
   useEffect(() => {
-    console.log('[ROUTER DEBUG - ACTIVE ONBOARDING GUARD]', {
+    logOrchestration('route', 'onboarding_guard.evaluate', {
       path: location.pathname,
-      isAuthenticated,
-      isEmailVerified,
+      phase: lifecycle.phase,
       onboardingDone,
-      isHydrated
+      onboardingStep,
     })
-  }, [location.pathname, isAuthenticated, isEmailVerified, onboardingDone, isHydrated])
+  }, [lifecycle.phase, location.pathname, onboardingDone, onboardingStep])
 
   // ── SYSTEM LOCK ──
   const locked = useSyncExternalStore(subscribeToSystemLock, isSystemLocked)
   if (locked) return <Outlet />
 
   // ── SECTION 3: HYDRATION LOCK ──
-  if (!isHydrated || isHydratingAuth) {
+  if (lifecycle.phase === 'hydrating') {
     return <LoadingScreen />
   }
 
-  // ── SECTION 4: MAX-STEP ROUTING WATERFALL ──
-  if (!isAuthenticated) {
+  if (lifecycle.phase === 'idle') {
+    logOrchestration('route', 'onboarding_guard.redirect_home', { path: location.pathname })
     return <SafeNavigate to={ROUTES.HOME} replace />
   }
-  else if (onboardingDone === false) {
+
+  if (!lifecycle.stable || lifecycle.phase === 'authenticated') {
+    return <LoadingScreen />
+  }
+
+  if (lifecycle.phase === 'onboarding_required' && onboardingDone === false) {
     const maxAllowedStep = onboardingStep || 1;
     let expectedPath;
     if (maxAllowedStep <= 1) expectedPath = ROUTES.ONBOARDING_STEP_1;
@@ -74,18 +77,31 @@ export default function ActiveOnboardingGuard() {
     // Strict Step Validation: Block skipping ahead, but PERMIT backward navigation for edits.
     // If they try to go to a step higher than their max allowed, push them to their max.
     if (requestedStep > maxAllowedStep) {
+      logOrchestration('route', 'onboarding_guard.redirect_step', {
+        from: location.pathname,
+        to: expectedPath,
+        requestedStep,
+        maxAllowedStep,
+      }, 'info')
       return <SafeNavigate to={expectedPath} replace />
     }
 
     // Check if they are completely off the onboarding route tree
     if (!pathWithoutQuery.startsWith('/onboarding')) {
+      logOrchestration('route', 'onboarding_guard.redirect_tree', {
+        from: location.pathname,
+        to: expectedPath,
+      }, 'info')
       return <SafeNavigate to={expectedPath} replace />
     }
 
     return <Outlet />
   }
-  else {
-    return <SafeNavigate to={ROUTES.DASHBOARD} replace />
-  }
+
+  logOrchestration('route', 'onboarding_guard.redirect_dashboard', {
+    from: location.pathname,
+    phase: lifecycle.phase,
+  }, 'info')
+  return <SafeNavigate to={ROUTES.DASHBOARD} replace />
 }
 

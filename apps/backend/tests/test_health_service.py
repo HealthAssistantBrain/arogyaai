@@ -79,47 +79,93 @@ def test_get_qdrant_health_adds_timestamp():
 
 
 def test_get_system_readiness_degrades_slow_optional_analytics_without_marking_core_down():
-    async def _check_database_side_effect(*args, label: str, **kwargs):
-        if label == "primary_db":
-            return {"status": "ok", "target": label}
-        await asyncio.sleep(0.05)
-        return {"status": "ok", "target": label}
+    lifecycle_snapshot = {
+        "phase": "tier2",
+        "services": {
+            "prediction_service": {"status": "ready", "tier": "tier2"},
+            "rag_service": {"status": "ready", "tier": "tier2"},
+            "analytics_db": {"status": "degraded", "tier": "tier2", "detail": "probe_timeout"},
+            "timescale": {"status": "degraded", "tier": "tier2", "detail": "probe_timeout"},
+            "qdrant": {"status": "warming", "tier": "tier2"},
+            "ollama": {"status": "warming", "tier": "tier2"},
+            "nvidia_provider": {"status": "deferred", "tier": "tier2"},
+            "google_fit_worker": {"status": "deferred", "tier": "tier3"},
+            "dashboard_listener": {"status": "deferred", "tier": "tier3"},
+            "emergency_worker": {"status": "deferred", "tier": "tier3"},
+        },
+    }
 
-    async def _slow_timescale(*args, **kwargs):
-        await asyncio.sleep(0.05)
-        return {"status": "ok", "provider": "neon"}
-
-    with patch.object(health_service, "analytics_runtime_enabled", return_value=True), patch.object(
+    with patch.object(health_service, "_READINESS_CACHE", {"expires_at": 0.0, "payload": None}), patch.object(
         health_service,
         "_check_database",
-        AsyncMock(side_effect=_check_database_side_effect),
+        AsyncMock(return_value={"status": "ok", "target": "primary_db"}),
     ), patch.object(
         health_service,
         "_check_redis",
         AsyncMock(return_value={"status": "ok"}),
     ), patch.object(
         health_service,
-        "_check_http_service",
-        AsyncMock(return_value={"status": "ok"}),
+        "get_supabase_auth_snapshot",
+        return_value={"status": "warming", "cache_state": "empty"},
     ), patch.object(
-        health_service,
-        "_fetch_timescale_status",
-        AsyncMock(side_effect=_slow_timescale),
-    ), patch.object(
-        health_service,
-        "get_qdrant_health",
-        AsyncMock(return_value={"status": "healthy", "mode": "local"}),
-    ), patch.object(
-        health_service,
-        "OPTIONAL_PROBE_BUDGET_SECONDS",
-        0.01,
+        health_service.startup_lifecycle,
+        "snapshot",
+        return_value=lifecycle_snapshot,
     ):
         payload = asyncio.run(health_service.get_system_readiness())
 
     assert payload["status"] == "ok"
     assert payload["core_system"] == "healthy"
-    assert payload["services"]["qdrant"] == "ok"
+    assert payload["services"]["qdrant"] == "warming"
     assert payload["services"]["analytics_db"] == "degraded"
     assert payload["services"]["timescale"] == "degraded"
-    assert payload["checks"]["analytics_db"]["error"] == "probe_budget_exceeded"
-    assert payload["checks"]["timescale"]["error"] == "probe_budget_exceeded"
+    assert payload["services"]["supabase_auth"] == "warming"
+    assert payload["checks"]["analytics_db"]["detail"] == "probe_timeout"
+    assert payload["checks"]["timescale"]["detail"] == "probe_timeout"
+
+
+def test_get_system_readiness_keeps_stale_supabase_auth_healthy():
+    lifecycle_snapshot = {
+        "phase": "tier3",
+        "services": {
+            "prediction_service": {"status": "ready", "tier": "tier2"},
+            "rag_service": {"status": "ready", "tier": "tier2"},
+            "analytics_db": {"status": "skipped", "tier": "tier2"},
+            "timescale": {"status": "skipped", "tier": "tier2"},
+            "qdrant": {"status": "ready", "tier": "tier2"},
+            "ollama": {"status": "warming", "tier": "tier2"},
+            "nvidia_provider": {"status": "deferred", "tier": "tier2"},
+            "google_fit_worker": {"status": "deferred", "tier": "tier3"},
+            "dashboard_listener": {"status": "ready", "tier": "tier3"},
+            "emergency_worker": {"status": "ready", "tier": "tier3"},
+        },
+    }
+
+    with patch.object(health_service, "_READINESS_CACHE", {"expires_at": 0.0, "payload": None}), patch.object(
+        health_service,
+        "_check_database",
+        AsyncMock(return_value={"status": "ok", "target": "primary_db"}),
+    ), patch.object(
+        health_service,
+        "_check_redis",
+        AsyncMock(return_value={"status": "ok"}),
+    ), patch.object(
+        health_service,
+        "get_supabase_auth_snapshot",
+        return_value={
+            "status": "healthy",
+            "cache_state": "stale",
+            "last_fetch_error": "timed out",
+            "startup_warmup_status": "ready",
+        },
+    ), patch.object(
+        health_service.startup_lifecycle,
+        "snapshot",
+        return_value=lifecycle_snapshot,
+    ):
+        payload = asyncio.run(health_service.get_system_readiness())
+
+    assert payload["status"] == "ok"
+    assert payload["core_system"] == "healthy"
+    assert payload["services"]["supabase_auth"] == "healthy"
+    assert payload["checks"]["supabase_auth"]["cache_state"] == "stale"

@@ -618,6 +618,38 @@ class ReportService:
         mime_type = content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
         title = Path(filename).stem.replace("_", " ").replace("-", " ").strip().title() or "Medical Report"
 
+        try:
+            from services.orchestrator import OrchestratorRequest, get_orchestrator
+
+            orchestrated = await get_orchestrator().run(
+                OrchestratorRequest(
+                    workflow="ocr_medical_report",
+                    user_id="report-upload",
+                    db=None,
+                    payload={
+                        "filename": filename,
+                        "title": title,
+                        "content_type": mime_type,
+                        "file_bytes": file_bytes,
+                    },
+                    endpoint_type="report_upload",
+                    intent="ocr_analysis",
+                    latency_tier="background",
+                    route_hints={"doctor_summary": True},
+                    uploaded_files=[
+                        {
+                            "filename": filename,
+                            "content_type": mime_type,
+                        }
+                    ],
+                )
+            )
+            analysis = orchestrated.get("data") if isinstance(orchestrated.get("data"), dict) else None
+            if isinstance(analysis, dict) and analysis.get("full_text") is not None:
+                return await cls._enrich_analysis_with_prediction(filename, analysis)
+        except Exception:
+            logger.exception("Workflow OCR analysis failed for %s; falling back to local OCR path", filename)
+
         if mime_type == "application/pdf":
             pdf_pages: list[dict[str, Any]] = []
             pdf_warnings: list[str] = []
@@ -1211,6 +1243,10 @@ class ReportService:
                 db=None,
                 payload=structured_data,
                 metadata={"rag_context": rag_context or {}},
+                endpoint_type="doctor_summary",
+                intent="doctor_summary",
+                medical_complexity="high",
+                latency_tier="balanced",
             )
         )
         payload = orchestrated.get("data") if isinstance(orchestrated.get("data"), dict) else None

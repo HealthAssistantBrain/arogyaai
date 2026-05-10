@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -19,6 +20,7 @@ from database.session import (
     engine as primary_engine,
 )
 from services.ollama_client import probe_ollama_health
+from services.startup_lifecycle import startup_lifecycle
 from services.supabase_jwt_verifier import get_supabase_auth_snapshot
 from pipelines.rag_pipeline.config import RagSettings
 from pipelines.rag_pipeline.qdrant import probe_qdrant_health
@@ -37,6 +39,7 @@ PRIMARY_DB_PROBE_TIMEOUT_SECONDS = float(os.getenv("HEALTH_PRIMARY_DB_TIMEOUT_SE
 ANALYTICS_DB_PROBE_TIMEOUT_SECONDS = float(os.getenv("HEALTH_ANALYTICS_DB_TIMEOUT_SECONDS", "12.0"))
 TIMESCALE_PROBE_TIMEOUT_SECONDS = float(os.getenv("HEALTH_TIMESCALE_TIMEOUT_SECONDS", "12.0"))
 OPTIONAL_PROBE_BUDGET_SECONDS = float(os.getenv("HEALTH_OPTIONAL_PROBE_BUDGET_SECONDS", "2.5"))
+READINESS_CACHE_TTL_SECONDS = max(1.0, float(os.getenv("HEALTH_READINESS_CACHE_TTL_SECONDS", "5.0")))
 SERVICE_URLS = {
     "prediction_service": os.getenv("PREDICTION_SERVICE_URL", "http://prediction-service:8000").strip(),
     "rag_service": os.getenv("RAG_SERVICE_URL", "http://rag-service:8000").strip(),
@@ -48,6 +51,10 @@ ANALYTICS_HYPERTABLES = (
     "health_scores",
     "feature_snapshots",
 )
+
+AUTH_HEALTHY_STATUSES = {"healthy", "warming"}
+LIFECYCLE_HEALTHY_STATUSES = {"ready", "warming", "skipped"}
+_READINESS_CACHE: dict[str, Any] = {"expires_at": 0.0, "payload": None}
 
 
 def _utc_now() -> str:
@@ -61,6 +68,31 @@ def _optional_probe_timeout_result(key: str) -> dict[str, Any]:
         "error": "probe_budget_exceeded",
         "timeout_budget_seconds": OPTIONAL_PROBE_BUDGET_SECONDS,
     }
+
+
+def _cache_readiness_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    _READINESS_CACHE["payload"] = payload
+    _READINESS_CACHE["expires_at"] = time.monotonic() + READINESS_CACHE_TTL_SECONDS
+    return payload
+
+
+def _get_cached_readiness_payload() -> dict[str, Any] | None:
+    cached = _READINESS_CACHE.get("payload")
+    expires_at = float(_READINESS_CACHE.get("expires_at") or 0.0)
+    if cached and time.monotonic() < expires_at:
+        return cached
+    return None
+
+
+def _normalize_lifecycle_status(status: str | None) -> str:
+    normalized = str(status or "warming").lower()
+    if normalized == "ready":
+        return "ok"
+    if normalized == "deferred":
+        return "warming"
+    if normalized == "failed":
+        return "degraded"
+    return normalized
 
 
 async def _check_database(
@@ -287,7 +319,10 @@ async def get_system_readiness() -> dict[str, Any]:
     The function never raises, never performs heavy work, and returns a
     structured snapshot of the dependency state.
     """
-    started_at = datetime.now(timezone.utc)
+    cached_payload = _get_cached_readiness_payload()
+    if cached_payload is not None:
+        return cached_payload
+
     tasks: dict[str, asyncio.Task[Any]] = {
         "db": asyncio.create_task(
             _check_database(
@@ -297,59 +332,36 @@ async def get_system_readiness() -> dict[str, Any]:
             )
         ),
         "redis": asyncio.create_task(_check_redis()),
-        "qdrant": asyncio.create_task(get_qdrant_health()),
-        "ollama": asyncio.create_task(get_ollama_health()),
     }
-    for service_name, base_url in SERVICE_URLS.items():
-        tasks[service_name] = asyncio.create_task(_check_http_service(service_name, base_url))
-
-    if analytics_runtime_enabled():
-        tasks["analytics_db"] = asyncio.create_task(
-            _check_database(
-                analytics_engine,
-                label="analytics_db",
-                timeout_seconds=ANALYTICS_DB_PROBE_TIMEOUT_SECONDS,
-            )
-        )
-        tasks["timescale"] = asyncio.create_task(
-            _fetch_timescale_status(timeout_seconds=TIMESCALE_PROBE_TIMEOUT_SECONDS)
-        )
-
-    order = ["db", "redis", "qdrant", "ollama", *SERVICE_URLS.keys()]
-    if analytics_runtime_enabled():
-        order.extend(["analytics_db", "timescale"])
-    order.append("supabase_auth")
+    order = [
+        "db",
+        "redis",
+        "supabase_auth",
+        "prediction_service",
+        "rag_service",
+        "analytics_db",
+        "timescale",
+        "qdrant",
+        "ollama",
+        "nvidia_provider",
+        "memory",
+        "google_fit_worker",
+        "dashboard_listener",
+        "emergency_worker",
+    ]
 
     results: dict[str, Any] = {}
     try:
         results["db"] = await tasks["db"]
     except Exception as exc:
         results["db"] = exc
+    try:
+        results["redis"] = await tasks["redis"]
+    except Exception as exc:
+        results["redis"] = exc
 
-    optional_keys = [key for key in order if key != "db" and key in tasks]
-    remaining_budget = max(
-        0.0,
-        OPTIONAL_PROBE_BUDGET_SECONDS - (datetime.now(timezone.utc) - started_at).total_seconds(),
-    )
-
-    task_to_key = {tasks[key]: key for key in optional_keys}
-    if task_to_key:
-        done, pending = await asyncio.wait(task_to_key.keys(), timeout=remaining_budget)
-
-        for task in done:
-            if task.cancelled():
-                results[task_to_key[task]] = _optional_probe_timeout_result(task_to_key[task])
-                continue
-            exception = task.exception()
-            results[task_to_key[task]] = task.result() if exception is None else exception
-
-        for task in pending:
-            key = task_to_key[task]
-            task.cancel()
-            results[key] = _optional_probe_timeout_result(key)
-
-        if pending:
-            await asyncio.gather(*pending, return_exceptions=True)
+    lifecycle_snapshot = startup_lifecycle.snapshot()
+    lifecycle_services = lifecycle_snapshot.get("services", {}) if isinstance(lifecycle_snapshot, dict) else {}
 
     services: dict[str, str] = {}
     checks: dict[str, dict[str, Any]] = {}
@@ -357,8 +369,19 @@ async def get_system_readiness() -> dict[str, Any]:
     for key in order:
         if key == "supabase_auth":
             snapshot = get_supabase_auth_snapshot()
-            services[key] = "ok" if snapshot.get("status") == "ok" else "degraded"
+            auth_status = str(snapshot.get("status") or "warming").lower()
+            services[key] = auth_status
             checks[key] = snapshot
+            continue
+
+        if key in {"prediction_service", "rag_service", "analytics_db", "timescale", "qdrant", "ollama", "nvidia_provider", "memory", "google_fit_worker", "dashboard_listener", "emergency_worker"}:
+            service_snapshot = lifecycle_services.get(key, {})
+            normalized_status = _normalize_lifecycle_status(service_snapshot.get("status"))
+            services[key] = normalized_status
+            checks[key] = {
+                "status": normalized_status,
+                **service_snapshot,
+            }
             continue
 
         result = results.get(key)
@@ -382,7 +405,15 @@ async def get_system_readiness() -> dict[str, Any]:
     core_status = "healthy" if services.get("db") in {"ok", "skipped"} else "down"
     overall_status = "ok" if core_status == "healthy" else "down"
 
-    return {
+    if services.get("supabase_auth") not in AUTH_HEALTHY_STATUSES:
+        logger.warning(
+            "[Health] Supabase auth dependency is not ready | status=%s cache_state=%s error=%s",
+            services.get("supabase_auth"),
+            checks.get("supabase_auth", {}).get("cache_state"),
+            checks.get("supabase_auth", {}).get("last_fetch_error"),
+        )
+
+    payload = _cache_readiness_payload({
         "status": overall_status,
         "core_system": core_status,
         "maintenance_eligible": core_status == "down",
@@ -394,4 +425,5 @@ async def get_system_readiness() -> dict[str, Any]:
             if key not in {"db", "analytics_db", "timescale"}
         },
         "checked_at": _utc_now(),
-    }
+    })
+    return payload

@@ -23,6 +23,14 @@ _HEALTH_CACHE: dict[tuple[str, str, float], dict[str, Any]] = {}
 _HEALTH_CACHE_LOCK = threading.Lock()
 _WARNING_CACHE: dict[str, float] = {}
 _WARNING_CACHE_LOCK = threading.Lock()
+_OLLAMA_SEMAPHORES: dict[int, asyncio.Semaphore] = {}
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
 
 
 @dataclass(slots=True)
@@ -60,6 +68,40 @@ def _preview(value: Any, *, limit: int = 1200) -> str:
     if len(text) <= limit:
         return text
     return f"{text[:limit]}...<trimmed>"
+
+
+def _truncate_prompt(value: str, *, limit: int) -> str:
+    if limit <= 0 or len(value) <= limit:
+        return value
+    return f"{value[:limit].rstrip()}\n\n[truncated_for_ollama]"
+
+
+def _ollama_concurrency_limit() -> int:
+    return max(1, _env_int("OLLAMA_MAX_CONCURRENCY", 2))
+
+
+def _ollama_queue_timeout_seconds() -> float:
+    try:
+        return max(0.5, float(os.getenv("OLLAMA_QUEUE_TIMEOUT_SECONDS", "8")))
+    except (TypeError, ValueError):
+        return 8.0
+
+
+def _ollama_prompt_char_limit() -> int:
+    return max(1200, _env_int("OLLAMA_PROMPT_CHAR_LIMIT", 12000))
+
+
+def _ollama_system_prompt_char_limit() -> int:
+    return max(400, _env_int("OLLAMA_SYSTEM_PROMPT_CHAR_LIMIT", 3000))
+
+
+def _get_ollama_semaphore() -> asyncio.Semaphore:
+    limit = _ollama_concurrency_limit()
+    semaphore = _OLLAMA_SEMAPHORES.get(limit)
+    if semaphore is None:
+        semaphore = asyncio.Semaphore(limit)
+        _OLLAMA_SEMAPHORES[limit] = semaphore
+    return semaphore
 
 
 def _log_warning_throttled(key: str, message: str, *args: Any) -> None:
@@ -319,10 +361,13 @@ async def ollama_generate_json(
     if not cleaned_prompt:
         raise RuntimeError("Ollama prompt is empty")
 
+    cleaned_prompt = _truncate_prompt(cleaned_prompt, limit=_ollama_prompt_char_limit())
+    cleaned_system_prompt = _truncate_prompt(cleaned_system_prompt, limit=_ollama_system_prompt_char_limit())
     request_id = uuid4().hex[:12]
     retries = max(0, int(settings.ollama_request_retries))
     backoff_seconds = max(0.0, float(settings.ollama_retry_backoff_seconds))
     client = _get_async_client(settings)
+    semaphore = _get_ollama_semaphore()
 
     for attempt in range(1, retries + 2):
         record = OllamaInvocationRecord(
@@ -347,7 +392,25 @@ async def ollama_generate_json(
         )
         started = time.perf_counter()
         try:
-            response = await client.post("/api/generate", json=payload)
+            try:
+                await asyncio.wait_for(semaphore.acquire(), timeout=_ollama_queue_timeout_seconds())
+            except asyncio.TimeoutError as exc:
+                failure = {
+                    **asdict(record),
+                    "timestamp": _utc_now(),
+                    "elapsed_ms": round((time.perf_counter() - started) * 1000, 2),
+                    "error_type": "QueueTimeout",
+                    "error": "ollama_queue_timeout",
+                    "payload_preview": _preview(json.dumps(payload, default=str), limit=1600),
+                }
+                persist_ollama_failure(failure)
+                raise RuntimeError(
+                    f"Ollama queue timed out (request_id={record.request_id}, workflow={record.workflow}, model={record.model})"
+                ) from exc
+            try:
+                response = await client.post("/api/generate", json=payload)
+            finally:
+                semaphore.release()
             elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
         except httpx.TimeoutException as exc:
             failure = {
@@ -596,7 +659,7 @@ async def probe_ollama_health(
                 result["warmup"] = {
                     "status": "failed",
                     "error": str(exc),
-        }
+                }
         return _store_cached_ollama_health(settings, result)
     except Exception as exc:
         _log_warning_throttled("ollama:probe", "Ollama health probe failed: %s", exc)

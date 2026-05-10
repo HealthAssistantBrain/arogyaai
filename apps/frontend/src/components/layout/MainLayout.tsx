@@ -1,39 +1,30 @@
-import { useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import AppHeader from './AppHeader';
+import { getAuthLifecycle } from '../../router/authRedirects';
 import { useAuthStore } from '../../store/authStore';
 import { useUserStore } from '../../store/userStore';
+import RouteContentSkeleton from './RouteContentSkeleton';
 
 export default function MainLayout() {
-    const fetchProfile = useAuthStore((state: any) => state.fetchProfile);
-    const isHydrated = useAuthStore((state: any) => state.isHydrated);
-    const isHydratingAuth = useAuthStore((state: any) => state.isHydratingAuth);
-    const isAuthenticated = useAuthStore((state: any) => state.isAuthenticated);
+    const authState = useAuthStore();
     const authUser = useAuthStore((state: any) => state.user);
-    const authProfile = useAuthStore((state: any) => state.profile);
-    const authReady = isHydrated && !isHydratingAuth && isAuthenticated && !!authUser?.id;
-    const fetchUser = useUserStore((state: any) => state.fetchUser);
+    const lifecycle = getAuthLifecycle(authState);
+    const authReady = lifecycle.phase === 'ready';
+    const setUser = useUserStore((state: any) => state.setUser);
     const user = useUserStore((state: any) => state.user);
-    const profileLoaded = !!(authProfile?.id || authProfile?.user_id);
     const userLoaded = !!(user?.id || user?.user_id);
 
     useEffect(() => {
-        if (!authReady) return;
-
-        if (!profileLoaded) {
-            void fetchProfile();
+        if (!authUser?.id) return;
+        if (!userLoaded || user?.id !== authUser.id) {
+            setUser(authUser);
         }
-        if (!userLoaded) {
-            void fetchUser();
-        }
-    }, [authReady, profileLoaded, userLoaded, fetchProfile, fetchUser]);
+    }, [authUser, setUser, user?.id, userLoaded]);
 
     const location = useLocation();
-    const isDashboardRoute = location.pathname === '/dashboard';
-    const fromOAuth = location.state?.fromOAuth;
-
-    if (!authReady && !isDashboardRoute && !fromOAuth) {
+    if (lifecycle.phase === 'hydrating') {
         return (
             <div className="flex min-h-screen items-center justify-center bg-background dark:bg-background text-sm font-bold text-slate-500">
                 Restoring your session...
@@ -47,7 +38,9 @@ export default function MainLayout() {
 
             <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto custom-scrollbar">
                 <AppHeader />
-                <Outlet />
+                <Suspense fallback={<RouteContentSkeleton />}>
+                    {authReady ? <Outlet /> : <RouteContentSkeleton />}
+                </Suspense>
             </div>
         </div>
     );

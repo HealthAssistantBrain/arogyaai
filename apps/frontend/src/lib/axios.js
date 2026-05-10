@@ -40,7 +40,6 @@ const getCurrentSupabaseToken = async (fallbackToken = null) => {
   const { data } = await client.auth.getSession();
   const session = data?.session ?? null;
   if (session?.access_token) {
-    useAuthStore.getState().setSupabaseSession?.(session);
     return session.access_token;
   }
 

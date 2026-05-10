@@ -129,6 +129,7 @@ def test_context_manager_prioritizes_recent_abnormal_signals():
     assert not any(item["title"] == "Resolved mild cough" for item in structured["recent_events"])
     assert context["context_meta"]["estimated_tokens"] <= context["context_meta"]["target_token_budget"]
     assert context["memory_summary"]
+    assert context["continuity_summary"]["ongoing_symptoms"]
 
 
 def test_context_manager_builds_payload_only_report_context():
@@ -170,3 +171,4 @@ def test_context_manager_builds_payload_only_report_context():
     assert context["structured_context"]["biomarkers"][0]["name"] == "HbA1c"
     assert context["structured_context"]["risk_changes"][0]["risk_level"] == "HIGH"
     assert context["context_meta"]["estimated_tokens"] <= context["context_meta"]["target_token_budget"]
+    assert "continuity_summary" in context

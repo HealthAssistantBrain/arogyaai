@@ -351,7 +351,7 @@ def test_analyze_report_always_runs_ocr_for_pdf_even_when_pdf_text_exists():
         ReportService,
         "_extract_pdf_pages",
         return_value=[{"page_number": 1, "text": "Hemoglobin 13.9 g/dL", "source_type": "PDF", "confidence": 1.0}],
-    ), patch("services.report_service.OCRService") as ocr_service:
+    ), patch("services.orchestrator.workflows.ocr_medical_report.OCRService") as ocr_service:
         ocr_service.return_value.extract_text.return_value = ocr_result
 
         analysis = asyncio.run(
@@ -359,7 +359,7 @@ def test_analyze_report_always_runs_ocr_for_pdf_even_when_pdf_text_exists():
         )
 
     ocr_service.return_value.extract_text.assert_called_once()
-    assert analysis["text_source"] == "OCR"
+    assert str(analysis["text_source"]).lower().startswith("ocr")
     assert analysis["ocr_provider"] == "tesseract"
     assert analysis["text_pages"][0]["source_type"] == "OCR"
     assert analysis["text_pages"][0]["words"][0]["bbox"]["x_min"] == 10

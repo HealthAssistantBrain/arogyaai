@@ -65,7 +65,7 @@ services:
       - ./apps/frontend/tsconfig.json:/app/tsconfig.json
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5173/ || exit 1"]
-      interval: 10s
+      interval: 30s
       timeout: 5s
       retries: 5
       start_period: 15s
@@ -97,7 +97,7 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
-      interval: 10s
+      interval: 30s
       timeout: 5s
       retries: 12
       start_period: 60s
@@ -165,7 +165,7 @@ services:
       - ./pipelines/prediction-service:/app
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
-      interval: 10s
+      interval: 30s
       timeout: 5s
       retries: 8
       start_period: 30s
@@ -188,7 +188,7 @@ services:
       - ./pipelines/rag-service:/app
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
-      interval: 10s
+      interval: 30s
       timeout: 5s
       retries: 8
       start_period: 30s

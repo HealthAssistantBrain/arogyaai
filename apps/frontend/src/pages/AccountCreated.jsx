@@ -30,7 +30,7 @@ const AccountCreated = () => {
 
   const handleStartOnboarding = () => {
     setPendingWelcome(false);
-    setOnboardingStep(1);
+    setOnboardingStep(1, { persist: false });
     navigate(ROUTES.ONBOARDING_STEP_1);
   };
 

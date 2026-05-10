@@ -57,8 +57,104 @@ export const getResolvedOnboardingState = (state = {}) => {
 export const getResolvedRole = (state = {}) =>
   String(state?.role ?? state?.user?.role ?? state?.profile?.role ?? 'patient').toLowerCase()
 
+const getResolvedAuthUserId = (state = {}) =>
+  state?.user?.id ?? state?.session?.user?.id ?? null
+
+const hasPendingProfileBootstrap = (state = {}) =>
+  ['session', 'hydrating'].includes(String(state?.authBootstrapStatus || '').toLowerCase()) &&
+  !state?.profile?.id &&
+  !state?.profile?.user_id
+
+const hasStableProfileBootstrap = (state = {}) =>
+  Boolean(state?.profile?.id || state?.profile?.user_id || state?.user?.profile?.id)
+
+export const getAuthLifecycle = (state = {}) => {
+  const hasToken = Boolean(state?.token || state?.accessToken || state?.session?.access_token)
+  const hasAuthUser = Boolean(getResolvedAuthUserId(state))
+  const bootstrapStatus = String(state?.authBootstrapStatus || '').toLowerCase()
+  const { onboardingDone, onboardingStep, pendingWelcome } = getResolvedOnboardingState(state)
+
+  if (!state?.isHydrated || !state?.hasBootstrappedAuth || state?.isHydratingAuth || bootstrapStatus === 'hydrating') {
+    return {
+      phase: 'hydrating',
+      stable: false,
+      hasToken,
+      hasAuthUser,
+      onboardingDone,
+      onboardingStep,
+      pendingWelcome,
+    }
+  }
+
+  if (!state?.isAuthenticated || !hasToken) {
+    return {
+      phase: 'idle',
+      stable: true,
+      hasToken: false,
+      hasAuthUser: false,
+      onboardingDone: false,
+      onboardingStep: 1,
+      pendingWelcome: false,
+    }
+  }
+
+  if (!hasAuthUser || (hasPendingProfileBootstrap(state) && !hasStableProfileBootstrap(state))) {
+    return {
+      phase: 'authenticated',
+      stable: false,
+      hasToken,
+      hasAuthUser,
+      onboardingDone,
+      onboardingStep,
+      pendingWelcome,
+    }
+  }
+
+  if (!state?.isEmailVerified) {
+    return {
+      phase: 'authenticated',
+      stable: true,
+      hasToken,
+      hasAuthUser,
+      onboardingDone,
+      onboardingStep,
+      pendingWelcome,
+    }
+  }
+
+  if (!onboardingDone) {
+    return {
+      phase: 'onboarding_required',
+      stable: true,
+      hasToken,
+      hasAuthUser,
+      onboardingDone,
+      onboardingStep,
+      pendingWelcome,
+    }
+  }
+
+  return {
+    phase: 'ready',
+    stable: true,
+    hasToken,
+    hasAuthUser,
+    onboardingDone,
+    onboardingStep,
+    pendingWelcome,
+  }
+}
+
+export const canPreloadDashboard = (state = {}) =>
+  getAuthLifecycle(state).phase === 'ready'
+
+export const canConnectRealtime = (state = {}) =>
+  getAuthLifecycle(state).phase === 'ready'
+
 export const getAuthenticatedHomeRoute = (state = {}) => {
-  if (!state?.isAuthenticated || !state?.user?.id) {
+  const lifecycle = getAuthLifecycle(state)
+
+  if (lifecycle.phase === 'idle' || !lifecycle.hasAuthUser) {
     return ROUTES.HOME
   }
 
@@ -66,10 +162,14 @@ export const getAuthenticatedHomeRoute = (state = {}) => {
     return ROUTES.DOCTOR_DASHBOARD
   }
 
-  const { onboardingDone, onboardingStep, pendingWelcome } = getResolvedOnboardingState(state)
+  const { onboardingDone, onboardingStep, pendingWelcome } = lifecycle
 
   if (pendingWelcome) {
     return ROUTES.ACCOUNT_CREATED
+  }
+
+  if (!lifecycle.stable) {
+    return ROUTES.DASHBOARD
   }
 
   if (!onboardingDone) {
@@ -80,7 +180,9 @@ export const getAuthenticatedHomeRoute = (state = {}) => {
 }
 
 export const getProtectedRouteRedirect = (pathname, state = {}) => {
-  if (!state?.isAuthenticated || !state?.user?.id) {
+  const lifecycle = getAuthLifecycle(state)
+
+  if (lifecycle.phase === 'idle' || !lifecycle.hasAuthUser) {
     return ROUTES.HOME
   }
 
@@ -100,7 +202,11 @@ export const getProtectedRouteRedirect = (pathname, state = {}) => {
     return ROUTES.DASHBOARD
   }
 
-  const { onboardingDone, onboardingStep, pendingWelcome } = getResolvedOnboardingState(state)
+  if (!lifecycle.stable) {
+    return null
+  }
+
+  const { onboardingDone, onboardingStep, pendingWelcome } = lifecycle
 
   if (onboardingDone) {
     return isWelcomeRoute(pathname) || isOnboardingRoute(pathname)

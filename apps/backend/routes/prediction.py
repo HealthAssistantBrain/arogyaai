@@ -8,6 +8,7 @@ from pipelines.storage_pipeline.service import StoragePipelineService
 from routes.users import get_current_user_from_header
 from schemas.api_models import DiseaseSimulationRequest, PredictionRequest, PredictionResponse
 from services.audit_service import log_event
+from services.progressive_ai_service import ProgressiveAIService
 from services.prediction_explanation_service import PredictionExplanationService
 
 router = APIRouter(prefix="/api/v1/prediction", tags=["Prediction"])
@@ -166,9 +167,17 @@ def get_prediction_shap(
 async def get_prediction_explanation(
     prediction_id: str | None = Query(default=None),
     force_refresh: bool = Query(default=False),
+    background: bool = Query(default=False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_from_header),
 ):
+    if background:
+        return await ProgressiveAIService.get_prediction_explanation(
+            db,
+            current_user,
+            prediction_id=prediction_id,
+            force_refresh=force_refresh,
+        )
     return await PredictionExplanationService.get_prediction_explanation(
         db,
         current_user,

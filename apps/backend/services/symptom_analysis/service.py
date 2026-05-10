@@ -241,6 +241,10 @@ class SymptomAnalysisService:
                         db=db,
                         current_user=current_user,
                         payload=request_payload,
+                        endpoint_type="symptom_analysis",
+                        intent="symptom_analysis",
+                        medical_complexity="high",
+                        latency_tier="interactive",
                     )
                 ),
                 timeout=SymptomAnalysisService.ANALYSIS_TIMEOUT_SECONDS,

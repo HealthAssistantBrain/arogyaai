@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
+import { logOrchestration } from '../lib/orchestrationDebug';
 import { ROUTES } from '../router/routes';
 import api from '../lib/axios';
 import OnboardingHeader from '../components/OnboardingHeader';
@@ -27,6 +28,7 @@ const MedicalHistory = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const setOnboardingStep = useAuthStore((state) => state.setOnboardingStep);
+  const saveOnboarding = useAuthStore((state) => state.saveOnboarding);
   const profile = useAuthStore((state) => state.profile);
 
   const [conditions, setConditions] = useState([]);
@@ -84,13 +86,20 @@ const MedicalHistory = () => {
     if (e && e.preventDefault) e.preventDefault();
     try {
       await saveStep2Data();
-      await useAuthStore.getState().fetchProfile();
+      const saved = await saveOnboarding({ onboarding_step: 3 });
+      if (!saved) {
+        toast.error('Unable to save your onboarding progress right now.');
+        return;
+      }
+      setOnboardingStep(3, { persist: false });
+      logOrchestration('onboarding', 'step2.continue', {
+        nextStep: 3,
+      }, 'info');
     } catch (err) {
       console.log("Non-blocking API error:", err);
+      toast.error('Unable to save your medical history right now.');
+      return;
     }
-
-    // Unlock Guard for step 3
-    setOnboardingStep(3);
 
     console.log("Navigating to step-3");
     navigate("/onboarding/step-3");
@@ -99,11 +108,20 @@ const MedicalHistory = () => {
   const handleSaveAndExit = async () => {
     try {
       await saveStep2Data();
-      await useAuthStore.getState().fetchProfile();
-      setOnboardingStep(3);
+      const saved = await saveOnboarding({ onboarding_step: 3 });
+      if (!saved) {
+        toast.error('Unable to save your onboarding progress right now.');
+        return;
+      }
+      setOnboardingStep(3, { persist: false });
+      logOrchestration('onboarding', 'step2.save_exit', {
+        nextStep: 3,
+      }, 'info');
       toast.success('Progress saved');
     } catch (err) {
       console.log("Non-blocking error:", err);
+      toast.error('Unable to save your medical history right now.');
+      return;
     }
     navigate(ROUTES.DASHBOARD);
   };

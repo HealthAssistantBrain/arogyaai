@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from ai.workflows import ProviderTaskRequest
+from ai.conversation import ConversationIntelligenceService
 from pipelines.rag_pipeline import RagExplanationPipeline
 from pipelines.rag_pipeline.query_builder import build_query_from_shap
 from services.agents import run_medical_pipeline
@@ -13,10 +15,11 @@ logger = logging.getLogger(__name__)
 
 
 class ReasoningPipeline:
-    def __init__(self, *, model_registry: Any, prompt_manager: Any, rag_pipeline: Any):
-        self.model_registry = model_registry
+    def __init__(self, *, provider_gateway: Any, prompt_manager: Any, rag_pipeline: Any):
+        self.provider_gateway = provider_gateway
         self.prompt_manager = prompt_manager
         self.rag_pipeline = rag_pipeline
+        self.conversation = ConversationIntelligenceService()
 
     async def run_chat(
         self,
@@ -29,6 +32,7 @@ class ReasoningPipeline:
         user_context: dict[str, Any],
         ml_data: dict[str, Any],
         rag_context: dict[str, Any],
+        conversation_intent: str = "conversation",
     ) -> dict[str, Any]:
         from services.chat_service import (
             _apply_response_format,
@@ -43,6 +47,14 @@ class ReasoningPipeline:
         compact_ml_data = self._compact_ml_prompt_context(ml_data)
         compact_rag_context = self._compact_rag_prompt_context(rag_context)
         compact_history = self._compact_conversation_history(conversation_history)
+        conversation_layer = self.conversation.prompt_context(
+            workflow="chatbot",
+            query=query,
+            user_context=user_context,
+            conversation_history=conversation_history,
+            risk_level=str(ml_data.get("risk_level") or ""),
+            conversation_intent=conversation_intent or "conversation",
+        )
         prompt_pack = self.prompt_manager.render(
             "chatbot",
             context={
@@ -51,6 +63,8 @@ class ReasoningPipeline:
                 "ml_data": compact_ml_data,
                 "rag_context": compact_rag_context,
                 "conversation_history": compact_history,
+                "conversation_intelligence": conversation_layer,
+                "intent": conversation_intent or "conversation",
             },
         )
         logger.info(
@@ -62,10 +76,27 @@ class ReasoningPipeline:
         )
 
         async def _provider_callable(prompt: str) -> dict[str, Any] | None:
-            result = await self.model_registry.generate_json(
-                workflow="chatbot",
-                prompt=prompt,
-                system_prompt=prompt_pack["system_prompt"],
+            result = await self.provider_gateway.generate(
+                ProviderTaskRequest(
+                    task="chat_assistant",
+                    workflow="chatbot",
+                    prompt=prompt,
+                    system_prompt=prompt_pack["system_prompt"],
+                    context={
+                        "query": query,
+                        "conversation_history": compact_history,
+                        "ml_data": compact_ml_data,
+                        "user_context": compact_user_context,
+                    },
+                    metadata={"latency_tier": "interactive"},
+                    conversation_history=compact_history,
+                    memory=(user_context.get("structured_context") if isinstance(user_context.get("structured_context"), dict) else {}),
+                    rag_context=compact_rag_context,
+                    timeout_seconds=12.0,
+                    require_structured_output=True,
+                    require_streaming=True,
+                    user_id=user_id,
+                )
             )
             llm_trace.update(result)
             return result.get("payload")
@@ -96,6 +127,15 @@ class ReasoningPipeline:
             symptoms=symptoms,
         )
         structured = _apply_response_format({**structured, "confidence_score": confidence_score})
+        structured = self.conversation.enrich_response(
+            workflow="chatbot",
+            response_payload=structured,
+            query=query,
+            user_context=user_context,
+            conversation_history=conversation_history,
+            risk_level=str(structured.get("risk_level") or ml_data.get("risk_level") or ""),
+            conversation_intent=conversation_intent or "conversation",
+        )
         structured["sources"] = rag_context.get("summary") or []
         structured["reasoning"] = pipeline_result.get("reasoning") or {}
         structured["reasoning_steps"] = pipeline_result.get("reasoning_steps") or _build_reasoning_steps(
@@ -148,6 +188,9 @@ class ReasoningPipeline:
                 "rag_context": self._compact_rag_prompt_context(rag_context),
                 "report_context": self._compact_user_prompt_context(report_context or {}, workflow="report_summary"),
                 "risk_level": risk_level,
+                "user_context": self._compact_user_prompt_context(report_context or {}, workflow="report_summary"),
+                "query": str(structured_data.get("patient_summary") or structured_data.get("summary") or ""),
+                "intent": "report_summary",
             },
         )
         logger.info(
@@ -156,16 +199,35 @@ class ReasoningPipeline:
             self._estimate_tokens(report_context or {}),
             len(_json_list(rag_context.get("summary"))),
         )
-        generated = await self.model_registry.generate_json(
-            workflow="report_summary",
-            prompt=prompt_pack["prompt"],
-            system_prompt=prompt_pack["system_prompt"],
+        generated = await self.provider_gateway.generate(
+            ProviderTaskRequest(
+                task="doctor_summary",
+                workflow="report_summary",
+                prompt=prompt_pack["prompt"],
+                system_prompt=prompt_pack["system_prompt"],
+                context={
+                    "structured_data": structured_data,
+                    "risk_level": risk_level,
+                },
+                memory=(report_context.get("structured_context") if isinstance(report_context, dict) and isinstance(report_context.get("structured_context"), dict) else {}),
+                rag_context=self._compact_rag_prompt_context(rag_context),
+                timeout_seconds=12.0,
+                user_id=str((report_context.get("profile") or {}).get("user_id") or "") if isinstance(report_context, dict) else "",
+            )
         )
         normalized = ReportService._normalize_clinical_summary_payload(
             generated.get("payload"),
             fallback=fallback,
             structured_data=structured_data,
             computed_risk_level=risk_level,
+        )
+        normalized = self.conversation.enrich_response(
+            workflow="report_summary",
+            response_payload=normalized,
+            query=str(structured_data.get("patient_summary") or structured_data.get("summary") or ""),
+            user_context=report_context or {},
+            risk_level=str(normalized.get("risk_level") or risk_level),
+            conversation_intent="report_summary",
         )
         normalized["provider"] = generated.get("provider") or "deterministic_fallback"
         normalized["provider_attempts"] = generated.get("attempts") or []
@@ -185,6 +247,7 @@ class ReasoningPipeline:
         feature_payload: dict[str, Any] | None = None,
         clinical_history: dict[str, Any] | None = None,
         context_bundle: dict[str, Any] | None = None,
+        rag_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         try:
             generated = await RagExplanationPipeline().explain(
@@ -199,7 +262,8 @@ class ReasoningPipeline:
             pass
 
         query_payload = build_query_from_shap(shap_values)
-        rag_context = await self.rag_pipeline.retrieve_ai_insight_context(shap_values)
+        if not isinstance(rag_context, dict) or not rag_context:
+            rag_context = await self.rag_pipeline.retrieve_ai_insight_context(shap_values)
         feature_payload = feature_payload if isinstance(feature_payload, dict) else {}
         clinical_history = clinical_history if isinstance(clinical_history, dict) else {}
         history_analysis = clinical_history.get("analysis") if isinstance(clinical_history.get("analysis"), dict) else {}
@@ -235,6 +299,9 @@ class ReasoningPipeline:
                 "rag_context": self._compact_rag_prompt_context(rag_context),
                 "query_payload": query_payload,
                 "context_bundle": self._compact_user_prompt_context(context_bundle or {}, workflow="ai_insights"),
+                "user_context": self._compact_user_prompt_context(context_bundle or {}, workflow="ai_insights"),
+                "query": str(clinical_payload["summary"]),
+                "intent": "analytics_explanation",
             },
         )
         logger.info(
@@ -243,10 +310,21 @@ class ReasoningPipeline:
             self._estimate_tokens(context_bundle or {}),
             len(_json_list(rag_context.get("summary"))),
         )
-        generated = await self.model_registry.generate_json(
-            workflow="ai_insights",
-            prompt=prompt_pack["prompt"],
-            system_prompt=prompt_pack["system_prompt"],
+        generated = await self.provider_gateway.generate(
+            ProviderTaskRequest(
+                task="risk_explanation",
+                workflow="ai_insights",
+                prompt=prompt_pack["prompt"],
+                system_prompt=prompt_pack["system_prompt"],
+                context={
+                    "risk_score": risk_score,
+                    "risk_level": risk_level,
+                    "query_payload": query_payload,
+                },
+                memory=(context_bundle.get("structured_context") if isinstance(context_bundle, dict) and isinstance(context_bundle.get("structured_context"), dict) else {}),
+                rag_context=self._compact_rag_prompt_context(rag_context),
+                timeout_seconds=10.0,
+            )
         )
         payload = generated.get("payload") if isinstance(generated.get("payload"), dict) else {}
         merged = {
@@ -258,6 +336,14 @@ class ReasoningPipeline:
         merged["factors"] = payload.get("factors") if isinstance(payload.get("factors"), list) and payload.get("factors") else fallback["factors"]
         merged["retrieval"] = payload.get("retrieval") if isinstance(payload.get("retrieval"), dict) and payload.get("retrieval") else fallback["retrieval"]
         merged["top_features"] = payload.get("top_features") if isinstance(payload.get("top_features"), list) and payload.get("top_features") else fallback["top_features"]
+        merged = self.conversation.enrich_response(
+            workflow="ai_insights",
+            response_payload=merged,
+            query=str(clinical_payload["summary"]),
+            user_context=context_bundle or {},
+            risk_level=str(risk_level or merged.get("risk_level") or ""),
+            conversation_intent="analytics_explanation",
+        )
         merged["provider"] = generated.get("provider") or "deterministic_fallback"
         merged["provider_attempts"] = generated.get("attempts") or []
         return merged
@@ -271,6 +357,7 @@ class ReasoningPipeline:
             "profile": user_context.get("profile") if isinstance(user_context.get("profile"), dict) else {},
             "memory_summary": _json_list(user_context.get("memory_summary"))[:6],
             "longitudinal_summary": user_context.get("longitudinal_summary") if isinstance(user_context.get("longitudinal_summary"), dict) else {},
+            "continuity_summary": user_context.get("continuity_summary") if isinstance(user_context.get("continuity_summary"), dict) else {},
             "structured_context": {
                 key: _json_list(structured.get(key))[:4]
                 for key in (

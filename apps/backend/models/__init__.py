@@ -47,6 +47,14 @@ from .feedback            import Feedback, FeedbackEntityType, FeedbackType
 from .timeline_event      import TimelineEvent
 from .symptom_analysis_session import SymptomAnalysisSession
 from .generated_report import GeneratedReport
+from .memory import (
+    EpisodicMemoryRecord,
+    SemanticMemoryRecord,
+    HealthMemoryRecord,
+    EmotionalMemoryRecord,
+    MemorySummaryRecord,
+    MemoryAuditLogRecord,
+)
 
 __all__ = [
     # Core Base
@@ -85,6 +93,12 @@ __all__ = [
     "TimelineEvent",
     "SymptomAnalysisSession",
     "GeneratedReport",
+    "EpisodicMemoryRecord",
+    "SemanticMemoryRecord",
+    "HealthMemoryRecord",
+    "EmotionalMemoryRecord",
+    "MemorySummaryRecord",
+    "MemoryAuditLogRecord",
     # Enums
     "DeviceTypeEnum",
     "ReportTypeEnum",

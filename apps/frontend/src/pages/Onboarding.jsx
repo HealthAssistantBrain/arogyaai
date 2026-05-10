@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, Link, useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { motion } from 'framer-motion';
 import {
@@ -15,8 +15,8 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
+import { logOrchestration } from '../lib/orchestrationDebug';
 import { ROUTES } from '../router/routes';
-import api from '../lib/axios';
 import OnboardingHeader from '../components/OnboardingHeader';
 import { calculateAge } from '../utils/calculateAge';
 
@@ -48,27 +48,55 @@ const Onboarding = () => {
   const user = useAuthStore((state) => state.user);
   const normalizedProfileGender = profile?.gender === 'non-binary' ? 'other' : profile?.gender;
   const normalizedHealthGender = healthProfile?.gender === 'non-binary' ? 'other' : healthProfile?.gender;
+  const renderCountRef = useRef(0);
+  const submitLockRef = useRef(false);
+  const lastSubmittedSignatureRef = useRef(null);
+  const hydratedSignatureRef = useRef(null);
 
   const [loading, setLoading] = useState(false);
+  const initialValues = useMemo(() => ({
+    fullName: profile?.full_name || user?.full_name || user?.name || '',
+    gender: normalizedProfileGender || normalizedHealthGender || '',
+    dob: profile?.date_of_birth || profile?.dob || healthProfile?.date_of_birth || '',
+    occupation: profile?.occupation || profile?.user_profile?.occupation || '',
+    city: profile?.city || profile?.user_profile?.city || '',
+    maritalStatus: profile?.marital_status || profile?.user_profile?.marital_status || '',
+    height: profile?.height_cm || healthProfile?.height || '',
+    weight: profile?.weight_kg || healthProfile?.weight || '',
+    bloodGroup: profile?.blood_group || healthProfile?.blood_group || '',
+  }), [
+    healthProfile?.blood_group,
+    healthProfile?.date_of_birth,
+    healthProfile?.height,
+    healthProfile?.weight,
+    normalizedHealthGender,
+    normalizedProfileGender,
+    profile?.blood_group,
+    profile?.city,
+    profile?.date_of_birth,
+    profile?.dob,
+    profile?.full_name,
+    profile?.height_cm,
+    profile?.marital_status,
+    profile?.occupation,
+    profile?.user_profile?.city,
+    profile?.user_profile?.marital_status,
+    profile?.user_profile?.occupation,
+    profile?.weight_kg,
+    user?.full_name,
+    user?.name,
+  ]);
+  const initialValuesSignature = JSON.stringify(initialValues);
   const {
     register,
     handleSubmit,
     setValue,
     getValues,
+    reset,
     watch,
     formState: { errors },
   } = useForm({
-    defaultValues: {
-      fullName: profile?.full_name || user?.full_name || user?.name || '',
-      gender: normalizedProfileGender || normalizedHealthGender || '',
-      dob: profile?.date_of_birth || profile?.dob || healthProfile?.date_of_birth || '',
-      occupation: profile?.occupation || profile?.user_profile?.occupation || '',
-      city: profile?.city || profile?.user_profile?.city || '',
-      maritalStatus: profile?.marital_status || profile?.user_profile?.marital_status || '',
-      height: profile?.height_cm || healthProfile?.height || '',
-      weight: profile?.weight_kg || healthProfile?.weight || '',
-      bloodGroup: profile?.blood_group || healthProfile?.blood_group || '',
-    },
+    defaultValues: initialValues,
   });
 
   const selectedGender = watch('gender');
@@ -79,23 +107,38 @@ const Onboarding = () => {
   const restoredStep = Number.isFinite(parsedStep) && parsedStep >= 1 && parsedStep <= 6 ? parsedStep : 1;
 
   useEffect(() => {
-    setValue('fullName', profile?.full_name || user?.full_name || user?.name || '');
-    setValue('gender', normalizedProfileGender || normalizedHealthGender || '');
-    setValue('dob', profile?.date_of_birth || profile?.dob || '');
-    setValue('occupation', profile?.occupation || profile?.user_profile?.occupation || '');
-    setValue('city', profile?.city || profile?.user_profile?.city || '');
-    setValue('maritalStatus', profile?.marital_status || profile?.user_profile?.marital_status || '');
-    setValue('height', profile?.height_cm || healthProfile?.height || '');
-    setValue('weight', profile?.weight_kg || healthProfile?.weight || '');
-    setValue('bloodGroup', profile?.blood_group || healthProfile?.blood_group || '');
-  }, [healthProfile?.blood_group, healthProfile?.height, healthProfile?.weight, normalizedHealthGender, normalizedProfileGender, profile?.blood_group, profile?.city, profile?.date_of_birth, profile?.dob, profile?.full_name, profile?.height_cm, profile?.marital_status, profile?.occupation, profile?.user_profile?.city, profile?.user_profile?.marital_status, profile?.user_profile?.occupation, profile?.weight_kg, setValue, user?.full_name, user?.name]);
+    renderCountRef.current += 1;
+    logOrchestration('onboarding', 'step1.render', {
+      renderCount: renderCountRef.current,
+      onboardingStep: useAuthStore.getState().onboardingStep,
+      onboardingDone: useAuthStore.getState().onboardingDone,
+    });
+  });
+
+  useEffect(() => {
+    if (hydratedSignatureRef.current === initialValuesSignature) {
+      return;
+    }
+
+    hydratedSignatureRef.current = initialValuesSignature;
+    logOrchestration('onboarding', 'step1.hydrate_form', {
+      signature: initialValuesSignature,
+      hasProfile: !!profile?.id || !!profile?.user_id,
+    });
+    reset(initialValues);
+  }, [initialValues, initialValuesSignature, profile?.id, profile?.user_id, reset]);
 
   useEffect(() => {
     if (!stepFromUrl && !stepFromStorage) {
       return;
     }
 
-    setOnboardingStep(restoredStep);
+    logOrchestration('onboarding', 'step1.restore_step', {
+      restoredStep,
+      stepFromUrl,
+      stepFromStorage,
+    });
+    setOnboardingStep(restoredStep, { persist: false });
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem('onboarding_step');
     }
@@ -131,9 +174,9 @@ const Onboarding = () => {
     return true;
   };
 
-  const saveProfile = async (data) => {
+  const buildProfilePayload = (data, nextStep) => {
     const derivedAge = calculateAge(data.dob);
-    const payload = {
+    return {
       full_name: data.fullName,
       date_of_birth: data.dob,
       age: derivedAge,
@@ -144,17 +187,32 @@ const Onboarding = () => {
       height_cm: Number(data.height),
       weight_kg: Number(data.weight),
       blood_group: data.bloodGroup,
+      onboarding_step: nextStep,
     };
-    await api.post('/users/profile', payload);
   };
 
   const handleContinue = async (data) => {
-    if (!validateForm(data)) return;
+    if (!validateForm(data) || submitLockRef.current) return;
     setLoading(true);
+    submitLockRef.current = true;
     try {
-      await saveProfile(data);
-      setOnboardingStep(2);
-      await useAuthStore.getState().fetchProfile();
+      const payload = buildProfilePayload(data, 2);
+      const payloadSignature = JSON.stringify(payload);
+      if (lastSubmittedSignatureRef.current === payloadSignature) {
+        logOrchestration('onboarding', 'step1.submit_deduped', {
+          signature: payloadSignature,
+          action: 'continue',
+        });
+      } else {
+        const saved = await saveOnboarding(payload);
+        if (!saved) {
+          toast.error('Failed to save data');
+          return;
+        }
+        lastSubmittedSignatureRef.current = payloadSignature;
+      }
+
+      setOnboardingStep(2, { persist: false });
 
       toast.success('Profile updated!');
       if (searchParams.get('return') === 'summary') {
@@ -163,26 +221,51 @@ const Onboarding = () => {
         navigate(ROUTES.ONBOARDING_STEP_2);
       }
     } catch (err) {
+      logOrchestration('onboarding', 'step1.submit_failed', {
+        action: 'continue',
+        message: err?.message ?? 'unknown',
+      }, 'warn');
       toast.error('Failed to save data');
     } finally {
+      submitLockRef.current = false;
       setLoading(false);
     }
   };
 
   const handleSaveAndExit = async () => {
     const data = getValues();
-    if (!validateForm(data)) return;
+    if (!validateForm(data) || submitLockRef.current) return;
     setLoading(true);
+    submitLockRef.current = true;
     try {
-      await saveProfile(data);
-      setOnboardingStep(2);
-      await useAuthStore.getState().fetchProfile();
+      const payload = buildProfilePayload(data, 2);
+      const payloadSignature = JSON.stringify(payload);
+      if (lastSubmittedSignatureRef.current === payloadSignature) {
+        logOrchestration('onboarding', 'step1.submit_deduped', {
+          signature: payloadSignature,
+          action: 'save_exit',
+        });
+      } else {
+        const saved = await saveOnboarding(payload);
+        if (!saved) {
+          toast.error('Failed to save data');
+          return;
+        }
+        lastSubmittedSignatureRef.current = payloadSignature;
+      }
+
+      setOnboardingStep(2, { persist: false });
 
       toast.success('Progress saved');
       navigate(ROUTES.DASHBOARD);
     } catch (err) {
+      logOrchestration('onboarding', 'step1.submit_failed', {
+        action: 'save_exit',
+        message: err?.message ?? 'unknown',
+      }, 'warn');
       toast.error('Failed to save data');
     } finally {
+      submitLockRef.current = false;
       setLoading(false);
     }
   };

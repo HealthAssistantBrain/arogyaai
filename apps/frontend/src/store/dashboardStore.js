@@ -3,6 +3,7 @@ import { createJSONStorage, devtools, persist } from 'zustand/middleware';
 import api from '../lib/axios';
 import { safeArray, safeNumber, safeObject, deepEqual, safeText } from '../utils/safeData';
 import { useAuthStore } from './authStore';
+import { logOrchestration } from '../lib/orchestrationDebug';
 
 /**
  * Pipeline-aware dashboard store.
@@ -17,16 +18,20 @@ const STALE_THRESHOLD_MS = 60_000;
 const VITALS_LIMIT = 100;
 const DEFAULT_VITAL_RANGE = '24h';
 const DASHBOARD_STORAGE_KEY = 'arogyaai-dashboard-cache';
+const DASHBOARD_PERSIST_VERSION = 2;
 const NO_CACHE_HEADERS = {
     'Cache-Control': 'no-cache, no-store, max-age=0, must-revalidate',
     Pragma: 'no-cache',
 };
 
 let dashboardFetchSeq = 0;
+let dashboardInFlightPromise = null;
+let dashboardAbortController = null;
 
 const emptySlice = () => ({ data: null, status: 'fallback', source: 'db', last_updated: null });
 const vitalKey = (type, range) => `${type}:${range}`;
 const isPlainObject = (value) => Boolean(value && typeof value === 'object' && !Array.isArray(value));
+const isBrowser = () => typeof window !== 'undefined';
 const getCurrentDashboardUserId = () => useAuthStore.getState()?.user?.id ?? null;
 const isVitalPoint = (value) => isPlainObject(value) && value.timestamp && (
     value.value !== undefined || value.systolic !== undefined || value.diastolic !== undefined
@@ -243,6 +248,74 @@ const normalizeVitals = (payload, type, range) => {
     };
 };
 
+const dashboardPersistStorage = {
+    getItem: (name) => {
+        if (!isBrowser()) return null;
+
+        const value = window.localStorage.getItem(name);
+        if (value === null) return null;
+
+        try {
+            JSON.parse(value);
+            return value;
+        } catch {
+            window.localStorage.removeItem(name);
+            return null;
+        }
+    },
+    setItem: (name, value) => {
+        if (!isBrowser()) return;
+        window.localStorage.setItem(name, value);
+    },
+    removeItem: (name) => {
+        if (!isBrowser()) return;
+        window.localStorage.removeItem(name);
+    },
+};
+
+const sanitizeDashboardSlice = (slice) => {
+    if (!isPlainObject(slice)) {
+        return emptySlice();
+    }
+
+    return {
+        data: slice.data ?? null,
+        status: typeof slice.status === 'string' ? slice.status : 'fallback',
+        source: typeof slice.source === 'string' ? slice.source : 'db',
+        last_updated: typeof slice.last_updated === 'string' ? slice.last_updated : null,
+    };
+};
+
+const sanitizePersistedDashboardState = (persistedState = {}) => {
+    const vitals = isPlainObject(persistedState.vitals)
+        ? Object.fromEntries(
+            Object.entries(persistedState.vitals).map(([key, slice]) => {
+                const [type = key, range = DEFAULT_VITAL_RANGE] = key.split(':');
+                return [key, coerceVitalSlice(slice, type, range)];
+            })
+        )
+        : {};
+
+    return {
+        healthScore: sanitizeDashboardSlice(persistedState.healthScore),
+        history: sanitizeDashboardSlice(persistedState.history),
+        prediction: sanitizeDashboardSlice(persistedState.prediction),
+        profile: sanitizeDashboardSlice(persistedState.profile),
+        alerts: sanitizeDashboardSlice(persistedState.alerts),
+        recommendedTests: sanitizeDashboardSlice(persistedState.recommendedTests),
+        googleFit: sanitizeDashboardSlice(persistedState.googleFit),
+        vitals,
+        dashboardData: persistedState.dashboardData == null ? null : safeObject(persistedState.dashboardData),
+        dashboardSignature: typeof persistedState.dashboardSignature === 'string' ? persistedState.dashboardSignature : null,
+        dashboardUpdatedAt: typeof persistedState.dashboardUpdatedAt === 'string' ? persistedState.dashboardUpdatedAt : null,
+        selectedMetricRange: persistedState.selectedMetricRange === '7d' ? '7d' : '24h',
+        lastFetched: typeof persistedState.lastFetched === 'string' ? persistedState.lastFetched : null,
+        lastFetchedAt: Number.isFinite(Number(persistedState.lastFetchedAt)) ? Number(persistedState.lastFetchedAt) : null,
+        cacheOwnerId: typeof persistedState.cacheOwnerId === 'string' ? persistedState.cacheOwnerId : null,
+        cacheDayKey: typeof persistedState.cacheDayKey === 'string' ? persistedState.cacheDayKey : getLocalDayKey(),
+    };
+};
+
 const useDashboardStore = create(
     persist(
         devtools((set, get) => ({
@@ -445,9 +518,8 @@ const useDashboardStore = create(
             },
 
             fetchDashboardData: async ({ force = false, silent = false } = {}) => {
-                const { lastFetched, loading, cacheOwnerId, cacheDayKey } = get();
+                const { lastFetched, cacheOwnerId, cacheDayKey, dashboardData } = get();
                 const currentUserId = getCurrentDashboardUserId();
-                if (loading && !force) return;
                 if (cacheDayKey && cacheDayKey !== getLocalDayKey()) {
                     get().invalidateDailyDashboardCache?.();
                 }
@@ -457,38 +529,75 @@ const useDashboardStore = create(
                     cacheOwnerId === currentUserId &&
                     lastFetched &&
                     Date.now() - lastFetched < STALE_THRESHOLD_MS
-                ) return;
+                ) return dashboardData;
+
+                if (dashboardInFlightPromise) {
+                    if (!force) {
+                        return dashboardInFlightPromise;
+                    }
+
+                    dashboardAbortController?.abort?.('dashboard_refetch');
+                }
 
                 const requestId = ++dashboardFetchSeq;
+                const ownsCache = Boolean(currentUserId) && cacheOwnerId === currentUserId;
+                const hasCachedSnapshot = ownsCache && Boolean(dashboardData);
+                const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+                dashboardAbortController = controller;
+
                 console.log('[Dashboard] Fetching dashboard data');
-                set({ loading: true, isFetching: true }, false, silent ? 'fetch/start:silent' : 'fetch/start');
-                set({ error: null }, false, 'fetch/clear-error');
+                set({
+                    loading: !silent && !hasCachedSnapshot,
+                    isFetching: true,
+                    error: null,
+                }, false, hasCachedSnapshot || silent ? 'fetch/revalidate' : 'fetch/start');
 
-                try {
-                    const response = await api.get('/dashboard', buildNoCacheHeadersConfig());
-                    console.log('[Dashboard] response', response.data);
-                    const bundle = response.data?.data ?? response.data ?? {};
-                    if (requestId !== dashboardFetchSeq) {
+                const requestPromise = (async () => {
+                    try {
+                        const response = await api.get('/dashboard', {
+                            ...buildNoCacheHeadersConfig(),
+                            signal: controller?.signal,
+                        });
+                        console.log('[Dashboard] response', response.data);
+                        const bundle = response.data?.data ?? response.data ?? {};
+                        if (requestId !== dashboardFetchSeq) {
+                            return bundle;
+                        }
+
+                        get().setDashboardData(bundle, { replace: true, source: 'fetch' });
                         return bundle;
-                    }
+                    } catch (err) {
+                        if (controller?.signal?.aborted || err?.code === 'ERR_CANCELED') {
+                            return get().dashboardData;
+                        }
 
-                    get().setDashboardData(bundle, { replace: true, source: 'fetch' });
-                    return bundle;
-                } catch (err) {
-                    if (requestId !== dashboardFetchSeq) {
-                        return;
+                        if (requestId !== dashboardFetchSeq) {
+                            return get().dashboardData;
+                        }
+
+                        console.error('[dashboardStore] fetch failed:', err);
+                        set(
+                            {
+                                loading: false,
+                                isFetching: false,
+                                error: err?.response?.data?.detail || err?.message || 'Failed to load dashboard data.',
+                            },
+                            false,
+                            'fetch/error'
+                        );
+                        return get().dashboardData;
+                    } finally {
+                        if (dashboardInFlightPromise === requestPromise) {
+                            dashboardInFlightPromise = null;
+                        }
+                        if (dashboardAbortController === controller) {
+                            dashboardAbortController = null;
+                        }
                     }
-                    console.error('[dashboardStore] fetch failed:', err);
-                    set(
-                        {
-                            loading: false,
-                            isFetching: false,
-                            error: err?.response?.data?.detail || err?.message || 'Failed to load dashboard data.',
-                        },
-                        false,
-                        'fetch/error'
-                    );
-                }
+                })();
+
+                dashboardInFlightPromise = requestPromise;
+                return requestPromise;
             },
 
             _managePoll: (slices) => {
@@ -510,6 +619,9 @@ const useDashboardStore = create(
             clearDashboard: () => {
                 const { _pollTimer } = get();
                 if (_pollTimer) clearInterval(_pollTimer);
+                dashboardAbortController?.abort?.('dashboard_clear');
+                dashboardAbortController = null;
+                dashboardInFlightPromise = null;
                 dashboardFetchSeq = 0;
                 set(
                     {
@@ -542,7 +654,8 @@ const useDashboardStore = create(
         }), { name: 'arogyaai-dashboard' }),
         {
             name: DASHBOARD_STORAGE_KEY,
-            storage: createJSONStorage(() => window.localStorage),
+            version: DASHBOARD_PERSIST_VERSION,
+            storage: createJSONStorage(() => dashboardPersistStorage),
             partialize: (state) => ({
                 healthScore: state.healthScore,
                 history: state.history,
@@ -561,10 +674,24 @@ const useDashboardStore = create(
                 cacheOwnerId: state.cacheOwnerId,
                 cacheDayKey: state.cacheDayKey,
             }),
+            migrate: (persistedState, version) => {
+                if (version !== DASHBOARD_PERSIST_VERSION) {
+                    dashboardPersistStorage.removeItem(DASHBOARD_STORAGE_KEY);
+                    logOrchestration('zustand', 'dashboard.persist_version_reset', {
+                        fromVersion: version ?? null,
+                        toVersion: DASHBOARD_PERSIST_VERSION,
+                    }, 'info');
+                }
+
+                return sanitizePersistedDashboardState(persistedState);
+            },
             onRehydrateStorage: () => (state, error) => {
                 if (error) {
                     console.warn('[dashboardStore] Persist rehydration failed:', error);
                 }
+                logOrchestration('zustand', 'dashboard.persist_rehydrated', {
+                    hasError: !!error,
+                }, error ? 'warn' : 'debug');
                 if (state) {
                     const currentDayKey = getLocalDayKey();
                     if (state.cacheDayKey && state.cacheDayKey !== currentDayKey) {

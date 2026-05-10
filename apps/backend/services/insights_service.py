@@ -104,6 +104,9 @@ class InsightsService:
                 db=db,
                 current_user=user,
                 payload={"mode": "dashboard"},
+                endpoint_type="dashboard_insights",
+                intent="health_insights",
+                latency_tier="interactive",
             )
         )
         payload = orchestrated.get("data") if isinstance(orchestrated.get("data"), dict) else {}
@@ -166,6 +169,9 @@ class InsightsService:
                 db=db,
                 current_user=user,
                 payload={"mode": "dashboard"},
+                endpoint_type="dashboard_health_insights",
+                intent="health_insights",
+                latency_tier="interactive",
             )
         )
         payload = orchestrated.get("data") if isinstance(orchestrated.get("data"), dict) else {}

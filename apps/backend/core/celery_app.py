@@ -93,6 +93,7 @@ if CELERY_AVAILABLE:
             "workers.notification_tasks",
             "workers.google_fit_tasks",
             "workers.emergency_tasks",
+            "tasks.memory_tasks",
         ],
     )
 else:  # pragma: no cover - local test fallback

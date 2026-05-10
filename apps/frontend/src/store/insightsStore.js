@@ -1,10 +1,10 @@
 import { create } from 'zustand';
 import { createJSONStorage, devtools, persist } from 'zustand/middleware';
-import api from '../lib/axios';
 import { normalizeClinicalCards } from '../lib/clinicalCards';
-import { fetchPredictionExplanation } from '../services/predictionExplanationService';
 import { safeArray, safeObject, safeText } from '../utils/safeData';
 import { useAuthStore } from './authStore';
+import useDashboardStore from './dashboardStore';
+import useHealthStore from './healthStore';
 
 const INSIGHTS_STORAGE_KEY = 'arogyaai-insights';
 const STALE_THRESHOLD_MS = 60_000;
@@ -647,7 +647,7 @@ const buildMetricInsights = (metricsResponse, dashboardBundle) => {
   ];
 };
 
-const normalizeInsightsPayload = ({ explanationResponse, dashboardResponse, metricsResponse }) => {
+export const composeInsightsSnapshot = ({ explanationResponse, dashboardResponse, metricsResponse }) => {
   const explanationPayload = getExplanationPayload(explanationResponse);
   const dashboardBundle = getDashboardBundle(dashboardResponse);
   const explanationEnvelope = safeObject(explanationResponse);
@@ -779,6 +779,8 @@ const normalizeInsightsPayload = ({ explanationResponse, dashboardResponse, metr
   };
 };
 
+const normalizeInsightsPayload = composeInsightsSnapshot;
+
 const collectErrors = (...responses) => responses
   .filter((item) => item.status === 'rejected')
   .map((item) =>
@@ -809,6 +811,11 @@ export const useInsightsStore = create(
         const state = get();
         const currentUserId = getCurrentUserId();
         const ownsCache = Boolean(currentUserId) && state.cacheOwnerId === currentUserId;
+        const buildSnapshot = () => normalizeInsightsPayload({
+          explanationResponse: useHealthStore.getState().explanation ?? {},
+          dashboardResponse: useDashboardStore.getState().dashboardData ?? {},
+          metricsResponse: useHealthStore.getState().metrics ?? {},
+        });
 
         if (!force && state.isFetching) {
           return state.insights;
@@ -823,9 +830,12 @@ export const useInsightsStore = create(
           return state.insights;
         }
 
+        const immediateSnapshot = buildSnapshot();
         set(
           {
-            loading: !silent && !state.insights,
+            insights: immediateSnapshot?.hasAnyData ? immediateSnapshot : state.insights,
+            data: immediateSnapshot?.hasAnyData ? immediateSnapshot : state.data,
+            loading: !silent && !(immediateSnapshot?.hasAnyData || state.insights),
             isFetching: true,
             error: null,
           },
@@ -833,16 +843,26 @@ export const useInsightsStore = create(
           'insights/fetchStart'
         );
 
+        const explanationPromise = useHealthStore.getState().fetchExplanation({ force, silent: true });
+        const dashboardPromise = useDashboardStore.getState().fetchDashboardData({ force, silent: true });
+        const metricsPromise = useHealthStore.getState().fetchHealthMetrics({ force, silent: true });
+
         const [explanationResult, dashboardResult, metricsResult] = await Promise.allSettled([
-          fetchPredictionExplanation({ force }).then((data) => ({ data })),
-          api.get('/dashboard'),
-          api.get('/health/metrics'),
+          explanationPromise,
+          dashboardPromise,
+          metricsPromise,
         ]);
 
         const nextInsights = normalizeInsightsPayload({
-          explanationResponse: explanationResult.status === 'fulfilled' ? explanationResult.value.data ?? {} : {},
-          dashboardResponse: dashboardResult.status === 'fulfilled' ? dashboardResult.value.data ?? {} : {},
-          metricsResponse: metricsResult.status === 'fulfilled' ? metricsResult.value.data ?? {} : {},
+          explanationResponse: explanationResult.status === 'fulfilled'
+            ? (useHealthStore.getState().explanation ?? explanationResult.value ?? {})
+            : (useHealthStore.getState().explanation ?? {}),
+          dashboardResponse: dashboardResult.status === 'fulfilled'
+            ? (useDashboardStore.getState().dashboardData ?? dashboardResult.value ?? {})
+            : (useDashboardStore.getState().dashboardData ?? {}),
+          metricsResponse: metricsResult.status === 'fulfilled'
+            ? (useHealthStore.getState().metrics ?? metricsResult.value ?? {})
+            : (useHealthStore.getState().metrics ?? {}),
         });
 
         const errors = collectErrors(explanationResult, dashboardResult, metricsResult);

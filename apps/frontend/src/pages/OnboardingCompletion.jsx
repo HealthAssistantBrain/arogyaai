@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -17,19 +17,24 @@ import {
   Microscope
 } from 'lucide-react';
 import { ROUTES } from '../router/routes';
+import { getAuthLifecycle } from '../router/authRedirects';
 import { lockSystem, unlockSystem } from '../lib/systemLock';
 import { triggerAuthRevalidation } from '../lib/authRevalidator';
-import { syncUser } from '../lib/authSync';
 import { useAuthStore } from '../store/authStore';
 
 const OnboardingCompletion = () => {
   const navigate = useNavigate();
+  const authState = useAuthStore();
+  const lifecycle = getAuthLifecycle(authState);
+  const redirectLockRef = useRef(false);
 
   const handleGoToDashboard = async () => {
+    if (redirectLockRef.current) return;
+    redirectLockRef.current = true;
     lockSystem();
     try {
-      const user = await syncUser({ force: true });
-      if (!user?.is_onboarding_done) {
+      const store = useAuthStore.getState();
+      if (!store.onboardingDone) {
         navigate(ROUTES.ONBOARDING_STEP_1, { replace: true });
         return;
       }
@@ -37,14 +42,22 @@ const OnboardingCompletion = () => {
       navigate(ROUTES.DASHBOARD, { replace: true });
     } finally {
       unlockSystem();              // Release the global lock, triggering the flushed event
+      window.setTimeout(() => {
+        redirectLockRef.current = false;
+      }, 0);
     }
   };
 
   // Auto-redirect after 3 seconds
   useEffect(() => {
+    if (lifecycle.phase === 'ready') {
+      navigate(ROUTES.DASHBOARD, { replace: true });
+      return undefined;
+    }
+
     const timer = setTimeout(handleGoToDashboard, 3000);
     return () => clearTimeout(timer);
-  }, []);
+  }, [lifecycle.phase, navigate]);
 
   // Animation variants
   const containerVariants = {

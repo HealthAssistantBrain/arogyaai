@@ -9,8 +9,9 @@ export default function GlobalStateValidator() {
   const user = useAuthStore((s) => s.user);
   const token = useAuthStore((s) => s.token);
   const isHydrated = useAuthStore((s) => s.isHydrated);
+  const hasBootstrappedAuth = useAuthStore((s) => s.hasBootstrappedAuth);
   const isHydratingAuth = useAuthStore((s) => s.isHydratingAuth);
-  const hydrateAuth = useAuthStore((s) => s.hydrateAuth);
+  const bootstrapAuth = useAuthStore((s) => s.bootstrapAuth);
   const logout = useAuthStore((s) => s.logout);
 
   // ── 0. Trigger backend Hydration on startup ───────────────────────────────────
@@ -21,15 +22,14 @@ export default function GlobalStateValidator() {
   // isHydratingAuth guard prevents double-calls with the cold-start path.
   // ─────────────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (isHydrated && token && !user && !isHydratingAuth) {
-      hydrateAuth();
+    if (isHydrated && token && !user && !isHydratingAuth && !hasBootstrappedAuth) {
+      bootstrapAuth?.({ force: true });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, user, isHydrated, isHydratingAuth, hydrateAuth]);
+  }, [token, user, isHydrated, hasBootstrappedAuth, isHydratingAuth, bootstrapAuth]);
 
   useEffect(() => {
     // ── SECTION 9: Wait for both persist hydration AND network auth hydration
-    if (!isHydrated || isHydratingAuth) return;
+    if (!isHydrated || !hasBootstrappedAuth || isHydratingAuth) return;
 
     // ── SECTION 1: ENFORCE STATE MACHINE CONTRACT
     let isValid = false;
@@ -94,7 +94,7 @@ export default function GlobalStateValidator() {
       console.error(`[SYSTEM SECURITY] Invalid state combination detected: ${reason}. Forcing logout sequence.`);
       logout();
     }
-  }, [isAuthenticated, isEmailVerified, onboardingDone, onboardingStep, token, isHydrated, logout]);
+  }, [isAuthenticated, isEmailVerified, onboardingDone, onboardingStep, token, isHydrated, hasBootstrappedAuth, isHydratingAuth, logout]);
 
   // This is a headless component. It only runs side-effects.
   return null;

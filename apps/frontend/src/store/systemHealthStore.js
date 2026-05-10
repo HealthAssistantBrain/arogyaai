@@ -2,12 +2,21 @@ import { create } from 'zustand';
 import {
   probeSystemHealth,
   SYSTEM_HEALTH_FAILURE_CONFIRMATION_COUNT,
-  SYSTEM_HEALTH_POLL_INTERVAL_MS,
   summarizeHealthResult,
 } from '../lib/systemReadiness';
 
 let healthInterval = null;
 let inFlightHealthCheck = null;
+let pollingActive = false;
+let visibilityListenerBound = false;
+
+const HEALTH_POLL_INTERVALS_MS = {
+  ready: 60_000,
+  degraded: 20_000,
+  down: 10_000,
+  checking: 30_000,
+  unknown: 15_000,
+};
 
 const clearStaleMaintenanceFlags = () => {
   if (typeof window === 'undefined') return;
@@ -78,6 +87,35 @@ const logTransition = (transition) => {
         : console.debug.bind(console);
 
   logger('[STARTUP] health transition', transition);
+};
+
+const clearScheduledPoll = () => {
+  if (!healthInterval) return;
+  window.clearTimeout(healthInterval);
+  healthInterval = null;
+};
+
+const resolvePollDelay = () => {
+  const state = useSystemHealthStore.getState();
+  const baseDelay = HEALTH_POLL_INTERVALS_MS[state.status] ?? HEALTH_POLL_INTERVALS_MS.unknown;
+  if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+    return Math.max(baseDelay, 120_000);
+  }
+  return baseDelay;
+};
+
+const scheduleNextPoll = () => {
+  if (!pollingActive || typeof window === 'undefined') return;
+  clearScheduledPoll();
+  healthInterval = window.setTimeout(() => {
+    void useSystemHealthStore.getState()
+      .checkHealth({ mode: 'poll', source: 'health_poll' })
+      .finally(() => {
+        if (pollingActive) {
+          scheduleNextPoll();
+        }
+      });
+  }, resolvePollDelay());
 };
 
 export const useSystemHealthStore = create((set, get) => ({
@@ -217,20 +255,29 @@ export const useSystemHealthStore = create((set, get) => ({
 
   startHealthPolling: () => {
     clearStaleMaintenanceFlags();
+    pollingActive = true;
+    if (visibilityListenerBound === false && typeof document !== 'undefined') {
+      visibilityListenerBound = true;
+      document.addEventListener('visibilitychange', () => {
+        if (!pollingActive || document.visibilityState !== 'visible') return;
+        void get().checkHealth({ mode: 'manual', source: 'visibility_resume' }).finally(() => {
+          scheduleNextPoll();
+        });
+      });
+    }
+
     if (healthInterval) return () => get().stopHealthPolling();
 
-    void get().checkHealth({ mode: 'poll', source: 'health_poll' });
-    healthInterval = window.setInterval(() => {
-      void get().checkHealth({ mode: 'poll', source: 'health_poll' });
-    }, SYSTEM_HEALTH_POLL_INTERVAL_MS);
+    void get().checkHealth({ mode: 'startup', source: 'health_startup' }).finally(() => {
+      scheduleNextPoll();
+    });
 
     return () => get().stopHealthPolling();
   },
 
   stopHealthPolling: () => {
-    if (!healthInterval) return;
-    window.clearInterval(healthInterval);
-    healthInterval = null;
+    pollingActive = false;
+    clearScheduledPoll();
   },
 }));
 

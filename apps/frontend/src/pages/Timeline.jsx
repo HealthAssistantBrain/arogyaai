@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 
 import MedicalHistoryPanel from '../components/timeline/MedicalHistoryPanel';
+import { MemoryPrivacyControls } from '../components/memory/MemoryPrivacyControls';
 import { useFetchLock } from '../hooks/useFetchLock';
 import api from '../lib/axios';
 import { ROUTES } from '../router/routes';
@@ -866,6 +867,10 @@ const Timeline = () => {
                 <MedicalHistoryPanel onTimelineRefresh={fetchTimeline} />
               </div>
             )}
+
+            <div className="mt-8">
+              <MemoryPrivacyControls />
+            </div>
           </div>
         </section>
       </main>

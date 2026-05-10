@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
+import { logOrchestration } from '../lib/orchestrationDebug';
 import { ROUTES } from '../router/routes';
 import googleFitLogo from '../assets/google-fit.png';
 import { connectGoogleFit } from '../services/deviceService';
@@ -29,13 +30,22 @@ const DeviceConnection = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const setOnboardingStep = useAuthStore((state) => state.setOnboardingStep);
+  const saveOnboarding = useAuthStore((state) => state.saveOnboarding);
 
   const [googleFitConnected, setGoogleFitConnected] = useState(false);
   const [statusLoading, setStatusLoading] = useState(true);
   const [connectionBanner, setConnectionBanner] = useState(null);
 
-  const handleFinish = () => {
-    setOnboardingStep(5);
+  const handleFinish = async () => {
+    const saved = await saveOnboarding({ onboarding_step: 5 });
+    if (!saved) {
+      toast.error('Unable to save your onboarding progress right now.');
+      return;
+    }
+    setOnboardingStep(5, { persist: false });
+    logOrchestration('onboarding', 'step4.continue', {
+      nextStep: 5,
+    }, 'info');
     toast.success('Onboarding profile completed!');
     if (searchParams.get('return') === 'summary') {
       navigate(ROUTES.ONBOARDING_SUMMARY);
@@ -44,8 +54,16 @@ const DeviceConnection = () => {
     }
   };
 
-  const handleSaveAndExit = () => {
-    setOnboardingStep(5);
+  const handleSaveAndExit = async () => {
+    const saved = await saveOnboarding({ onboarding_step: 5 });
+    if (!saved) {
+      toast.error('Unable to save your onboarding progress right now.');
+      return;
+    }
+    setOnboardingStep(5, { persist: false });
+    logOrchestration('onboarding', 'step4.save_exit', {
+      nextStep: 5,
+    }, 'info');
     toast.success('Progress saved');
     navigate(ROUTES.DASHBOARD);
   };
@@ -99,7 +117,7 @@ const DeviceConnection = () => {
   }, [googleFitStatus, googleFitMessage]);
 
   const handleConnectGoogleFit = () => {
-    setOnboardingStep(4);
+    setOnboardingStep(4, { persist: false });
     window.localStorage.setItem('onboarding_step', '4');
     connectGoogleFit({ redirectPath: window.location.pathname });
   };

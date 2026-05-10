@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AlertCircle,
   HeartPulse,
   LoaderCircle,
   Mic,
   Send,
-  Sparkles,
-  User,
 } from 'lucide-react';
 import api from '../lib/axios';
+import ChatMessage from './chat/ChatMessage';
+import useChatStore from '../store/chatStore';
+import { parseSafetyFromResponse } from './safety/SafetyContext';
 
 const promptChips = [
   'Why is my heart rate high?',
@@ -18,8 +20,12 @@ const promptChips = [
 const initialAssistantMessage = {
   id: 'assistant-welcome',
   role: 'assistant',
-  content: "Hello. Tell me what's going on, even if it feels vague. I'll ask the next useful question and interpret your health data cautiously.",
-  structured: null,
+  content: "Hey! What would you like help with today?",
+  structured: {
+    mode: 'casual',
+    depth: 'micro',
+    quick_replies: ['Check symptoms', 'View my risk score', 'Upload a report'],
+  },
 };
 
 const extractErrorMessage = (error) =>
@@ -39,34 +45,39 @@ const toHistoryPayload = (messages) =>
 
 const buildAssistantSummary = (payload) => {
   if (!payload) return 'I reviewed your question using the available health context.';
-  return payload.message || payload.understanding || payload.clinical_interpretation || payload.insight || payload.risk_summary || 'I reviewed your question using the available health context.';
+  return payload.summary_preview || payload.message || payload.summary || payload.understanding || payload.clinical_interpretation || payload.insight || payload.risk_summary || 'I reviewed your question using the available health context.';
 };
 
-const sanitizeDisplayText = (value) =>
-  String(value || '')
-    .replace(/#{1,6}\s*/g, '')
-    .replace(/[*`_]+/g, '')
-    .replace(/\s+\n/g, '\n')
-    .trim();
+const quickReplyToQuery = {
+  'Check symptoms': 'I want to check my symptoms.',
+  'View my risk score': 'Explain my risk score.',
+  'Upload a report': 'I want to upload a report.',
+};
 
-const splitParagraphs = (value) =>
-  sanitizeDisplayText(value)
-    .split(/\n{2,}/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+const typingConfig = {
+  micro: { minMs: 500, label: 'Arya is typing...' },
+  short: { minMs: 800, label: 'Arya is typing...' },
+  medium: { minMs: 1500, label: 'Thinking this through...' },
+  detailed: { minMs: 1400, label: 'Thinking this through...' },
+  expert: { minMs: 1500, label: 'Analyzing your data...' },
+};
 
-const MessageContent = ({ text }) => {
-  const paragraphs = splitParagraphs(text);
+const predictPendingDepth = (value) => {
+  const query = String(value || '').trim().toLowerCase();
+  if (!query) return 'short';
+  if (/(can't breathe|cannot breathe|heart attack|stroke|crushing chest pain|severe)/.test(query)) return 'short';
+  if (/(hi|hello|hey|thanks|thank you|bye|okay|ok|got it)/.test(query) && query.split(/\s+/).length <= 4) return 'micro';
+  if (/(report|blood test|lab report|analyze this report)/.test(query)) return 'expert';
+  if (/(risk score|what should i do|recommend|advice)/.test(query)) return 'detailed';
+  if (/(pain|hurts|headache|dizzy|breath|fever|palpitations|symptom)/.test(query)) return 'medium';
+  return 'short';
+};
 
-  if (!paragraphs.length) return null;
-
-  return (
-    <div className="space-y-2">
-      {paragraphs.map((paragraph) => (
-        <p key={paragraph}>{paragraph}</p>
-      ))}
-    </div>
-  );
+const waitForMinimum = async (startedAt, depth) => {
+  const minimum = typingConfig[depth]?.minMs ?? 800;
+  const elapsed = Date.now() - startedAt;
+  if (elapsed >= minimum) return;
+  await new Promise((resolve) => window.setTimeout(resolve, minimum - elapsed));
 };
 
 const Chatbot = () => {
@@ -74,7 +85,9 @@ const Chatbot = () => {
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState('');
+  const [typingDepth, setTypingDepth] = useState('short');
   const endRef = useRef(null);
+  const { currentMode, escalation, setMode, setEscalation, setCurrentSafety, recordSafetyForMessage } = useChatStore();
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -85,6 +98,8 @@ const Chatbot = () => {
   const sendMessage = async (presetValue) => {
     const query = String(presetValue ?? input).trim();
     if (!query || isSending) return;
+    const requestDepth = predictPendingDepth(query);
+    const requestStartedAt = Date.now();
 
     const nextUserMessage = {
       id: `user-${Date.now()}`,
@@ -99,6 +114,7 @@ const Chatbot = () => {
     setInput('');
     setError('');
     setIsSending(true);
+    setTypingDepth(requestDepth);
 
     try {
       const response = await api.post('/chat', {
@@ -107,16 +123,24 @@ const Chatbot = () => {
       });
 
       const payload = response?.data?.data || null;
+      const safety = parseSafetyFromResponse(payload);
+      await waitForMinimum(requestStartedAt, payload?.depth || requestDepth);
+      setMode(response?.data?.mode || payload?.mode || 'casual');
+      setEscalation(payload?.escalation || null);
+      setCurrentSafety(safety);
+      const assistantMessageId = `assistant-${Date.now()}`;
+      recordSafetyForMessage(assistantMessageId, safety);
       setMessages((current) => [
         ...current,
         {
-          id: `assistant-${Date.now()}`,
+          id: assistantMessageId,
           role: 'assistant',
           content: buildAssistantSummary(payload),
-          structured: payload,
+          structured: { ...payload, safety },
         },
       ]);
     } catch (requestError) {
+      await waitForMinimum(requestStartedAt, requestDepth);
       const message = extractErrorMessage(requestError);
       setError(message);
       setMessages((current) => [
@@ -133,6 +157,10 @@ const Chatbot = () => {
     }
   };
 
+  const handleQuickReply = async (reply) => {
+    await sendMessage(quickReplyToQuery[reply] || reply);
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     await sendMessage();
@@ -147,7 +175,7 @@ const Chatbot = () => {
               <HeartPulse size={20} strokeWidth={2.5} />
             </div>
             <p className="text-sm leading-relaxed text-slate-600 dark:text-text-secondary">
-              Share a symptom, report change, or concern. ArogyaAI will keep the thread in mind and respond carefully.
+              Share a symptom, report change, or concern. Arya will keep the thread in mind and respond naturally.
             </p>
             <div className="flex flex-wrap justify-center gap-2 pt-1">
               {promptChips.map((chip) => (
@@ -165,44 +193,47 @@ const Chatbot = () => {
           </section>
 
           {messages.map((message) => (
-            <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`flex ${message.role === 'user' ? 'max-w-[85%] flex-row-reverse gap-2' : 'max-w-[92%] gap-2'}`}>
-                <div
-                  className={`flex size-8 shrink-0 items-center justify-center rounded-full ${
-                    message.role === 'user'
-                      ? 'bg-secondary/15 text-secondary'
-                      : 'border border-primary/20 bg-white text-primary shadow-sm dark:bg-white/5 dark:text-[#b9abff]'
-                  }`}
-                >
-                  {message.role === 'user' ? <User size={15} strokeWidth={2.5} /> : <Sparkles size={14} strokeWidth={2.5} />}
-                </div>
-
-                <div className="space-y-3">
-                  <div
-                    className={`rounded-2xl px-3 py-3 text-sm shadow-sm ${
-                      message.role === 'user'
-                        ? 'rounded-tr-none bg-primary text-white'
-                        : 'rounded-tl-none border border-slate-200 bg-white text-slate-700 dark:border-stroke dark:bg-white/5 dark:text-text-primary'
-                    }`}
-                  >
-                    <MessageContent text={message.content} />
-                  </div>
-                </div>
-              </div>
-            </div>
+            <ChatMessage
+              key={message.id}
+              message={message}
+              disabled={isSending}
+              onQuickReply={handleQuickReply}
+            />
           ))}
 
           {isSending ? (
             <div className="flex justify-start">
               <div className="flex max-w-[85%] gap-2">
                 <div className="flex size-8 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-white text-primary shadow-sm dark:bg-white/5 dark:text-[#b9abff]">
-                  <Sparkles size={14} strokeWidth={2.5} />
+                  <HeartPulse size={14} strokeWidth={2.5} />
                 </div>
-                <div className="flex items-center gap-2 rounded-2xl rounded-tl-none border border-slate-200 bg-white px-3 py-3 text-sm text-slate-600 shadow-sm dark:border-stroke dark:bg-white/5 dark:text-text-secondary">
-                  <LoaderCircle size={16} className="animate-spin" />
-                  Reviewing this carefully...
+                <div className="space-y-2 rounded-2xl rounded-tl-none border border-slate-200 bg-white px-3 py-3 text-sm text-slate-600 shadow-sm dark:border-stroke dark:bg-white/5 dark:text-text-secondary">
+                  <div className="flex items-center gap-2">
+                    <LoaderCircle size={16} className="animate-spin" />
+                    {typingConfig[typingDepth]?.label || 'Thinking this through...'}
+                  </div>
+                  {typingDepth === 'expert' ? (
+                    <div className="h-1.5 w-44 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
+                      <div className="h-full w-1/2 animate-pulse rounded-full bg-primary/70" />
+                    </div>
+                  ) : null}
                 </div>
               </div>
+            </div>
+          ) : null}
+
+          {escalation?.severity === 'emergency' ? (
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+              <div className="flex items-center gap-2 font-semibold">
+                <AlertCircle size={16} />
+                Emergency guidance is active for this conversation.
+              </div>
+            </div>
+          ) : null}
+
+          {!isSending && currentMode !== 'expert' && escalation?.severity === 'medical' ? (
+            <div className="text-xs font-medium uppercase tracking-[0.18em] text-amber-600 dark:text-amber-300">
+              Clinical mode active
             </div>
           ) : null}
 

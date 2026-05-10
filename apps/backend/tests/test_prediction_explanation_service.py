@@ -174,6 +174,40 @@ def test_get_prediction_explanation_builds_shap_fallback_recommendations():
     assert "BMI is currently 31.4" in recommendation["description"]
 
 
+def test_get_prediction_explanation_can_defer_generation_to_background():
+    risk_score = SimpleNamespace(
+        id="prediction-1",
+        overall_score=0.42,
+        risk_level=SimpleNamespace(value="HIGH"),
+        risk_payload={},
+    )
+    shap_rows = [
+        SimpleNamespace(
+            feature_name="activity",
+            shap_value=0.21,
+            abs_shap_value=0.21,
+            direction="increase",
+            shap_payload={"feature_value": 5200},
+        )
+    ]
+
+    with patch.object(PredictionExplanationService, "_risk_record", return_value=risk_score), \
+        patch("services.prediction_explanation_service.StoragePipelineService.latest_shap_values", return_value=shap_rows), \
+        patch("services.prediction_explanation_service.ClinicalHistoryService.latest_history_analysis", return_value={}), \
+        patch.object(PredictionExplanationService, "_cached_explanation", return_value=None):
+        result = asyncio.run(
+            PredictionExplanationService.get_prediction_explanation(
+                MagicMock(),
+                SimpleNamespace(id="user-1"),
+                allow_generation=False,
+            )
+        )
+
+    assert result["status"] == "processing"
+    assert result["data"]["summary"] == "Personalized AI explanation is being prepared in the background."
+    assert result["data"]["prediction_id"] == "prediction-1"
+
+
 def test_get_prediction_explanation_adds_clinical_sections():
     risk_score = SimpleNamespace(
         id="prediction-1",

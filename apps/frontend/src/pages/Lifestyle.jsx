@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
+import { logOrchestration } from '../lib/orchestrationDebug';
 import { ROUTES } from '../router/routes';
 import api from '../lib/axios';
 import OnboardingHeader from '../components/OnboardingHeader';
@@ -154,9 +155,11 @@ const Lifestyle = () => {
         onset: data.onset || null,
         severity: data.severity ? parseInt(data.severity, 10) : null,
       });
-      await useAuthStore.getState().fetchProfile();
     } catch (err) {
       console.log("Non-blocking error", err);
+      toast.error('Unable to save your lifestyle assessment right now.');
+      setLoading(false);
+      return;
     }
 
     try {
@@ -165,7 +168,10 @@ const Lifestyle = () => {
         toast.error('Unable to save your lifestyle assessment right now.');
         return;
       }
-      setOnboardingStep(4);
+      setOnboardingStep(4, { persist: false });
+      logOrchestration('onboarding', 'step3.continue', {
+        nextStep: 4,
+      }, 'info');
       toast.success('Lifestyle assessment saved');
       if (searchParams.get('return') === 'summary') {
         navigate(ROUTES.ONBOARDING_SUMMARY);
@@ -197,11 +203,20 @@ const Lifestyle = () => {
         onset: data.onset || null,
         severity: data.severity ? parseInt(data.severity, 10) : null,
       });
-      await useAuthStore.getState().fetchProfile();
-      await saveOnboarding({ onboarding_step: 4 });
+      const saved = await saveOnboarding({ onboarding_step: 4 });
+      if (!saved) {
+        toast.error('Unable to save your lifestyle assessment right now.');
+        return;
+      }
+      setOnboardingStep(4, { persist: false });
+      logOrchestration('onboarding', 'step3.save_exit', {
+        nextStep: 4,
+      }, 'info');
       toast.success('Progress saved');
     } catch (err) {
       console.log("Non-blocking error", err);
+      toast.error('Unable to save your lifestyle assessment right now.');
+      return;
     } finally {
       setLoading(false);
     }

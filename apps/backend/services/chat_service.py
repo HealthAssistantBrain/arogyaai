@@ -17,6 +17,15 @@ from sqlalchemy import desc
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from ai.safety import (
+    ConversationContext,
+    ProviderType,
+    apply_provider_safety_prompt,
+    get_temperature_cap,
+    infer_provider_type,
+    validate_response,
+)
+from ai.memory import RetrievedMemoryContext, get_memory_engine
 from models import ChatSession, LabResult, Report, User, UserVital
 from pipelines.ml_pipeline.service import MLPipelineService
 from pipelines.rag_pipeline.config import RagSettings
@@ -743,6 +752,7 @@ def build_clinical_context(
             "clinical_history": clinical_history,
             "history_timeline": user_context.get("history_timeline") or [],
             "conversation_state": user_context.get("conversation_state") or {},
+            "continuity_summary": user_context.get("continuity_summary") or {},
         },
         "ml_output": {
             "risk_score": ml_data.get("overall_risk"),
@@ -785,6 +795,7 @@ def build_clinical_context(
         "rag_disease_context": rag_context.get("disease_context") or [],
         "conversation_history": _normalize_history(conversation_history),
         "conversation_state": user_context.get("conversation_state") or {},
+        "continuity_summary": user_context.get("continuity_summary") or {},
         "patient_profile": user_context.get("profile"),
         "patient_vitals": vitals,
         "ml_risk_scores": {
@@ -1015,11 +1026,29 @@ def _load_chat_session(
 def _session_context_payload(chat_session: ChatSession | None) -> dict[str, Any]:
     messages = _normalize_history(_session_messages(chat_session))
     symptoms_history = _session_symptoms(chat_session)
+    recent_emotions: list[str] = []
+    last_persona = ""
+    last_follow_up_topics: list[str] = []
+    for item in _session_messages(chat_session)[-6:]:
+        if not isinstance(item, dict) or str(item.get("role") or "").lower() != "assistant":
+            continue
+        emotional_context = item.get("emotional_context") if isinstance(item.get("emotional_context"), dict) else {}
+        dominant_emotion = _clean_text(emotional_context.get("dominant_emotion"))
+        if dominant_emotion:
+            recent_emotions.append(dominant_emotion)
+        persona = item.get("persona") if isinstance(item.get("persona"), dict) else {}
+        primary = persona.get("primary") if isinstance(persona.get("primary"), dict) else {}
+        if primary:
+            last_persona = _clean_text(primary.get("key") or primary.get("label")) or last_persona
+        last_follow_up_topics.extend(_coerce_list(item.get("follow_up_topics")))
     return {
         "messages": messages,
         "symptoms_history": symptoms_history,
         "last_risk_score": _normalize_probability(getattr(chat_session, "last_risk_score", None)),
         "follow_up_pending": bool(getattr(chat_session, "follow_up_pending", False)),
+        "recent_emotions": _dedupe_texts(recent_emotions, limit=3),
+        "last_persona": last_persona,
+        "last_follow_up_topics": _dedupe_texts(last_follow_up_topics, limit=4),
     }
 
 
@@ -1029,7 +1058,187 @@ def _merge_session_context(user_context: dict[str, Any], chat_session: ChatSessi
     merged["conversation_state"] = state
     merged["recent_symptoms"] = state["symptoms_history"][:MAX_SESSION_SYMPTOMS]
     merged["symptoms_history"] = state["symptoms_history"][:MAX_SESSION_SYMPTOMS]
+    continuity_summary = dict(merged.get("continuity_summary") or {})
+    continuity_summary.setdefault("ongoing_symptoms", state["symptoms_history"][:4])
+    continuity_summary.setdefault("last_persona", state.get("last_persona"))
+    merged["continuity_summary"] = continuity_summary
     return merged
+
+
+def _merge_memory_user_context(
+    user_context: dict[str, Any],
+    memory_context: RetrievedMemoryContext | None,
+) -> dict[str, Any]:
+    if memory_context is None:
+        return dict(user_context or {})
+
+    merged = dict(user_context or {})
+    symptoms_history = _coerce_list(merged.get("symptoms_history"))
+    continuity_summary = dict(merged.get("continuity_summary") or {})
+
+    for episode in memory_context.episodic:
+        symptoms_history = _dedupe_texts(symptoms_history, episode.symptoms_discussed, limit=MAX_SESSION_SYMPTOMS)
+
+    merged["symptoms_history"] = symptoms_history
+    merged["recent_symptoms"] = symptoms_history[:MAX_SESSION_SYMPTOMS]
+    merged["memory_prompt"] = memory_context.to_prompt_string()
+    merged["memory_summary"] = memory_context.to_metadata()
+    merged["memory_episodic"] = [episode.interaction_summary for episode in memory_context.episodic[:3]]
+    merged["memory_health_trends"] = [trend.content for trend in memory_context.health_trends[:3]]
+
+    if memory_context.semantic:
+        continuity_summary["recurring_concerns"] = memory_context.semantic.recurring_concerns[:3]
+        continuity_summary["known_conditions"] = memory_context.semantic.confirmed_conditions[:4]
+    if memory_context.health_trends:
+        continuity_summary["recent_trends"] = [trend.content for trend in memory_context.health_trends[:2]]
+    if memory_context.emotional:
+        merged["memory_emotional_context"] = {
+            "tone": memory_context.emotional.emotional_tone.value,
+            "topic": memory_context.emotional.trigger_topic,
+            "intensity": memory_context.emotional.intensity,
+        }
+
+    merged["continuity_summary"] = continuity_summary
+    return merged
+
+
+def _tone_adaptation_prompt(tone_adaptation: dict[str, Any]) -> str:
+    if not isinstance(tone_adaptation, dict) or not tone_adaptation:
+        return ""
+    parts: list[str] = []
+    if tone_adaptation.get("tone_modifier"):
+        parts.append(f"Adopt a {tone_adaptation['tone_modifier']} tone.")
+    if tone_adaptation.get("response_length"):
+        parts.append(f"Keep the response {tone_adaptation['response_length']} in length.")
+    if tone_adaptation.get("extra_instruction"):
+        parts.append(str(tone_adaptation["extra_instruction"]))
+    return " ".join(parts)
+
+
+def _metric_query_matches(query: str, metric_name: str) -> bool:
+    normalized_metric = metric_name.replace("_", " ").lower()
+    if normalized_metric in query:
+        return True
+    aliases = {
+        "systolic bp": ["blood pressure", "bp", "pressure"],
+        "diastolic bp": ["blood pressure", "bp", "pressure"],
+        "heart rate": ["heart rate", "pulse", "hr"],
+        "sleep hours": ["sleep", "recovery"],
+        "glucose": ["glucose", "blood sugar", "sugar"],
+    }
+    for label, candidates in aliases.items():
+        if label in normalized_metric and any(candidate in query for candidate in candidates):
+            return True
+    return False
+
+
+def _apply_memory_continuity(
+    structured: dict[str, Any],
+    *,
+    memory_context: RetrievedMemoryContext,
+    query: str,
+) -> dict[str, Any]:
+    if not isinstance(structured, dict):
+        return structured
+
+    query_lower = _clean_text(query).lower()
+    continuity_tags: list[str] = []
+    continuity_intro = ""
+
+    short_check_in = len(query_lower.split()) <= 6 and any(
+        token in query_lower for token in ("hi", "hello", "hey", "check in", "checking in", "how are you")
+    )
+    if short_check_in:
+        recent_episode = next(
+            (item for item in memory_context.episodic if item.follow_up_needed or item.symptoms_discussed),
+            None,
+        )
+        if recent_episode:
+            topic = recent_episode.symptoms_discussed[0] if recent_episode.symptoms_discussed else "that concern"
+            continuity_intro = f"You mentioned {topic} previously. How has that been since we last talked?"
+            continuity_tags.append("follow_up")
+
+    if not continuity_intro:
+        for trend in memory_context.health_trends:
+            if trend.metric_name and _metric_query_matches(query_lower, trend.metric_name):
+                continuity_intro = f"From your recent history, your {trend.metric_name.replace('_', ' ')} has been {trend.trend_direction}."
+                continuity_tags.append("trend")
+                break
+
+    if not continuity_intro and memory_context.semantic:
+        for concern in memory_context.semantic.recurring_concerns[:3]:
+            concern_lower = concern.lower()
+            if concern_lower and any(token in query_lower for token in concern_lower.split()):
+                continuity_intro = f"This has come up before in your history: {concern}."
+                continuity_tags.append("recurring_concern")
+                break
+
+    message = _clean_text(structured.get("message"))
+    if continuity_intro and continuity_intro.lower() not in message.lower():
+        structured["message"] = f"{continuity_intro}\n\n{message}".strip()
+        if structured.get("summary_preview"):
+            structured["summary_preview"] = _summary_preview(structured["message"], sentences=3, max_words=90)
+
+    structured["memory"] = {
+        **memory_context.to_metadata(),
+        "used": bool(memory_context.to_prompt_string()),
+        "continuity_tags": continuity_tags,
+    }
+    structured["continuity"] = {
+        "memory_used": bool(memory_context.to_prompt_string()),
+        "tags": continuity_tags,
+        "top_episode": memory_context.episodic[0].interaction_summary if memory_context.episodic else "",
+    }
+    return structured
+
+
+def _build_memory_vitals(user_context: dict[str, Any], ml_data: dict[str, Any]) -> dict[str, float]:
+    vitals: dict[str, float] = {}
+    vitals_summary = user_context.get("vitals") if isinstance(user_context, dict) else {}
+    if isinstance(vitals_summary, dict):
+        metric_map = {
+            "blood_pressure_systolic": "systolic_bp",
+            "blood_pressure_diastolic": "diastolic_bp",
+            "heart_rate": "heart_rate",
+            "sleep": "sleep_hours",
+            "glucose": "glucose",
+        }
+        for source_key, target_key in metric_map.items():
+            entry = vitals_summary.get(source_key)
+            if isinstance(entry, dict):
+                value = _safe_float(entry.get("latest"))
+                if value is not None:
+                    vitals[target_key] = float(value)
+    wearable_trends = user_context.get("wearable_trends") if isinstance(user_context, dict) else {}
+    if isinstance(wearable_trends, dict):
+        for source_key, target_key in (
+            ("heart_rate_7d", "heart_rate"),
+            ("sleep_efficiency", "sleep_hours"),
+            ("bmi", "bmi"),
+        ):
+            value = _safe_float(wearable_trends.get(source_key))
+            if value is not None and target_key not in vitals:
+                vitals[target_key] = float(value)
+    overall_risk = _normalize_probability(ml_data.get("overall_risk"))
+    if overall_risk is not None:
+        vitals.setdefault("overall_risk", float(overall_risk))
+    return vitals
+
+
+def _build_memory_prediction_scores(ml_data: dict[str, Any]) -> dict[str, Any]:
+    predictions: dict[str, Any] = {}
+    overall_risk = _normalize_probability(ml_data.get("overall_risk"))
+    if overall_risk is not None:
+        predictions["overall"] = {"probability": float(overall_risk)}
+    for key, value in (ml_data or {}).items():
+        if not isinstance(key, str):
+            continue
+        if "risk" not in key.lower() and "probability" not in key.lower():
+            continue
+        numeric = _normalize_probability(value)
+        if numeric is not None:
+            predictions[key.lower()] = {"probability": float(numeric)}
+    return predictions
 
 
 def _append_chat_session_turn(
@@ -1057,6 +1266,14 @@ def _append_chat_session_turn(
                 "risk_level": assistant_payload.get("risk_level"),
                 "confidence_score": assistant_payload.get("confidence_score"),
                 "follow_up_questions": assistant_payload.get("follow_up_questions") or [],
+                "follow_up_topics": [
+                    question.split("?", 1)[0][:80]
+                    for question in (assistant_payload.get("follow_up_questions") or [])[:2]
+                    if _clean_text(question)
+                ],
+                "persona": assistant_payload.get("persona") if isinstance(assistant_payload.get("persona"), dict) else {},
+                "emotional_context": assistant_payload.get("emotional_context") if isinstance(assistant_payload.get("emotional_context"), dict) else {},
+                "continuity": assistant_payload.get("continuity") if isinstance(assistant_payload.get("continuity"), dict) else {},
             },
         ]
     )
@@ -1885,6 +2102,7 @@ async def retrieve_medical_context(
     *,
     ml_data: dict[str, Any] | None = None,
     user_context: dict[str, Any] | None = None,
+    user_id: str | None = None,
 ) -> dict[str, Any]:
     settings = RagSettings()
     augmented_query = _rag_search_terms(query, ml_data or {}, user_context or {})
@@ -1973,16 +2191,47 @@ async def retrieve_medical_context(
         )
 
     summary = _rag_summary_from_documents(documents)
+    personal_memory_docs: list[dict[str, Any]] = []
+    if user_id:
+        personal_memory_docs = await get_memory_engine().search_personal_context(user_id=user_id, query=augmented_query, top_k=3)
+        if personal_memory_docs:
+            source = f"{source}+memory"
+            summary = [
+                {
+                    "title": f"From your history · {doc.get('source_date')}",
+                    "source": "Personal Health Memory",
+                    "excerpt": clean_rag_text(doc.get("content") or "", limit=260),
+                    "score": float(doc.get("relevance") or 0.0),
+                    "citation": {
+                        "source": "Personal Health Memory",
+                        "title": f"{doc.get('memory_type', 'history')} · {doc.get('source_date')}",
+                        "url": "",
+                    },
+                }
+                for doc in personal_memory_docs
+            ] + summary
     disease_context = _infer_disease_context(augmented_query, ml_data=ml_data, user_context=user_context)
+    documents_payload = [clean_source_payload(doc.as_dict()) for doc in documents[:MAX_RAG_DOCUMENTS]]
+    for doc in personal_memory_docs:
+        documents_payload.append(
+            {
+                "title": f"From your history · {doc.get('source_date')}",
+                "text": clean_rag_text(doc.get("content") or "", limit=260),
+                "source": "Personal Health Memory",
+                "memory_type": doc.get("memory_type"),
+                "relevance": doc.get("relevance"),
+            }
+        )
     return {
         "query": augmented_query,
         "source": source,
         "error": error_text,
         "enhancement_error": enhancement_error,
         "llama_index_used": source == "llama_index",
-        "documents": [clean_source_payload(doc.as_dict()) for doc in documents[:MAX_RAG_DOCUMENTS]],
+        "documents": documents_payload,
         "summary": summary,
         "top_chunks": summary,
+        "personal_memory_docs": personal_memory_docs,
         "disease_context": disease_context,
     }
 
@@ -2010,7 +2259,14 @@ async def build_patient_context(
     if not retrieval_query:
         retrieval_query = " ".join(_coerce_list(user_context.get("symptoms_history"))) or "general preventive health context"
     db.close()
-    rag_context = await retrieve_medical_context(retrieval_query, ml_data=ml_data, user_context=user_context)
+    memory_context = await get_memory_engine().get_context_for_prompt(
+        user_id=user_id,
+        session_id=str(chat_session.id) if chat_session else "background",
+        current_query=retrieval_query,
+        health_metrics=["systolic_bp", "glucose", "heart_rate", "sleep_hours"],
+    )
+    user_context = _merge_memory_user_context(user_context, memory_context)
+    rag_context = await retrieve_medical_context(retrieval_query, ml_data=ml_data, user_context=user_context, user_id=user_id)
     clinical_context = build_clinical_context(
         query=retrieval_query,
         ml_data=ml_data,
@@ -2102,6 +2358,170 @@ def _score_rag_relevance(rag_context: dict[str, Any]) -> float:
     if scores:
         return _clamp(mean(scores))
     return 0.65
+
+
+def _safety_provider_type(provider_name: Any, model_name: Any = "") -> ProviderType:
+    inferred = infer_provider_type(f"{provider_name or ''} {model_name or ''}")
+    return inferred if isinstance(inferred, ProviderType) else ProviderType.UNKNOWN
+
+
+def _normalize_safety_vitals(user_context: dict[str, Any]) -> dict[str, float]:
+    vitals = user_context.get("vitals") if isinstance(user_context, dict) else {}
+    wearable_trends = user_context.get("wearable_trends") if isinstance(user_context, dict) else {}
+
+    def _value(key: str) -> float | None:
+        row = vitals.get(key) if isinstance(vitals, dict) else None
+        if isinstance(row, dict):
+            return _safe_float(row.get("latest"))
+        return _safe_float(row)
+
+    normalized: dict[str, float] = {}
+    value_map = {
+        "systolic_bp": _value("blood_pressure_systolic") or _value("systolic_bp"),
+        "diastolic_bp": _value("blood_pressure_diastolic") or _value("diastolic_bp"),
+        "heart_rate": _value("heart_rate"),
+        "spo2": _value("oxygen_saturation") or _value("spo2"),
+        "glucose": _value("glucose"),
+        "bmi": _safe_float(wearable_trends.get("bmi")) if isinstance(wearable_trends, dict) else None,
+    }
+    for key, value in value_map.items():
+        if value is not None:
+            normalized[key] = value
+    if "glucose" not in normalized:
+        for lab in user_context.get("lab_results") or []:
+            if not isinstance(lab, dict):
+                continue
+            name = _clean_text(lab.get("name")).lower()
+            if "glucose" in name:
+                lab_value = _safe_float(lab.get("value"))
+                if lab_value is not None:
+                    normalized["glucose"] = lab_value
+                    break
+    return normalized
+
+
+def _normalize_safety_ml_predictions(ml_data: dict[str, Any]) -> dict[str, Any]:
+    predictions: dict[str, Any] = {}
+    for disease, probability in (ml_data.get("condition_risks") or {}).items():
+        numeric = _normalize_probability(probability)
+        if numeric is not None:
+            predictions[str(disease).lower().replace(" ", "_")] = {"probability": numeric}
+    overall_risk = _normalize_probability(ml_data.get("overall_risk"))
+    if overall_risk is not None and not predictions:
+        possible = _coerce_list(ml_data.get("possible_conditions"))
+        label = (possible[0] if possible else "overall_risk").lower().replace(" ", "_")
+        predictions[label] = {"probability": overall_risk}
+    return predictions
+
+
+def _normalize_safety_rag_evidence(rag_context: dict[str, Any]) -> list[dict[str, Any]]:
+    evidence: list[dict[str, Any]] = []
+    for document in rag_context.get("summary") or []:
+        if not isinstance(document, dict):
+            continue
+        content = _clean_text(document.get("excerpt") or document.get("text") or document.get("summary"))
+        if not content:
+            continue
+        evidence.append(
+            {
+                "title": _clean_text(document.get("title")),
+                "content": content,
+                "source": _clean_text(document.get("source")),
+                "score": _normalize_probability(document.get("score"), 0.0) or 0.0,
+            }
+        )
+    return evidence
+
+
+def _build_safety_context(
+    *,
+    user_id: str,
+    session_id: str,
+    query: str,
+    structured: dict[str, Any],
+    user_context: dict[str, Any],
+    ml_data: dict[str, Any],
+    rag_context: dict[str, Any],
+    conversation_history: list[dict[str, Any]],
+) -> ConversationContext:
+    symptoms = clean_text_list(structured.get("symptoms"), limit=8, item_limit=80)
+    if not symptoms:
+        symptoms = _extract_query_symptoms(query)
+    if not symptoms:
+        symptoms = _coerce_list((user_context.get("clinical_history") or {}).get("analysis", {}).get("symptoms"))[:8]
+
+    provider_name = _clean_text(structured.get("provider"))
+    model_name = _clean_text(structured.get("model"))
+    raw_confidence = _normalize_probability(structured.get("confidence_score"))
+
+    return ConversationContext(
+        user_id=user_id,
+        session_id=session_id,
+        user_symptoms=symptoms,
+        vitals=_normalize_safety_vitals(user_context),
+        ml_predictions=_normalize_safety_ml_predictions(ml_data),
+        rag_evidence=_normalize_safety_rag_evidence(rag_context),
+        rag_confidence=_score_rag_relevance(rag_context),
+        conversation_history=_normalize_history(conversation_history),
+        provider=_safety_provider_type(provider_name, model_name),
+        raw_model_confidence=raw_confidence,
+    )
+
+
+async def _apply_safety_validation(
+    *,
+    user_id: str,
+    session_id: str,
+    query: str,
+    structured: dict[str, Any],
+    user_context: dict[str, Any],
+    ml_data: dict[str, Any],
+    rag_context: dict[str, Any],
+    conversation_history: list[dict[str, Any]],
+) -> dict[str, Any]:
+    response_text = _clean_text(structured.get("message") or structured.get("summary"))
+    if not response_text:
+        return structured
+
+    safety_context = _build_safety_context(
+        user_id=user_id,
+        session_id=session_id,
+        query=query,
+        structured=structured,
+        user_context=user_context,
+        ml_data=ml_data,
+        rag_context=rag_context,
+        conversation_history=conversation_history,
+    )
+    validation = await validate_response(query, response_text, safety_context)
+    merged = dict(structured)
+    merged["message"] = validation.final_response
+    if merged.get("summary_preview"):
+        merged["summary_preview"] = validation.final_response
+    merged["formatted_response"] = validation.final_response
+    merged["response"] = validation.final_response
+    merged["safety"] = validation.to_api_payload()["safety"]
+    if validation.escalation_required:
+        merged["escalation"] = {
+            "escalated": True,
+            "severity": "emergency" if validation.risk_level.value == "emergency" else "medical",
+            "reason": validation.escalation_message or validation.confidence_reason,
+            "critical": validation.risk_level.value == "emergency",
+        }
+    elif not merged.get("escalation"):
+        merged["escalation"] = {
+            "escalated": False,
+            "severity": "none",
+            "reason": "",
+            "critical": False,
+        }
+
+    full_analysis = _clean_text(merged.get("full_analysis"))
+    if full_analysis:
+        detailed_validation = await validate_response(query, full_analysis, safety_context)
+        merged["full_analysis"] = detailed_validation.final_response
+
+    return _apply_response_format(merged)
 
 
 def _score_symptom_clarity(query: str, symptoms: list[str]) -> float:
@@ -2262,27 +2682,57 @@ Return ONLY valid JSON in this exact format:
 """.strip()
 
 
-async def _call_ollama_model(prompt: str, settings: RagSettings, model_name: str) -> dict[str, Any] | None:
+async def _call_ollama_model(
+    prompt: str,
+    settings: RagSettings,
+    model_name: str,
+    *,
+    system_prompt: str = "",
+    temperature: float = 0.2,
+    top_p: float = 0.85,
+    max_tokens: int | None = None,
+) -> dict[str, Any] | None:
+    options = {
+        "temperature": temperature,
+        "top_p": top_p,
+    }
+    if max_tokens:
+        options["num_predict"] = max(1, int(max_tokens))
     result = await ollama_generate_json(
         prompt=prompt,
         settings=settings,
         model_name=model_name,
         workflow="chat_service",
-        options={
-            "temperature": 0.2,
-            "top_p": 0.85,
-        },
+        system_prompt=system_prompt,
+        options=options,
     )
     return _extract_json_object(result.get("payload"))
 
 
-async def _call_ollama(prompt: str, settings: RagSettings) -> dict[str, Any] | None:
+async def _call_ollama(
+    prompt: str,
+    settings: RagSettings,
+    *,
+    system_prompt: str = "",
+    temperature: float = 0.2,
+    top_p: float = 0.85,
+    max_tokens: int | None = None,
+) -> dict[str, Any] | None:
     if not settings.ollama_base_url:
         return None
 
     for model_name, model_layer in _ollama_model_candidates(settings):
         try:
-            response = await _call_ollama_model(prompt, settings, model_name)
+            provider_type = _safety_provider_type("ollama", model_name)
+            response = await _call_ollama_model(
+                prompt,
+                settings,
+                model_name,
+                system_prompt=apply_provider_safety_prompt(system_prompt, provider_type),
+                temperature=min(temperature, get_temperature_cap(provider_type)),
+                top_p=top_p,
+                max_tokens=max_tokens,
+            )
         except Exception as exc:
             if model_layer == "lora":
                 logger.warning(
@@ -2305,26 +2755,37 @@ async def _call_ollama(prompt: str, settings: RagSettings) -> dict[str, Any] | N
     return None
 
 
-async def _call_openai_compatible(prompt: str, settings: RagSettings) -> dict[str, Any] | None:
+async def _call_openai_compatible(
+    prompt: str,
+    settings: RagSettings,
+    *,
+    system_prompt: str = "",
+    temperature: float = 0.2,
+    max_tokens: int | None = None,
+) -> dict[str, Any] | None:
     if not settings.llm_api_base or not settings.llm_api_key:
         return None
 
     async with httpx.AsyncClient(timeout=settings.llm_timeout_seconds) as client:
+        provider_type = _safety_provider_type(settings.llm_api_base, settings.llm_api_model)
+        system_message = system_prompt or (
+            f"{CLINICAL_ASSISTANT_INSTRUCTION} "
+            "Use only the provided patient, symptom, lab, wearable, risk, and medical context internally. "
+            "Return valid JSON only, with a natural patient-facing message and no headings or bullets."
+        )
+        system_message = apply_provider_safety_prompt(system_message, provider_type)
         response = await client.post(
             f"{settings.llm_api_base.rstrip('/')}/chat/completions",
             headers={"Authorization": f"Bearer {settings.llm_api_key}"},
             json={
                 "model": settings.llm_api_model,
-                "temperature": 0.2,
+                "temperature": min(temperature, get_temperature_cap(provider_type)),
+                **({"max_tokens": int(max_tokens)} if max_tokens else {}),
                 "response_format": {"type": "json_object"},
                 "messages": [
                     {
                         "role": "system",
-                        "content": (
-                            f"{CLINICAL_ASSISTANT_INSTRUCTION} "
-                            "Use only the provided patient, symptom, lab, wearable, risk, and medical context internally. "
-                            "Return valid JSON only, with a natural patient-facing message and no headings or bullets."
-                        ),
+                        "content": system_message,
                     },
                     {"role": "user", "content": prompt},
                 ],
@@ -2339,12 +2800,35 @@ async def _call_openai_compatible(prompt: str, settings: RagSettings) -> dict[st
         return _extract_json_object(content)
 
 
-async def call_llm(prompt: str) -> dict[str, Any] | None:
+async def call_llm(
+    prompt: str,
+    *,
+    system_prompt: str = "",
+    max_tokens: int | None = None,
+    temperature: float = 0.2,
+    top_p: float = 0.85,
+) -> dict[str, Any] | None:
     settings = RagSettings()
     for caller in (_call_ollama, _call_openai_compatible):
         provider = "ollama" if caller is _call_ollama else "openai_compatible"
         try:
-            response = await caller(prompt, settings)
+            if caller is _call_ollama:
+                response = await caller(
+                    prompt,
+                    settings,
+                    system_prompt=system_prompt,
+                    temperature=temperature,
+                    top_p=top_p,
+                    max_tokens=max_tokens,
+                )
+            else:
+                response = await caller(
+                    prompt,
+                    settings,
+                    system_prompt=system_prompt,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
         except httpx.TimeoutException as exc:
             logger.warning(
                 "LLM failure | provider=%s model=%s reason=timeout timeout_seconds=%s: %s",
@@ -2371,6 +2855,54 @@ async def call_llm(prompt: str) -> dict[str, Any] | None:
             return response
     logger.warning("LLM failure | provider=all reason=no_structured_response")
     return None
+
+
+def _count_words(text: Any) -> int:
+    return len(re.findall(r"\b\w+\b", str(text or "")))
+
+
+def _trim_words(text: Any, limit: int | None) -> str:
+    value = _clean_text(text)
+    if not limit:
+        return value
+    words = re.findall(r"\S+", value)
+    if len(words) <= limit:
+        return value
+    trimmed = " ".join(words[:limit]).rstrip(",;:")
+    if trimmed and trimmed[-1] not in ".!?":
+        trimmed += "."
+    return trimmed
+
+
+def _summary_preview(text: Any, *, sentences: int = 3, max_words: int = 80) -> str:
+    parts = [item.strip() for item in re.split(r"(?<=[.!?])\s+", _clean_text(text)) if item.strip()]
+    preview = " ".join(parts[:sentences]).strip() or _clean_text(text)
+    return _trim_words(preview, max_words)
+
+
+def _expert_full_analysis(payload: dict[str, Any]) -> str:
+    sections: list[str] = []
+    summary = _clean_text(payload.get("summary") or payload.get("clinical_summary") or payload.get("message"))
+    if summary:
+        sections.append(f"Summary\n{summary}")
+    findings = [
+        str(item).strip()
+        for item in (payload.get("possible_causes") or payload.get("contributing_factors") or [])[:4]
+        if _clean_text(item)
+    ]
+    if findings:
+        sections.append("Findings\n" + "\n".join(f"- {item}" for item in findings))
+    implications = _clean_text(payload.get("clinical_interpretation") or payload.get("clinical_insight"))
+    if implications:
+        sections.append(f"Implications\n{implications}")
+    recommendations = [
+        str(item).strip()
+        for item in (payload.get("recommendations") or [])[:4]
+        if _clean_text(item)
+    ]
+    if recommendations:
+        sections.append("Recommendations\n" + "\n".join(f"- {item}" for item in recommendations))
+    return "\n\n".join(section for section in sections if section).strip() or _clean_text(payload.get("message"))
 
 
 def _determine_risk_level(
@@ -2801,6 +3333,8 @@ async def generate_chat_response(
     current_user: User | None = None,
     conversation_history: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    from ai.conversation import ConversationRouterOrchestrator
+
     cleaned_query = _clean_text(query)
     if not cleaned_query:
         raise ValueError("A non-empty query is required.")
@@ -2809,9 +3343,29 @@ async def generate_chat_response(
     if user is None:
         user = db.query(User).filter(User.id == user_id).one_or_none()
     chat_session = _load_chat_session(db, user, create=True)
+    memory_engine = get_memory_engine()
+    memory_context = await memory_engine.get_context_for_prompt(
+        user_id=user_id,
+        session_id=str(chat_session.id) if chat_session else "chat",
+        current_query=cleaned_query,
+        health_metrics=["systolic_bp", "glucose", "heart_rate", "sleep_hours"],
+    )
+    memory_prompt_str = memory_context.to_prompt_string()
+    tone_adaptation = await memory_engine.get_tone_adaptation(memory_context)
 
     session_history = _normalize_history(_session_messages(chat_session))
     normalized_history = _merge_histories(session_history, conversation_history)
+    routing_context = _merge_session_context({}, chat_session)
+    routing_context = _merge_memory_user_context(routing_context, memory_context)
+    if tone_adaptation:
+        routing_context["tone_adaptation"] = tone_adaptation
+    routing_orchestrated: dict[str, Any] = {"status": "ready", "source": "conversation_router"}
+    pipeline_bundle: dict[str, Any] = {
+        "structured": {},
+        "ml_data": {},
+        "user_context": {},
+        "rag_context": {},
+    }
 
     async def _fetch_user_context_for_pipeline(
         *,
@@ -2820,40 +3374,173 @@ async def generate_chat_response(
         current_user: User | None = None,
     ) -> dict[str, Any]:
         context = await get_user_health_context(db, user_id, current_user=current_user)
-        return _merge_session_context(context, chat_session)
-    from services.orchestrator import OrchestratorRequest, get_orchestrator
+        context = _merge_session_context(context, chat_session)
+        return _merge_memory_user_context(context, memory_context)
 
-    orchestrated = await get_orchestrator().run(
-        OrchestratorRequest(
-            workflow="chatbot",
-            user_id=user_id,
-            db=db,
-            current_user=user,
-            query=cleaned_query,
-            conversation_history=normalized_history,
-            metadata={"chat_session": chat_session},
+    async def _run_existing_pipeline(message: str, intent_meta: dict[str, Any]) -> dict[str, Any]:
+        from services.orchestrator import OrchestratorRequest, get_orchestrator
+
+        nonlocal routing_orchestrated
+        if pipeline_bundle["structured"]:
+            return dict(pipeline_bundle["structured"])
+
+        conversation_intent = _clean_text(intent_meta.get("intent"), "conversation")
+        routing_orchestrated = await get_orchestrator().run(
+            OrchestratorRequest(
+                workflow="chatbot",
+                user_id=user_id,
+                db=db,
+                current_user=user,
+                query=message,
+                conversation_history=normalized_history,
+                metadata={
+                    "chat_session": chat_session,
+                    "intent": conversation_intent,
+                    "conversation_mode": intent_meta.get("mode"),
+                    "conversation_depth": intent_meta.get("depth"),
+                    "memory_prompt": memory_prompt_str,
+                    "memory_metadata": memory_context.to_metadata(),
+                    "tone_adaptation": tone_adaptation,
+                },
+                endpoint_type="chat_assistant",
+                intent=conversation_intent,
+                chat_context={"session_id": str(chat_session.id)},
+                medical_complexity="high" if intent_meta.get("mode") == "expert" or len(message.split()) >= 10 else "medium",
+                latency_tier="analytical" if intent_meta.get("mode") == "expert" else "interactive",
+            )
         )
+        structured = routing_orchestrated.get("data") if isinstance(routing_orchestrated.get("data"), dict) else {}
+        raw_context = structured.get("orchestrator_context") if isinstance(structured.get("orchestrator_context"), dict) else {}
+        ml_data = raw_context.get("ml_data") if isinstance(raw_context.get("ml_data"), dict) else {}
+        user_context = raw_context.get("user_context") if isinstance(raw_context.get("user_context"), dict) else {}
+        rag_context = raw_context.get("rag_context") if isinstance(raw_context.get("rag_context"), dict) else {}
+        user_context = _merge_memory_user_context(user_context, memory_context)
+
+        if not structured:
+            user_context = await _fetch_user_context_for_pipeline(db=db, user_id=user_id, current_user=user)
+            ml_data = await get_ml_prediction(user_id, db=db, current_user=user, user_context=user_context)
+            rag_context = await retrieve_medical_context(message, ml_data=ml_data, user_context=user_context, user_id=user_id)
+            structured = _build_fallback_response(
+                query=message,
+                ml_data=ml_data,
+                user_context=user_context,
+                rag_context=rag_context,
+                conversation_history=normalized_history,
+            )
+
+        if intent_meta.get("mode") == "expert":
+            original_message = _clean_text(structured.get("message") or structured.get("summary"))
+            structured["full_analysis"] = original_message or _expert_full_analysis(structured)
+            structured["summary_preview"] = _summary_preview(original_message or structured.get("summary"), sentences=3, max_words=90)
+
+        pipeline_bundle.update(
+            {
+                "structured": dict(structured),
+                "ml_data": dict(ml_data),
+                "user_context": dict(user_context),
+                "rag_context": dict(rag_context),
+            }
+        )
+        return dict(structured)
+
+    async def _lightweight_conversation_llm(prompt: str, intent_meta: dict[str, Any]) -> dict[str, Any]:
+        prompt_text = prompt
+        if memory_prompt_str:
+            prompt_text = f"{memory_prompt_str}\n\nCurrent user message:\n{prompt}"
+        response = await call_llm(
+            prompt_text,
+            system_prompt=(
+                "You are Arya. Return compact JSON only for a brief, human, conversational health-assistant reply. "
+                + _tone_adaptation_prompt(tone_adaptation)
+            ).strip(),
+            max_tokens=int(intent_meta.get("max_tokens") or 100),
+            temperature=0.25,
+            top_p=0.9,
+        )
+        return response if isinstance(response, dict) else {}
+
+    async def _intent_fallback_llm(
+        text: str,
+        history: list[dict[str, Any]],
+        context: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        if os.getenv("CHAT_ENABLE_INTENT_LLM_FALLBACK", "false").strip().lower() not in {"1", "true", "yes", "on"}:
+            return None
+        prompt = f"""
+Classify this health-assistant user turn into exactly one intent.
+Return JSON only with keys intent and confidence.
+
+Allowed intents:
+greeting, acknowledgement, gratitude, farewell,
+casual_chat, clarification, followup_question, emotional_support,
+symptom_report, emergency_concern, report_analysis, recommendation_request,
+risk_explanation, health_education, onboarding_help, navigation_help.
+
+Conversation history:
+{json.dumps(history[-4:], default=str)}
+
+Context:
+{json.dumps(context, default=str)}
+
+User message:
+{text}
+""".strip()
+        return await call_llm(
+            prompt,
+            system_prompt="Return minimal JSON only for intent classification.",
+            max_tokens=80,
+            temperature=0.0,
+        )
+
+    router = ConversationRouterOrchestrator()
+    structured = await router.route_message(
+        cleaned_query,
+        normalized_history,
+        routing_context,
+        lightweight_llm_call=_lightweight_conversation_llm,
+        medical_llm_call=_run_existing_pipeline,
+        expert_llm_call=_run_existing_pipeline,
+        guardrails_enabled=os.getenv("CHAT_GUARDRAILS_DISABLED", "false").strip().lower() not in {"1", "true", "yes", "on"},
+        developer_flags={"bypass_guardrails": os.getenv("CHAT_GUARDRAILS_DISABLED", "false").strip().lower() in {"1", "true", "yes", "on"}},
+        llm_intent_fallback=_intent_fallback_llm,
     )
-    structured = orchestrated.get("data") if isinstance(orchestrated.get("data"), dict) else {}
-    raw_context = structured.get("orchestrator_context") if isinstance(structured.get("orchestrator_context"), dict) else {}
-    ml_data = raw_context.get("ml_data") if isinstance(raw_context.get("ml_data"), dict) else {}
-    user_context = raw_context.get("user_context") if isinstance(raw_context.get("user_context"), dict) else {}
-    rag_context = raw_context.get("rag_context") if isinstance(raw_context.get("rag_context"), dict) else {}
-    final_symptoms = structured.get("symptoms") if isinstance(structured.get("symptoms"), list) else []
-    if not structured:
-        user_context = await _fetch_user_context_for_pipeline(db=db, user_id=user_id, current_user=user)
-        ml_data = await get_ml_prediction(user_id, db=db, current_user=user, user_context=user_context)
-        rag_context = await retrieve_medical_context(cleaned_query, ml_data=ml_data, user_context=user_context)
-        structured = _build_fallback_response(
-            query=cleaned_query,
-            ml_data=ml_data,
-            user_context=user_context,
-            rag_context=rag_context,
-            conversation_history=normalized_history,
-        )
-        final_symptoms = structured.get("symptoms") if isinstance(structured.get("symptoms"), list) else []
 
+    ml_data = dict(pipeline_bundle["ml_data"])
+    user_context = dict(pipeline_bundle["user_context"])
+    rag_context = dict(pipeline_bundle["rag_context"])
+    final_symptoms = structured.get("symptoms") if isinstance(structured.get("symptoms"), list) else []
+    if not final_symptoms and structured.get("intent") == "symptom_report":
+        final_symptoms = _extract_query_symptoms(cleaned_query)
+
+    if structured.get("mode") == "expert":
+        structured["full_analysis"] = _clean_text(structured.get("full_analysis")) or _expert_full_analysis(structured)
+        structured["summary_preview"] = _summary_preview(
+            structured.get("summary_preview") or structured.get("message") or structured.get("summary"),
+            sentences=3,
+            max_words=90,
+        )
+        structured["message"] = structured["summary_preview"]
+    elif structured.get("max_words") and _count_words(structured.get("message")) > int(structured.get("max_words")):
+        structured["message"] = _trim_words(structured.get("message"), int(structured.get("max_words")))
+
+    structured.setdefault("quick_replies", [])
+    structured.setdefault("response_mode", structured.get("mode"))
     structured["generated_at"] = _iso(_now_utc())
+    structured = _apply_memory_continuity(structured, memory_context=memory_context, query=cleaned_query)
+    structured = await _apply_safety_validation(
+        user_id=user_id,
+        session_id=str(chat_session.id),
+        query=cleaned_query,
+        structured=structured,
+        user_context=user_context,
+        ml_data=ml_data,
+        rag_context=rag_context,
+        conversation_history=normalized_history,
+    )
+    structured["memory"] = {
+        **memory_context.to_metadata(),
+        **(structured.get("memory") if isinstance(structured.get("memory"), dict) else {}),
+    }
     _append_chat_session_turn(
         db,
         chat_session,
@@ -2864,23 +3551,42 @@ async def generate_chat_response(
     )
 
     try:
-        await asyncio.to_thread(
-            _log_chat_training_example,
-            user_id=user_id,
-            query=cleaned_query,
-            ml_data=ml_data,
-            user_context=user_context,
-            rag_context=rag_context,
-            conversation_history=normalized_history,
-        structured_output=structured,
-    )
+        if structured.get("mode") != "casual":
+            await asyncio.to_thread(
+                _log_chat_training_example,
+                user_id=user_id,
+                query=cleaned_query,
+                ml_data=ml_data,
+                user_context=user_context,
+                rag_context=rag_context,
+                conversation_history=normalized_history,
+                structured_output=structured,
+            )
     except Exception as exc:
         logger.warning("Failed to write chat training log for user=%s: %s", user_id, exc)
 
+    asyncio.create_task(
+        memory_engine.record_interaction(
+            user_id=user_id,
+            session_id=str(chat_session.id) if chat_session else "chat",
+            user_input=cleaned_query,
+            ai_response=_clean_text(structured.get("message") or structured.get("summary") or structured.get("understanding")),
+            vitals=_build_memory_vitals(user_context, ml_data),
+            ml_predictions=_build_memory_prediction_scores(ml_data),
+            context_snapshot={
+                "query": cleaned_query,
+                "risk_level": structured.get("risk_level"),
+                "timestamp": _iso(_now_utc()),
+            },
+        )
+    )
+
     return {
         "success": True,
-        "status": orchestrated.get("status") if isinstance(orchestrated, dict) else "ready",
-        "source": orchestrated.get("source") if isinstance(orchestrated, dict) else "ai_orchestrator",
+        "status": routing_orchestrated.get("status") if isinstance(routing_orchestrated, dict) else "ready",
+        "source": routing_orchestrated.get("source") if isinstance(routing_orchestrated, dict) and routing_orchestrated.get("source") else ("ai_orchestrator" if pipeline_bundle["structured"] else "conversation_router"),
         "error": None,
+        "intent": structured.get("intent"),
+        "mode": structured.get("mode"),
         "data": structured,
     }

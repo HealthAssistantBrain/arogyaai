@@ -1875,6 +1875,9 @@ async def get_recommendation_plan(user: User, db: Session) -> dict:
             user_id=str(user.id),
             db=db,
             current_user=user,
+            endpoint_type="dashboard_recommendations",
+            intent="recommendations",
+            latency_tier="interactive",
         )
     )
     payload = orchestrated.get("data") if isinstance(orchestrated.get("data"), dict) else {}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
+import { logOrchestration } from '../lib/orchestrationDebug';
 import { ROUTES } from '../router/routes';
 import { fetchConnectedDeviceSummaries } from '../lib/deviceApi';
 import OnboardingHeader from '../components/OnboardingHeader';
@@ -35,14 +36,25 @@ const OnboardingSummary = () => {
   const completeOnboarding = useAuthStore((state) => state.completeOnboarding);
   const fetchProfile = useAuthStore((state) => state.fetchProfile);
   const userData = useAuthStore((state) => state.profile);
+  const renderCountRef = useRef(0);
 
   const [devices, setDevices] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    renderCountRef.current += 1;
+    logOrchestration('onboarding', 'summary.render', {
+      renderCount: renderCountRef.current,
+      hasProfile: !!userData?.id || !!userData?.user_id,
+    });
+  });
+
+  useEffect(() => {
     async function fetchUserProfile() {
       try {
-        await fetchProfile();
+        if (!userData?.id && !userData?.user_id) {
+          await fetchProfile();
+        }
       } catch (err) {
         console.error("Non-blocking error fetching profile:", err);
       }
@@ -58,7 +70,7 @@ const OnboardingSummary = () => {
       }
     }
     fetchUserProfile();
-  }, [fetchProfile]);
+  }, [fetchProfile, userData?.id, userData?.user_id]);
 
   const safeValue = (val) => {
     if (Array.isArray(val)) {
@@ -137,7 +149,7 @@ const OnboardingSummary = () => {
   };
 
   const handleEdit = (step) => {
-    setOnboardingStep(step);
+    setOnboardingStep(step, { persist: false });
     navigate(`/onboarding/step-${step}?return=summary`);
   };
 

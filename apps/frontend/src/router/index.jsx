@@ -1,11 +1,9 @@
 import { lazy, Suspense } from 'react'
 import {
-  Routes, Route, Navigate,
-  useLocation
+  Routes, Route, Navigate
 } from 'react-router-dom'
-import { AnimatePresence } from 'framer-motion'
 import { ROUTES } from './routes'
-import { getAuthenticatedHomeRoute } from './authRedirects'
+import { getAuthLifecycle, getAuthenticatedHomeRoute } from './authRedirects'
 import ProtectedRoute from '../components/guards/AuthGuard'
 import GuestGuard from '../components/guards/GuestGuard'
 import ActiveOnboardingGuard from '../components/guards/ActiveOnboardingGuard'
@@ -79,41 +77,42 @@ const MaintenancePage = lazy(() => import('../pages/SystemMaintenance'))
 
 function RootRedirect() {
   const authState = useAuthStore()
-  const { isAuthenticated, isHydrated } = authState
-  const isSignedIn = isAuthenticated && !!authState.user?.id
+  const lifecycle = getAuthLifecycle(authState)
 
-  if (!isHydrated) return <LoadingScreen />
+  if (lifecycle.phase === 'hydrating') return <LoadingScreen />
 
-  return isSignedIn
+  return lifecycle.phase !== 'idle'
     ? <Navigate to={getAuthenticatedHomeRoute(authState)} replace />
     : <LandingPage />
 }
 
-export default function AppRouter() {
-  const location = useLocation()
+const withPageFallback = (node, fallback = <LoadingScreen />) => (
+  <Suspense fallback={fallback}>
+    {node}
+  </Suspense>
+)
 
+export default function AppRouter() {
   return (
-    <Suspense fallback={<LoadingScreen />}>
-      <AnimatePresence mode="wait">
-        <Routes location={location} key={location.pathname}>
+      <Routes>
 
           {/* ── PUBLIC — no guard ─────────────────────────────── */}
           <Route path={ROUTES.HOME} element={<RootRedirect />} />
-          <Route path={ROUTES.TERMS} element={<TermsOfService />} />
-          <Route path={ROUTES.PRIVACY} element={<PrivacyPolicy />} />
-          <Route path={ROUTES.DATA_CONSENT} element={<DataConsent />} />
-          <Route path={ROUTES.AUTH_CALLBACK} element={<AuthCallback />} />
-          <Route path={ROUTES.EMAIL_VERIFICATION} element={<EmailVerification />} />
-          <Route path={ROUTES.NOT_FOUND} element={<NotFound404 />} />
-          <Route path={ROUTES.SERVER_ERROR} element={<ServerError500 />} />
-          <Route path={ROUTES.MAINTENANCE} element={<MaintenancePage />} />
+          <Route path={ROUTES.TERMS} element={withPageFallback(<TermsOfService />)} />
+          <Route path={ROUTES.PRIVACY} element={withPageFallback(<PrivacyPolicy />)} />
+          <Route path={ROUTES.DATA_CONSENT} element={withPageFallback(<DataConsent />)} />
+          <Route path={ROUTES.AUTH_CALLBACK} element={withPageFallback(<AuthCallback />)} />
+          <Route path={ROUTES.EMAIL_VERIFICATION} element={withPageFallback(<EmailVerification />)} />
+          <Route path={ROUTES.NOT_FOUND} element={withPageFallback(<NotFound404 />)} />
+          <Route path={ROUTES.SERVER_ERROR} element={withPageFallback(<ServerError500 />)} />
+          <Route path={ROUTES.MAINTENANCE} element={withPageFallback(<MaintenancePage />)} />
 
           {/* ── GUEST ONLY — redirect auth users to dashboard ─── */}
           <Route element={<GuestGuard />}>
-            <Route path={ROUTES.LOGIN} element={<Login />} />
-            <Route path={ROUTES.SIGNUP} element={<SignUp />} />
-            <Route path={ROUTES.FORGOT_PASSWORD} element={<ForgotPassword />} />
-            <Route path={ROUTES.RESET_PASSWORD} element={<ResetPassword />} />
+            <Route path={ROUTES.LOGIN} element={withPageFallback(<Login />)} />
+            <Route path={ROUTES.SIGNUP} element={withPageFallback(<SignUp />)} />
+            <Route path={ROUTES.FORGOT_PASSWORD} element={withPageFallback(<ForgotPassword />)} />
+            <Route path={ROUTES.RESET_PASSWORD} element={withPageFallback(<ResetPassword />)} />
           </Route>
 
           {/* ── AUTH REQUIRED ─────────────────────────────────── */}
@@ -186,9 +185,7 @@ export default function AppRouter() {
             element={<Navigate to={ROUTES.NOT_FOUND} replace />}
           />
 
-        </Routes>
-      </AnimatePresence>
-    </Suspense>
+      </Routes>
   )
 }
 

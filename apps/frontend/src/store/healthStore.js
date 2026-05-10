@@ -2,7 +2,8 @@ import { create } from 'zustand';
 import { persist, devtools } from 'zustand/middleware';
 import api from '../lib/axios';
 import { normalizeClinicalCards } from '../lib/clinicalCards';
-import { clearPredictionExplanationMemo, fetchPredictionExplanation } from '../services/predictionExplanationService';
+import { clearPredictionExplanationMemo } from '../services/predictionExplanationService';
+import { fetchProgressivePredictionExplanation } from '../services/progressiveAiService';
 import useDashboardStore from './dashboardStore';
 import { normalizeHealthMetricsResponse } from '../lib/healthMetrics';
 import { safeArray, safeObject, safeText } from '../utils/safeData';
@@ -265,6 +266,8 @@ export const useHealthStore = create(
         error: null,
         explanationLastFetched: null,
         explanationPredictionId: null,
+        explanationHydrating: false,
+        explanationMeta: null,
 
         metrics: null,
         metricsByRange: {},
@@ -310,36 +313,59 @@ export const useHealthStore = create(
           }
 
           if (!silent) {
-            set({ loading: true, error: null }, false, 'predictionExplanation/fetchStart');
+            set({
+              loading: !state.explanation,
+              explanationHydrating: true,
+              error: null,
+            }, false, 'predictionExplanation/fetchStart');
           }
 
           const requestId = ++explanationRequestSeq;
           return (async () => {
             try {
-              const responsePayload = await fetchPredictionExplanation({
+              const updateFromPayload = (responsePayload) => {
+                const normalized = normalizeExplanationPayload(responsePayload);
+                const processing = responsePayload?.status === 'processing';
+
+                if (requestId !== explanationRequestSeq) {
+                  return normalized;
+                }
+
+                set((current) => ({
+                  explanation: normalized ?? current.explanation,
+                  recommendations: normalized?.recommendations ?? current.recommendations ?? [],
+                  recommendationPlan: normalized?.recommendationPlan ?? current.recommendationPlan ?? null,
+                  recommendationPlans: normalized?.recommendationPlans?.length
+                    ? normalized.recommendationPlans
+                    : (current.recommendationPlans ?? []),
+                  loading: processing ? !Boolean(normalized ?? current.explanation) : false,
+                  explanationHydrating: processing,
+                  error: processing ? null : current.error,
+                  explanationLastFetched: processing ? current.explanationLastFetched : Date.now(),
+                  explanationPredictionId: normalized?.predictionId ?? current.explanationPredictionId ?? resolvedPredictionId,
+                  explanationMeta: responsePayload?.meta ?? null,
+                }), false, processing ? 'predictionExplanation/fetchProgress' : 'predictionExplanation/fetchSuccess');
+
+                return normalized;
+              };
+
+              const responsePayload = await fetchProgressivePredictionExplanation({
                 predictionId: resolvedPredictionId,
                 force,
+                onProgress: updateFromPayload,
               });
-              const normalized = normalizeExplanationPayload(responsePayload);
+              const normalized = updateFromPayload(responsePayload);
 
               if (requestId !== explanationRequestSeq) {
                 return normalized;
               }
-
-              set(
-                {
-                  explanation: normalized,
-                  recommendations: normalized?.recommendations ?? [],
-                  recommendationPlan: normalized?.recommendationPlan ?? null,
-                  recommendationPlans: normalized?.recommendationPlans ?? [],
-                  loading: false,
-                  error: null,
-                  explanationLastFetched: Date.now(),
-                  explanationPredictionId: normalized?.predictionId ?? resolvedPredictionId,
-                },
-                false,
-                'predictionExplanation/fetchSuccess'
-              );
+              set({
+                loading: false,
+                explanationHydrating: false,
+                error: null,
+                explanationLastFetched: Date.now(),
+                explanationMeta: responsePayload?.meta ?? null,
+              }, false, 'predictionExplanation/fetchSettled');
 
               return normalized;
             } catch (error) {
@@ -361,11 +387,13 @@ export const useHealthStore = create(
                     ? current.recommendationPlans
                     : (fallbackExplanation?.recommendationPlans ?? []),
                   loading: false,
+                  explanationHydrating: false,
                   error: message,
                   explanationPredictionId:
                     current.explanationPredictionId ??
                     fallbackExplanation?.predictionId ??
                     resolvedPredictionId,
+                  explanationMeta: null,
                 }), false, 'predictionExplanation/fetchError');
               }
 

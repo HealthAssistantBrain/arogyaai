@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from ai.formatters import ResponseFormatter
 from services.feature_service import FeatureSnapshot, _clamp
 
 
@@ -129,6 +130,8 @@ class DriverAggregate:
 
 
 class RiskEngine:
+    response_formatter = ResponseFormatter()
+
     @staticmethod
     def _card(
         key: str,
@@ -523,7 +526,7 @@ class RiskEngine:
 
         latest_updated = features.latest_observation_at.isoformat() if features.latest_observation_at else _now_utc().isoformat()
 
-        return {
+        payload = {
             "user_id": user_id,
             "status": "ready",
             "risks": risk_payload,
@@ -535,3 +538,11 @@ class RiskEngine:
             "data_points": features.data_points,
             "feature_snapshot": features.to_dict(),
         }
+        return RiskEngine.response_formatter.format_payload(
+            workflow="risk_analysis",
+            payload=payload,
+            response_status="ready",
+            provider="rule_engine",
+            model="deterministic_rules_v1",
+            raw_response=payload,
+        )

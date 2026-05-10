@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from ai.formatters import ResponseFormatter
 from models import MedicalHistory, User, UserProfile
 from pipelines.feature_pipeline.service import FeaturePipelineService, FeatureSnapshot
 from pipelines.ml_pipeline.inference import MLPipelineInference
@@ -132,6 +133,7 @@ class DiseaseSimulationService:
         "activity": (0.0, 120.0),
         "air_quality": (0.0, 250.0),
     }
+    response_formatter = ResponseFormatter()
 
     @staticmethod
     def _latest_profile(db: Session, user: User) -> UserProfile | None:
@@ -706,6 +708,22 @@ class DiseaseSimulationService:
                 "model_version": scenario_model_version or baseline_model_version,
             },
         }
+        response_data = DiseaseSimulationService.response_formatter.format_payload(
+            workflow="disease_simulator",
+            payload=response_data,
+            response_status="ready",
+            provider=simulated_meta["mode"],
+            model=scenario_model_version or baseline_model_version,
+            raw_response={
+                "current_risk": current_risk,
+                "simulated_risk": simulated_risk,
+                "clinical_payload": clinical_payload,
+                "scoring": {
+                    "current": current_meta,
+                    "simulated": simulated_meta,
+                },
+            },
+        )
 
         try:
             trigger_notification_sync(

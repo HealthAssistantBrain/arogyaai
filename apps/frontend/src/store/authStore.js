@@ -3,6 +3,7 @@ import { devtools, persist, createJSONStorage } from 'zustand/middleware'
 import { getApiUrl } from '../lib/apiBaseUrl'
 import { syncUser } from '../lib/authSync'
 import { getCsrfToken } from '../lib/csrf'
+import { logOrchestration } from '../lib/orchestrationDebug'
 import { getSupabaseClient, supabase } from '../lib/supabaseClient'
 import { buildBootstrapErrorSummary, isRecoverableBootstrapError } from '../lib/systemReadiness'
 
@@ -10,6 +11,7 @@ const API_BASE_URL = getApiUrl(import.meta.env.VITE_API_URL || import.meta.env.V
 const AUTH_STORAGE_KEY = 'auth-storage'
 const LEGACY_AUTH_STORAGE_KEY = 'arogyaai-auth'
 const LEGACY_TOKEN_KEYS = ['access_token', 'token', 'user']
+const AUTH_PERSIST_VERSION = 2
 const COMPLETE_ONBOARDING_ENDPOINTS = [
   `${API_BASE_URL}/auth/complete-onboarding`,
   `${API_BASE_URL}/user/complete-onboarding`,
@@ -18,10 +20,18 @@ const COMPLETE_ONBOARDING_ENDPOINTS = [
 
 const isBrowser = () => typeof window !== 'undefined'
 const AUTH_HYDRATION_RETRY_DELAY_MS = 5000
+const isPlainObject = (value) => Boolean(value && typeof value === 'object' && !Array.isArray(value))
 
 const getSupabase = () => getSupabaseClient() ?? supabase
 let authStateSubscription = null
 let hydrationRetryTimer = null
+let authBootstrapPromise = null
+let profileBootstrapPromise = null
+let profileBootstrapToken = null
+let completeOnboardingPromise = null
+let lastAppliedSessionFingerprint = null
+let updateProfilePromise = null
+let updateProfileSignature = null
 
 const clearHydrationRetryTimer = () => {
   if (!isBrowser() || hydrationRetryTimer === null) return
@@ -29,16 +39,31 @@ const clearHydrationRetryTimer = () => {
   hydrationRetryTimer = null
 }
 
+const buildSessionFingerprint = (session = null) => {
+  if (!session?.access_token) return null
+
+  return [
+    session.user?.id ?? '',
+    session.access_token ?? '',
+    session.refresh_token ?? '',
+    session.user?.email_confirmed_at ?? session.user?.confirmed_at ?? '',
+  ].join(':')
+}
+
 const scheduleHydrationRetry = (delayMs = AUTH_HYDRATION_RETRY_DELAY_MS) => {
   if (!isBrowser()) return
   if (hydrationRetryTimer !== null) return
 
+  logOrchestration('auth', 'hydrate.retry_scheduled', { delayMs }, 'info')
   hydrationRetryTimer = window.setTimeout(() => {
     hydrationRetryTimer = null
     const store = useAuthStore.getState()
     if (store.isHydratingAuth || store.authBootstrapStatus === 'ready') return
-    console.info('[authStore] Retrying auth hydration after transient failure')
-    void store.hydrateAuth()
+    logOrchestration('auth', 'hydrate.retry_start', {
+      authBootstrapStatus: store.authBootstrapStatus,
+      authRetryCount: store.authRetryCount,
+    }, 'info')
+    void store.bootstrapCanonicalProfile?.({ force: true })
   }, delayMs)
 }
 
@@ -105,6 +130,20 @@ const clearCanonicalProfileStores = () => {
   }).catch(() => {})
 }
 
+const clearSessionScopedStores = () => {
+  void import('./dashboardStore').then(({ default: useDashboardStore }) => {
+    useDashboardStore.getState().clearDashboard?.()
+  }).catch(() => {})
+
+  void import('./healthStore').then(({ default: useHealthStore }) => {
+    useHealthStore.getState().invalidateMetricsCache?.()
+  }).catch(() => {})
+
+  void import('./insightsStore').then(({ default: useInsightsStore }) => {
+    useInsightsStore.getState().clearExplanationMemo?.()
+  }).catch(() => {})
+}
+
 const isWriteMethod = (method = 'GET') => ['POST', 'PUT', 'PATCH', 'DELETE'].includes(String(method).toUpperCase())
 
 export const clearLegacyAuthStorage = () => {
@@ -150,7 +189,6 @@ const getCurrentSupabaseToken = async (fallbackToken = null) => {
 
     const session = data?.session ?? null
     if (session?.access_token) {
-      useAuthStore.getState().setSupabaseSession?.(session)
       return session.access_token
     }
   } catch (err) {
@@ -255,7 +293,11 @@ const authPersistStorage = {
       }
       return JSON.stringify(parsed)
     } catch {
-      return value
+      window.localStorage.removeItem(name)
+      if (name === AUTH_STORAGE_KEY) {
+        window.localStorage.removeItem(LEGACY_AUTH_STORAGE_KEY)
+      }
+      return null
     }
   },
   setItem: (name, value) => {
@@ -266,6 +308,50 @@ const authPersistStorage = {
     if (!isBrowser()) return
     window.localStorage.removeItem(name)
   },
+}
+
+export const selectAuthRoutingState = (state) => ({
+  user: state.user,
+  session: state.session,
+  profile: state.profile,
+  token: state.token,
+  accessToken: state.accessToken,
+  isAuthenticated: state.isAuthenticated,
+  isHydrated: state.isHydrated,
+  hasBootstrappedAuth: state.hasBootstrappedAuth,
+  isHydratingAuth: state.isHydratingAuth,
+  authBootstrapStatus: state.authBootstrapStatus,
+  onboardingDone: state.onboardingDone,
+  onboardingStep: state.onboardingStep,
+  pendingWelcome: state.pendingWelcome,
+  isEmailVerified: state.isEmailVerified,
+  role: state.role,
+})
+
+const sanitizePersistedAuthState = (persistedState = {}) => {
+  const user = isPlainObject(persistedState.user) ? persistedState.user : null
+  const profile = withOnboardingAliases(isPlainObject(persistedState.profile) ? persistedState.profile : {})
+  const healthProfile = isPlainObject(persistedState.healthProfile) ? persistedState.healthProfile : {}
+  const roleSource = persistedState.role ?? user?.role ?? profile?.role ?? 'patient'
+  const role = String(roleSource || 'patient').toLowerCase()
+  const onboardingSource = {
+    ...persistedState,
+    user,
+    profile,
+  }
+  const onboardingDone = resolveOnboardingDone(onboardingSource)
+  const onboardingStep = resolveOnboardingStep(onboardingSource, onboardingDone)
+
+  return {
+    user,
+    profile,
+    healthProfile,
+    isEmailVerified: !!(persistedState.isEmailVerified ?? user?.is_email_verified ?? user?.isEmailVerified ?? false),
+    onboardingStep,
+    onboardingDone,
+    pendingWelcome: !!persistedState.pendingWelcome && !onboardingDone,
+    role: role || 'patient',
+  }
 }
 
 const normalizeProfileState = (profile) => ({
@@ -378,15 +464,66 @@ const sessionUserToAppUser = (session) => {
     full_name: metadata.full_name || metadata.name || null,
     avatar_url: metadata.avatar_url || metadata.picture || null,
     is_email_verified: !!(authUser.email_confirmed_at || authUser.confirmed_at),
-    is_onboarding_done: false,
-    onboarding_step: 1,
-    onboardingCompleted: false,
-    onboardingStep: 1,
   }
 }
 
 const getSessionVerificationStatus = (session) =>
   !!(session?.user?.email_confirmed_at || session?.user?.confirmed_at)
+
+const sameUserId = (left, right) => {
+  if (!left || !right) return false
+  return String(left) === String(right)
+}
+
+const buildSessionBootstrapUser = (session, fallbackUser = null) => {
+  const sessionUser = sessionUserToAppUser(session)
+  if (!sessionUser?.id) return fallbackUser ?? null
+
+  if (sameUserId(fallbackUser?.id, sessionUser.id)) {
+    return withOnboardingAliases({
+      ...fallbackUser,
+      ...sessionUser,
+      profile: fallbackUser?.profile ?? fallbackUser ?? null,
+    })
+  }
+
+  return withOnboardingAliases(sessionUser)
+}
+
+const syncCanonicalUserInBackground = ({ session = null, force = false } = {}) => {
+  const activeSession = session ?? useAuthStore.getState().session ?? null
+  const token = activeSession?.access_token ?? useAuthStore.getState().token ?? null
+  if (!token) return Promise.resolve(null)
+
+  const store = useAuthStore.getState()
+  if (!force && profileBootstrapPromise && profileBootstrapToken === token) {
+    return profileBootstrapPromise
+  }
+
+  if (!force && store.authBootstrapStatus === 'ready' && sameUserId(store.user?.id, activeSession?.user?.id || store.user?.id)) {
+    return Promise.resolve(store.user)
+  }
+
+  profileBootstrapToken = token
+  profileBootstrapPromise = Promise.resolve(
+    hydrateCanonicalUserFromSession(activeSession, { force })
+  ).catch((error) => {
+    const summary = buildBootstrapErrorSummary('auth_sync', error)
+    console.warn('[authStore] Background profile sync deferred', {
+      message: summary.message,
+      status: summary.status ?? null,
+    })
+    useAuthStore.getState().markAuthDegraded?.(activeSession, summary)
+    return useAuthStore.getState().user
+  }).finally(() => {
+    if (profileBootstrapToken === token) {
+      profileBootstrapToken = null
+      profileBootstrapPromise = null
+    }
+  })
+
+  return profileBootstrapPromise
+}
 
 export const useAuthStore = create(
   persist(
@@ -409,6 +546,7 @@ export const useAuthStore = create(
       pendingWelcome: false,
       role: 'patient',
       isHydrated: false,
+      hasBootstrappedAuth: false,
       isHydratingAuth: false,
       authBootstrapStatus: 'idle',
       authRetryCount: 0,
@@ -428,30 +566,107 @@ export const useAuthStore = create(
       setRefreshToken: (refreshToken = null) => set({ refreshToken: refreshToken ?? null }, false, 'setRefreshToken'),
       setEmailVerified: (isEmailVerified = true) => set({ isEmailVerified: !!isEmailVerified }, false, 'setEmailVerified'),
       setHydrated: () => set({ isHydrated: true }, false, 'setHydrated'),
+      setAuthBootstrapComplete: (value = true) => set({ hasBootstrappedAuth: !!value }, false, 'setAuthBootstrapComplete'),
       setPendingWelcome: (pendingWelcome = false) => set({ pendingWelcome: !!pendingWelcome }, false, 'setPendingWelcome'),
       scheduleHydrationRetry: (delayMs = AUTH_HYDRATION_RETRY_DELAY_MS) => scheduleHydrationRetry(delayMs),
+      bootstrapCanonicalProfile: async ({ session = null, force = false } = {}) => {
+        logOrchestration('auth', 'profile.bootstrap_requested', {
+          userId: session?.user?.id ?? get().user?.id ?? get().session?.user?.id ?? null,
+          force,
+        })
+        return syncCanonicalUserInBackground({ session: session ?? get().session ?? null, force })
+      },
 
       setSupabaseSession: (session) => {
         const token = session?.access_token ?? null
+        const existingUser = get().user
+        const nextUser = token ? buildSessionBootstrapUser(session, existingUser) : null
+        const sessionFingerprint = buildSessionFingerprint(session)
+        const currentFingerprint = buildSessionFingerprint(get().session)
+        const didSwitchUsers =
+          !!existingUser?.id &&
+          !!nextUser?.id &&
+          !sameUserId(existingUser.id, nextUser.id)
+        const shouldReuseProfile = sameUserId(existingUser?.id, nextUser?.id)
+        const nextProfile = shouldReuseProfile ? (get().profile || {}) : {}
+        const nextHealthProfile = shouldReuseProfile ? (get().healthProfile || {}) : normalizeProfileState(nextUser || {})
+        const onboardingSource = shouldReuseProfile
+          ? ({
+              ...(existingUser || {}),
+              ...(get().profile || {}),
+              ...(nextUser || {}),
+            })
+          : (nextUser || existingUser || {})
+        const onboardingDone = resolveOnboardingDone(onboardingSource)
+        const onboardingStep = resolveOnboardingStep(onboardingSource, onboardingDone)
+        const authBootstrapStatus = token
+          ? (shouldReuseProfile && (nextProfile?.id || nextProfile?.user_id) ? 'ready' : 'session')
+          : 'idle'
 
+        if (
+          sessionFingerprint &&
+          sessionFingerprint === currentFingerprint &&
+          sessionFingerprint === lastAppliedSessionFingerprint &&
+          !didSwitchUsers &&
+          get().isAuthenticated === !!token &&
+          get().isEmailVerified === getSessionVerificationStatus(session) &&
+          get().onboardingDone === onboardingDone &&
+          Number(get().onboardingStep || 1) === Number(onboardingStep || 1) &&
+          get().authBootstrapStatus === authBootstrapStatus
+        ) {
+          logOrchestration('auth', 'session.skipped', {
+            userId: nextUser?.id ?? null,
+            onboardingDone,
+            onboardingStep,
+            authBootstrapStatus,
+          })
+          return
+        }
+
+        if (didSwitchUsers || (!token && existingUser?.id)) {
+          clearSessionScopedStores()
+        }
+
+        lastAppliedSessionFingerprint = sessionFingerprint
         set({
           session: session ?? null,
+          user: nextUser,
+          profile: nextProfile,
+          healthProfile: nextHealthProfile,
           token,
           accessToken: token,
           refreshToken: session?.refresh_token ?? null,
           isAuthenticated: !!token,
           isEmailVerified: getSessionVerificationStatus(session),
-          authBootstrapStatus: token ? 'hydrating' : 'idle',
+          onboardingDone,
+          onboardingStep,
+          role: nextUser?.role ?? get().role ?? 'patient',
+          isHydrated: true,
+          hasBootstrappedAuth: !!token,
+          authBootstrapStatus,
           lastHydrationError: null,
         }, false, 'setSupabaseSession')
+        logOrchestration('auth', 'session.applied', {
+          hasToken: !!token,
+          authBootstrapStatus: useAuthStore.getState().authBootstrapStatus,
+          userId: nextUser?.id ?? null,
+          didSwitchUsers,
+          onboardingDone,
+          onboardingStep,
+        })
       },
 
       applyBackendUser: (user, sessionOverride = null) => {
         const session = sessionOverride ?? get().session ?? null
         const token = session?.access_token ?? get().token ?? null
         const dbUser = withOnboardingAliases(user || {})
+        const previousUserId = get().user?.id ?? null
         const onboardingDone = dbUser.onboardingCompleted
         const onboardingStep = dbUser.onboardingStep
+
+        if (previousUserId && dbUser?.id && !sameUserId(previousUserId, dbUser.id)) {
+          clearSessionScopedStores()
+        }
 
         set({
           session: session ?? get().session ?? null,
@@ -474,12 +689,19 @@ export const useAuthStore = create(
           onboardingStep,
           pendingWelcome: onboardingDone || onboardingStep > 1 ? false : get().pendingWelcome,
           role: dbUser.role ?? get().role ?? 'patient',
+          hasBootstrappedAuth: true,
           profileError: null,
           authBootstrapStatus: 'ready',
           authRetryCount: 0,
           lastHydrationError: null,
         }, false, 'applyBackendUser')
         void syncCanonicalProfileFromLegacyUser(dbUser)
+        logOrchestration('auth', 'profile.applied', {
+          userId: dbUser?.id ?? null,
+          onboardingDone,
+          onboardingStep,
+          role: dbUser?.role ?? null,
+        }, 'info')
       },
 
       setAuth: (data) => {
@@ -501,6 +723,7 @@ export const useAuthStore = create(
           onboardingStep,
           pendingWelcome: shouldClearPendingWelcome ? false : !!(data?.pendingWelcome ?? get().pendingWelcome),
           role: data?.role ?? user?.role ?? 'patient',
+          hasBootstrappedAuth: true,
           authBootstrapStatus: token ? 'ready' : 'idle',
           authRetryCount: 0,
           lastHydrationError: null,
@@ -510,24 +733,39 @@ export const useAuthStore = create(
       markAuthDegraded: (session, summary) => {
         const nextSession = session ?? get().session ?? null
         const token = nextSession?.access_token ?? get().token ?? null
+        const fallbackUser = token ? buildSessionBootstrapUser(nextSession, get().user) : null
         set({
           session: nextSession,
+          user: fallbackUser ?? get().user ?? null,
           token,
           accessToken: token,
           refreshToken: nextSession?.refresh_token ?? get().refreshToken ?? null,
           isAuthenticated: !!token,
           isEmailVerified: !!(getSessionVerificationStatus(nextSession) || get().isEmailVerified),
           isHydrated: true,
+          hasBootstrappedAuth: true,
           isHydratingAuth: false,
           authBootstrapStatus: token ? 'degraded' : 'idle',
           authRetryCount: (get().authRetryCount || 0) + 1,
+          profileError: summary?.message ?? null,
           lastHydrationError: summary,
         }, false, 'markAuthDegraded')
+        logOrchestration('auth', 'bootstrap.degraded', {
+          userId: fallbackUser?.id ?? get().user?.id ?? null,
+          message: summary?.message ?? null,
+          status: summary?.status ?? null,
+        }, 'warn')
         scheduleHydrationRetry()
       },
 
       reset: () => {
         clearHydrationRetryTimer()
+        profileBootstrapPromise = null
+        profileBootstrapToken = null
+        completeOnboardingPromise = null
+        lastAppliedSessionFingerprint = null
+        updateProfilePromise = null
+        updateProfileSignature = null
         set({
           user: null,
           session: null,
@@ -544,6 +782,7 @@ export const useAuthStore = create(
           onboardingStep: 1,
           pendingWelcome: false,
           role: 'patient',
+          hasBootstrappedAuth: false,
           isHydratingAuth: false,
           authBootstrapStatus: 'idle',
           authRetryCount: 0,
@@ -552,12 +791,22 @@ export const useAuthStore = create(
         clearGoogleFitClientSyncState()
         clearLegacyAuthStorage()
         clearCanonicalProfileStores()
+        clearSessionScopedStores()
+        logOrchestration('auth', 'state.reset')
       },
 
       clearUser: () => {
         get().reset()
-        set({ isHydrated: true, isHydratingAuth: false, authBootstrapStatus: 'idle', authRetryCount: 0, lastHydrationError: null }, false, 'clearUser')
+        set({
+          isHydrated: true,
+          hasBootstrappedAuth: true,
+          isHydratingAuth: false,
+          authBootstrapStatus: 'idle',
+          authRetryCount: 0,
+          lastHydrationError: null,
+        }, false, 'clearUser')
         clearPersistedAuthStorage()
+        logOrchestration('auth', 'state.cleared')
       },
 
       setOnboardingStatus: (data) => {
@@ -570,25 +819,59 @@ export const useAuthStore = create(
         }, false, 'setOnboardingStatus')
       },
 
-      setOnboardingStep: (step) => {
+      setOnboardingStep: (step, options = {}) => {
         if (get().onboardingDone === true) return
 
+        const { persist = false, forcePersist = false } = options || {}
+        const previousStep = Number(get().onboardingStep) || 1
         const requestedStep = Number.isFinite(Number(step)) ? Number(step) : 1
         const safeStep = requestedStep >= 1 && requestedStep <= 6 ? requestedStep : 1
-        const maxStep = Math.max(get().onboardingStep || 1, safeStep)
+        const maxStep = Math.max(previousStep, safeStep)
+        const didAdvance = maxStep > previousStep
         set({
           onboardingStep: maxStep,
           pendingWelcome: maxStep > 1 ? false : get().pendingWelcome,
         }, false, 'setOnboardingStep')
 
+        logOrchestration('onboarding', 'step.set', {
+          requestedStep: safeStep,
+          previousStep,
+          resolvedStep: maxStep,
+          didAdvance,
+          persist,
+          forcePersist,
+        })
+
         const token = get().token
-        if (token && maxStep >= 1 && maxStep <= 6) {
+        const persistedProfileStep = Number(
+          get().profile?.onboardingStep ??
+          get().profile?.onboarding_step ??
+          previousStep
+        ) || previousStep
+        const shouldPersist = Boolean(
+          persist &&
+          token &&
+          maxStep >= 1 &&
+          maxStep <= 6 &&
+          (forcePersist || didAdvance || maxStep > persistedProfileStep)
+        )
+
+        if (shouldPersist) {
           fetchJson(`${API_BASE_URL}/users/profile`, {
             method: 'POST',
             body: { onboarding_step: maxStep },
             token,
             retryOn401: true,
-          }).catch((err) => console.warn('[authStore] Failed to persist onboarding step:', err?.message))
+          }).then(() => {
+            logOrchestration('onboarding', 'step.persisted', {
+              onboardingStep: maxStep,
+            }, 'info')
+          }).catch((err) => {
+            logOrchestration('onboarding', 'step.persist_failed', {
+              onboardingStep: maxStep,
+              message: err?.message ?? 'unknown',
+            }, 'warn')
+          })
         }
       },
 
@@ -596,6 +879,7 @@ export const useAuthStore = create(
         const startedAt = Date.now()
         let resolvedSession = null
         set({ isHydratingAuth: true, authBootstrapStatus: 'hydrating', lastHydrationError: null }, false, 'refreshSession_start')
+        logOrchestration('auth', 'refresh.started')
 
         try {
           console.debug('[authStore] refreshSession start')
@@ -618,14 +902,29 @@ export const useAuthStore = create(
 
           if (!data?.session?.access_token) {
             get().reset()
-            set({ isHydrated: true, isHydratingAuth: false, authBootstrapStatus: 'idle', lastHydrationError: null }, false, 'refreshSession_no_session')
+            set({
+              isHydrated: true,
+              hasBootstrappedAuth: true,
+              isHydratingAuth: false,
+              authBootstrapStatus: 'idle',
+              lastHydrationError: null,
+            }, false, 'refreshSession_no_session')
             return false
           }
 
-          await hydrateCanonicalUserFromSession(data.session, { force: true })
-
+          get().setSupabaseSession(data.session)
           clearHydrationRetryTimer()
-          set({ isHydrated: true, isHydratingAuth: false, authBootstrapStatus: 'ready', authRetryCount: 0, profileError: null, lastHydrationError: null }, false, 'refreshSession_SUCCESS')
+          set({
+            isHydrated: true,
+            hasBootstrappedAuth: true,
+            isHydratingAuth: false,
+            authBootstrapStatus: useAuthStore.getState().authBootstrapStatus,
+          }, false, 'refreshSession_SUCCESS')
+          void get().bootstrapCanonicalProfile({ session: data.session, force: false })
+          logOrchestration('auth', 'refresh.succeeded', {
+            durationMs: Date.now() - startedAt,
+            userId: data.session?.user?.id ?? null,
+          }, 'info')
           console.debug('[authStore] refreshSession success', { hasUser: !!get().user?.id, durationMs: Date.now() - startedAt })
           return data.session
         } catch (err) {
@@ -641,8 +940,19 @@ export const useAuthStore = create(
           }
 
           console.error('[authStore] Supabase refresh failed:', err)
+          logOrchestration('auth', 'refresh.failed', {
+            durationMs: Date.now() - startedAt,
+            message: summary.message,
+            status: summary.status ?? null,
+          }, 'warn')
           get().reset()
-          set({ isHydrated: true, isHydratingAuth: false, authBootstrapStatus: 'idle', lastHydrationError: summary }, false, 'refreshSession_FAIL')
+          set({
+            isHydrated: true,
+            hasBootstrappedAuth: true,
+            isHydratingAuth: false,
+            authBootstrapStatus: 'idle',
+            lastHydrationError: summary,
+          }, false, 'refreshSession_FAIL')
           return false
         }
       },
@@ -678,12 +988,21 @@ export const useAuthStore = create(
 
       updateProfile: async (newHealthProfile) => {
         const payload = normalizeProfilePayload(newHealthProfile)
+        const payloadSignature = JSON.stringify(payload)
         const previousUser = get().user
         const previousProfile = get().healthProfile
         const previousCanonicalProfile = get().profile
         const safePayloadState = Object.fromEntries(
           Object.entries(normalizeProfileState(payload)).filter((entry) => entry[1] !== '' && entry[1] !== null)
         )
+
+        if (updateProfilePromise && updateProfileSignature === payloadSignature) {
+          logOrchestration('onboarding', 'profile.save_deduped', {
+            fields: Object.keys(payload),
+            signature: payloadSignature,
+          })
+          return updateProfilePromise
+        }
 
         set({
           user: {
@@ -699,95 +1018,159 @@ export const useAuthStore = create(
           profileLoading: true,
         }, false, 'updateProfile_OPTIMISTIC')
 
-        try {
-          const envelope = await fetchJson(`${API_BASE_URL}/users/profile`, {
-            method: 'POST',
-            body: payload,
-            token: get().token,
-            retryOn401: true,
-          })
-          const data = withOnboardingAliases(envelope.data || envelope || {})
-          const normalizedProfile = normalizeProfileState(data)
-          const safeDataState = Object.fromEntries(
-            Object.entries(normalizedProfile).filter((entry) => entry[1] !== '' && entry[1] !== null)
-          )
+        updateProfileSignature = payloadSignature
+        updateProfilePromise = (async () => {
+          try {
+            const envelope = await fetchJson(`${API_BASE_URL}/users/profile`, {
+              method: 'POST',
+              body: payload,
+              token: get().token,
+              retryOn401: true,
+            })
+            const data = withOnboardingAliases(envelope.data || envelope || {})
+            const normalizedProfile = normalizeProfileState(data)
+            const safeDataState = Object.fromEntries(
+              Object.entries(normalizedProfile).filter((entry) => entry[1] !== '' && entry[1] !== null)
+            )
 
-          set({
-            user: {
-              ...(get().user || {}),
-              ...data,
-              full_name: data.full_name ?? get().user?.full_name ?? null,
-              avatar_url: data.avatar_url ?? get().user?.avatar_url ?? null,
-              patient_id: data.patient_id ?? get().user?.patient_id ?? null,
+            logOrchestration('onboarding', 'profile.save_succeeded', {
+              fields: Object.keys(payload),
+              onboardingDone: data.onboardingCompleted ?? get().onboardingDone,
+              onboardingStep: data.onboardingCompleted ? 6 : (data.onboardingStep ?? get().onboardingStep ?? 1),
+            }, 'info')
+
+            set({
+              user: {
+                ...(get().user || {}),
+                ...data,
+                full_name: data.full_name ?? get().user?.full_name ?? null,
+                avatar_url: data.avatar_url ?? get().user?.avatar_url ?? null,
+                patient_id: data.patient_id ?? get().user?.patient_id ?? null,
+                profile: { ...(get().profile || {}), ...data },
+              },
               profile: { ...(get().profile || {}), ...data },
-            },
-            profile: { ...(get().profile || {}), ...data },
-            healthProfile: { ...get().healthProfile, ...safeDataState },
-            onboardingDone: data.onboardingCompleted ?? get().onboardingDone,
-            onboardingStep: data.onboardingCompleted ? 6 : (data.onboardingStep ?? get().onboardingStep ?? 1),
-            pendingWelcome: !!(data.onboardingCompleted ?? get().onboardingDone) || Number(data.onboardingStep ?? get().onboardingStep) > 1
-              ? false
-              : get().pendingWelcome,
-            profileLoading: false,
-          }, false, 'updateProfile_SUCCESS')
-          void syncCanonicalProfileFromLegacyUser(data)
-          return true
-        } catch (err) {
-          console.error('updateProfile error:', err)
-          set({
-            user: previousUser,
-            profile: previousCanonicalProfile || {},
-            healthProfile: previousProfile || {},
-            profileError: err.message,
-            profileLoading: false,
-          }, false, 'updateProfile_FAIL')
-          return false
-        }
+              healthProfile: { ...get().healthProfile, ...safeDataState },
+              onboardingDone: data.onboardingCompleted ?? get().onboardingDone,
+              onboardingStep: data.onboardingCompleted ? 6 : (data.onboardingStep ?? get().onboardingStep ?? 1),
+              pendingWelcome: !!(data.onboardingCompleted ?? get().onboardingDone) || Number(data.onboardingStep ?? get().onboardingStep) > 1
+                ? false
+                : get().pendingWelcome,
+              profileLoading: false,
+            }, false, 'updateProfile_SUCCESS')
+            void syncCanonicalProfileFromLegacyUser(data)
+            return true
+          } catch (err) {
+            console.error('updateProfile error:', err)
+            logOrchestration('onboarding', 'profile.save_failed', {
+              fields: Object.keys(payload),
+              message: err?.message ?? 'unknown',
+            }, 'warn')
+            set({
+              user: previousUser,
+              profile: previousCanonicalProfile || {},
+              healthProfile: previousProfile || {},
+              profileError: err.message,
+              profileLoading: false,
+            }, false, 'updateProfile_FAIL')
+            return false
+          } finally {
+            if (updateProfileSignature === payloadSignature) {
+              updateProfilePromise = null
+              updateProfileSignature = null
+            }
+          }
+        })()
+
+        return updateProfilePromise
       },
 
       saveOnboarding: async (onboardingData) => {
         const payload = normalizeProfilePayload(onboardingData)
+        logOrchestration('onboarding', 'profile.save_requested', {
+          fields: Object.keys(payload),
+        })
         return get().updateProfile(payload)
       },
 
       completeOnboarding: async () => {
-        const envelope = await postToFirstAvailableEndpoint(COMPLETE_ONBOARDING_ENDPOINTS, {
-          method: 'POST',
-          body: {},
-          token: get().token,
-          retryOn401: true,
-        })
-
-        const completedUser = withOnboardingAliases(envelope?.data?.user || envelope?.data || envelope || {})
-        const nextUser = {
-          ...(get().user || {}),
-          ...completedUser,
-          is_onboarding_done: true,
-          onboarding_step: 6,
-          onboardingCompleted: true,
-          onboardingStep: 6,
+        if (completeOnboardingPromise) {
+          return completeOnboardingPromise
         }
 
-        set({
-          user: nextUser,
-          profile: {
-            ...(get().profile || {}),
+        logOrchestration('onboarding', 'completion.started', {
+          userId: get().user?.id ?? null,
+        }, 'info')
+
+        completeOnboardingPromise = (async () => {
+          const envelope = await postToFirstAvailableEndpoint(COMPLETE_ONBOARDING_ENDPOINTS, {
+            method: 'POST',
+            body: {},
+            token: get().token,
+            retryOn401: true,
+          })
+
+          const completedUser = withOnboardingAliases(envelope?.data?.user || envelope?.data || envelope || {})
+          const nextUser = {
+            ...(get().user || {}),
             ...completedUser,
             is_onboarding_done: true,
             onboarding_step: 6,
             onboardingCompleted: true,
             onboardingStep: 6,
-          },
-          healthProfile: {
-            ...(get().healthProfile || {}),
-            ...normalizeProfileState(completedUser),
-          },
-          onboardingDone: true,
-          onboardingStep: 6,
-          pendingWelcome: false,
-        }, false, 'completeOnboarding')
+          }
 
-        return envelope
+          set({
+            user: nextUser,
+            profile: {
+              ...(get().profile || {}),
+              ...completedUser,
+              is_onboarding_done: true,
+              onboarding_step: 6,
+              onboardingCompleted: true,
+              onboardingStep: 6,
+            },
+            healthProfile: {
+              ...(get().healthProfile || {}),
+              ...normalizeProfileState(completedUser),
+            },
+            onboardingDone: true,
+            onboardingStep: 6,
+            pendingWelcome: false,
+            authBootstrapStatus: 'ready',
+          }, false, 'completeOnboarding')
+
+          void syncCanonicalProfileFromLegacyUser(nextUser)
+          void import('./profileStore').then(({ useProfileStore }) => {
+            useProfileStore.getState().clear?.()
+          }).catch(() => {})
+
+          logOrchestration('onboarding', 'completion.succeeded', {
+            userId: nextUser?.id ?? null,
+          }, 'info')
+
+          return envelope
+        })().finally(() => {
+          completeOnboardingPromise = null
+        })
+
+        return completeOnboardingPromise
+      },
+
+      bootstrapAuth: async ({ force = false, tokenOverride = null } = {}) => {
+        if (!force && get().hasBootstrappedAuth && !get().isHydratingAuth) {
+          return useAuthStore.getState()
+        }
+
+        if (!force && authBootstrapPromise) {
+          return authBootstrapPromise
+        }
+
+        const run = Promise.resolve(get().hydrateAuth(tokenOverride)).finally(() => {
+          authBootstrapPromise = null
+        })
+
+        authBootstrapPromise = run
+        return run
       },
 
       hydrateAuth: async (tokenOverride = null) => {
@@ -795,25 +1178,37 @@ export const useAuthStore = create(
         let resolvedSession = null
         const startedAt = Date.now()
         set({ isHydratingAuth: true, authBootstrapStatus: 'hydrating', lastHydrationError: null }, false, 'hydrateAuth_start')
+        logOrchestration('auth', 'hydrate.started', {
+          hasTokenOverride: !!tokenOverride,
+        })
 
         try {
           console.debug('[authStore] hydrateAuth start')
           const memoryToken = tokenOverride ?? get().token ?? null
-          if (memoryToken) {
+          if (memoryToken && get().user?.id) {
             get().setAccessToken(memoryToken)
-            const fetched = await get().fetchProfile({ throwOnError: true })
-            if (!fetched) throw new Error('Unable to fetch user with in-memory token')
             clearHydrationRetryTimer()
-            set({ isHydrated: true, isHydratingAuth: false, authBootstrapStatus: 'ready', authRetryCount: 0, profileError: null, lastHydrationError: null }, false, 'hydrateAuth_MEMORY_SUCCESS')
+            set({
+              isHydrated: true,
+              hasBootstrappedAuth: true,
+              isHydratingAuth: false,
+              authBootstrapStatus: get().profile?.id || get().profile?.user_id ? 'ready' : 'session',
+            }, false, 'hydrateAuth_MEMORY_SUCCESS')
+            void get().bootstrapCanonicalProfile({ force: !(get().profile?.id || get().profile?.user_id) })
+            logOrchestration('auth', 'hydrate.memory_restored', {
+              durationMs: Date.now() - startedAt,
+              userId: get().user?.id ?? null,
+            })
             return useAuthStore.getState()
           }
 
           const refreshed = await get().refreshSession()
           if (refreshed) {
             const latestState = useAuthStore.getState()
-            if (latestState.user?.id || latestState.authBootstrapStatus === 'degraded') {
+            if (latestState.user?.id || ['session', 'degraded', 'ready'].includes(latestState.authBootstrapStatus)) {
               set({
                 isHydrated: true,
+                hasBootstrappedAuth: true,
                 isHydratingAuth: false,
                 authBootstrapStatus: latestState.authBootstrapStatus,
                 profileError: null,
@@ -829,7 +1224,13 @@ export const useAuthStore = create(
 
           if (!client) {
             get().reset()
-            set({ isHydrated: true, isHydratingAuth: false, authBootstrapStatus: 'idle', lastHydrationError: null }, false, 'hydrateAuth_no_session')
+            set({
+              isHydrated: true,
+              hasBootstrappedAuth: true,
+              isHydratingAuth: false,
+              authBootstrapStatus: 'idle',
+              lastHydrationError: null,
+            }, false, 'hydrateAuth_no_session')
             return null
           }
 
@@ -868,21 +1269,29 @@ export const useAuthStore = create(
 
           if (!session?.access_token) {
             get().reset()
-            set({ isHydrated: true, isHydratingAuth: false, authBootstrapStatus: 'idle', lastHydrationError: null }, false, 'hydrateAuth_no_session')
+            set({
+              isHydrated: true,
+              hasBootstrappedAuth: true,
+              isHydratingAuth: false,
+              authBootstrapStatus: 'idle',
+              lastHydrationError: null,
+            }, false, 'hydrateAuth_no_session')
             return null
           }
 
-          await hydrateCanonicalUserFromSession(session, { force: true })
-
+          get().setSupabaseSession(session)
           clearHydrationRetryTimer()
           set({
             isHydrated: true,
+            hasBootstrappedAuth: true,
             isHydratingAuth: false,
-            authBootstrapStatus: 'ready',
-            authRetryCount: 0,
-            profileError: null,
-            lastHydrationError: null,
+            authBootstrapStatus: useAuthStore.getState().authBootstrapStatus,
           }, false, 'hydrateAuth_SUCCESS')
+          void get().bootstrapCanonicalProfile({ session, force: false })
+          logOrchestration('auth', 'hydrate.succeeded', {
+            durationMs: Date.now() - startedAt,
+            userId: session?.user?.id ?? null,
+          }, 'info')
 
           console.debug('[authStore] hydrateAuth success', { durationMs: Date.now() - startedAt })
           return useAuthStore.getState()
@@ -899,8 +1308,19 @@ export const useAuthStore = create(
           }
 
           console.error('[authStore] Auth hydration failed:', err)
+          logOrchestration('auth', 'hydrate.failed', {
+            durationMs: Date.now() - startedAt,
+            message: summary.message,
+            status: summary.status ?? null,
+          }, 'warn')
           get().reset()
-          set({ isHydrated: true, isHydratingAuth: false, authBootstrapStatus: 'idle', lastHydrationError: summary }, false, 'hydrateAuth_FAIL')
+          set({
+            isHydrated: true,
+            hasBootstrappedAuth: true,
+            isHydratingAuth: false,
+            authBootstrapStatus: 'idle',
+            lastHydrationError: summary,
+          }, false, 'hydrateAuth_FAIL')
           return null
         } finally {
           clearLegacyAuthStorage()
@@ -909,6 +1329,7 @@ export const useAuthStore = create(
 
       logout: async () => {
         set({ isHydratingAuth: true }, false, 'logout_start')
+        logOrchestration('auth', 'logout.started')
 
         let signOutError = null
         const logoutToken = get().token
@@ -931,6 +1352,7 @@ export const useAuthStore = create(
         }
 
         get().clearUser()
+        logOrchestration('auth', 'logout.completed', { hadError: !!signOutError })
 
         if (signOutError) {
           throw signOutError
@@ -939,11 +1361,19 @@ export const useAuthStore = create(
 
       hardReset: () => {
         get().reset()
-        set({ isHydrated: true, authBootstrapStatus: 'idle', authRetryCount: 0, lastHydrationError: null }, false, 'hardReset')
+        set({
+          isHydrated: true,
+          hasBootstrappedAuth: true,
+          authBootstrapStatus: 'idle',
+          authRetryCount: 0,
+          lastHydrationError: null,
+        }, false, 'hardReset')
+        logOrchestration('auth', 'state.hard_reset', {}, 'warn')
       },
     })),
     {
       name: AUTH_STORAGE_KEY,
+      version: AUTH_PERSIST_VERSION,
       storage: createJSONStorage(() => authPersistStorage),
       partialize: (state) => ({
         user: state.user,
@@ -955,8 +1385,22 @@ export const useAuthStore = create(
         pendingWelcome: state.pendingWelcome,
         role: state.role,
       }),
+      migrate: (persistedState, version) => {
+        if (version !== AUTH_PERSIST_VERSION) {
+          clearPersistedAuthStorage()
+          logOrchestration('zustand', 'auth.persist_version_reset', {
+            fromVersion: version ?? null,
+            toVersion: AUTH_PERSIST_VERSION,
+          }, 'info')
+        }
+
+        return sanitizePersistedAuthState(persistedState)
+      },
       onRehydrateStorage: () => (state, error) => {
         if (error) console.warn('[authStore] Persist rehydration failed:', error)
+        logOrchestration('zustand', 'auth.persist_rehydrated', {
+          hasError: !!error,
+        }, error ? 'warn' : 'debug')
         state?.setHydrated?.()
         clearLegacyAuthStorage()
       },
@@ -972,6 +1416,11 @@ export const initializeAuthStateListener = () => {
 
   const { data } = client.auth.onAuthStateChange((event, session) => {
     const store = useAuthStore.getState()
+    logOrchestration('auth', 'listener.event', {
+      event,
+      hasSession: !!session?.access_token,
+      userId: session?.user?.id ?? null,
+    })
 
     if (event === 'SIGNED_OUT' || event === 'USER_DELETED' || !session?.access_token) {
       store.clearUser?.()
@@ -984,11 +1433,15 @@ export const initializeAuthStateListener = () => {
       return
     }
 
-    useAuthStore.setState({ isHydratingAuth: true, isHydrated: false, authBootstrapStatus: 'hydrating' })
-    void hydrateCanonicalUserFromSession(session, { force: event === 'SIGNED_IN' })
+    useAuthStore.setState({ isHydratingAuth: true, authBootstrapStatus: 'session' })
+    const shouldForceBootstrap =
+      event === 'SIGNED_IN' &&
+      (!sameUserId(store.user?.id, session?.user?.id) || !(store.profile?.id || store.profile?.user_id))
+
+    void store.bootstrapCanonicalProfile?.({ session, force: shouldForceBootstrap })
       .catch((error) => {
         const summary = buildBootstrapErrorSummary('auth_sync', error)
-        if (session?.access_token && isRecoverableBootstrapError(summary)) {
+        if (session?.access_token) {
           console.warn('[authStore] Auth listener degraded; preserving session', {
             message: summary.message,
             status: summary.status ?? null,
@@ -1004,8 +1457,14 @@ export const initializeAuthStateListener = () => {
         const latestState = useAuthStore.getState()
         useAuthStore.setState({
           isHydrated: true,
+          hasBootstrappedAuth: true,
           isHydratingAuth: false,
-          authBootstrapStatus: latestState.authBootstrapStatus ?? 'idle',
+          authBootstrapStatus: latestState.authBootstrapStatus ?? 'session',
+        })
+        logOrchestration('auth', 'listener.settled', {
+          event,
+          authBootstrapStatus: latestState.authBootstrapStatus ?? 'session',
+          userId: latestState.user?.id ?? latestState.session?.user?.id ?? null,
         })
       })
   })

@@ -1,0 +1,6 @@
+[
+  {
+    "user_input": "I have chest pain and I cannot breathe",
+    "expected_tier": "cardiac"
+  }
+]

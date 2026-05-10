@@ -35,9 +35,12 @@ import { useAuthStore } from '../store/authStore';
 import useHealthStore from '../store/healthStore';
 import { useSystemHealthStore } from '../store/systemHealthStore';
 import HealthSummary from '../components/HealthSummary';
+import { AIRemembersCard } from '../components/memory/AIRemembersCard';
+import { RecommendationTracker } from '../components/memory/RecommendationTracker';
+import { TrendNarrativeCard } from '../components/memory/TrendNarrativeCard';
+import { HealthJourneyTimeline } from '../components/memory/HealthJourneyTimeline';
 import { fetchConnectedDeviceSummaries, GOOGLE_FIT_PROVIDER } from '../lib/deviceApi';
 import { runGoogleFitSyncOnce } from '../lib/googleFitSyncController';
-import { getApiRootUrl } from '../lib/apiBaseUrl';
 import { safeArray, safeNumber, safeObject, safeText } from '../utils/safeData';
 import { useFetchLock } from '../hooks/useFetchLock';
 import useDeviceStore from '../store/deviceStore';
@@ -50,13 +53,9 @@ import useSmartFetchOverlay from '../hooks/useSmartFetchOverlay';
 import useGoogleFitAutoSync from '../hooks/useGoogleFitAutoSync';
 import MetricGroup from '../components/dashboard/MetricGroup';
 import { extractBloodPressureValues, formatBloodPressureReading } from '../lib/healthMetrics';
-
-const DASHBOARD_WS_ROOT = getApiRootUrl(
-  import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
-)
-  .replace(/localhost/g, '127.0.0.1')
-  .replace(/^https:/i, 'wss:')
-  .replace(/^http:/i, 'ws:');
+import { logOrchestration } from '../lib/orchestrationDebug';
+import { getAuthLifecycle } from '../router/authRedirects';
+import api from '../lib/axios';
 
 const TEST_ICON_RULES = [
   { match: ['ecg', 'holter', 'cardio', 'heart'], icon: Heart },
@@ -418,16 +417,20 @@ const buildPremiumMetricGroups = (healthMetrics, dashboardData) => {
 const Dashboard = () => {
   const isSyncing = useHealthStore((s) => s.isSyncing);
   const [hasAttemptedDashboardLoad, setHasAttemptedDashboardLoad] = useState(false);
+  const [memoryTrends, setMemoryTrends] = useState([]);
   const { acquireLock, releaseLock } = useFetchLock();
   const syncLockRef = useRef(false);
   const metricsLoadedForUserRef = useRef(null);
+  const dashboardLoadedForUserRef = useRef(null);
   const localDayKeyRef = useRef(getLocalDayKey());
 
   // ── Store ─────────────────────────────────────────────────────────────────
-  const { healthScore, alerts,
-    isFetching, error, fetchDashboardData } = useDashboardStore();
+  const healthScore = useDashboardStore((s) => s.healthScore);
+  const alerts = useDashboardStore((s) => s.alerts);
+  const isFetching = useDashboardStore((s) => s.isFetching);
+  const error = useDashboardStore((s) => s.error);
+  const fetchDashboardData = useDashboardStore((s) => s.fetchDashboardData);
   const dashboardData = useDashboardStore((s) => s.dashboardData);
-  const setDashboardData = useDashboardStore((s) => s.setDashboardData);
   const lastFetchedAt = useDashboardStore((s) => s.lastFetchedAt);
   const cacheOwnerId = useDashboardStore((s) => s.cacheOwnerId);
   const hasHydratedCache = useDashboardStore((s) => s.hasHydratedCache);
@@ -440,24 +443,50 @@ const Dashboard = () => {
   const setMetricsRange = useHealthStore((s) => s.setMetricsRange);
   const invalidateMetricsCache = useHealthStore((s) => s.invalidateMetricsCache);
   const authUser = useAuthStore((s) => s.user);
-  const authToken = useAuthStore((s) => s.token || s.accessToken);
+  const authProfile = useAuthStore((s) => s.profile);
+  const authSessionUserId = useAuthStore((s) => s.session?.user?.id ?? null);
+  const authToken = useAuthStore((s) => s.token);
+  const authAccessToken = useAuthStore((s) => s.accessToken);
+  const authBootstrapStatus = useAuthStore((s) => s.authBootstrapStatus);
+  const onboardingDone = useAuthStore((s) => s.onboardingDone);
+  const isEmailVerified = useAuthStore((s) => s.isEmailVerified);
 
   const setDevices = useDeviceStore((s) => s.setDevices);
   const isAssistantOpen = useAppStore((s) => s.isAssistantOpen);
   const closeAssistant = useAppStore((s) => s.closeAssistant);
   const isHydrated = useAuthStore((s) => s.isHydrated);
-  const isHydratingAuth = useAuthStore((s) => s.isHydratingAuth);
+  const hasBootstrappedAuth = useAuthStore((s) => s.hasBootstrappedAuth);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isHydratingAuth = useAuthStore((s) => s.isHydratingAuth);
   const systemHealthStatus = useSystemHealthStore((s) => s.status);
   const systemHealthCause = useSystemHealthStore((s) => s.cause);
-  const hasAuthUser = !!authUser?.id;
-  const authReady = isHydrated && !isHydratingAuth && isAuthenticated && hasAuthUser;
-  const authUserId = authUser?.id ?? null;
+  const systemHealthCriticalFailures = useSystemHealthStore((s) => s.consecutiveCriticalFailures);
+  const resolvedAuthUserId = authUser?.id ?? authSessionUserId ?? null;
+  const hasAuthUser = !!resolvedAuthUserId;
+  const authLifecycle = getAuthLifecycle({
+    user: authUser,
+    session: authSessionUserId ? { user: { id: authSessionUserId } } : null,
+    profile: authProfile,
+    token: authToken,
+    accessToken: authAccessToken,
+    isAuthenticated,
+    isHydrated,
+    hasBootstrappedAuth,
+    isHydratingAuth,
+    authBootstrapStatus,
+    onboardingDone,
+    isEmailVerified,
+  });
+  const authReady = authLifecycle.phase === 'ready' && hasAuthUser;
+  const authUserId = resolvedAuthUserId;
   useGoogleFitAutoSync({ enabled: authReady });
 
-  const hasDashboardSnapshot = cacheOwnerId === authUserId && lastFetchedAt !== null;
+  const hasDashboardSnapshot = cacheOwnerId === authUserId && Boolean(dashboardData);
   const shouldBlockOnCacheHydration = !hasHydratedCache && !hasAttemptedDashboardLoad;
-  const showSkeleton = !authReady || (!hasDashboardSnapshot && (isFetching || shouldBlockOnCacheHydration));
+  const canRenderCachedSnapshot = hasDashboardSnapshot && authLifecycle.phase !== 'idle';
+  const showSkeleton =
+    (!authReady && !canRenderCachedSnapshot) ||
+    (!hasDashboardSnapshot && (isFetching || shouldBlockOnCacheHydration));
   const showRefreshOverlay = useSmartFetchOverlay(isFetching, hasDashboardSnapshot, { exitDelayMs: 200 });
 
   const refreshDashboard = useCallback(async ({ silent = true } = {}) => {
@@ -497,10 +526,17 @@ const Dashboard = () => {
   useEffect(() => {
     if (!authReady) return;
 
+    if (dashboardLoadedForUserRef.current === authUserId) return;
+
+    logOrchestration('dashboard', 'preload.started', {
+      userId: authUserId,
+      hasDashboardSnapshot,
+    }, 'info');
+    dashboardLoadedForUserRef.current = authUserId;
     localDayKeyRef.current = getLocalDayKey();
     setHasAttemptedDashboardLoad(true);
-    void refreshDashboard({ silent: false });
-  }, [authReady, authUserId]);
+    void refreshDashboard({ silent: hasDashboardSnapshot });
+  }, [authReady, authUserId, hasDashboardSnapshot, refreshDashboard]);
 
   useEffect(() => {
     if (!authReady) return;
@@ -510,36 +546,8 @@ const Dashboard = () => {
 
     metricsLoadedForUserRef.current = metricsScopeKey;
     setMetricsRange(selectedMetricRange);
-    void fetchHealthMetrics({ force: true, silent: true, range: selectedMetricRange });
+    void fetchHealthMetrics({ force: false, silent: true, range: selectedMetricRange });
   }, [authReady, authUserId, fetchHealthMetrics, selectedMetricRange, setMetricsRange]);
-
-  useEffect(() => {
-    if (!authReady || !authUserId || !authToken || typeof WebSocket === 'undefined') return undefined;
-
-    const socket = new WebSocket(`${DASHBOARD_WS_ROOT}/ws/dashboard/${authUserId}?token=${encodeURIComponent(authToken)}`);
-    const pingTimer = window.setInterval(() => {
-      if (socket.readyState === WebSocket.OPEN) {
-        socket.send('ping');
-      }
-    }, 25000);
-
-    socket.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-        if (message?.type === 'dashboard.update' && message?.data) {
-          setDashboardData(message.data, { replace: false, source: 'ws' });
-          void fetchHealthMetrics({ force: true, silent: true, range: selectedMetricRange });
-        }
-      } catch (err) {
-        console.warn('Dashboard realtime payload ignored', err);
-      }
-    };
-
-    return () => {
-      window.clearInterval(pingTimer);
-      socket.close();
-    };
-  }, [authReady, authToken, authUserId, fetchHealthMetrics, selectedMetricRange, setDashboardData]);
 
   useEffect(() => {
     if (!authReady || typeof window === 'undefined') return undefined;
@@ -586,6 +594,16 @@ const Dashboard = () => {
   }, [authReady, invalidateDailyDashboardCache, invalidateMetricsCache, refreshDashboard]);
 
   useEffect(() => {
+    if (!authReady && authLifecycle.phase !== 'idle') {
+      logOrchestration('dashboard', 'preload.blocked', {
+        phase: authLifecycle.phase,
+        authBootstrapStatus,
+        hasDashboardSnapshot,
+      });
+    }
+  }, [authBootstrapStatus, authLifecycle.phase, authReady, hasDashboardSnapshot]);
+
+  useEffect(() => {
     if (!healthMetrics?.metrics) return;
     const payload = Object.entries(healthMetrics.metrics).map(([metricType, metric]) => ({
       metric_type: metricType,
@@ -625,6 +643,24 @@ const Dashboard = () => {
       root.style.removeProperty('--scroll-offset');
     };
   }, []);
+
+  useEffect(() => {
+    if (!authReady) return undefined;
+    let active = true;
+    api
+      .get('/memory/trends')
+      .then((response) => {
+        if (active) {
+          setMemoryTrends(Array.isArray(response?.data?.trends) ? response.data.trends : []);
+        }
+      })
+      .catch(() => {
+        if (active) setMemoryTrends([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [authReady]);
 
   // ── Sync handler ──────────────────────────────────────────────────────────
   const handleSync = async () => {
@@ -679,7 +715,7 @@ const Dashboard = () => {
       minute: '2-digit',
     })
     : 'Waiting for sync';
-  const showSystemDegradedBanner = systemHealthStatus === 'degraded';
+  const showSystemDegradedBanner = systemHealthStatus === 'degraded' && systemHealthCriticalFailures > 0;
   const riskScoreData = [
     { name: 'Score', value: score },
     { name: 'Remaining', value: 100 - score },
@@ -902,6 +938,46 @@ const Dashboard = () => {
                     <HealthSummary />
                   </Motion.div>
                 </div>
+
+                <Motion.section variants={itemVariants} className="grid grid-cols-1 xl:grid-cols-[1.15fr_0.95fr_0.9fr] gap-6">
+                  <AIRemembersCard />
+
+                  <div className="rounded-[1.8rem] border border-slate-200 bg-white/90 p-5 shadow-sm dark:border-stroke dark:bg-background/45">
+                    <p className="text-[11px] font-black uppercase tracking-[0.24em] text-text-muted">Trend Narratives</p>
+                    <h3 className="mt-2 text-lg font-black tracking-tight text-slate-950 dark:text-text-primary">Longitudinal context from your recent history</h3>
+                    <div className="mt-5 space-y-3">
+                      {memoryTrends.length > 0 ? (
+                        memoryTrends.slice(0, 3).map((trend) => (
+                          <TrendNarrativeCard
+                            key={`${trend.metric}-${trend.period}`}
+                            trend={trend}
+                          />
+                        ))
+                      ) : (
+                        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-5 text-sm font-medium text-slate-500 dark:border-stroke dark:bg-background/60 dark:text-text-secondary">
+                          Trend narratives will appear after more health readings and follow-up conversations.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <RecommendationTracker />
+                </Motion.section>
+
+                <Motion.section variants={itemVariants} className="rounded-[2rem] border border-slate-200 bg-white/90 p-6 shadow-sm dark:border-stroke dark:bg-background/45">
+                  <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <p className="text-[11px] font-black uppercase tracking-[0.24em] text-text-muted">Health Journey Memory</p>
+                      <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950 dark:text-text-primary">
+                        Timeline fragments Arya can carry across sessions
+                      </h3>
+                    </div>
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:border-stroke dark:bg-background/60 dark:text-text-secondary">
+                      Personal continuity layer
+                    </span>
+                  </div>
+                  <HealthJourneyTimeline />
+                </Motion.section>
 
                 {/* Section 4: Critical Alerts & Recommendations */}
                 <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] gap-8 items-start pb-12">

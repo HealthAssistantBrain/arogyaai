@@ -43,12 +43,21 @@ class SupabaseJWTVerifier:
         self._cache = JWKSCacheState()
         self._lock = asyncio.Lock()
         self._refresh_task: asyncio.Task[JWKSCacheState] | None = None
+        self._background_refresh_task: asyncio.Task[None] | None = None
         self._client: httpx.AsyncClient | None = None
+        self._next_background_refresh_at_monotonic: float = 0.0
+        self._next_retry_at_monotonic: float = 0.0
+        self._log_deadlines_monotonic: dict[str, float] = {}
         self._metrics: dict[str, Any] = {
             "cache_hits": 0,
             "cache_misses": 0,
             "stale_hits": 0,
             "stale_fallback_uses": 0,
+            "refresh_reuses": 0,
+            "refresh_deduplications": 0,
+            "refresh_cooldown_skips": 0,
+            "background_refresh_schedules": 0,
+            "background_refresh_skips": 0,
             "jwks_fetch_successes": 0,
             "jwks_fetch_failures": 0,
             "jwks_fetch_timeouts": 0,
@@ -100,6 +109,19 @@ class SupabaseJWTVerifier:
         connect_timeout = min(timeout_seconds, max(0.25, timeout_seconds / 2))
         return httpx.Timeout(timeout_seconds, connect=connect_timeout)
 
+    @property
+    def refresh_cooldown_seconds(self) -> float:
+        return max(5.0, float(getattr(settings, "SUPABASE_JWKS_REFRESH_COOLDOWN_SECONDS", 30.0) or 30.0))
+
+    @property
+    def failure_cooldown_seconds(self) -> float:
+        configured = float(getattr(settings, "SUPABASE_JWKS_FAILURE_COOLDOWN_SECONDS", 15.0) or 15.0)
+        return max(1.0, configured)
+
+    @property
+    def log_cooldown_seconds(self) -> float:
+        return max(5.0, min(60.0, self.failure_cooldown_seconds))
+
     def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:
             self._client = httpx.AsyncClient(
@@ -120,6 +142,14 @@ class SupabaseJWTVerifier:
             return None
         return max(0.0, round(time.monotonic() - state.fetched_at_monotonic, 3))
 
+    def _cache_state(self, cache: JWKSCacheState | None = None) -> str:
+        state = cache or self._cache
+        if self._is_fresh(state):
+            return "fresh"
+        if self._is_stale_usable(state):
+            return "stale"
+        return "empty"
+
     def _is_fresh(self, cache: JWKSCacheState | None = None) -> bool:
         state = cache or self._cache
         return bool(
@@ -136,6 +166,109 @@ class SupabaseJWTVerifier:
             and time.monotonic() < state.stale_deadline_monotonic
         )
 
+    def _refresh_in_progress(self) -> bool:
+        return bool(self._refresh_task and not self._refresh_task.done())
+
+    def _compute_health_status(self) -> str:
+        cache_state = self._cache_state()
+        if cache_state in {"fresh", "stale"}:
+            return "healthy"
+        if self._refresh_in_progress():
+            return "warming"
+        if self._metrics["last_fetch_error"]:
+            return "unavailable"
+        return "warming"
+
+    def _should_log(self, key: str, cooldown_seconds: float | None = None) -> bool:
+        now = time.monotonic()
+        cooldown = self.log_cooldown_seconds if cooldown_seconds is None else max(0.0, cooldown_seconds)
+        next_allowed = self._log_deadlines_monotonic.get(key, 0.0)
+        if now < next_allowed:
+            return False
+        self._log_deadlines_monotonic[key] = now + cooldown
+        return True
+
+    def _clear_refresh_task(self, task: asyncio.Task[JWKSCacheState]) -> None:
+        if self._refresh_task is task:
+            self._refresh_task = None
+
+    def _clear_background_refresh_task(self, task: asyncio.Task[None]) -> None:
+        if self._background_refresh_task is task:
+            self._background_refresh_task = None
+
+    async def _acquire_refresh_task(
+        self,
+        *,
+        reason: str,
+        force: bool,
+        background: bool,
+    ) -> tuple[asyncio.Task[JWKSCacheState] | None, str]:
+        current_task = asyncio.current_task()
+
+        async with self._lock:
+            if not force and self._is_fresh(self._cache):
+                return None, "fresh"
+
+            active_task = self._refresh_task
+            if active_task is not None and active_task.done():
+                self._refresh_task = None
+                active_task = None
+
+            if active_task is not None:
+                if active_task is current_task:
+                    self._metrics["refresh_deduplications"] += 1
+                    raise RuntimeError("Recursive JWKS refresh re-entry detected")
+
+                self._metrics["refresh_reuses"] += 1
+                logger.info(
+                    "[Auth] JWKS refresh reuse | reason=%s inflight_reason=%s background=%s",
+                    reason,
+                    self._metrics["last_fetch_reason"],
+                    background,
+                )
+                return active_task, "reused"
+
+            now_monotonic = time.monotonic()
+            if now_monotonic < self._next_retry_at_monotonic:
+                self._metrics["refresh_cooldown_skips"] += 1
+                remaining = round(self._next_retry_at_monotonic - now_monotonic, 3)
+                if self._should_log("jwks_retry_cooldown"):
+                    logger.info(
+                        "[Auth] JWKS refresh cooldown active | reason=%s background=%s remaining_s=%s cache_state=%s",
+                        reason,
+                        background,
+                        remaining,
+                        self._cache_state(),
+                    )
+                return None, "retry_cooldown"
+
+            if background and now_monotonic < self._next_background_refresh_at_monotonic:
+                self._metrics["background_refresh_skips"] += 1
+                remaining = round(self._next_background_refresh_at_monotonic - now_monotonic, 3)
+                if self._should_log("jwks_background_cooldown"):
+                    logger.info(
+                        "[Auth] JWKS background refresh cooldown active | reason=%s remaining_s=%s cache_state=%s",
+                        reason,
+                        remaining,
+                        self._cache_state(),
+                    )
+                return None, "background_cooldown"
+
+            task = asyncio.create_task(self._fetch_and_store(reason=reason), name=f"supabase-jwks:{reason}")
+            self._refresh_task = task
+            self._metrics["last_fetch_reason"] = reason
+            if background:
+                self._next_background_refresh_at_monotonic = now_monotonic + self.refresh_cooldown_seconds
+            logger.info(
+                "[Auth] JWKS refresh start | reason=%s force=%s background=%s cache_state=%s",
+                reason,
+                force,
+                background,
+                self._cache_state(),
+            )
+            task.add_done_callback(self._clear_refresh_task)
+            return task, "started"
+
     def _public_key_from_jwk(self, jwk_payload: dict[str, Any], algorithm: str):
         if algorithm.startswith("RS"):
             return algorithms.RSAAlgorithm.from_jwk(json.dumps(jwk_payload))
@@ -148,26 +281,18 @@ class SupabaseJWTVerifier:
 
     def snapshot(self) -> dict[str, Any]:
         cache_age_seconds = self._cache_age_seconds()
-        cache_state = "empty"
-        if self._is_fresh():
-            cache_state = "fresh"
-        elif self._is_stale_usable():
-            cache_state = "stale"
-
-        if cache_state == "fresh":
-            status_value = "ok"
-        elif cache_state == "stale":
-            status_value = "degraded"
-        else:
-            status_value = "degraded" if self._metrics["last_fetch_error"] else "warming"
+        cache_state = self._cache_state()
+        status_value = self._compute_health_status()
 
         return {
             "status": status_value,
+            "health_state": status_value,
             "cache_state": cache_state,
             "cache_age_seconds": cache_age_seconds,
             "cache_ttl_seconds": self.cache_ttl_seconds,
             "stale_ttl_seconds": self.stale_ttl_seconds,
             "keys_cached": len(self._cache.keys_by_kid),
+            "refresh_in_progress": self._refresh_in_progress(),
             "last_fetch_reason": self._metrics["last_fetch_reason"],
             "last_fetch_started_at": self._metrics["last_fetch_started_at"],
             "last_fetch_completed_at": self._metrics["last_fetch_completed_at"],
@@ -182,6 +307,11 @@ class SupabaseJWTVerifier:
             "cache_misses": self._metrics["cache_misses"],
             "stale_hits": self._metrics["stale_hits"],
             "stale_fallback_uses": self._metrics["stale_fallback_uses"],
+            "refresh_reuses": self._metrics["refresh_reuses"],
+            "refresh_deduplications": self._metrics["refresh_deduplications"],
+            "refresh_cooldown_skips": self._metrics["refresh_cooldown_skips"],
+            "background_refresh_schedules": self._metrics["background_refresh_schedules"],
+            "background_refresh_skips": self._metrics["background_refresh_skips"],
             "jwks_fetch_successes": self._metrics["jwks_fetch_successes"],
             "jwks_fetch_failures": self._metrics["jwks_fetch_failures"],
             "jwks_fetch_timeouts": self._metrics["jwks_fetch_timeouts"],
@@ -193,12 +323,25 @@ class SupabaseJWTVerifier:
         started_at = time.perf_counter()
         self._metrics["startup_warmup_status"] = "running"
         try:
-            await self._refresh(reason=reason, allow_stale=True)
-            self._metrics["startup_warmup_status"] = "ready"
+            await self._refresh(reason=reason, allow_stale=True, background=True)
         except Exception as exc:
-            self._metrics["startup_warmup_status"] = "degraded"
-            logger.warning("[Auth] JWKS startup warmup degraded | reason=%s error=%s", reason, exc)
+            snapshot = self.snapshot()
+            if self._should_log("jwks_startup_warmup_failure"):
+                logger.warning(
+                    "[Auth] JWKS startup warmup deferred | reason=%s status=%s cache_state=%s error=%s",
+                    reason,
+                    snapshot.get("status"),
+                    snapshot.get("cache_state"),
+                    exc,
+                )
         finally:
+            snapshot = self.snapshot()
+            self._metrics["startup_warmup_status"] = {
+                "healthy": "ready",
+                "warming": "warming",
+                "degraded": "degraded",
+                "unavailable": "unavailable",
+            }.get(str(snapshot.get("status") or "").lower(), "warming")
             self._metrics["startup_warmup_duration_ms"] = round((time.perf_counter() - started_at) * 1000, 2)
         return self.snapshot()
 
@@ -319,11 +462,12 @@ class SupabaseJWTVerifier:
         if not force_refresh and self._is_stale_usable(cache) and required_kid in cache.keys_by_kid:
             self._metrics["stale_hits"] += 1
             self._schedule_background_refresh(reason=f"stale_refresh:{required_kid}")
-            logger.warning(
-                "[Auth] Using stale JWKS cache | kid=%s age_s=%s",
-                required_kid,
-                self._cache_age_seconds(cache),
-            )
+            if self._should_log("jwks_stale_cache_use"):
+                logger.info(
+                    "[Auth] Using stale JWKS cache | kid=%s age_s=%s",
+                    required_kid,
+                    self._cache_age_seconds(cache),
+                )
             return cache
 
         self._metrics["cache_misses"] += 1
@@ -339,19 +483,42 @@ class SupabaseJWTVerifier:
         except RuntimeError:
             return
 
-        if self._refresh_task and not self._refresh_task.done():
+        if self._background_refresh_task and not self._background_refresh_task.done():
             return
 
-        task = loop.create_task(self._refresh(reason=reason, allow_stale=True, force=True))
-        self._refresh_task = task
+        if self._refresh_task and not self._refresh_task.done():
+            self._metrics["background_refresh_skips"] += 1
+            return
 
-        def _cleanup(done_task: asyncio.Task[Any]) -> None:
+        task = loop.create_task(self._run_background_refresh(reason=reason), name=f"supabase-jwks-bg:{reason}")
+        self._background_refresh_task = task
+        self._metrics["background_refresh_schedules"] += 1
+
+        def _cleanup(done_task: asyncio.Task[None]) -> None:
+            self._clear_background_refresh_task(done_task)
             if done_task.cancelled():
                 return
             if done_task.exception():
-                logger.warning("[Auth] Background JWKS refresh failed | reason=%s error=%s", reason, done_task.exception())
+                if self._should_log("jwks_background_refresh_failure"):
+                    logger.warning(
+                        "[Auth] Background JWKS refresh failed | reason=%s error=%s",
+                        reason,
+                        done_task.exception(),
+                    )
 
         task.add_done_callback(_cleanup)
+
+    async def _run_background_refresh(self, *, reason: str) -> None:
+        try:
+            await self._refresh(reason=reason, allow_stale=True, force=True, background=True)
+        except HTTPException as exc:
+            if self._should_log("jwks_background_refresh_deferred"):
+                logger.info(
+                    "[Auth] Background JWKS refresh deferred | reason=%s status_code=%s detail=%s",
+                    reason,
+                    exc.status_code,
+                    exc.detail,
+                )
 
     async def _refresh(
         self,
@@ -359,42 +526,57 @@ class SupabaseJWTVerifier:
         reason: str,
         allow_stale: bool,
         force: bool = False,
+        background: bool = False,
     ) -> JWKSCacheState:
         cache = self._cache
         if not force and self._is_fresh(cache):
             return cache
 
-        async with self._lock:
-            if not force and self._is_fresh(self._cache):
+        task, task_state = await self._acquire_refresh_task(
+            reason=reason,
+            force=force,
+            background=background,
+        )
+
+        if task_state == "fresh":
+            return self._cache
+
+        if task is None:
+            if allow_stale and self._is_stale_usable(self._cache):
+                self._metrics["stale_fallback_uses"] += 1
+                if self._should_log("jwks_refresh_cooldown_stale_fallback"):
+                    logger.info(
+                        "[Auth] JWKS refresh deferred; using stale cache | reason=%s background=%s cache_age_s=%s",
+                        reason,
+                        background,
+                        self._cache_age_seconds(),
+                    )
                 return self._cache
 
-            if self._refresh_task and not self._refresh_task.done():
-                task = self._refresh_task
-            else:
-                task = asyncio.create_task(self._fetch_and_store(reason=reason))
-                self._refresh_task = task
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Supabase JWKS refresh cooling down",
+            )
 
         try:
             return await task
         except Exception as exc:
             if allow_stale and self._is_stale_usable(self._cache):
                 self._metrics["stale_fallback_uses"] += 1
-                logger.warning(
-                    "[Auth] JWKS refresh failed; falling back to stale cache | reason=%s error=%s age_s=%s",
-                    reason,
-                    exc,
-                    self._cache_age_seconds(),
-                )
+                if self._should_log("jwks_refresh_stale_fallback"):
+                    logger.info(
+                        "[Auth] JWKS refresh failed; falling back to stale cache | reason=%s background=%s error=%s age_s=%s",
+                        reason,
+                        background,
+                        exc,
+                        self._cache_age_seconds(),
+                    )
                 return self._cache
 
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Supabase JWKS temporarily unavailable",
             ) from exc
-        finally:
-            async with self._lock:
-                if self._refresh_task is task and task.done():
-                    self._refresh_task = None
 
     async def _fetch_and_store(self, *, reason: str) -> JWKSCacheState:
         last_error: Exception | None = None
@@ -426,6 +608,7 @@ class SupabaseJWTVerifier:
                     last_fetch_duration_ms=duration_ms,
                 )
                 self._cache = cache
+                self._next_retry_at_monotonic = 0.0
                 self._metrics["jwks_fetch_successes"] += 1
                 self._metrics["last_fetch_completed_at"] = _utc_now().isoformat()
                 self._metrics["last_fetch_duration_ms"] = duration_ms
@@ -460,11 +643,16 @@ class SupabaseJWTVerifier:
                     await asyncio.sleep(self.retry_backoff_seconds * (2 ** (attempt - 1)))
 
         if last_error is not None:
+            self._next_retry_at_monotonic = time.monotonic() + self.failure_cooldown_seconds
             raise last_error
 
         raise RuntimeError("Supabase JWKS refresh failed without an explicit error")
 
     async def aclose(self) -> None:
+        if self._background_refresh_task and not self._background_refresh_task.done():
+            self._background_refresh_task.cancel()
+            await asyncio.gather(self._background_refresh_task, return_exceptions=True)
+            self._background_refresh_task = None
         if self._client is not None:
             await self._client.aclose()
             self._client = None

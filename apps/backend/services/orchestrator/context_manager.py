@@ -564,6 +564,7 @@ class ContextManager:
         )
         memory_summary = self._build_memory_summary(profile, structured)
         longitudinal_summary = self._build_longitudinal_summary(structured)
+        continuity_summary = self._build_continuity_summary(structured, metadata)
         compact_clinical_history = self._compact_clinical_history(clinical_history, structured)
 
         context = {
@@ -607,6 +608,7 @@ class ContextManager:
             "recommendation_plan": self._compact_recommendation_plan(recommendation_plans[0]) if recommendation_plans else None,
             "memory_summary": memory_summary,
             "longitudinal_summary": longitudinal_summary,
+            "continuity_summary": continuity_summary,
             "conversation_state": self._compact_conversation_state(metadata),
             "context_meta": meta,
         }
@@ -1350,6 +1352,33 @@ class ContextManager:
             ),
         }
 
+    def _build_continuity_summary(
+        self,
+        structured: dict[str, list[dict[str, Any]]],
+        metadata: dict[str, Any],
+    ) -> dict[str, list[str] | str]:
+        conversation_state = self._compact_conversation_state(metadata)
+        current_symptoms = [
+            item.get("name")
+            for item in structured["symptom_history"][:4]
+            if item.get("name")
+        ]
+        carryover_recommendations = self._section_sentences(
+            structured["recommendation_history"][:3],
+            ("summary", "title"),
+        )
+        recent_assistant_focus = [
+            sentence
+            for sentence in _json_list(conversation_state.get("assistant_highlights"))[:2]
+            if _clean_text(sentence)
+        ]
+        return {
+            "ongoing_symptoms": current_symptoms[:4],
+            "carryover_recommendations": carryover_recommendations,
+            "recent_assistant_focus": recent_assistant_focus,
+            "last_persona": _clean_text(conversation_state.get("last_persona"), limit=48),
+        }
+
     def _section_sentences(self, items: list[dict[str, Any]], keys: tuple[str, ...]) -> list[str]:
         sentences: list[str] = []
         for item in items:
@@ -1450,17 +1479,50 @@ class ContextManager:
         if chat_session is None:
             return {}
         messages = _json_list(getattr(chat_session, "messages", None))
+        user_messages = [
+            _clean_text(item.get("content"), limit=120)
+            for item in messages[-4:]
+            if isinstance(item, dict) and str(item.get("role") or "").lower() == "user"
+        ]
         assistant_messages = [
             _clean_text(item.get("content"), limit=120)
             for item in messages[-4:]
             if isinstance(item, dict) and str(item.get("role") or "").lower() == "assistant"
         ]
+        recent_emotions: list[str] = []
+        last_persona = ""
+        last_follow_up_topics: list[str] = []
+        continuity_notes: list[str] = []
+        for item in messages[-6:]:
+            if not isinstance(item, dict):
+                continue
+            if str(item.get("role") or "").lower() != "assistant":
+                continue
+            dominant_emotion = _clean_text(
+                (_json_dict(item.get("emotional_context")).get("dominant_emotion")),
+                limit=40,
+            )
+            if dominant_emotion:
+                recent_emotions.append(dominant_emotion)
+            persona = item.get("persona")
+            if isinstance(persona, dict):
+                primary = _json_dict(persona.get("primary"))
+                last_persona = _clean_text(primary.get("key") or persona.get("selection_reason"), limit=64) or last_persona
+            last_follow_up_topics.extend(_json_list(item.get("follow_up_topics")))
+            continuity_note = _clean_text(_json_dict(item.get("continuity")).get("reference"), limit=120)
+            if continuity_note:
+                continuity_notes.append(continuity_note)
         return {
             "message_count": len(messages),
             "symptoms_history": _json_list(getattr(chat_session, "symptoms_history", None))[:6],
             "last_risk_score": _safe_float(getattr(chat_session, "last_risk_score", None)),
             "follow_up_pending": bool(getattr(chat_session, "follow_up_pending", False)),
             "assistant_highlights": [item for item in assistant_messages if item][:2],
+            "user_highlights": [item for item in user_messages if item][:2],
+            "recent_emotions": [item for item in recent_emotions if item][:3],
+            "last_persona": last_persona,
+            "last_follow_up_topics": [item for item in last_follow_up_topics if _clean_text(item)][:4],
+            "continuity_notes": [item for item in continuity_notes if item][:2],
             "last_updated": _iso(getattr(chat_session, "updated_at", None)),
         }
 
@@ -1624,6 +1686,12 @@ class ContextManager:
                 "abnormal_changes": [],
                 "persistent_issues": [],
                 "recommendation_carryover": [],
+            },
+            "continuity_summary": {
+                "ongoing_symptoms": [],
+                "carryover_recommendations": [],
+                "recent_assistant_focus": [],
+                "last_persona": "",
             },
             "conversation_state": self._compact_conversation_state(metadata),
             "context_meta": {

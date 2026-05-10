@@ -5,9 +5,7 @@ import {
   buildBootstrapErrorSummary,
   formatBootstrapFailureCause,
   isCriticalBootstrapError,
-  summarizeHealthResult,
 } from '../lib/systemReadiness';
-import { useSystemHealthStore } from '../store/systemHealthStore';
 import { ROUTES } from './routes';
 import { getAuthenticatedHomeRoute, getProtectedRouteRedirect } from './authRedirects';
 
@@ -100,23 +98,6 @@ const logInit = (phase: string, payload: Record<string, unknown>, level: 'debug'
   logger(`[STARTUP] ${phase}`, payload);
 };
 
-const getStableHealthSnapshot = () => {
-  const state = useSystemHealthStore.getState();
-  if (!['ready', 'degraded', 'down'].includes(state.status)) return null;
-
-  return {
-    status: state.status,
-    cause: state.cause,
-    maintenanceEligible: state.status === 'down',
-    durationMs: state.lastProbe?.durationMs ?? null,
-    attempt: state.lastProbe?.attempt ?? null,
-    httpStatus: state.lastProbe?.httpStatus ?? null,
-    criticalServices: state.lastProbe?.criticalServices ?? [],
-    optionalServices: state.lastProbe?.optionalServices ?? [],
-    mode: 'cached',
-  };
-};
-
 const buildAuthRecoveryResult = ({
   pathname,
   isProtectedPath,
@@ -154,7 +135,6 @@ const runInitResolver = async ({
   const isAuthCallbackPath = pathname === ROUTES.AUTH_CALLBACK;
   const isMaintenancePath = pathname === ROUTES.MAINTENANCE;
   const store = useAuthStore.getState();
-  const systemHealthStore = useSystemHealthStore.getState();
 
   try {
     logInit('resolver.start', { trigger, pathname, isProtectedPath, skipHealthCheck });
@@ -162,56 +142,26 @@ const runInitResolver = async ({
     logInit('persist.hydrated', { trigger }, 'info');
 
     if (isAuthCallbackPath) {
-      useAuthStore.setState({ isHydrated: true, isHydratingAuth: false });
+      useAuthStore.setState({ isHydrated: true, hasBootstrappedAuth: true, isHydratingAuth: false });
       return null;
     }
 
-    const healthPromise = async () => {
-      if (skipHealthCheck) {
-        const cachedHealth = getStableHealthSnapshot();
-        if (cachedHealth) {
-          logInit('health.reuse', summarizeHealthResult(cachedHealth) || {}, 'info');
-          return cachedHealth;
-        }
-      }
-
-      return await systemHealthStore.checkHealth({
-        mode: 'startup',
-        source: trigger,
-      });
-    };
-
-    const [resolvedHealth, hydratedState] = await Promise.all([
-      healthPromise(),
-      withTimeout(store.hydrateAuth(), INIT_TIMEOUT_MS, 'Auth initialization'),
-    ]);
+    const hydratedState = await withTimeout(
+      store.bootstrapAuth ? store.bootstrapAuth() : store.hydrateAuth(),
+      INIT_TIMEOUT_MS,
+      'Auth initialization'
+    );
 
     const currentState = hydratedState || useAuthStore.getState();
     const hydrationError = currentState.lastHydrationError;
-
-    logInit('health.resolved', summarizeHealthResult(resolvedHealth) || {}, resolvedHealth?.status === 'down' ? 'warn' : 'info');
-
-    if (resolvedHealth.status === 'down') {
-      logInit(
-        'maintenance.enter',
-        {
-          trigger,
-          reason: resolvedHealth.cause || 'Core backend unavailable.',
-          criticalServices: resolvedHealth.criticalServices || [],
-        },
-        'warn'
-      );
-      return {
-        route: ROUTES.MAINTENANCE,
-        cause: resolvedHealth.cause || 'Core backend unavailable.',
-      };
-    }
+    const canContinueWithSession =
+      currentState.isAuthenticated &&
+      Boolean(currentState.user?.id || currentState.session?.user?.id) &&
+      ['session', 'degraded', 'ready'].includes(String(currentState.authBootstrapStatus || '').toLowerCase());
 
     if (
       hydrationError &&
-      currentState.authBootstrapStatus === 'degraded' &&
-      currentState.isAuthenticated &&
-      !!currentState.user?.id
+      canContinueWithSession
     ) {
       logInit('auth.degraded.continuing', {
         trigger,
@@ -232,9 +182,10 @@ const runInitResolver = async ({
     logInit('auth.hydrated', {
       trigger,
       isAuthenticated: currentState.isAuthenticated,
-      hasUser: !!currentState.user?.id,
+      hasUser: !!(currentState.user?.id || currentState.session?.user?.id),
       onboardingDone: currentState.onboardingDone,
       onboardingStep: currentState.onboardingStep,
+      authBootstrapStatus: currentState.authBootstrapStatus,
     }, 'info');
 
     if (!currentState.isAuthenticated) {
@@ -291,6 +242,7 @@ const runInitResolver = async ({
     console.warn('[INIT_RESOLVER] Auth bootstrap failed:', err?.message);
     store.reset();
     store.setHydrated();
+    store.setAuthBootstrapComplete?.(true);
     return isProtectedPath ? { route: ROUTES.HOME, cause: `Failed auth check: ${err?.message}` } : null;
   }
 };
