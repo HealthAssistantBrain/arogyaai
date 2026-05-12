@@ -133,6 +133,12 @@ class OnboardingService:
         db.refresh(user)
 
         if user.is_onboarding_done and OnboardingService._pipeline_artifacts_exist(db, user):
+            try:
+                from ai.scoring.realtime.event_listener import ScoringEventListener
+
+                ScoringEventListener.on_onboarding_update(db, user)
+            except Exception:
+                logger.exception("Onboarding scoring refresh failed for user=%s", user.id)
             latest_health = StoragePipelineService.latest_health_score(db, user)
             latest_risk = StoragePipelineService.latest_risk_score(db, user)
             latest_baselines = StoragePipelineService.latest_baseline_metrics(db, user)

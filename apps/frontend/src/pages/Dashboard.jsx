@@ -489,14 +489,14 @@ const Dashboard = () => {
     (!hasDashboardSnapshot && (isFetching || shouldBlockOnCacheHydration));
   const showRefreshOverlay = useSmartFetchOverlay(isFetching, hasDashboardSnapshot, { exitDelayMs: 200 });
 
-  const refreshDashboard = useCallback(async ({ silent = true } = {}) => {
+  const refreshDashboard = useCallback(async ({ silent = true, force = false } = {}) => {
     if (!acquireLock('dashboard_refresh')) return;
 
     try {
       const timezone = getBrowserTimezone();
       await Promise.all([
-        fetchDashboardData({ force: true, silent }),
-        fetchHealthMetrics({ force: true, silent: true, range: selectedMetricRange, timezone }),
+        fetchDashboardData({ force, silent }),
+        fetchHealthMetrics({ force, silent: true, range: selectedMetricRange, timezone }),
       ]);
     } catch (err) {
       console.error('Refresh dashboard error:', err);
@@ -535,7 +535,7 @@ const Dashboard = () => {
     dashboardLoadedForUserRef.current = authUserId;
     localDayKeyRef.current = getLocalDayKey();
     setHasAttemptedDashboardLoad(true);
-    void refreshDashboard({ silent: hasDashboardSnapshot });
+    void refreshDashboard({ silent: hasDashboardSnapshot, force: false });
   }, [authReady, authUserId, hasDashboardSnapshot, refreshDashboard]);
 
   useEffect(() => {
@@ -560,7 +560,7 @@ const Dashboard = () => {
         invalidateDailyDashboardCache();
         invalidateMetricsCache();
       }
-      void refreshDashboard({ silent: true });
+      void refreshDashboard({ silent: true, force: false });
       midnightTimer = window.setTimeout(refreshForDayBoundary, msUntilNextMidnight() + 1500);
     };
 
@@ -572,12 +572,12 @@ const Dashboard = () => {
         invalidateDailyDashboardCache();
         invalidateMetricsCache();
       }
-      void refreshDashboard({ silent: true });
+      void refreshDashboard({ silent: true, force: false });
     };
 
     const pollTimer = window.setInterval(() => {
       if (document.visibilityState === 'visible') {
-        void refreshDashboard({ silent: true });
+        void refreshDashboard({ silent: true, force: false });
       }
     }, 60_000);
 
@@ -673,7 +673,7 @@ const Dashboard = () => {
       await runGoogleFitSyncOnce({ requireConnected: false });
       invalidateMetricsCache();
       invalidateDailyDashboardCache();
-      void refreshDashboard({ silent: true });
+      void refreshDashboard({ silent: true, force: true });
     } catch (err) {
       console.error('Sync failed', err);
     } finally {
@@ -746,7 +746,7 @@ const Dashboard = () => {
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <button
-              onClick={() => void refreshDashboard({ silent: false })}
+              onClick={() => void refreshDashboard({ silent: false, force: true })}
               className="rounded-xl bg-primary px-5 py-3 text-xs font-black uppercase tracking-[0.2em] text-white"
             >
               Retry Fetch
@@ -827,7 +827,7 @@ const Dashboard = () => {
                         </p>
                       </div>
                       <button
-                        onClick={() => void refreshDashboard({ silent: true })}
+                        onClick={() => void refreshDashboard({ silent: true, force: true })}
                         className="bg-amber-500 text-white px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-amber-600 transition-colors"
                       >
                         Refresh
@@ -847,7 +847,7 @@ const Dashboard = () => {
                         <p className="text-red-700 dark:text-red-400/80 text-xs font-medium truncate">{error}</p>
                       </div>
                       <button
-                        onClick={() => void refreshDashboard({ silent: true })}
+                        onClick={() => void refreshDashboard({ silent: true, force: true })}
                         className="bg-red-500 text-text-primary px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-red-600 transition-colors"
                       >
                         Retry Now

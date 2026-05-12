@@ -22,6 +22,7 @@ _STAGE_ALIASES = {
     "rag_retrieval": "retrieve_knowledge",
     "provider_inference": "generate_response",
     "safety_validation": "validate_response",
+    "final_safety_validation": "validate_response",
     "structured_formatting": "format_output",
 }
 
@@ -300,6 +301,7 @@ class WorkflowEngine:
             "provider_inference",
             "safety_validation",
             "structured_formatting",
+            "final_safety_validation",
             "response_finalization",
             "memory_persistence",
             "telemetry_logging",
@@ -446,6 +448,21 @@ class WorkflowEngine:
                 context,
             )
             context.formatted_output = _safe_dict(formatted)
+
+            if hasattr(self.dependencies.safety_validator, "validate_workflow_response"):
+                final_safe_output = await self._run_stage(
+                    workflow,
+                    "final_safety_validation",
+                    lambda req, deps, ctx: deps.safety_validator.validate_workflow_response(
+                        workflow=workflow.name,
+                        request=req,
+                        context=ctx,
+                        response=context.formatted_output,
+                    ),
+                    request,
+                    context,
+                )
+                context.formatted_output = _safe_dict(final_safe_output) or dict(context.formatted_output)
 
             if workflow.timeline_enabled:
                 timeline_events = await self._run_stage(

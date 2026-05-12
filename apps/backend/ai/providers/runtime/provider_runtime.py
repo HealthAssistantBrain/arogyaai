@@ -138,6 +138,16 @@ class ProviderRuntime:
                     payload=response.as_legacy_result(),
                 )
                 return response
+            except asyncio.CancelledError:
+                logger.info(
+                    "[INFERENCE_CANCELLED] request_id=%s task=%s workflow=%s provider=%s model=%s",
+                    prepared.request_id,
+                    prepared.task,
+                    prepared.workflow,
+                    candidate.provider,
+                    candidate.model,
+                )
+                raise
             except asyncio.TimeoutError:
                 latency_ms = (time.perf_counter() - attempt_started) * 1000
                 attempt = ProviderAttempt(
@@ -175,6 +185,17 @@ class ProviderRuntime:
                     candidate.model,
                     exc,
                 )
+
+        if cached:
+            logger.info(
+                "[WORKFLOW_CACHE_HIT] workflow=%s request_id=%s source=provider_runtime_fallback",
+                prepared.workflow,
+                prepared.request_id,
+            )
+            response = self._response_from_cached(prepared, cached, routing_meta)
+            response.attempts = attempts
+            response.warnings = [*response.warnings, "cached_after_provider_failure"]
+            return response
 
         return self._degraded_response(prepared, attempts=attempts, routing_meta=routing_meta)
 

@@ -12,7 +12,6 @@ if str(ROOT_DIR) not in sys.path:
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from starlette.requests import Request
 
 # Import modular routers
@@ -23,6 +22,7 @@ from api.v1 import emergency as emergency_routes
 from database.session import analytics_runtime_enabled, dispose_engines, engine, log_pool_snapshot
 from core.config import settings
 from core.pipeline_logger import log_pipeline, log_pipeline_section
+from core.serialization.safe_response import SafeJSONResponse as JSONResponse
 from pipelines.rag_pipeline.config import RagSettings
 from services.dashboard_realtime import start_dashboard_realtime_listener, stop_dashboard_realtime_listener
 from services.health_service import (
@@ -36,9 +36,14 @@ from services.health_service import (
 )
 from services.ollama_client import probe_ollama_health
 from services.startup_lifecycle import startup_lifecycle
+from services.supabase_sdk_validation import (
+    SupabaseSDKCompatibilityError,
+    ensure_supabase_sdk_compatibility,
+)
 from services.supabase_jwt_verifier import supabase_jwt_verifier
 from workers.emergency_worker import start_emergency_worker, stop_emergency_worker
 from workers.google_fit_worker import start_google_fit_worker, stop_google_fit_worker
+from workers.preventive_worker import start_preventive_worker, stop_preventive_worker
 
 # Critical: import all models so they register on Base.metadata
 import models  # noqa: F401
@@ -390,6 +395,39 @@ async def _startup_scheduler():
     log_pipeline("system", step="initializing", status="running", data="pending")
     startup_lifecycle.mark("core_api", status="running", detail="booting")
 
+    async def _package_compatibility_startup() -> dict[str, str]:
+        snapshot = await asyncio.to_thread(ensure_supabase_sdk_compatibility, force=True)
+        logger.info(
+            "[DEPENDENCY VALIDATION] Locked Supabase SDK ready | packages=%s",
+            snapshot.get("packages"),
+        )
+        log_pipeline(
+            "system",
+            step="dependency_validation",
+            status="healthy",
+            data=str(snapshot.get("packages")),
+        )
+        return {"status": "ready", "detail": snapshot.get("detail", "supabase_sdk_locked")}
+
+    try:
+        await startup_lifecycle.run_blocking(
+            "package_compatibility",
+            _package_compatibility_startup,
+            detail="supabase_sdk_validation",
+        )
+    except SupabaseSDKCompatibilityError as exc:
+        logger.critical(
+            "[PACKAGE COMPATIBILITY] Backend startup blocked by incompatible Supabase SDK | error=%s",
+            exc,
+        )
+        log_pipeline(
+            "system",
+            step="dependency_validation",
+            status="degraded",
+            data=str(exc),
+        )
+        raise RuntimeError(str(exc)) from exc
+
     try:
         await startup_lifecycle.run_blocking("db", lambda: asyncio.to_thread(_check_db_connection), detail="connection_check")
         logger.info("DB Connected")
@@ -589,6 +627,12 @@ async def _startup_scheduler():
         log_pipeline("realtime", step="emergency_worker", status="healthy", data="started")
         return {"status": "ready"}
 
+    async def _start_preventive_worker_task() -> dict:
+        start_preventive_worker()
+        logger.info("Preventive intelligence background worker started")
+        log_pipeline("realtime", step="preventive_worker", status="healthy", data="started")
+        return {"status": "ready"}
+
     startup_lifecycle.schedule("analytics_db", _analytics_startup, delay_seconds=TIER2_INITIAL_DELAY_SECONDS, timeout_seconds=OPTIONAL_STARTUP_TIMEOUT_SECONDS, detail="analytics_probe")
     startup_lifecycle.schedule("prediction_service", _prediction_service_startup, delay_seconds=TIER2_INITIAL_DELAY_SECONDS, timeout_seconds=OPTIONAL_STARTUP_TIMEOUT_SECONDS, detail="prediction_probe")
     startup_lifecycle.schedule("rag_service", _rag_service_startup, delay_seconds=TIER2_INITIAL_DELAY_SECONDS + 1, timeout_seconds=OPTIONAL_STARTUP_TIMEOUT_SECONDS, detail="rag_probe")
@@ -605,6 +649,7 @@ async def _startup_scheduler():
     startup_lifecycle.schedule("google_fit_worker", _start_google_fit_worker_task, delay_seconds=TIER3_INITIAL_DELAY_SECONDS, timeout_seconds=15.0, detail="worker_boot")
     startup_lifecycle.schedule("dashboard_listener", _start_dashboard_listener_task, delay_seconds=TIER3_INITIAL_DELAY_SECONDS + TIER3_STEP_DELAY_SECONDS, timeout_seconds=15.0, detail="listener_boot")
     startup_lifecycle.schedule("emergency_worker", _start_emergency_worker_task, delay_seconds=TIER3_INITIAL_DELAY_SECONDS + (TIER3_STEP_DELAY_SECONDS * 2), timeout_seconds=15.0, detail="worker_boot")
+    startup_lifecycle.schedule("preventive_worker", _start_preventive_worker_task, delay_seconds=TIER3_INITIAL_DELAY_SECONDS + (TIER3_STEP_DELAY_SECONDS * 3), timeout_seconds=15.0, detail="worker_boot")
 
     log_pool_snapshot(force=True)
     startup_lifecycle.set_phase("ready")
@@ -622,6 +667,7 @@ async def _shutdown_scheduler():
     stop_google_fit_worker()
     stop_dashboard_realtime_listener()
     stop_emergency_worker()
+    stop_preventive_worker()
     await supabase_jwt_verifier.aclose()
     log_pool_snapshot(force=True)
     dispose_engines()

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   Activity,
@@ -126,6 +127,7 @@ function LoadingReasoning() {
 }
 
 export default function SymptomAnalysisWorkspace() {
+  const location = useLocation();
   const [form, setForm] = useState(initialForm);
   const [customSymptom, setCustomSymptom] = useState('');
   const [validationError, setValidationError] = useState('');
@@ -137,6 +139,7 @@ export default function SymptomAnalysisWorkspace() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [loadingSessionId, setLoadingSessionId] = useState('');
   const [revealCount, setRevealCount] = useState(0);
+  const assistantLaunchHandledRef = useRef('');
 
   useEffect(() => {
     try {
@@ -160,6 +163,22 @@ export default function SymptomAnalysisWorkspace() {
     }, 300);
     return () => window.clearTimeout(timer);
   }, [form]);
+
+  useEffect(() => {
+    const assistantActionId = location.state?.assistantActionId;
+    const launchKey = `${location.key}:${assistantActionId || ''}`;
+
+    if (assistantActionId !== 'check-symptoms' || assistantLaunchHandledRef.current === launchKey) {
+      return;
+    }
+
+    assistantLaunchHandledRef.current = launchKey;
+    setForm((current) => ({
+      ...current,
+      notes: current.notes || 'Started from Arya for a structured symptom intake.',
+    }));
+    toast.success('Symptom workflow opened from Arya.');
+  }, [location.key, location.state]);
 
   useEffect(() => {
     let cancelled = false;

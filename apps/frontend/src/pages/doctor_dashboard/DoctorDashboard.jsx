@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -31,6 +31,7 @@ import {
   fetchDoctorPatientDetail,
   fetchDoctorPatients,
   markDoctorPatientReviewed,
+  queryDoctorPatientIntelligence,
   sendDoctorRecommendation,
   triggerDoctorFollowUp,
 } from '../../services/doctorService';
@@ -53,6 +54,10 @@ const alertTone = {
 };
 
 const safeArray = (value) => (Array.isArray(value) ? value : []);
+const safeText = (value, fallback = '') => {
+  const text = typeof value === 'string' ? value.trim() : '';
+  return text || fallback;
+};
 
 const formatDateTime = (value) => {
   if (!value) return 'No activity';
@@ -113,6 +118,86 @@ function MetricTile({ icon: Icon, label, value, meta, tone = 'text-slate-900 dar
       </div>
       <p className="mt-3 text-xs font-semibold text-slate-500 dark:text-text-muted">{meta}</p>
     </div>
+  );
+}
+
+function QueueSummaryPanel({ summary }) {
+  const highestRisk = safeArray(summary?.highest_risk_users);
+  const escalation = safeArray(summary?.escalation_candidates);
+  const clusters = safeArray(summary?.instability_clusters);
+
+  if (!summary) return null;
+
+  return (
+    <Panel className="mb-5 overflow-hidden">
+      <div className="border-b border-slate-200/80 bg-[linear-gradient(135deg,rgba(8,145,178,0.10),rgba(15,118,110,0.06))] p-5 dark:border-stroke">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-sky-700 dark:text-sky-300">Provider Intelligence</p>
+            <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950 dark:text-text-primary">Queue prioritization</h2>
+            <p className="mt-2 text-sm font-semibold text-slate-500 dark:text-text-muted">{summary.summary || 'Clinical queue intelligence is ready.'}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <MetricTile icon={Users} label="Patients" value={summary.total_patients || 0} meta="Visible in doctor queue" />
+            <MetricTile icon={Brain} label="High Risk" value={highestRisk.length} meta="Top prioritized users" tone="text-orange-600" />
+            <MetricTile icon={AlertTriangle} label="Escalations" value={escalation.length} meta="Requires closer review" tone="text-red-600" />
+            <MetricTile icon={History} label="Clusters" value={clusters.length} meta="Instability groupings" tone="text-sky-600" />
+          </div>
+        </div>
+      </div>
+      <div className="grid gap-5 p-5 lg:grid-cols-3">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-text-muted">Highest Risk Users</p>
+          <div className="mt-3 space-y-3">
+            {highestRisk.slice(0, 3).map((item) => (
+              <div key={item.patient_id} className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-stroke dark:bg-background/35">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-black text-slate-900 dark:text-text-primary">{item.name}</p>
+                  <span className={`rounded-full border px-2.5 py-1 text-[10px] font-black ${triageTone[normalizeTriage(item.triage_level)] || triageTone.UNKNOWN}`}>
+                    {normalizeTriage(item.triage_level)}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs font-semibold text-slate-500 dark:text-text-muted">
+                  Risk {formatRisk(item.risk_score)} with {item.active_alerts || 0} active alerts
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-text-muted">Escalation Candidates</p>
+          <div className="mt-3 space-y-3">
+            {escalation.slice(0, 3).map((item) => (
+              <div key={item.patient_id} className="rounded-xl border border-red-200 bg-red-50/80 p-4 text-red-800 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-100">
+                <p className="text-sm font-black">{item.name}</p>
+                <p className="mt-2 text-xs font-semibold">Triage {normalizeTriage(item.triage_level)} • Risk {formatRisk(item.risk_score)}</p>
+              </div>
+            ))}
+            {escalation.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm font-semibold text-text-muted dark:border-stroke">
+                No active escalation candidates in the current queue.
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-text-muted">Instability Clusters</p>
+          <div className="mt-3 space-y-3">
+            {clusters.map((item, index) => (
+              <div key={`${item.cluster || item.description}-${index}`} className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-stroke dark:bg-background/35">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-black text-slate-900 dark:text-text-primary">{item.cluster || 'Cluster'}</p>
+                  <span className="rounded-full bg-slate-900 px-2.5 py-1 text-[10px] font-black text-white dark:bg-white dark:text-slate-950">{item.count || 0}</span>
+                </div>
+                <p className="mt-2 text-xs font-semibold text-slate-500 dark:text-text-muted">{item.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Panel>
   );
 }
 
@@ -275,13 +360,17 @@ function AlertsPanel({ alerts, onSelectPatient }) {
   );
 }
 
-function PatientDetail({ detail, loading, onReviewed, onSendRecommendation, onFollowUp, actionLoading }) {
+function PatientDetail({ detail, loading, onReviewed, onSendRecommendation, onFollowUp, onRunClinicalQuery, actionLoading }) {
   const [recommendationText, setRecommendationText] = useState('');
   const [followUpReason, setFollowUpReason] = useState('');
+  const [clinicalQuery, setClinicalQuery] = useState('What changed most recently?');
+  const [queryResult, setQueryResult] = useState(null);
+  const [queryLoading, setQueryLoading] = useState(false);
 
   useEffect(() => {
     setRecommendationText('');
     setFollowUpReason('');
+    setQueryResult(null);
   }, [detail?.patient?.id]);
 
   if (loading && !detail) {
@@ -313,6 +402,15 @@ function PatientDetail({ detail, loading, onReviewed, onSendRecommendation, onFo
   const rag = detail.rag_explanation?.data || {};
   const ragRecommendations = safeArray(rag.recommendations);
   const timeline = [...safeArray(detail.history)].reverse().slice(0, 8);
+  const providerIntelligence = detail.provider_intelligence || {};
+  const clinicalSummary = providerIntelligence.summary || {};
+  const riskSummary = providerIntelligence.risk_summary || {};
+  const consultation = providerIntelligence.consultation_preparation || {};
+  const physiologicalCompression = safeArray(providerIntelligence.physiological_compression);
+  const interventionAnalysis = providerIntelligence.intervention_analysis || {};
+  const interventionOutcomes = safeArray(interventionAnalysis.interventions);
+  const intelligenceTimeline = providerIntelligence.medical_timeline || {};
+  const anomalyTimeline = safeArray(intelligenceTimeline.anomaly_timeline);
   const triage = normalizeTriage(patient.triage_level);
   const shapMax = Math.max(...shapInsights.map((item) => Number(item.abs_shap_value) || 0), 0.01);
 
@@ -324,6 +422,18 @@ function PatientDetail({ detail, loading, onReviewed, onSendRecommendation, onFo
   const handleFollowUp = async () => {
     await onFollowUp(followUpReason);
     setFollowUpReason('');
+  };
+
+  const handleClinicalQuery = async (nextQuery = clinicalQuery) => {
+    if (!safeText(nextQuery)) return;
+    setQueryLoading(true);
+    try {
+      const response = await onRunClinicalQuery(nextQuery);
+      setQueryResult(response);
+      setClinicalQuery(nextQuery);
+    } finally {
+      setQueryLoading(false);
+    }
   };
 
   return (
@@ -500,6 +610,173 @@ function PatientDetail({ detail, loading, onReviewed, onSendRecommendation, onFo
         </Panel>
       </div>
 
+      <div className="grid gap-5 xl:grid-cols-2">
+        <Panel className="p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-text-muted">Longitudinal Summary</p>
+              <h3 className="mt-2 text-lg font-black text-slate-950 dark:text-text-primary">7d / 30d narrative</h3>
+            </div>
+            <History className="text-sky-600" size={22} />
+          </div>
+          <div className="mt-5 space-y-4">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-stroke dark:bg-background/35">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Overview</p>
+              <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-700 dark:text-text-primary">
+                {clinicalSummary.overview || 'No longitudinal provider summary is available yet.'}
+              </p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              {[clinicalSummary.summary_7d, clinicalSummary.summary_30d].map((item, index) => (
+                <div key={item?.label || index} className="rounded-xl border border-slate-200 bg-white p-4 dark:border-stroke dark:bg-background/35">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">{item?.label || (index === 0 ? '7d' : '30d')}</p>
+                  <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-700 dark:text-text-primary">{item?.narrative || 'No summary available.'}</p>
+                  {safeArray(item?.highlights).length > 0 ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {safeArray(item.highlights).slice(0, 4).map((highlight) => (
+                        <span key={highlight} className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-black text-slate-500 dark:border-stroke dark:bg-background">
+                          {highlight}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              {[clinicalSummary.deterioration_summary, clinicalSummary.recovery_summary].map((item, index) => (
+                <div key={item?.label || index} className="rounded-xl border border-slate-200 bg-white p-4 dark:border-stroke dark:bg-background/35">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">{item?.label || (index === 0 ? 'Deterioration' : 'Recovery')}</p>
+                  <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-700 dark:text-text-primary">{item?.narrative || 'No summary available.'}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Panel>
+
+        <Panel className="p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-text-muted">Consultation Prep</p>
+              <h3 className="mt-2 text-lg font-black text-slate-950 dark:text-text-primary">Visit briefing</h3>
+            </div>
+            <Calendar className="text-teal-600" size={22} />
+          </div>
+          <div className="mt-5 space-y-4">
+            <div className="rounded-xl border border-teal-100 bg-teal-50/80 p-4 dark:border-teal-500/20 dark:bg-teal-500/10">
+              <p className="text-sm font-black text-teal-900 dark:text-teal-100">{consultation.headline || 'Consultation briefing is not available yet.'}</p>
+              <p className="mt-2 text-sm font-semibold leading-relaxed text-teal-900/80 dark:text-teal-100/90">{consultation.symptom_narrative || riskSummary.summary}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Agenda</p>
+              <div className="mt-3 space-y-2">
+                {safeArray(consultation.agenda).slice(0, 4).map((item) => (
+                  <div key={item} className="flex gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3 text-sm font-semibold text-slate-700 dark:border-stroke dark:bg-background/35 dark:text-text-primary">
+                    <CheckCircle2 className="mt-0.5 shrink-0 text-teal-600" size={16} />
+                    <span>{item}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Follow-up Questions</p>
+              <div className="mt-3 space-y-2">
+                {safeArray(consultation.follow_up_questions).slice(0, 4).map((item) => (
+                  <div key={item} className="rounded-xl border border-dashed border-slate-200 p-3 text-sm font-semibold text-slate-600 dark:border-stroke dark:text-text-secondary">
+                    {item}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Panel>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-3">
+        <Panel className="p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-text-muted">Physiological Compression</p>
+              <h3 className="mt-2 text-lg font-black text-slate-950 dark:text-text-primary">Signal summary</h3>
+            </div>
+            <Activity className="text-indigo-600" size={22} />
+          </div>
+          <div className="mt-5 space-y-3">
+            {physiologicalCompression.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-200 p-6 text-sm font-semibold text-text-muted dark:border-stroke">
+                No compressed physiologic summary is available.
+              </div>
+            ) : physiologicalCompression.slice(0, 4).map((item) => (
+              <div key={item.metric} className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-stroke dark:bg-background/35">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-black text-slate-900 dark:text-text-primary">{item.label}</p>
+                  <span className={`rounded-full border px-2.5 py-1 text-[10px] font-black ${item.state === 'deteriorating' ? triageTone.HIGH : item.state === 'improving' ? triageTone.LOW : triageTone.UNKNOWN}`}>
+                    {item.state}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs font-semibold text-slate-500 dark:text-text-muted">{item.interpretation}</p>
+                <p className="mt-3 text-xs font-black text-slate-700 dark:text-text-primary">
+                  Latest {formatNumber(item.latest_value)} {item.unit || ''} • Delta {Number(item.delta || 0).toFixed(1)}
+                </p>
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel className="p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-text-muted">Risk Priorities</p>
+              <h3 className="mt-2 text-lg font-black text-slate-950 dark:text-text-primary">Escalation logic</h3>
+            </div>
+            <Brain className="text-orange-600" size={22} />
+          </div>
+          <div className="mt-5 space-y-3">
+            <div className="rounded-xl border border-orange-100 bg-orange-50/80 p-4 dark:border-orange-500/20 dark:bg-orange-500/10">
+              <p className="text-sm font-black text-orange-900 dark:text-orange-100">{riskSummary.headline || 'Risk prioritization unavailable.'}</p>
+              <p className="mt-2 text-xs font-semibold text-orange-900/80 dark:text-orange-100/80">{riskSummary.summary}</p>
+            </div>
+            {safeArray(riskSummary.priorities).slice(0, 4).map((item) => (
+              <div key={`${item.label}-${item.score}`} className="rounded-xl border border-slate-200 bg-white p-4 dark:border-stroke dark:bg-background/35">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-black text-slate-900 dark:text-text-primary">{item.label}</p>
+                  <span className={`rounded-full border px-2.5 py-1 text-[10px] font-black ${triageTone[normalizeTriage(item.severity)] || triageTone.UNKNOWN}`}>
+                    {item.severity}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs font-semibold leading-relaxed text-slate-500 dark:text-text-muted">{item.rationale}</p>
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel className="p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-text-muted">Intervention Tracking</p>
+              <h3 className="mt-2 text-lg font-black text-slate-950 dark:text-text-primary">Effectiveness</h3>
+            </div>
+            <ListChecks className="text-emerald-600" size={22} />
+          </div>
+          <div className="mt-5 space-y-3">
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/80 p-4 dark:border-emerald-500/20 dark:bg-emerald-500/10">
+              <p className="text-sm font-black text-emerald-900 dark:text-emerald-100">{interventionAnalysis.headline || 'No intervention analysis available.'}</p>
+            </div>
+            {interventionOutcomes.slice(0, 4).map((item) => (
+              <div key={`${item.title}-${item.status}`} className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-stroke dark:bg-background/35">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-black text-slate-900 dark:text-text-primary">{item.title}</p>
+                  <span className={`rounded-full border px-2.5 py-1 text-[10px] font-black ${item.status === 'improving' ? triageTone.LOW : item.status === 'not_stabilized' ? triageTone.HIGH : triageTone.UNKNOWN}`}>
+                    {item.status}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs font-semibold leading-relaxed text-slate-500 dark:text-text-muted">{item.narrative}</p>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
+
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Panel className="p-5">
           <div className="flex items-center justify-between gap-3">
@@ -532,64 +809,154 @@ function PatientDetail({ detail, loading, onReviewed, onSendRecommendation, onFo
           </div>
         </Panel>
 
-        <Panel className="p-5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-text-muted">Action Panel</p>
-              <h3 className="mt-2 text-lg font-black text-slate-950 dark:text-text-primary">Care actions</h3>
+        <div className="space-y-5">
+          <Panel className="p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-text-muted">Clinical Copilot</p>
+                <h3 className="mt-2 text-lg font-black text-slate-950 dark:text-text-primary">Provider query engine</h3>
+              </div>
+              <Sparkles className="text-sky-600" size={22} />
             </div>
-            <Stethoscope className="text-teal-600" size={22} />
-          </div>
-          <div className="mt-5 space-y-4">
-            <button
-              type="button"
-              onClick={onReviewed}
-              disabled={actionLoading}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-background px-4 py-3 text-sm font-black text-text-primary transition hover:bg-card disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
-            >
-              <CheckCircle2 size={17} />
-              Mark Reviewed
-            </button>
-
-            <div>
-              <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Recommendation</label>
+            <div className="mt-5 space-y-3">
+              <div className="flex flex-wrap gap-2">
+                {[
+                  'What changed most recently?',
+                  'Summarize cardiovascular deterioration.',
+                  'Show anomaly progression timeline.',
+                ].map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    onClick={() => void handleClinicalQuery(prompt)}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black text-slate-600 transition hover:border-sky-300 hover:text-sky-700 dark:border-stroke dark:bg-background/35 dark:text-text-secondary dark:hover:border-sky-400/40 dark:hover:text-sky-200"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
               <textarea
-                value={recommendationText}
-                onChange={(event) => setRecommendationText(event.target.value)}
-                placeholder="Write a recommendation"
-                className="mt-2 min-h-28 w-full resize-none rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10 dark:border-stroke dark:bg-background/35 dark:text-slate-100"
+                value={clinicalQuery}
+                onChange={(event) => setClinicalQuery(event.target.value)}
+                placeholder="Ask a provider-style question"
+                className="min-h-28 w-full resize-none rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-sky-600 focus:ring-4 focus:ring-sky-600/10 dark:border-stroke dark:bg-background/35 dark:text-slate-100"
               />
               <button
                 type="button"
-                onClick={handleSend}
-                disabled={actionLoading || !recommendationText.trim()}
-                className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-3 text-sm font-black text-text-primary transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => void handleClinicalQuery()}
+                disabled={queryLoading || !safeText(clinicalQuery)}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-sky-700 px-4 py-3 text-sm font-black text-white transition hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <Send size={17} />
-                Send Recommendation
+                <Brain size={17} className={queryLoading ? 'animate-pulse' : ''} />
+                {queryLoading ? 'Analyzing...' : 'Run Clinical Query'}
               </button>
+              {queryResult ? (
+                <div className="rounded-2xl border border-sky-100 bg-sky-50/80 p-4 dark:border-sky-500/20 dark:bg-sky-500/10">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-sky-700 dark:text-sky-300">{queryResult.intent || 'provider_response'}</p>
+                  <p className="mt-2 text-sm font-black text-slate-900 dark:text-text-primary">{queryResult.answer}</p>
+                  <p className="mt-3 text-xs font-semibold leading-relaxed text-slate-600 dark:text-text-secondary">{queryResult.reasoning}</p>
+                  {safeArray(queryResult.grounded_evidence).length > 0 ? (
+                    <div className="mt-4 space-y-2">
+                      {safeArray(queryResult.grounded_evidence).slice(0, 3).map((item) => (
+                        <div key={`${item.reference_id}-${item.title}`} className="rounded-xl border border-sky-100 bg-white/80 p-3 text-xs font-semibold text-slate-600 dark:border-sky-500/10 dark:bg-background/35 dark:text-text-secondary">
+                          <p className="font-black text-slate-900 dark:text-text-primary">{item.title}</p>
+                          <p className="mt-1">{item.excerpt || item.source}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {queryResult.disclaimer ? <p className="mt-4 text-[11px] font-bold text-sky-700 dark:text-sky-200">{queryResult.disclaimer}</p> : null}
+                </div>
+              ) : null}
             </div>
+          </Panel>
 
-            <div>
-              <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Follow-up</label>
-              <input
-                value={followUpReason}
-                onChange={(event) => setFollowUpReason(event.target.value)}
-                placeholder="Follow-up reason"
-                className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10 dark:border-stroke dark:bg-background/35 dark:text-slate-100"
-              />
+          <Panel className="p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-text-muted">Anomaly Progression</p>
+                <h3 className="mt-2 text-lg font-black text-slate-950 dark:text-text-primary">Clinical signal review</h3>
+              </div>
+              <AlertCircle className="text-red-500" size={22} />
+            </div>
+            <div className="mt-5 space-y-3">
+              {anomalyTimeline.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm font-semibold text-text-muted dark:border-stroke">
+                  No anomaly progression entries are currently available.
+                </div>
+              ) : anomalyTimeline.slice(0, 3).map((item) => (
+                <div key={item.event_id} className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-stroke dark:bg-background/35">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-black text-slate-900 dark:text-text-primary">{item.title}</p>
+                    <span className={`rounded-full border px-2.5 py-1 text-[10px] font-black ${triageTone[normalizeTriage(item.severity)] || triageTone.UNKNOWN}`}>
+                      {item.severity || 'info'}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs font-semibold text-slate-500 dark:text-text-muted">{item.narrative}</p>
+                </div>
+              ))}
+            </div>
+          </Panel>
+
+          <Panel className="p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-text-muted">Action Panel</p>
+                <h3 className="mt-2 text-lg font-black text-slate-950 dark:text-text-primary">Care actions</h3>
+              </div>
+              <Stethoscope className="text-teal-600" size={22} />
+            </div>
+            <div className="mt-5 space-y-4">
               <button
                 type="button"
-                onClick={handleFollowUp}
+                onClick={onReviewed}
                 disabled={actionLoading}
-                className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-black text-teal-800 transition hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-teal-500/20 dark:bg-teal-500/10 dark:text-teal-100"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-background px-4 py-3 text-sm font-black text-text-primary transition hover:bg-card disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
               >
-                <Calendar size={17} />
-                Trigger Follow-up
+                <CheckCircle2 size={17} />
+                Mark Reviewed
               </button>
+
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Recommendation</label>
+                <textarea
+                  value={recommendationText}
+                  onChange={(event) => setRecommendationText(event.target.value)}
+                  placeholder="Write a recommendation"
+                  className="mt-2 min-h-28 w-full resize-none rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10 dark:border-stroke dark:bg-background/35 dark:text-slate-100"
+                />
+                <button
+                  type="button"
+                  onClick={handleSend}
+                  disabled={actionLoading || !recommendationText.trim()}
+                  className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-3 text-sm font-black text-text-primary transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Send size={17} />
+                  Send Recommendation
+                </button>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Follow-up</label>
+                <input
+                  value={followUpReason}
+                  onChange={(event) => setFollowUpReason(event.target.value)}
+                  placeholder="Follow-up reason"
+                  className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10 dark:border-stroke dark:bg-background/35 dark:text-slate-100"
+                />
+                <button
+                  type="button"
+                  onClick={handleFollowUp}
+                  disabled={actionLoading}
+                  className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-black text-teal-800 transition hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-teal-500/20 dark:bg-teal-500/10 dark:text-teal-100"
+                >
+                  <Calendar size={17} />
+                  Trigger Follow-up
+                </button>
+              </div>
             </div>
-          </div>
-        </Panel>
+          </Panel>
+        </div>
       </div>
     </div>
   );
@@ -602,7 +969,9 @@ export default function DoctorDashboard() {
   const [alerts, setAlerts] = useState([]);
   const [selectedPatientId, setSelectedPatientId] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [queueSummary, setQueueSummary] = useState(null);
   const [query, setQuery] = useState('');
+  const deferredQuery = useDeferredValue(query);
   const [loadingPatients, setLoadingPatients] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -615,6 +984,7 @@ export default function DoctorDashboard() {
       if (!silent) setLoadingPatients(true);
       const data = await fetchDoctorPatients();
       const nextPatients = safeArray(data.patients);
+      setQueueSummary(data.provider_intelligence || null);
       setPatients(nextPatients);
       setSelectedPatientId((current) => {
         if (current && nextPatients.some((patient) => patient.id === current)) return current;
@@ -681,14 +1051,14 @@ export default function DoctorDashboard() {
   }, [isDoctor, loadDetail, selectedPatientId]);
 
   const filteredPatients = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
+    const normalized = deferredQuery.trim().toLowerCase();
     if (!normalized) return patients;
     return patients.filter((patient) => (
       `${patient.name || ''} ${patient.email || ''} ${patient.triage_level || ''}`
         .toLowerCase()
         .includes(normalized)
     ));
-  }, [patients, query]);
+  }, [deferredQuery, patients]);
 
   const selectedPatient = useMemo(
     () => patients.find((patient) => patient.id === selectedPatientId) || null,
@@ -753,6 +1123,16 @@ export default function DoctorDashboard() {
     }
   };
 
+  const handleClinicalQuery = async (queryText) => {
+    if (!selectedPatientId) return null;
+    try {
+      return await queryDoctorPatientIntelligence(selectedPatientId, queryText);
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Unable to run clinical query');
+      return null;
+    }
+  };
+
   if (!isDoctor) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-6 dark:bg-background">
@@ -813,6 +1193,8 @@ export default function DoctorDashboard() {
           <MetricTile icon={Clock} label="Last Update" value={lastUpdated ? relativeTime(lastUpdated) : '--'} meta={formatDateTime(lastUpdated)} tone="text-teal-700 dark:text-teal-200" />
         </div>
 
+        <QueueSummaryPanel summary={queueSummary} />
+
         <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)_360px]">
           <PatientList
             patients={filteredPatients}
@@ -836,6 +1218,7 @@ export default function DoctorDashboard() {
                 onReviewed={handleReviewed}
                 onSendRecommendation={handleRecommendation}
                 onFollowUp={handleFollowUp}
+                onRunClinicalQuery={handleClinicalQuery}
                 actionLoading={actionLoading}
               />
             </motion.div>

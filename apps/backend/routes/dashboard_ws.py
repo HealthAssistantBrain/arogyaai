@@ -3,10 +3,12 @@ from __future__ import annotations
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
+from core.serialization.safe_response import websocket_send_json_safe
 from database.session import SessionLocal
 from models import User
+from dashboard_realtime.connection_manager import dashboard_connection_manager
 from services.auth_service import AuthService
-from services.dashboard_realtime import build_realtime_payload, dashboard_connection_manager
+from services.dashboard_realtime import build_realtime_payload
 
 router = APIRouter(tags=["Dashboard Realtime"])
 
@@ -53,7 +55,8 @@ async def dashboard_socket(websocket: WebSocket, user_id: str):
         finally:
             db.close()
 
-        await websocket.send_json(
+        await websocket_send_json_safe(
+            websocket,
             {
                 "type": "dashboard.update",
                 "user_id": str(current_user.id),
@@ -61,9 +64,21 @@ async def dashboard_socket(websocket: WebSocket, user_id: str):
                 "last_updated": initial_payload.get("last_updated"),
             }
         )
+        await dashboard_connection_manager.prime_snapshot(str(current_user.id), initial_payload)
 
         while True:
-            await websocket.receive_text()
+            message = await websocket.receive_text()
+            await dashboard_connection_manager.mark_heartbeat(str(current_user.id), websocket)
+            if message == "ping":
+                await websocket_send_json_safe(
+                    websocket,
+                    {
+                        "type": "dashboard.pong",
+                        "user_id": str(current_user.id),
+                        "last_updated": initial_payload.get("last_updated"),
+                    },
+                )
+                continue
     except WebSocketDisconnect:
         pass
     finally:

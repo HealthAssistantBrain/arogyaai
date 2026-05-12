@@ -188,3 +188,4 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     query: str = Field(min_length=1, max_length=2000)
     history: list[ChatMessage] = Field(default_factory=list)
+    session_id: Optional[str] = None

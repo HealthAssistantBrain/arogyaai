@@ -41,6 +41,7 @@ class StartupLifecycle:
         self._started_at = _utc_now()
         self._services = {
             "core_api": ServiceState("core_api", "tier1", blocking=True),
+            "package_compatibility": ServiceState("package_compatibility", "tier1", blocking=True),
             "db": ServiceState("db", "tier1", blocking=True),
             "auth": ServiceState("auth", "tier1", blocking=True),
             "redis": ServiceState("redis", "tier1", blocking=True),

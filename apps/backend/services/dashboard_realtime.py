@@ -11,20 +11,24 @@ import uuid
 from contextlib import suppress
 from datetime import datetime, timezone
 from typing import Any
+from uuid import UUID
 
 import psycopg2
 from psycopg2 import extensions
-from fastapi import WebSocket
 from sqlalchemy.orm import Session
 
 from core.config import settings
+from core.resilience import TimeoutPolicyError, run_with_timeout
+from core.serialization import normalize_outbound_payload
 from database.session import SessionLocal, get_listener_engines
 from models import User
+from dashboard_realtime.connection_manager import DashboardConnectionManager, dashboard_connection_manager
 from services.google_fit_service import GoogleFitService
 from services import dashboard_service as dashboard_svc
 from services.user_data_service import UserDataService
 
 logger = logging.getLogger("dashboard_realtime")
+DASHBOARD_AGGREGATION_TIMEOUT_SECONDS = 5.0
 
 
 def _parse_iso_datetime(value: Any) -> datetime | None:
@@ -79,6 +83,8 @@ def _dashboard_last_updated(payload: dict[str, Any]) -> str | None:
     candidates = [
         _slice_last_updated(payload.get("healthScore")),
         _slice_last_updated(payload.get("history")),
+        _slice_last_updated(payload.get("forecast")),
+        _slice_last_updated(payload.get("preventive")),
         _slice_last_updated(payload.get("prediction")),
         _slice_last_updated(payload.get("profile")),
         _slice_last_updated(payload.get("alerts")),
@@ -123,6 +129,8 @@ def _extract_latest_steps(bundle: dict[str, Any]) -> int:
 def _dashboard_flat_contract(bundle: dict[str, Any]) -> dict[str, Any]:
     history_data = _safe_dict(_safe_dict(bundle.get("history")).get("data"))
     prediction_data = _safe_dict(_safe_dict(bundle.get("prediction")).get("data"))
+    forecast_data = _safe_dict(_safe_dict(bundle.get("forecast")).get("data"))
+    preventive_data = _safe_dict(_safe_dict(bundle.get("preventive")).get("data"))
     health_score_data = _safe_dict(_safe_dict(bundle.get("healthScore")).get("data"))
     recommended_tests = _safe_list(_safe_dict(bundle.get("recommendedTests")).get("data"))
 
@@ -139,11 +147,39 @@ def _dashboard_flat_contract(bundle: dict[str, Any]) -> dict[str, Any]:
         flat["sleep"] = sleep_records
     if bundle.get("prediction") is not None:
         flat["insights"] = insights
+    if bundle.get("forecast") is not None:
+        flat["forecast"] = forecast_data
+    if bundle.get("preventive") is not None:
+        flat["prevention"] = preventive_data
     if bundle.get("recommendedTests") is not None:
         flat["recommended_tests"] = recommended_tests
     if bundle.get("vitals") is not None:
         flat["vitals"] = vitals
     return flat
+
+
+def _normalize_dashboard_payload(payload: dict[str, Any], *, channel: str) -> dict[str, Any]:
+    normalized = normalize_outbound_payload(_dashboard_flat_contract(payload), channel=channel)
+    return normalized if isinstance(normalized, dict) else {"data": normalized}
+
+
+def _degraded_dashboard_message(user_id: str, *, reason: str) -> dict[str, Any]:
+    last_updated = datetime.now(timezone.utc).isoformat()
+    return {
+        "type": "dashboard.update",
+        "user_id": str(user_id),
+        "data": {
+            "status": "degraded",
+            "error": reason,
+            "message": "Realtime dashboard snapshot temporarily sanitized.",
+            "last_updated": last_updated,
+        },
+        "last_updated": last_updated,
+        "meta": {
+            "degraded": True,
+            "reason": reason,
+        },
+    }
 
 
 def _serialize_vitals_slice(db: Session, current_user: User, vital_type: str, range_value: str = "24h") -> dict[str, Any]:
@@ -180,60 +216,154 @@ async def _safe_call(coro, fallback_data=None):
             "data": fallback_data if fallback_data is not None else {}
         }
 
-async def build_dashboard_bundle(db: Session, current_user: User) -> dict[str, Any]:
-    health_score = await _safe_call(dashboard_svc.get_health_score(current_user, db))
-    history = await _safe_call(dashboard_svc.get_health_history(current_user, db))
-    prediction = await _safe_call(dashboard_svc.get_latest_prediction(current_user, db))
-    profile = await _safe_call(dashboard_svc.get_user_profile(current_user, db))
-    alerts = await _safe_call(dashboard_svc.get_alerts(current_user, db))
-    recommended_tests = await _safe_call(dashboard_svc.get_recommended_tests(current_user, db), fallback_data=[])
-    google_fit = {
-        "success": True,
-        "status": "ready",
-        "source": "db",
-        "error": None,
-        "data": GoogleFitService.get_status(db, current_user),
-    }
+async def _run_user_slice(
+    user_id: str,
+    fetcher,
+    *,
+    fallback_data=None,
+):
+    session = SessionLocal()
+    try:
+        user_uuid = UUID(str(user_id))
+        fresh_user = session.query(User).filter(User.id == user_uuid, User.is_deleted == False).first()
+        if fresh_user is None:
+            return {
+                "success": False,
+                "status": "fallback",
+                "source": "db",
+                "error": "user_not_found",
+                "data": fallback_data if fallback_data is not None else {},
+            }
+        result = fetcher(session, fresh_user)
+        if asyncio.iscoroutine(result):
+            return await _safe_call(result, fallback_data=fallback_data)
+        return result
+    except Exception as exc:
+        logger.error("Dashboard slice failed | user_id=%s error=%s", user_id, exc)
+        return {
+            "success": False,
+            "status": "fallback",
+            "source": "error",
+            "error": str(exc),
+            "data": fallback_data if fallback_data is not None else {},
+        }
+    finally:
+        session.close()
 
-    bundle = {
-        "healthScore": health_score,
-        "history": history,
-        "prediction": prediction,
-        "profile": profile,
-        "alerts": alerts,
-        "recommendedTests": recommended_tests,
-        "googleFit": google_fit,
-        "vitals": {
-            "heart_rate:24h": _serialize_vitals_slice(db, current_user, "heart_rate", "24h"),
-            "steps:24h": _serialize_vitals_slice(db, current_user, "steps", "24h"),
-            "sleep:24h": _serialize_vitals_slice(db, current_user, "sleep", "24h"),
-        },
-    }
-    bundle["last_updated"] = _dashboard_last_updated(bundle)
-    return _dashboard_flat_contract(bundle)
+
+async def build_dashboard_bundle(db: Session, current_user: User) -> dict[str, Any]:
+    async def _build() -> dict[str, Any]:
+        user_id = str(current_user.id)
+        (
+            health_score,
+            history,
+            forecast,
+            preventive,
+            prediction,
+            profile,
+            alerts,
+            recommended_tests,
+            google_fit_status,
+            vitals,
+        ) = await asyncio.gather(
+            _run_user_slice(user_id, lambda session, user: dashboard_svc.get_health_score(user, session)),
+            _run_user_slice(user_id, lambda session, user: dashboard_svc.get_health_history(user, session)),
+            _run_user_slice(user_id, lambda session, user: dashboard_svc.get_health_forecast(user, session)),
+            _run_user_slice(user_id, lambda session, user: dashboard_svc.get_preventive_intelligence(user, session)),
+            _run_user_slice(user_id, lambda session, user: dashboard_svc.get_latest_prediction(user, session)),
+            _run_user_slice(user_id, lambda session, user: dashboard_svc.get_user_profile(user, session)),
+            _run_user_slice(user_id, lambda session, user: dashboard_svc.get_alerts(user, session)),
+            _run_user_slice(user_id, lambda session, user: dashboard_svc.get_recommended_tests(user, session), fallback_data=[]),
+            _run_user_slice(user_id, lambda session, user: {"success": True, "status": "ready", "source": "db", "error": None, "data": GoogleFitService.get_status(session, user)}),
+            _run_user_slice(
+                user_id,
+                lambda session, user: {
+                    "heart_rate:24h": _serialize_vitals_slice(session, user, "heart_rate", "24h"),
+                    "steps:24h": _serialize_vitals_slice(session, user, "steps", "24h"),
+                    "sleep:24h": _serialize_vitals_slice(session, user, "sleep", "24h"),
+                },
+            ),
+        )
+
+        bundle = {
+            "healthScore": health_score,
+            "history": history,
+            "forecast": forecast,
+            "preventive": preventive,
+            "prediction": prediction,
+            "profile": profile,
+            "alerts": alerts,
+            "recommendedTests": recommended_tests,
+            "googleFit": google_fit_status,
+            "vitals": vitals if isinstance(vitals, dict) else {},
+        }
+        bundle["last_updated"] = _dashboard_last_updated(bundle)
+        return _normalize_dashboard_payload(bundle, channel="dashboard.bundle")
+
+    try:
+        return await run_with_timeout(
+            _build(),
+            timeout_seconds=DASHBOARD_AGGREGATION_TIMEOUT_SECONDS,
+            operation="dashboard_bundle",
+        )
+    except TimeoutPolicyError:
+        logger.warning("[DASHBOARD TIMEOUT] bundle degraded | user_id=%s", current_user.id)
+        degraded = {
+            "status": "degraded",
+            "error": "dashboard_timeout",
+            "message": "Dashboard snapshot timed out. Cached or partial data may still be available.",
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+        }
+        return _normalize_dashboard_payload(degraded, channel="dashboard.bundle")
 
 
 async def build_realtime_payload(db: Session, current_user: User) -> dict[str, Any]:
-    heart_rate = _serialize_vitals_slice(db, current_user, "heart_rate", "24h")
-    steps = _serialize_vitals_slice(db, current_user, "steps", "24h")
-    recommended_tests = await _safe_call(dashboard_svc.get_recommended_tests(current_user, db), fallback_data=[])
-    google_fit_status = GoogleFitService.get_status(db, current_user)
-    google_fit = {
-        "success": True,
-        "status": "ready",
-        "source": "db",
-        "error": None,
-        "data": google_fit_status,
-        "last_updated": google_fit_status.get("last_synced_at"),
-    }
-    payload = {
-        "steps": steps,
-        "heart_rate": heart_rate,
-        "googleFit": google_fit,
-        "recommendedTests": recommended_tests,
-    }
-    payload["last_updated"] = _dashboard_last_updated(payload)
-    return _dashboard_flat_contract(payload)
+    async def _build() -> dict[str, Any]:
+        user_id = str(current_user.id)
+        heart_rate, steps, health_score, forecast, preventive, recommended_tests, google_fit_status = await asyncio.gather(
+            _run_user_slice(user_id, lambda session, user: _serialize_vitals_slice(session, user, "heart_rate", "24h")),
+            _run_user_slice(user_id, lambda session, user: _serialize_vitals_slice(session, user, "steps", "24h")),
+            _run_user_slice(user_id, lambda session, user: dashboard_svc.get_health_score(user, session)),
+            _run_user_slice(user_id, lambda session, user: dashboard_svc.get_health_forecast(user, session)),
+            _run_user_slice(user_id, lambda session, user: dashboard_svc.get_preventive_intelligence(user, session)),
+            _run_user_slice(user_id, lambda session, user: dashboard_svc.get_recommended_tests(user, session), fallback_data=[]),
+            _run_user_slice(user_id, lambda session, user: GoogleFitService.get_status(session, user)),
+        )
+        google_fit = {
+            "success": True,
+            "status": "ready",
+            "source": "db",
+            "error": None,
+            "data": google_fit_status if isinstance(google_fit_status, dict) else {},
+            "last_updated": google_fit_status.get("last_synced_at") if isinstance(google_fit_status, dict) else None,
+        }
+        payload = {
+            "healthScore": health_score,
+            "forecast": forecast,
+            "preventive": preventive,
+            "steps": steps,
+            "heart_rate": heart_rate,
+            "googleFit": google_fit,
+            "recommendedTests": recommended_tests,
+        }
+        payload["last_updated"] = _dashboard_last_updated(payload)
+        return _normalize_dashboard_payload(payload, channel="dashboard.realtime")
+
+    try:
+        return await run_with_timeout(
+            _build(),
+            timeout_seconds=DASHBOARD_AGGREGATION_TIMEOUT_SECONDS,
+            operation="dashboard_realtime_payload",
+        )
+    except TimeoutPolicyError:
+        logger.warning("[DASHBOARD TIMEOUT] realtime degraded | user_id=%s", current_user.id)
+        degraded = {
+            "status": "degraded",
+            "error": "dashboard_timeout",
+            "message": "Realtime payload timed out. Retaining last known dashboard state.",
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+        }
+        return _normalize_dashboard_payload(degraded, channel="dashboard.realtime")
 
 
 def _build_psycopg2_kwargs(source_engine) -> dict[str, Any]:
@@ -255,59 +385,6 @@ def _build_psycopg2_kwargs(source_engine) -> dict[str, Any]:
             kwargs[key] = url.query[key]
     return kwargs
 
-
-class DashboardConnectionManager:
-    def __init__(self) -> None:
-        self._connections: dict[str, list[WebSocket]] = {}
-        self._lock = asyncio.Lock()
-
-    async def connect(self, user_id: str, websocket: WebSocket) -> None:
-        await websocket.accept()
-        async with self._lock:
-            sockets = self._connections.setdefault(user_id, [])
-            if websocket not in sockets:
-                sockets.append(websocket)
-
-    async def disconnect(self, user_id: str, websocket: WebSocket) -> None:
-        async with self._lock:
-            sockets = self._connections.get(user_id)
-            if not sockets:
-                return
-            sockets = [socket for socket in sockets if socket is not websocket]
-            if sockets:
-                self._connections[user_id] = sockets
-                return
-            self._connections.pop(user_id, None)
-
-    async def broadcast(self, user_id: str, payload: dict[str, Any]) -> None:
-        async with self._lock:
-            sockets = list(self._connections.get(user_id, []))
-
-        if not sockets:
-            return
-
-        message = json.dumps(payload)
-        dead_sockets: list[WebSocket] = []
-        for websocket in sockets:
-            try:
-                await websocket.send_text(message)
-            except Exception:
-                dead_sockets.append(websocket)
-
-        if dead_sockets:
-            async with self._lock:
-                sockets = self._connections.get(user_id)
-                if sockets:
-                    for websocket in dead_sockets:
-                        sockets = [socket for socket in sockets if socket is not websocket]
-                    if sockets:
-                        self._connections[user_id] = sockets
-                    else:
-                        self._connections.pop(user_id, None)
-
-
-dashboard_connection_manager = DashboardConnectionManager()
-
 _listener_threads: list[threading.Thread] = []
 _listener_stop = threading.Event()
 _listener_loop: asyncio.AbstractEventLoop | None = None
@@ -326,16 +403,16 @@ async def _broadcast_current_snapshot(user_id: str) -> None:
         if not user:
             return
 
-        payload = await build_realtime_payload(db, user)
-        await dashboard_connection_manager.broadcast(
-            str(user.id),
-            {
-                "type": "dashboard.update",
-                "user_id": str(user.id),
-                "data": payload,
-                "last_updated": payload.get("last_updated"),
-            },
-        )
+        try:
+            payload = await build_realtime_payload(db, user)
+        except Exception:
+            logger.exception("[Dashboard WS] snapshot build failed | user_id=%s", user_id)
+            await dashboard_connection_manager.broadcast(
+                str(user.id),
+                _degraded_dashboard_message(str(user.id), reason="snapshot_build_failed"),
+            )
+            return
+        await dashboard_connection_manager.broadcast_snapshot(str(user.id), payload)
     finally:
         db.close()
 

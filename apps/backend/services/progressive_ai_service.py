@@ -100,6 +100,7 @@ class ProgressiveAIService:
                 ),
                 name=f"progressive-ai:{resource_key}",
             )
+            logger.info("[BACKGROUND_REFRESH_STARTED] resource_key=%s prediction_id=%s", resource_key, prediction_id or "latest")
             cls._inflight_tasks[resource_key] = task
 
             def _cleanup(done_task: asyncio.Task, *, key: str = resource_key) -> None:
@@ -107,7 +108,12 @@ class ProgressiveAIService:
                 if current is done_task:
                     cls._inflight_tasks.pop(key, None)
                 try:
-                    done_task.result()
+                    result = done_task.result()
+                    logger.info(
+                        "[BACKGROUND_REFRESH_COMPLETED] resource_key=%s status=%s",
+                        key,
+                        result.get("status") if isinstance(result, dict) else "unknown",
+                    )
                 except Exception as exc:  # pragma: no cover - background observation
                     logger.warning("Progressive AI refresh failed | key=%s error=%s", key, exc)
 

@@ -3,18 +3,59 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from ai.reasoning import get_reasoning_orchestrator
+from core.serialization import make_json_safe
 from pipelines.storage_pipeline.service import StoragePipelineService
 from services.insight_formatter import sanitize_ai_insight_payload
 from services.orchestrator.workflow_engine import BaseWorkflow, WorkflowExecutionContext
 
 
+def _enrich_stored_reasoning(
+    stored: dict[str, Any] | None,
+    *,
+    user_id: str,
+    user_context: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not isinstance(stored, dict) or not stored:
+        return stored
+    reasoning = get_reasoning_orchestrator().generate(
+        workflow="ai_insights",
+        user_id=user_id,
+        source="dashboard_health_insights",
+        risk_payload=stored.get("risk") if isinstance(stored.get("risk"), dict) else {},
+        feature_payload=stored.get("feature_snapshot") if isinstance(stored.get("feature_snapshot"), dict) else {},
+        wearable_trends=user_context.get("wearable_trends") if isinstance(user_context.get("wearable_trends"), dict) else {},
+        vitals=user_context.get("vitals") if isinstance(user_context.get("vitals"), dict) else {},
+        forecasting=stored.get("forecasting") if isinstance(stored.get("forecasting"), dict) else {},
+        clinical_history=stored.get("clinical_history") if isinstance(stored.get("clinical_history"), dict) else {},
+        drivers=stored.get("drivers") if isinstance(stored.get("drivers"), list) else [],
+        recommendations=stored.get("recommendations") if isinstance(stored.get("recommendations"), list) else [],
+        user_context=user_context,
+        labs=user_context.get("lab_results") if isinstance(user_context.get("lab_results"), list) else [],
+    )
+    enriched = dict(stored)
+    enriched["reasoning"] = reasoning
+    enriched["cognitive_summary"] = reasoning.get("cognitive_summary")
+    enriched["clinical_narrative"] = reasoning.get("clinical_narrative")
+    enriched["causal_explanations"] = reasoning.get("causal_explanations") or []
+    enriched["confidence_indicators"] = reasoning.get("confidence_indicators") or []
+    enriched["future_trajectory"] = reasoning.get("trajectory_explanation") or {}
+    if not enriched.get("explanation") and reasoning.get("summary"):
+        enriched["explanation"] = {
+            "summary": reasoning.get("summary"),
+            "clinical_insight": reasoning.get("clinical_narrative"),
+            "recommendations": reasoning.get("recommendations") or [],
+        }
+    return enriched
+
+
 class AIInsightsWorkflow(BaseWorkflow):
     name = "ai_insights"
-    timeout_seconds = 12.0
+    timeout_seconds = 30.0
     stage_timeouts = {
         "build_context": 5.0,
-        "retrieve_knowledge": 5.0,
-        "generate_response": 8.0,
+        "retrieve_knowledge": 8.0,
+        "generate_response": 25.0,
         "validate_response": 3.0,
         "format_output": 2.0,
         "timeline_event_generation": 2.0,
@@ -93,6 +134,11 @@ class AIInsightsWorkflow(BaseWorkflow):
             }
         )
         stored = parallel_results.get("stored")
+        stored = _enrich_stored_reasoning(
+            stored,
+            user_id=str(request.user_id or ""),
+            user_context=context.user_context if isinstance(context.user_context, dict) else {},
+        )
         plans = parallel_results.get("plans") or []
         return {
             "stored": stored,
@@ -120,7 +166,7 @@ class AIInsightsWorkflow(BaseWorkflow):
         ) else {}
         if context.execution_state.get("mode") == "dashboard":
             formatted["status"] = "ready" if formatted.get("stored") else "fallback"
-        return formatted
+        return make_json_safe(formatted)
 
     async def persist_memory(
         self,
@@ -169,8 +215,13 @@ class AIInsightsWorkflow(BaseWorkflow):
         if context.execution_state.get("mode") == "dashboard":
             user = request.current_user
             stored = StoragePipelineService.fetch_health_insights(request.db, user) if user is not None else None
+            stored = _enrich_stored_reasoning(
+                stored,
+                user_id=str(request.user_id or ""),
+                user_context=context.user_context if isinstance(context.user_context, dict) else {},
+            )
             plans = deps.recommendation_pipeline.generate_plans(request.user_id, db=request.db)
-            return {
+            return make_json_safe({
                 "stored": stored,
                 "explanation": sanitize_ai_insight_payload((stored or {}).get("explanation")) if stored else None,
                 "recommendation_plan": plans[0] if plans else None,
@@ -181,9 +232,9 @@ class AIInsightsWorkflow(BaseWorkflow):
                     context.user_context,
                     dict,
                 ) else {},
-            }
+            })
 
-        return {
+        return make_json_safe({
             "summary": "A detailed AI explanation is temporarily unavailable.",
             "clinical_insight": "Recent health data is available, but the detailed explanation stage could not complete safely.",
             "recommendations": [
@@ -192,4 +243,4 @@ class AIInsightsWorkflow(BaseWorkflow):
             "sources": context.retrieved_knowledge.get("summary") or [],
             "provider": "deterministic_fallback",
             "context_meta": context.user_context.get("context_meta") if isinstance(context.user_context, dict) else {},
-        }
+        })

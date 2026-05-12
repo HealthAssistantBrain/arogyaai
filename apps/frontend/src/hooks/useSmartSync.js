@@ -14,7 +14,7 @@ export const useSmartSync = (enabled = true) => {
         if (hasFetchedRef.current) return;
 
         hasFetchedRef.current = true;
-        void fetchHealthMetrics({ force: true, silent: true });
+        void fetchHealthMetrics({ force: false, silent: true });
     }, [enabled, fetchHealthMetrics]);
 };
 

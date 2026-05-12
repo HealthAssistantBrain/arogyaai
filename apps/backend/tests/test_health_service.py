@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 import sys
@@ -12,6 +13,13 @@ for path in (REPO_ROOT, BACKEND_ROOT):
     resolved = str(path)
     if resolved not in sys.path:
         sys.path.insert(0, resolved)
+
+os.environ.setdefault("JWT_SECRET_KEY", "test-jwt-secret")
+os.environ.setdefault("APP_ENCRYPTION_KEY", "G4u8Y4VhV1v2kJx6lS0Q7pA3mF9nR2tU")
+os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
+os.environ.setdefault("SUPABASE_ANON_KEY", "test-anon-key")
+os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
+os.environ.setdefault("DATABASE_URL", "sqlite:///./health_service_test.db")
 
 from services import health_service
 
@@ -105,6 +113,10 @@ def test_get_system_readiness_degrades_slow_optional_analytics_without_marking_c
         AsyncMock(return_value={"status": "ok"}),
     ), patch.object(
         health_service,
+        "get_supabase_sdk_validation_snapshot",
+        return_value={"status": "healthy", "detail": "supabase_sdk_locked"},
+    ), patch.object(
+        health_service,
         "get_supabase_auth_snapshot",
         return_value={"status": "warming", "cache_state": "empty"},
     ), patch.object(
@@ -116,6 +128,7 @@ def test_get_system_readiness_degrades_slow_optional_analytics_without_marking_c
 
     assert payload["status"] == "ok"
     assert payload["core_system"] == "healthy"
+    assert payload["services"]["package_compatibility"] == "ok"
     assert payload["services"]["qdrant"] == "warming"
     assert payload["services"]["analytics_db"] == "degraded"
     assert payload["services"]["timescale"] == "degraded"
@@ -151,6 +164,10 @@ def test_get_system_readiness_keeps_stale_supabase_auth_healthy():
         AsyncMock(return_value={"status": "ok"}),
     ), patch.object(
         health_service,
+        "get_supabase_sdk_validation_snapshot",
+        return_value={"status": "healthy", "detail": "supabase_sdk_locked"},
+    ), patch.object(
+        health_service,
         "get_supabase_auth_snapshot",
         return_value={
             "status": "healthy",
@@ -167,5 +184,6 @@ def test_get_system_readiness_keeps_stale_supabase_auth_healthy():
 
     assert payload["status"] == "ok"
     assert payload["core_system"] == "healthy"
+    assert payload["services"]["package_compatibility"] == "ok"
     assert payload["services"]["supabase_auth"] == "healthy"
     assert payload["checks"]["supabase_auth"]["cache_state"] == "stale"

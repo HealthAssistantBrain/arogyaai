@@ -311,7 +311,7 @@ def test_google_api_request_retries_once_after_timeout(monkeypatch):
 
     assert result is response
     assert attempts["count"] == 2
-    sleep_mock.assert_awaited_once_with(1.0)
+    sleep_mock.assert_awaited_once_with(0.25)
 
 
 def test_fetch_steps_ignores_duplicate_step_sources_and_uses_estimated_source():
@@ -454,7 +454,7 @@ def test_fetch_sleep_reads_sleep_segments_as_hours():
         ]
     }
 
-    with patch.object(GoogleFitService, "_aggregate_fit_data", new=AsyncMock(return_value=response)) as aggregate:
+    with patch.object(GoogleFitService, "_fetch_source_dataset_with_raw_fallback", new=AsyncMock(return_value=response)) as source_fetch:
         records = asyncio.run(
             GoogleFitService.fetch_sleep(
                 SimpleNamespace(id="user-1"),
@@ -463,11 +463,14 @@ def test_fetch_sleep_reads_sleep_segments_as_hours():
                 timezone_name="UTC",
                 start_ts=start_millis,
                 end_ts=end_millis,
+                data_sources=[
+                    {"dataStreamId": "sleep-source-1", "dataType": {"name": "com.google.sleep.segment"}},
+                ],
             )
         )
 
-    aggregate.assert_awaited_once()
-    assert aggregate.await_args.args[1] == "com.google.sleep.segment"
+    source_fetch.assert_awaited_once()
+    assert source_fetch.await_args.args[1] == "com.google.sleep.segment"
     assert records[0]["type"] == "sleep"
     assert records[0]["unit"] == "hours"
     assert records[0]["value"] == 2.0
@@ -1196,7 +1199,7 @@ def test_fetch_sleep_dedupes_overlapping_source_segments():
         ]
     }
 
-    with patch.object(GoogleFitService, "_aggregate_fit_data", new=AsyncMock(side_effect=[source_response, source_response])) as aggregate:
+    with patch.object(GoogleFitService, "_fetch_source_dataset_with_raw_fallback", new=AsyncMock(return_value=source_response)) as source_fetch:
         records = asyncio.run(
             GoogleFitService.fetch_sleep(
                 SimpleNamespace(id="user-1"),
@@ -1212,8 +1215,8 @@ def test_fetch_sleep_dedupes_overlapping_source_segments():
             )
         )
 
-    assert aggregate.await_count == 2
-    assert [call.kwargs["data_source_id"] for call in aggregate.await_args_list] == ["sleep-source-1", "sleep-source-2"]
+    source_fetch.assert_awaited_once()
+    assert source_fetch.await_args.kwargs["data_source_id"] == "sleep-source-1"
     assert records[0]["type"] == "sleep"
     assert records[0]["value"] == 2.0
 

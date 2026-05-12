@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
 import api from '../../lib/axios';
+import {
+  extractRecommendationTrackerItems,
+  logRecommendationDebug,
+  summarizeRecommendationTracker,
+} from '../../lib/recommendationContracts';
 
 type RecommendationItem = {
   id: string;
@@ -15,11 +20,19 @@ export function RecommendationTracker() {
 
   useEffect(() => {
     let active = true;
+    const startedAt = Date.now();
     api
       .get('/memory/recommendations')
       .then((response) => {
         if (active) {
-          setItems(Array.isArray(response?.data?.items) ? response.data.items : []);
+          const payload = response?.data ?? {};
+          const normalizedItems = extractRecommendationTrackerItems(payload);
+          logRecommendationDebug('RECOMMENDATIONS_FETCH_SUCCESS', {
+            durationMs: Date.now() - startedAt,
+            endpoint: '/memory/recommendations',
+            ...summarizeRecommendationTracker(payload),
+          });
+          setItems(normalizedItems);
         }
       })
       .catch(() => {

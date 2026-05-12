@@ -50,6 +50,45 @@ def test_execute_qdrant_operation_falls_back_to_local(monkeypatch):
     assert result.primary_error == "connection refused"
 
 
+def test_query_qdrant_points_uses_query_points_when_search_is_unavailable(monkeypatch):
+    qdrant._FAILURE_CACHE.clear()
+    settings = RagSettings(
+        qdrant_mode="cloud",
+        qdrant_url="https://cloud-qdrant.example",
+        local_qdrant_url="http://local-qdrant:6333",
+    )
+    target = qdrant.QdrantTarget(
+        name="cloud_primary",
+        mode="cloud",
+        url="https://cloud-qdrant.example",
+        api_key="secret",
+        timeout_seconds=5.0,
+    )
+
+    class _Client:
+        def query_points(self, **kwargs):
+            assert kwargs["collection_name"] == settings.collection_name
+            assert kwargs["query"] == [0.1, 0.2, 0.3]
+            assert kwargs["query_filter"] == {"user_id": "user-1"}
+            return SimpleNamespace(points=[SimpleNamespace(id="point-1", score=0.88, payload={"ok": True})])
+
+    monkeypatch.setattr(qdrant, "_get_or_create_client", lambda _: _Client())
+    monkeypatch.setattr(qdrant, "resolve_qdrant_targets", lambda *args, **kwargs: [target])
+
+    result = qdrant.query_qdrant_points(
+        settings,
+        collection_name=settings.collection_name,
+        query_vector=[0.1, 0.2, 0.3],
+        limit=2,
+        with_payload=True,
+        query_filter={"user_id": "user-1"},
+        allow_fallback=False,
+    )
+
+    assert len(result.value) == 1
+    assert result.value[0].id == "point-1"
+
+
 def test_probe_qdrant_health_reports_missing_collection_as_degraded(monkeypatch):
     settings = RagSettings(
         qdrant_mode="cloud",

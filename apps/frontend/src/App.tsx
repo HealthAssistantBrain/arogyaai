@@ -13,10 +13,7 @@ import { useSystemHealthStore } from './store/systemHealthStore';
 import { useThemeEffect } from './hooks/useThemeEffect';
 import { useThemeStore } from './store/themeStore';
 import useDashboardStore from './store/dashboardStore';
-import useHealthStore from './store/healthStore';
 import { setDashboardSocketSession, subscribeDashboardSocket } from './services/dashboardSocketManager';
-
-const SOCKET_METRICS_REFRESH_DEBOUNCE_MS = 20_000;
 
 export default function App() {
   const navigate = useNavigate();
@@ -28,7 +25,6 @@ export default function App() {
   const lastCheckedAt = useSystemHealthStore((state) => state.lastCheckedAt);
   const startHealthPolling = useSystemHealthStore((state) => state.startHealthPolling);
   const recoveryAttemptRef = useRef<number | null>(null);
-  const realtimeMetricsRefreshRef = useRef(0);
   const authPhaseRef = useRef<string | null>(null);
   const lastLoggedPathRef = useRef<string | null>(null);
   const authUserId = useAuthStore((state: any) => state.user?.id ?? null);
@@ -187,16 +183,12 @@ export default function App() {
     if (event.type !== 'message') return;
 
     const message = event.payload;
-    if (message?.type !== 'dashboard.update' || !message?.data) return;
+    if ((message?.type !== 'dashboard.update' && message?.type !== 'dashboard.patch') || !message?.data) return;
 
-    useDashboardStore.getState().setDashboardData(message.data, { replace: false, source: 'ws' });
-
-    const now = Date.now();
-    if ((now - realtimeMetricsRefreshRef.current) < SOCKET_METRICS_REFRESH_DEBOUNCE_MS) return;
-
-    realtimeMetricsRefreshRef.current = now;
-    const range = useHealthStore.getState().metricsRange;
-    void useHealthStore.getState().fetchHealthMetrics({ force: true, silent: true, range });
+    useDashboardStore.getState().setDashboardData(message.data, {
+      replace: message.type === 'dashboard.update',
+      source: 'ws',
+    });
   }), []);
 
   const toastStyle = resolvedTheme === 'dark'

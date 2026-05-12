@@ -21,7 +21,10 @@ export const useInsightsData = () => {
   const dashboardData = useDashboardStore((state) => state.dashboardData);
 
   useEffect(() => {
-    void fetchInsights();
+    const controller = new AbortController();
+    console.info('[RECOMMENDATION_PREFETCH] source=shared_insights_hook');
+    void fetchInsights({ signal: controller.signal });
+    return () => controller.abort();
   }, [fetchInsights]);
 
   const liveSnapshot = composeInsightsSnapshot({

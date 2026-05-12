@@ -56,7 +56,7 @@ const AIInsights = () => {
               {error || 'We could not render the latest insights snapshot right now.'}
             </p>
             <button
-              onClick={() => void refresh({ force: true })}
+              onClick={() => void refresh({ force: true, forceSource: 'manual' })}
               className="mt-8 inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-black uppercase tracking-[0.2em] text-white transition-transform hover:scale-[1.02]"
             >
               <RefreshCcw size={16} />
@@ -67,7 +67,7 @@ const AIInsights = () => {
           <PreventiveRecommendations
             data={data}
             error={error}
-            onRetry={() => void refresh({ force: true })}
+            onRetry={() => void refresh({ force: true, forceSource: 'manual' })}
           />
         )}
       </main>

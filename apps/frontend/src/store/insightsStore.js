@@ -260,6 +260,43 @@ const normalizeRecommendation = (item, index) => {
   };
 };
 
+const normalizePreventivePriority = (item, index) => {
+  const payload = safeObject(item);
+  const domain = safeArray(payload.domains).find(Boolean) || safeText(payload.category);
+  const title = cleanLabel(payload.title, `Preventive Priority ${index + 1}`);
+  const description = cleanText(payload.detail ?? payload.description ?? payload.title, title, { limit: 320 });
+  if (!title && !description) {
+    return null;
+  }
+
+  const category = formatRecommendationCategory(domain || 'lifestyle');
+  return {
+    id: safeText(payload.action_id, `${category}-preventive-${index}`),
+    title: title || description,
+    description: description || title,
+    category,
+    categoryLabel: CATEGORY_LABELS[category],
+    priority: normalizePriority(payload.priority),
+  };
+};
+
+const normalizePreventiveAlert = (item, index) => {
+  const payload = safeObject(item);
+  const title = cleanLabel(payload.title, `Preventive Alert ${index + 1}`);
+  const description = cleanText(payload.message ?? payload.summary, title, { limit: 260 });
+  const recommendation = cleanText(safeArray(payload.guidance)[0], '', { limit: 180 });
+  if (!title && !description) {
+    return null;
+  }
+  return {
+    id: safeText(payload.alert_id, `preventive-alert-${index}`),
+    title: title || description,
+    value: cleanLabel(payload.severity, 'Alert', 24).toUpperCase(),
+    description: description || title,
+    recommendation,
+  };
+};
+
 const normalizeFactor = (item, index) => {
   const payload = safeObject(item);
   const featureName = safeText(
@@ -654,11 +691,42 @@ export const composeInsightsSnapshot = ({ explanationResponse, dashboardResponse
   const dashboardEnvelope = safeObject(dashboardResponse);
   const metricsEnvelope = safeObject(metricsResponse);
   const prediction = safeObject(safeObject(dashboardBundle.prediction).data);
-
-  const recommendations = safeArray(explanationPayload.recommendations)
-    .map((item, index) => normalizeRecommendation(item, index))
+  const preventionPayload = safeObject(
+    dashboardBundle.prevention ??
+    safeObject(dashboardBundle.preventive).data ??
+    explanationPayload.prevention ??
+    prediction.prevention
+  );
+  const preventiveGuidance = safeObject(preventionPayload.guidance);
+  const preventiveMonitoring = safeObject(preventionPayload.monitoring);
+  const preventivePlan = safeObject(preventionPayload.intervention_plan);
+  const preventivePriorities = safeArray(preventivePlan.priorities)
+    .map((item, index) => normalizePreventivePriority(item, index))
     .filter(Boolean);
-  const riskCards = buildRiskCards(explanationPayload, dashboardBundle);
+  const preventiveAlerts = safeArray(preventionPayload.alerts)
+    .map((item, index) => normalizePreventiveAlert(item, index))
+    .filter(Boolean);
+
+  const recommendations = [
+    ...preventivePriorities,
+    ...safeArray(explanationPayload.recommendations)
+    .map((item, index) => normalizeRecommendation(item, index))
+    .filter(Boolean),
+  ];
+  const baseRiskCards = buildRiskCards(explanationPayload, dashboardBundle);
+  const preventiveOverallRisk = normalizeProbability(preventiveMonitoring.overall_risk);
+  const preventiveRiskCard = preventiveOverallRisk === null
+    ? null
+    : {
+        id: 'preventive-overall-risk',
+        title: cleanLabel(preventiveGuidance.headline, 'Preventive Risk'),
+        score: preventiveOverallRisk,
+        percent: toPercent(preventiveOverallRisk),
+        label: getRiskLabel(preventiveOverallRisk),
+        tone: getRiskTone(preventiveOverallRisk),
+        summary: cleanText(preventiveGuidance.summary, '', { limit: 240 }),
+      };
+  const riskCards = preventiveRiskCard ? [preventiveRiskCard, ...baseRiskCards] : baseRiskCards;
   const factors = buildFactors(explanationPayload);
   const metricInsights = buildMetricInsights(metricsResponse, dashboardBundle);
   const sources = safeArray(explanationPayload.sources).map((item, index) => normalizeSource(item, index));
@@ -670,7 +738,7 @@ export const composeInsightsSnapshot = ({ explanationResponse, dashboardResponse
     return acc;
   }, {});
 
-  const summary = cleanText(explanationPayload.summary ?? prediction.analysis, '', { limit: 360 });
+  const summary = cleanText(explanationPayload.summary ?? preventiveGuidance.summary ?? prediction.analysis, '', { limit: 360 });
   const outcome = safeObject(explanationPayload.outcome);
   const possibleConditions = safeArray(explanationPayload.possible_conditions)
     .map((item) => cleanLabel(item, '', 120))
@@ -727,6 +795,7 @@ export const composeInsightsSnapshot = ({ explanationResponse, dashboardResponse
     metricsEnvelope.last_updated,
     dashboardBundle.last_updated,
     prediction.last_updated,
+    preventionPayload.generated_at,
     ...metricInsights.map((item) => item.lastUpdated),
   );
   const clinicalCards = normalizeClinicalCards(explanationPayload, {
@@ -748,7 +817,10 @@ export const composeInsightsSnapshot = ({ explanationResponse, dashboardResponse
     factors.length ||
     recommendations.length ||
     metricInsights.some((item) => item.value !== null) ||
-    sources.length
+    sources.length ||
+    preventivePriorities.length ||
+    preventiveAlerts.length ||
+    Object.keys(preventionPayload).length
   );
 
   return {
@@ -761,8 +833,8 @@ export const composeInsightsSnapshot = ({ explanationResponse, dashboardResponse
     summary,
     factors,
     outcome: {
-      severity: cleanLabel(outcome.severity),
-      headline: cleanText(outcome.headline, '', { limit: 220 }),
+      severity: cleanLabel(outcome.severity ?? preventiveMonitoring.dominant_severity),
+      headline: cleanText(outcome.headline ?? preventiveGuidance.headline, '', { limit: 220 }),
       summary: cleanText(outcome.summary ?? summary, summary, { limit: 320 }),
       riskScore: normalizeProbability(outcome.risk_score),
     },
@@ -774,6 +846,16 @@ export const composeInsightsSnapshot = ({ explanationResponse, dashboardResponse
     groupedRecommendations,
     sources,
     metricInsights,
+    prevention: {
+      headline: cleanText(preventiveGuidance.headline, '', { limit: 180 }),
+      summary: cleanText(preventiveGuidance.summary, '', { limit: 280 }),
+      overallRisk: toPercent(preventiveOverallRisk),
+      dominantSeverity: cleanLabel(preventiveMonitoring.dominant_severity),
+      focusDomain: cleanLabel(preventiveGuidance.focus_domain),
+      alerts: preventiveAlerts,
+      priorities: preventivePriorities,
+      generatedAt: preventionPayload.generated_at ?? null,
+    },
     lastUpdated,
     hasAnyData,
   };
@@ -807,7 +889,7 @@ export const useInsightsStore = create(
 
       setHasHydratedCache: (value = true) => set({ hasHydratedCache: !!value }, false, 'insights/cacheHydrated'),
 
-      fetchInsights: async ({ force = false, silent = false } = {}) => {
+      fetchInsights: async ({ force = false, silent = false, forceSource = 'auto', signal = null } = {}) => {
         const state = get();
         const currentUserId = getCurrentUserId();
         const ownsCache = Boolean(currentUserId) && state.cacheOwnerId === currentUserId;
@@ -843,7 +925,12 @@ export const useInsightsStore = create(
           'insights/fetchStart'
         );
 
-        const explanationPromise = useHealthStore.getState().fetchExplanation({ force, silent: true });
+        const explanationPromise = useHealthStore.getState().fetchExplanation({
+          force,
+          silent: true,
+          forceSource,
+          signal,
+        });
         const dashboardPromise = useDashboardStore.getState().fetchDashboardData({ force, silent: true });
         const metricsPromise = useHealthStore.getState().fetchHealthMetrics({ force, silent: true });
 

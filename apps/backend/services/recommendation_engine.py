@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import logging
+import json
+import os
+import time
 from typing import Any
 from uuid import UUID
+from hashlib import sha256
 
 from sqlalchemy.orm import Session
 
+from ai.cache import get_workflow_cache
 from database.session import SessionLocal
 from pipelines.rag_pipeline.config import RagSettings
+from pipelines.rag_pipeline.corpus import load_corpus_chunks
+from pipelines.rag_pipeline.keyword import keyword_retrieve
 from pipelines.rag_pipeline.retriever import MedicalKnowledgeRetriever
 from pipelines.rag_pipeline.text_cleaning import clean_clinical_text, clean_source_payload
 from services.recommendation_service import (
@@ -30,6 +37,12 @@ from services.recommendation_service import (
 
 
 logger = logging.getLogger(__name__)
+workflow_cache = get_workflow_cache()
+RECOMMENDATION_CACHE_TTL_SECONDS = 600.0
+FAST_RECOMMENDATION_CACHE_TTL_SECONDS = 120.0
+RECOMMENDATION_RAG_TOP_K = max(1, int(os.getenv("RECOMMENDATION_RAG_TOP_K", "2")))
+RECOMMENDATION_MAX_PLANS = max(1, int(os.getenv("RECOMMENDATION_MAX_PLANS", "3")))
+RECOMMENDATION_RAG_MODE = os.getenv("RECOMMENDATION_RAG_MODE", "lexical").strip().lower()
 
 CONDITION_LABELS = {
     "cardiovascular": "Cardiovascular prevention",
@@ -172,6 +185,63 @@ def _source_title(source: dict[str, Any]) -> str:
     return str(source.get("title") or source.get("source") or source.get("source_org") or "medical reference").strip()
 
 
+def _recommendation_rag_cache_key(condition: str, query: str) -> str:
+    return "recommendation_rag:" + sha256(
+        json.dumps({"condition": condition, "query": query}, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+
+
+def _recommendation_plan_cache_key(signals: RecommendationSignals) -> str:
+    material = {
+        "risk_score": signals.risk_score,
+        "disease_probabilities": signals.disease_probabilities,
+        "symptoms": signals.symptoms,
+        "drivers": [
+            {
+                "feature_name": driver.get("feature_name") if isinstance(driver, dict) else None,
+                "label": driver.get("label") if isinstance(driver, dict) else None,
+                "impact": driver.get("impact") if isinstance(driver, dict) else None,
+            }
+            for driver in signals.drivers[:6]
+            if isinstance(driver, dict)
+        ],
+        "vitals": {
+            key: signals.vitals.get(key)
+            for key in (
+                "systolic_bp",
+                "diastolic_bp",
+                "heart_rate",
+                "steps",
+                "sleep_hours",
+                "oxygen_saturation",
+                "spo2",
+                "fasting_glucose",
+                "glucose",
+                "blood_glucose",
+                "blood_sugar",
+            )
+        },
+        "labs": [
+            {
+                "name": lab.get("name"),
+                "category": lab.get("category"),
+                "status": lab.get("status"),
+                "value": lab.get("value"),
+            }
+            for lab in signals.labs[:12]
+            if isinstance(lab, dict)
+        ],
+        "feature_snapshot": signals.feature_snapshot,
+    }
+    return "recommendation_plans:" + sha256(
+        json.dumps(material, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
+
+
+def _fast_recommendation_plan_cache_key(signals: RecommendationSignals) -> str:
+    return _recommendation_plan_cache_key(signals).replace("recommendation_plans:", "recommendation_fast_plans:", 1)
+
+
 def _retrieve_rag_context(condition: str, signals: RecommendationSignals) -> dict[str, Any]:
     query_parts = [
         condition,
@@ -180,29 +250,72 @@ def _retrieve_rag_context(condition: str, signals: RecommendationSignals) -> dic
         _lower_text(signals.symptoms),
     ]
     query = " ".join(part for part in query_parts if part).strip()
+    cache_key = _recommendation_rag_cache_key(condition, query)
+    cached = workflow_cache.get(cache_key)
+    if isinstance(cached, dict):
+        logger.info("[RAG_REUSE] workflow=recommendations condition=%s cache_key=%s", condition, cache_key[:16])
+        cached["cache_hit"] = True
+        return cached
+    started_at = time.perf_counter()
     try:
-        settings = RagSettings(top_k=3)
-        documents = MedicalKnowledgeRetriever(settings).retrieve(query, top_k=3)
+        settings = RagSettings(
+            top_k=RECOMMENDATION_RAG_TOP_K,
+            dense_top_k=RECOMMENDATION_RAG_TOP_K,
+            sparse_top_k=max(RECOMMENDATION_RAG_TOP_K, 4),
+            rerank_candidate_k=max(RECOMMENDATION_RAG_TOP_K, 4),
+            qdrant_timeout_seconds=min(float(os.getenv("QDRANT_TIMEOUT_SECONDS", "5.0")), 1.0),
+        )
+        if RECOMMENDATION_RAG_MODE == "hybrid":
+            documents = MedicalKnowledgeRetriever(settings).retrieve(query, top_k=RECOMMENDATION_RAG_TOP_K)
+            retrieval_mode = "hybrid"
+        else:
+            chunks = load_corpus_chunks(settings)
+            documents = keyword_retrieve(query, chunks, limit=RECOMMENDATION_RAG_TOP_K)
+            retrieval_mode = "lexical"
     except Exception as exc:
         logger.warning("Recommendation plan RAG retrieval unavailable: %s", exc)
         documents = []
+        retrieval_mode = "fallback"
 
-    sources = [clean_source_payload(document.as_dict()) for document in documents]
+    latency_ms = round((time.perf_counter() - started_at) * 1000, 2)
+    logger.info(
+        "[RAG LATENCY] workflow=recommendations condition=%s mode=%s latency_ms=%s docs=%s",
+        condition,
+        retrieval_mode,
+        latency_ms,
+        len(documents),
+    )
+
+    sources = [
+        clean_source_payload(document.as_dict(), text_limit=320, excerpt_limit=180)
+        for document in documents[:RECOMMENDATION_RAG_TOP_K]
+    ]
     basis_sentences: list[str] = []
     for source in sources:
-        text = clean_clinical_text(source.get("text"), limit=220)
+        text = clean_clinical_text(source.get("text") or source.get("excerpt"), limit=180)
         title = _source_title(source)
         if text:
             basis_sentences.append(f"{title}: {text}")
-        if len(basis_sentences) >= 2:
+        if len(basis_sentences) >= RECOMMENDATION_RAG_TOP_K:
             break
 
-    return {
+    payload = {
         "query": query,
         "sources": sources,
-        "basis": " ".join(basis_sentences),
+        "basis": clean_clinical_text(" ".join(basis_sentences), limit=420),
         "rag_status": "ready" if sources or basis_sentences else "fallback",
+        "cache_hit": False,
+        "latency_ms": latency_ms,
+        "retrieval_mode": retrieval_mode,
     }
+    logger.info(
+        "[PROMPT COMPRESSED] workflow=recommendations condition=%s sources=%s basis_chars=%s target_prompt_tokens_lt=3000",
+        condition,
+        len(sources),
+        len(payload["basis"]),
+    )
+    workflow_cache.set(cache_key, payload, ttl_seconds=RECOMMENDATION_CACHE_TTL_SECONDS)
+    return payload
 
 
 def _fallback_recommendation(condition: str, score: float) -> dict[str, Any]:
@@ -769,10 +882,80 @@ PLAN_BUILDERS = {
 }
 
 
-def build_recommendation_plans(signals: RecommendationSignals) -> list[dict[str, Any]]:
+def _decorate_plan(plan: dict[str, Any], signals: RecommendationSignals) -> dict[str, Any]:
+    plan["generated_from"] = {
+        "ml": signals.has_ml,
+        "wearables": signals.has_vitals,
+        "labs": signals.has_labs,
+        "symptoms": signals.has_symptoms,
+        "top_drivers": [
+            str(driver.get("label") or driver.get("feature_name") or driver.get("key"))
+            for driver in signals.drivers[:4]
+            if isinstance(driver, dict)
+        ],
+    }
+    return plan
+
+
+def _ordered_prediction_scores(signals: RecommendationSignals) -> list[tuple[str, float]]:
     scores = _condition_scores(signals)
-    ordered_predictions = sorted(scores.items(), key=lambda item: item[1], reverse=True)
-    print("Predictions:", [{"condition": condition, "score": round(score, 4)} for condition, score in ordered_predictions])
+    return sorted(scores.items(), key=lambda item: item[1], reverse=True)[:RECOMMENDATION_MAX_PLANS]
+
+
+def _deferred_rag_context(condition: str) -> dict[str, Any]:
+    return {
+        "query": condition,
+        "sources": [],
+        "basis": "",
+        "rag_status": "deferred",
+        "cache_hit": False,
+        "retrieval_mode": "deferred",
+    }
+
+
+def build_fast_recommendation_plans(signals: RecommendationSignals) -> list[dict[str, Any]]:
+    """
+    Build render-ready recommendation plans without RAG or provider inference.
+
+    This is the hydration-safe path used by snapshots and dashboard endpoints.
+    Heavier RAG grounding can enrich the cached snapshot later without blocking UI.
+    """
+    cache_key = _fast_recommendation_plan_cache_key(signals)
+    cached = workflow_cache.get(cache_key)
+    if isinstance(cached, list) and cached:
+        logger.info("[RECOMMENDATION CACHE HIT] workflow=recommendations mode=fast key=%s plans=%s", cache_key[:16], len(cached))
+        return cached
+
+    ordered_predictions = _ordered_prediction_scores(signals)
+    plans: list[dict[str, Any]] = []
+    for condition, score in ordered_predictions:
+        builder = PLAN_BUILDERS.get(condition, _general_plan)
+        rag = _deferred_rag_context(condition)
+        plan = _apply_interpretation_rules(builder(signals, score, rag), signals)
+        plan = _apply_rag_fallback(plan, condition, score, rag)
+        plan = _apply_low_risk_messaging(plan)
+        plan["rag_status"] = "deferred"
+        plan["snapshot_mode"] = "fast"
+        plans.append(_decorate_plan(plan, signals))
+
+    logger.info(
+        "[SNAPSHOT FAST PATH] workflow=recommendations predictions=%s plans=%s",
+        len(ordered_predictions),
+        len(plans),
+    )
+    workflow_cache.set(cache_key, plans, ttl_seconds=FAST_RECOMMENDATION_CACHE_TTL_SECONDS)
+    return plans
+
+
+def build_recommendation_plans(signals: RecommendationSignals) -> list[dict[str, Any]]:
+    cache_key = _recommendation_plan_cache_key(signals)
+    cached = workflow_cache.get(cache_key)
+    if isinstance(cached, list) and cached:
+        logger.info("[WORKFLOW_CACHE_HIT] workflow=recommendations key=%s plans=%s", cache_key[:16], len(cached))
+        return cached
+
+    logger.info("[WORKFLOW_CACHE_MISS] workflow=recommendations key=%s", cache_key[:16])
+    ordered_predictions = _ordered_prediction_scores(signals)
     plans: list[dict[str, Any]] = []
     for condition, score in ordered_predictions:
         builder = PLAN_BUILDERS.get(condition, _general_plan)
@@ -780,21 +963,24 @@ def build_recommendation_plans(signals: RecommendationSignals) -> list[dict[str,
         plan = _apply_interpretation_rules(builder(signals, score, rag), signals)
         plan = _apply_rag_fallback(plan, condition, score, rag)
         plan = _apply_low_risk_messaging(plan)
-        plan["generated_from"] = {
-            "ml": signals.has_ml,
-            "wearables": signals.has_vitals,
-            "labs": signals.has_labs,
-            "symptoms": signals.has_symptoms,
-            "top_drivers": [
-                str(driver.get("label") or driver.get("feature_name") or driver.get("key"))
-                for driver in signals.drivers[:4]
-                if isinstance(driver, dict)
-            ],
-        }
-        plans.append(plan)
-    print("Generated recommendations:", len(plans))
+        plan["snapshot_mode"] = "rag_enriched"
+        plans.append(_decorate_plan(plan, signals))
     logger.info("Generated recommendation plans: predictions=%s recommendations=%s", len(ordered_predictions), len(plans))
+    workflow_cache.set(cache_key, plans, ttl_seconds=RECOMMENDATION_CACHE_TTL_SECONDS)
     return plans
+
+
+def generate_fast_recommendation_plans(user_id: UUID | str, db: Session | None = None) -> list[dict[str, Any]]:
+    owns_session = db is None
+    session = db or SessionLocal()
+    try:
+        return build_fast_recommendation_plans(_collect_signals(session, user_id))
+    except Exception as exc:
+        logger.exception("Failed to generate fast recommendation plans for user=%s: %s", user_id, exc)
+        return [build_fast_recommendation_plans(RecommendationSignals())[0]]
+    finally:
+        if owns_session:
+            session.close()
 
 
 def generate_recommendation_plans(user_id: UUID | str, db: Session | None = None) -> list[dict[str, Any]]:
@@ -813,3 +999,8 @@ def generate_recommendation_plans(user_id: UUID | str, db: Session | None = None
 def generate_recommendation_plan(user_id: UUID | str, db: Session | None = None) -> dict[str, Any]:
     plans = generate_recommendation_plans(user_id, db=db)
     return plans[0] if plans else build_recommendation_plans(RecommendationSignals())[0]
+
+
+def generate_fast_recommendation_plan(user_id: UUID | str, db: Session | None = None) -> dict[str, Any]:
+    plans = generate_fast_recommendation_plans(user_id, db=db)
+    return plans[0] if plans else build_fast_recommendation_plans(RecommendationSignals())[0]

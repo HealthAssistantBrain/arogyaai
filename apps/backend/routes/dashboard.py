@@ -15,9 +15,10 @@ Pipeline-compatible response envelope:
 """
 
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from cache.recommendations import RecommendationSnapshotService
+from core.serialization.safe_response import SafeJSONResponse
 from database.session import get_db
 from models import User
 from routes.users import get_current_user_from_header
@@ -41,7 +42,7 @@ async def get_dashboard_bundle(
     print("Serving latest dashboard data")
     bundle = await build_dashboard_bundle(db, current_user)
 
-    return JSONResponse(
+    return SafeJSONResponse(
         status_code=200,
         content={
             "success": True,
@@ -63,14 +64,33 @@ async def get_health_score(
     return await svc.get_health_score(current_user, db)
 
 
-@router.get("/health/history")
-async def get_health_history(
+@router.get("/health/forecast")
+async def get_health_forecast(
+    force_refresh: bool = Query(default=False),
     current_user: User = Depends(get_current_user_from_header),
     db: Session = Depends(get_db),
 ):
-    return JSONResponse(
+    return await svc.get_health_forecast(current_user, db, force_refresh=force_refresh)
+
+
+@router.get("/health/preventive")
+async def get_preventive_intelligence(
+    force_refresh: bool = Query(default=False),
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
+    return await svc.get_preventive_intelligence(current_user, db, force_refresh=force_refresh)
+
+
+@router.get("/health/history")
+async def get_health_history(
+    range: str = Query(default="24h", pattern="^(24h|7d|30d)$"),
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
+    return SafeJSONResponse(
         status_code=200,
-        content=await svc.get_health_history(current_user, db),
+        content=await svc.get_health_history(current_user, db, range_value=range),
         headers=NO_CACHE_HEADERS,
     )
 
@@ -82,7 +102,7 @@ async def get_health_metrics(
     current_user: User = Depends(get_current_user_from_header),
     db: Session = Depends(get_db),
 ):
-    return JSONResponse(
+    return SafeJSONResponse(
         status_code=200,
         content=await svc.get_health_metrics(current_user, db, range_value=range, timezone_name=timezone),
         headers=NO_CACHE_HEADERS,
@@ -95,6 +115,25 @@ async def get_recommendation_plan(
     db: Session = Depends(get_db),
 ):
     return await svc.get_recommendation_plan(current_user, db)
+
+
+@router.get("/recommendations/snapshot")
+async def get_recommendation_snapshot(
+    prediction_id: str | None = Query(default=None),
+    force_refresh: bool = Query(default=False),
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
+    return SafeJSONResponse(
+        status_code=200,
+        content=await RecommendationSnapshotService.get_snapshot(
+            db,
+            current_user,
+            prediction_id=prediction_id,
+            force_refresh=force_refresh,
+        ),
+        headers=NO_CACHE_HEADERS,
+    )
 
 
 @router.get("/prediction/latest")

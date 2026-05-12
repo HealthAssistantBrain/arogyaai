@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
   HeartPulse,
@@ -7,26 +8,24 @@ import {
   Send,
 } from 'lucide-react';
 import api from '../lib/axios';
+import { useAuthStore } from '../store/authStore';
 import ChatMessage from './chat/ChatMessage';
 import useChatStore from '../store/chatStore';
 import { parseSafetyFromResponse } from './safety/SafetyContext';
+import { streamChatResponse } from '../services/chatStreamService';
+import { appendAssistantChunk } from '../services/chatTransport';
+import { useAppStore } from '../store/useAppStore';
+import useDashboardStore from '../store/dashboardStore';
+import {
+  createChatActionDispatcher,
+  logAssistantDevEvent,
+} from '../services/chat/chatActionDispatcher';
 
 const promptChips = [
   'Why is my heart rate high?',
   'What does chest pain mean?',
   'Explain my latest risk score',
 ];
-
-const initialAssistantMessage = {
-  id: 'assistant-welcome',
-  role: 'assistant',
-  content: "Hey! What would you like help with today?",
-  structured: {
-    mode: 'casual',
-    depth: 'micro',
-    quick_replies: ['Check symptoms', 'View my risk score', 'Upload a report'],
-  },
-};
 
 const extractErrorMessage = (error) =>
   error?.response?.data?.error ||
@@ -46,12 +45,6 @@ const toHistoryPayload = (messages) =>
 const buildAssistantSummary = (payload) => {
   if (!payload) return 'I reviewed your question using the available health context.';
   return payload.summary_preview || payload.message || payload.summary || payload.understanding || payload.clinical_interpretation || payload.insight || payload.risk_summary || 'I reviewed your question using the available health context.';
-};
-
-const quickReplyToQuery = {
-  'Check symptoms': 'I want to check my symptoms.',
-  'View my risk score': 'Explain my risk score.',
-  'Upload a report': 'I want to upload a report.',
 };
 
 const typingConfig = {
@@ -80,85 +73,348 @@ const waitForMinimum = async (startedAt, depth) => {
   await new Promise((resolve) => window.setTimeout(resolve, minimum - elapsed));
 };
 
+const buildMessageId = (role = 'message') =>
+  `${role}-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`}`;
+
 const Chatbot = () => {
-  const [messages, setMessages] = useState([initialAssistantMessage]);
+  const navigate = useNavigate();
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState('');
   const [typingDepth, setTypingDepth] = useState('short');
+  const [typingLabel, setTypingLabel] = useState(typingConfig.short.label);
   const endRef = useRef(null);
-  const { currentMode, escalation, setMode, setEscalation, setCurrentSafety, recordSafetyForMessage } = useChatStore();
+  const abortRef = useRef(null);
+  const activeAssistantMessageIdRef = useRef(null);
+  const userId = useAuthStore((state) => state.user?.id || state.session?.user?.id || 'anonymous');
+  const closeAssistant = useAppStore((state) => state.closeAssistant);
+  const {
+    messages,
+    sessionId,
+    continuitySummary,
+    hydratedForUserId,
+    hydrateConversation,
+    persistConversation,
+    appendMessage,
+    patchMessage,
+    setSessionMeta,
+    currentMode,
+    escalation,
+    setMode,
+    setEscalation,
+    setCurrentSafety,
+    recordSafetyForMessage,
+  } = useChatStore();
+
+  useEffect(() => {
+    hydrateConversation(userId);
+  }, [hydrateConversation, userId]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages, isSending]);
 
+  useEffect(() => {
+    if (hydratedForUserId !== userId) return;
+    persistConversation(userId);
+  }, [continuitySummary, hydratedForUserId, messages, persistConversation, sessionId, userId]);
+
+  useEffect(() => () => abortRef.current?.abort(), []);
+
   const canSend = useMemo(() => input.trim().length > 0 && !isSending, [input, isSending]);
 
-  const sendMessage = async (presetValue) => {
+  const persistLatestConversation = () => {
+    if (hydratedForUserId !== userId) return;
+    persistConversation(userId);
+  };
+
+  const appendLocalAssistantActionMessage = (message, metadata = {}) => {
+    const role = message?.role === 'assistant' ? 'assistant' : 'user';
+    const content = String(message?.content || '').trim();
+    if (!content) return;
+
+    appendMessage({
+      id: buildMessageId(role),
+      role,
+      content,
+      structured: {
+        ...(message?.structured || {}),
+        assistant_action: metadata.actionId || null,
+        assistant_source: metadata.source || 'assistant',
+        local_action: true,
+      },
+    });
+  };
+
+  const interruptStreaming = async ({ actionId, source } = {}) => {
+    if (!abortRef.current) return false;
+
+    const activeAssistantMessageId = activeAssistantMessageIdRef.current;
+    if (activeAssistantMessageId) {
+      const existing = useChatStore.getState().messages.find((message) => message.id === activeAssistantMessageId);
+      if (existing?.content) {
+        patchMessage(activeAssistantMessageId, {
+          structured: {
+            interrupted: true,
+            interrupted_by: actionId || 'assistant-action',
+            interrupted_source: source || 'assistant',
+          },
+        });
+      }
+    }
+
+    logAssistantDevEvent('[CHAT_ACTION]', {
+      phase: 'abort_requested',
+      actionId: actionId || 'assistant-action',
+      source: source || 'assistant',
+    });
+
+    abortRef.current.abort();
+    return true;
+  };
+
+  const sendMessage = async (presetValue, options = {}) => {
     const query = String(presetValue ?? input).trim();
+    const displayText = String(options.displayText ?? presetValue ?? input).trim() || query;
+
     if (!query || isSending) return;
+
+    const {
+      messages: currentMessages,
+      sessionId: currentSessionId,
+      continuitySummary: currentContinuitySummary,
+      currentMode: currentConversationMode,
+    } = useChatStore.getState();
     const requestDepth = predictPendingDepth(query);
     const requestStartedAt = Date.now();
-
+    const historyPayload = toHistoryPayload(currentMessages);
     const nextUserMessage = {
-      id: `user-${Date.now()}`,
+      id: buildMessageId('user'),
       role: 'user',
-      content: query,
-      structured: null,
+      content: displayText,
+      structured: options.metadata || null,
     };
 
-    const historyPayload = toHistoryPayload(messages);
-
-    setMessages((current) => [...current, nextUserMessage]);
+    appendMessage(nextUserMessage);
     setInput('');
     setError('');
     setIsSending(true);
     setTypingDepth(requestDepth);
+    setTypingLabel(typingConfig[requestDepth]?.label || 'Thinking this through...');
+    logAssistantDevEvent('[ASSISTANT_TRIGGER]', {
+      phase: 'message_started',
+      prompt: displayText,
+      transport: options.metadata?.assistant_action ? 'assistant-action' : 'manual',
+    });
 
     try {
-      const response = await api.post('/chat', {
-        query,
-        history: historyPayload,
-      });
+      const assistantMessageId = buildMessageId('assistant');
+      activeAssistantMessageIdRef.current = assistantMessageId;
+      let sawStreamChunk = false;
+      let finalPayload = null;
 
-      const payload = response?.data?.data || null;
-      const safety = parseSafetyFromResponse(payload);
-      await waitForMinimum(requestStartedAt, payload?.depth || requestDepth);
-      setMode(response?.data?.mode || payload?.mode || 'casual');
-      setEscalation(payload?.escalation || null);
-      setCurrentSafety(safety);
-      const assistantMessageId = `assistant-${Date.now()}`;
-      recordSafetyForMessage(assistantMessageId, safety);
-      setMessages((current) => [
-        ...current,
-        {
+      const finalizeAssistantMessage = async (payload, sourceMode = 'stream') => {
+        const safety = parseSafetyFromResponse(payload);
+        await waitForMinimum(requestStartedAt, payload?.depth || requestDepth);
+        setMode(payload?.mode || 'casual');
+        setEscalation(payload?.escalation || null);
+        setCurrentSafety(safety);
+        recordSafetyForMessage(assistantMessageId, safety);
+        setSessionMeta({
+          sessionId: payload?.session_id || useChatStore.getState().sessionId || currentSessionId || null,
+          continuitySummary:
+            payload?.conversation_state?.continuity_summary ||
+            payload?.context_compression?.summary ||
+            useChatStore.getState().continuitySummary ||
+            currentContinuitySummary,
+        });
+        const finalizedContent = buildAssistantSummary(payload);
+        const existing = useChatStore.getState().messages.find((message) => message.id === assistantMessageId);
+        if (existing) {
+          patchMessage(assistantMessageId, {
+            content: finalizedContent,
+            structured: { ...payload, safety, transport: sourceMode },
+          });
+          return;
+        }
+        appendMessage({
           id: assistantMessageId,
           role: 'assistant',
-          content: buildAssistantSummary(payload),
-          structured: { ...payload, safety },
-        },
-      ]);
+          content: finalizedContent,
+          structured: { ...payload, safety, transport: sourceMode },
+        });
+      };
+
+      const fallbackToBufferedResponse = async () => {
+        const response = await api.post('/chat', {
+          query,
+          history: historyPayload,
+          session_id: currentSessionId,
+        });
+        const payload = response?.data?.data || null;
+        await finalizeAssistantMessage(payload, 'buffered');
+      };
+
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      try {
+        await streamChatResponse({
+          query,
+          history: historyPayload,
+          sessionId: currentSessionId,
+          signal: controller.signal,
+          onEvent: (event) => {
+            if (!event || typeof event !== 'object') return;
+            if (event.event === 'meta') {
+              setSessionMeta({
+                sessionId: event?.data?.session_id || useChatStore.getState().sessionId || currentSessionId,
+              });
+              return;
+            }
+            if (event.event === 'typing') {
+              setTypingDepth(event?.data?.depth || requestDepth);
+              setTypingLabel(event?.data?.label || typingConfig[requestDepth]?.label || 'Thinking this through...');
+              return;
+            }
+            if (event.event === 'chunk') {
+              const chunkContent = String(event?.data?.content || '').trim();
+              if (!chunkContent) return;
+              sawStreamChunk = true;
+              const existing = useChatStore.getState().messages.find((message) => message.id === assistantMessageId);
+              if (!existing) {
+                appendMessage({
+                  id: assistantMessageId,
+                  role: 'assistant',
+                  content: chunkContent,
+                  structured: {
+                    mode: useChatStore.getState().currentMode || currentConversationMode,
+                    depth: requestDepth,
+                    quick_replies: [],
+                  },
+                });
+                return;
+              }
+              patchMessage(assistantMessageId, {
+                content: appendAssistantChunk(existing.content, chunkContent),
+                structured: {
+                  ...(existing.structured || {}),
+                  depth: requestDepth,
+                },
+              });
+              return;
+            }
+            if (event.event === 'final') {
+              finalPayload = event?.data?.payload || null;
+              return;
+            }
+            if (event.event === 'error') {
+              throw new Error(event?.data?.message || 'Streaming chat failed.');
+            }
+          },
+        });
+
+        if (finalPayload) {
+          await finalizeAssistantMessage(finalPayload, 'stream');
+        } else if (!sawStreamChunk) {
+          await fallbackToBufferedResponse();
+        } else {
+          throw new Error('The assistant stream ended before the final message was completed.');
+        }
+      } catch (streamError) {
+        if (streamError?.name === 'AbortError') {
+          logAssistantDevEvent('[CHAT_ACTION]', {
+            phase: 'aborted',
+            prompt: displayText,
+          });
+          return;
+        }
+        if (!sawStreamChunk) {
+          await fallbackToBufferedResponse();
+        } else {
+          await waitForMinimum(requestStartedAt, requestDepth);
+          const message = extractErrorMessage(streamError);
+          setError(message);
+          appendMessage({
+            id: buildMessageId('assistant-error'),
+            role: 'assistant',
+            content: message,
+            structured: null,
+          });
+        }
+      }
     } catch (requestError) {
       await waitForMinimum(requestStartedAt, requestDepth);
       const message = extractErrorMessage(requestError);
       setError(message);
-      setMessages((current) => [
-        ...current,
-        {
-          id: `assistant-error-${Date.now()}`,
-          role: 'assistant',
-          content: message,
-          structured: null,
-        },
-      ]);
+      appendMessage({
+        id: buildMessageId('assistant-error'),
+        role: 'assistant',
+        content: message,
+        structured: null,
+      });
     } finally {
+      activeAssistantMessageIdRef.current = null;
+      abortRef.current = null;
       setIsSending(false);
+      setTypingLabel(typingConfig.short.label);
     }
   };
 
+  const getDashboardSnapshot = () => {
+    const dashboardState = useDashboardStore.getState();
+    return {
+      score: dashboardState.healthScore?.data?.score ?? null,
+      label: dashboardState.healthScore?.data?.label ?? '',
+      updatedAt:
+        dashboardState.healthScore?.last_updated ||
+        dashboardState.healthScore?.lastUpdated ||
+        dashboardState.healthScore?.data?.last_updated ||
+        null,
+      alerts: dashboardState.alerts?.data?.alerts || [],
+    };
+  };
+
+  const handleActionError = (actionError, action) => {
+    const isBusyError = actionError?.code === 'assistant_busy';
+    const message = isBusyError
+      ? actionError.message
+      : action?.effect === 'route'
+        ? 'I could not open that workflow right now. Please try again.'
+        : 'I could not run that assistant action right now. Please try again.';
+
+    setError(message);
+
+    if (isBusyError) {
+      return;
+    }
+
+    appendMessage({
+      id: buildMessageId('assistant-error'),
+      role: 'assistant',
+      content: message,
+      structured: {
+        mode: 'casual',
+        depth: 'micro',
+        quick_replies: [],
+      },
+    });
+  };
+
+  const chatActionDispatcher = createChatActionDispatcher({
+    navigate,
+    closeAssistant,
+    sendMessage,
+    appendLocalExchange: appendLocalAssistantActionMessage,
+    interruptStreaming,
+    persistContext: persistLatestConversation,
+    getDashboardSnapshot,
+    isBusy: () => isSending,
+    onError: handleActionError,
+  });
+
   const handleQuickReply = async (reply) => {
-    await sendMessage(quickReplyToQuery[reply] || reply);
+    await chatActionDispatcher.execute(reply, { source: 'quick-reply' });
   };
 
   const handleSubmit = async (event) => {
@@ -177,12 +433,17 @@ const Chatbot = () => {
             <p className="text-sm leading-relaxed text-slate-600 dark:text-text-secondary">
               Share a symptom, report change, or concern. Arya will keep the thread in mind and respond naturally.
             </p>
+            {continuitySummary ? (
+              <div className="mx-auto max-w-xl rounded-full border border-primary/10 bg-primary/5 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary dark:border-primary/20 dark:bg-primary/10 dark:text-[#cdbfff]">
+                Continuing thread: {continuitySummary}
+              </div>
+            ) : null}
             <div className="flex flex-wrap justify-center gap-2 pt-1">
               {promptChips.map((chip) => (
                 <button
                   key={chip}
                   type="button"
-                  onClick={() => sendMessage(chip)}
+                  onClick={() => chatActionDispatcher.execute(chip, { source: 'suggested-chip' })}
                   disabled={isSending}
                   className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold uppercase tracking-[0.18em] text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stroke dark:bg-white/5 dark:text-text-primary dark:hover:bg-white/10"
                 >
@@ -196,7 +457,7 @@ const Chatbot = () => {
             <ChatMessage
               key={message.id}
               message={message}
-              disabled={isSending}
+              disabled={false}
               onQuickReply={handleQuickReply}
             />
           ))}
@@ -210,7 +471,7 @@ const Chatbot = () => {
                 <div className="space-y-2 rounded-2xl rounded-tl-none border border-slate-200 bg-white px-3 py-3 text-sm text-slate-600 shadow-sm dark:border-stroke dark:bg-white/5 dark:text-text-secondary">
                   <div className="flex items-center gap-2">
                     <LoaderCircle size={16} className="animate-spin" />
-                    {typingConfig[typingDepth]?.label || 'Thinking this through...'}
+                    {typingLabel || typingConfig[typingDepth]?.label || 'Thinking this through...'}
                   </div>
                   {typingDepth === 'expert' ? (
                     <div className="h-1.5 w-44 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
@@ -282,4 +543,3 @@ const Chatbot = () => {
 };
 
 export default Chatbot;
-

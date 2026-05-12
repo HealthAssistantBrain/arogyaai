@@ -21,6 +21,10 @@ class DoctorFollowUpRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=1200)
 
 
+class DoctorClinicalQueryRequest(BaseModel):
+    query: str = Field(min_length=3, max_length=1200)
+
+
 @router.get("/patients")
 def list_patients(
     current_doctor: User = Depends(get_current_doctor_from_header),
@@ -36,6 +40,21 @@ async def get_patient_detail(
     db: Session = Depends(get_db),
 ):
     return await DoctorService.get_patient_detail(db, current_doctor, patient_id)
+
+
+@router.post("/patient/{patient_id}/query")
+async def query_patient_intelligence(
+    patient_id: str,
+    payload: DoctorClinicalQueryRequest,
+    current_doctor: User = Depends(get_current_doctor_from_header),
+    db: Session = Depends(get_db),
+):
+    return await DoctorService.run_provider_query(
+        db,
+        current_doctor,
+        patient_id,
+        query=payload.query,
+    )
 
 
 @router.get("/alerts")

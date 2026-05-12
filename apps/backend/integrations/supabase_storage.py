@@ -18,9 +18,12 @@ from typing import Any
 from urllib.parse import urlparse
 
 from fastapi import HTTPException, status
-from supabase import Client, create_client
 
 from core.config import settings
+from services.supabase_sdk_validation import (
+    SupabaseSDKCompatibilityError,
+    load_supabase_client_symbols,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +37,7 @@ def _safe_filename(filename: str) -> str:
     return cleaned.strip("-") or "report"
 
 
-def _get_client() -> Client:
+def _get_client() -> Any:
     if not settings.SUPABASE_URL:
         raise SupabaseStorageError("SUPABASE_URL is not configured.")
     if not settings.SUPABASE_SERVICE_ROLE_KEY:
@@ -43,6 +46,10 @@ def _get_client() -> Client:
             "Local file storage has been removed. "
             "Set this key to enable Supabase Storage."
         )
+    try:
+        _, create_client = load_supabase_client_symbols()
+    except SupabaseSDKCompatibilityError as exc:
+        raise SupabaseStorageError(str(exc)) from exc
     return create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
 
 

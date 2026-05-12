@@ -8,7 +8,7 @@ from typing import Any
 
 from ai.providers import get_provider_runtime
 from pipelines.rag_pipeline.config import RagSettings
-from pipelines.rag_pipeline.qdrant import batch_upsert_points, ensure_qdrant_collection, execute_qdrant_operation
+from pipelines.rag_pipeline.qdrant import batch_upsert_points, ensure_qdrant_collection, execute_qdrant_operation, query_qdrant_points
 
 from .memory_types import MemoryItem, QDRANT_MEMORY_COLLECTION
 
@@ -92,24 +92,15 @@ class MemoryEmbeddingService:
             ]
         )
 
-        def _operation(client: Any, _target) -> list[Any]:
-            return list(
-                client.search(
-                    collection_name=self.collection_name,
-                    query_vector=vector,
-                    query_filter=query_filter,
-                    limit=max(1, int(top_k) * 2),
-                    with_payload=True,
-                )
-                or []
-            )
-
         try:
             result = await asyncio.to_thread(
-                execute_qdrant_operation,
+                query_qdrant_points,
                 self._settings,
-                _operation,
-                operation_name="memory_search",
+                query_vector=vector,
+                collection_name=self.collection_name,
+                limit=max(1, int(top_k) * 2),
+                with_payload=True,
+                query_filter=query_filter,
                 allow_fallback=True,
             )
             hits = list(result.value or [])

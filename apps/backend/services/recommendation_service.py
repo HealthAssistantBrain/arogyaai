@@ -9,6 +9,7 @@ from uuid import UUID
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
+from core.serialization import make_json_safe
 from database.session import SessionLocal
 from models import ClinicalHistory, FeatureSnapshotRecord, LabResult, RiskScore, ShapValueRecord, UserVital
 
@@ -791,10 +792,10 @@ def generate_test_recommendations(user_id: UUID | str, db: Session | None = None
     session = db or SessionLocal()
     try:
         signals = _collect_signals(session, user_id)
-        return _build_recommendations(signals)
+        return make_json_safe(_build_recommendations(signals))
     except Exception as exc:
         logger.exception("Failed to generate test recommendations for user=%s: %s", user_id, exc)
-        return [
+        return make_json_safe([
             _recommendation(
                 "Baseline preventive tests",
                 "Recommendation engine could not read enough current signals; start with routine preventive screening.",
@@ -802,7 +803,7 @@ def generate_test_recommendations(user_id: UUID | str, db: Session | None = None
                 "1 month",
                 0.25,
             )
-        ]
+        ])
     finally:
         if owns_session:
             session.close()

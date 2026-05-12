@@ -8,16 +8,21 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from ai.formatters import ResponseFormatter
+from ai.prevention import PreventiveEngine
+from ai.reasoning import get_reasoning_orchestrator
+from ai.safety.core.validator_engine import ValidatorEngine
 from models import MedicalHistory, User, UserProfile
 from pipelines.feature_pipeline.service import FeaturePipelineService, FeatureSnapshot
 from pipelines.ml_pipeline.inference import MLPipelineInference
 from pipelines.ml_pipeline.model_loader import ModelLoader
 from pipelines.ml_pipeline.preprocess import build_feature_vector
 from pipelines.ml_pipeline.shap_explainer import ShapExplainer
+from pipelines.storage_pipeline.service import StoragePipelineService
 from services.clinical_insight_service import ClinicalInsightService
 from services.notification_service import trigger_notification_sync
 
 logger = logging.getLogger("uvicorn.error")
+_preventive_engine = PreventiveEngine()
 
 
 def _utc_now() -> datetime:
@@ -134,6 +139,7 @@ class DiseaseSimulationService:
         "air_quality": (0.0, 250.0),
     }
     response_formatter = ResponseFormatter()
+    safety_validator = ValidatorEngine()
 
     @staticmethod
     def _latest_profile(db: Session, user: User) -> UserProfile | None:
@@ -595,6 +601,12 @@ class DiseaseSimulationService:
         height_cm = DiseaseSimulationService._height_from_profile(profile)
         weight = DiseaseSimulationService._weight_from_profile(profile)
         bmi = DiseaseSimulationService._bmi(height_cm, weight)
+        health_insights = StoragePipelineService.fetch_health_insights(db, user) or {}
+        prevention = (
+            health_insights.get("prevention")
+            if isinstance(health_insights.get("prevention"), dict)
+            else _preventive_engine.generate(db, user, persist=True)
+        )
 
         return {
             "baseline": baseline,
@@ -611,6 +623,8 @@ class DiseaseSimulationService:
             "feature_snapshot": feature_snapshot.to_dict(),
             "conditions": conditions,
             "focus_options": focus_options,
+            "forecasting": health_insights.get("forecasting") if isinstance(health_insights.get("forecasting"), dict) else None,
+            "prevention": prevention if isinstance(prevention, dict) else None,
             "assumptions": [
                 "Scenario scoring uses the latest stored feature snapshot as the physiological baseline.",
                 "Calibrated XGBoost probability is used when the model artifact is available; otherwise an explainable weighted fallback score is used.",
@@ -682,6 +696,8 @@ class DiseaseSimulationService:
             "simulation": scenario_inputs.as_dict(),
             "profile": baseline_context["profile"],
             "medical_conditions": baseline_context["conditions"],
+            "forecasting": baseline_context.get("forecasting"),
+            "prevention": baseline_context.get("prevention"),
             "current_risk": current_risk,
             "simulated_risk": simulated_risk,
             "delta": delta_map,
@@ -708,6 +724,38 @@ class DiseaseSimulationService:
                 "model_version": scenario_model_version or baseline_model_version,
             },
         }
+        reasoning_bundle = get_reasoning_orchestrator().generate(
+            workflow="disease_simulator",
+            user_id=str(getattr(user, "id", "") or ""),
+            source="disease_simulator",
+            risk_payload={
+                "risk_scores": simulated_risk,
+                "risk_level": str(focus_outcome.get("severity") or "medium").upper(),
+                "overall_risk_score": max(simulated_risk.values()) if simulated_risk else 0.0,
+            },
+            feature_payload=scenario_feature_payload,
+            forecasting=baseline_context.get("forecasting") if isinstance(baseline_context.get("forecasting"), dict) else {},
+            clinical_history={
+                "analysis": {
+                    "summary": clinical_payload.get("summary"),
+                    "symptoms": clinical_payload.get("symptoms") or [],
+                    "possible_conditions": clinical_payload.get("possible_conditions") or [],
+                }
+            },
+            drivers=clinical_payload.get("key_drivers") if isinstance(clinical_payload.get("key_drivers"), list) else [],
+            recommendations=clinical_payload.get("recommendations") if isinstance(clinical_payload.get("recommendations"), list) else [],
+            disease_simulation={
+                "current_risk": current_risk,
+                "simulated_risk": simulated_risk,
+                "delta": delta_map,
+            },
+        )
+        response_data["reasoning"] = reasoning_bundle
+        response_data["clinical_narrative"] = reasoning_bundle.get("clinical_narrative")
+        response_data["cognitive_summary"] = reasoning_bundle.get("cognitive_summary")
+        response_data["causal_explanations"] = reasoning_bundle.get("causal_explanations") or []
+        response_data["confidence_indicators"] = reasoning_bundle.get("confidence_indicators") or []
+        response_data["future_trajectory"] = reasoning_bundle.get("trajectory_explanation") or {}
         response_data = DiseaseSimulationService.response_formatter.format_payload(
             workflow="disease_simulator",
             payload=response_data,
@@ -722,8 +770,16 @@ class DiseaseSimulationService:
                     "current": current_meta,
                     "simulated": simulated_meta,
                 },
+                "reasoning": reasoning_bundle,
             },
         )
+        response_data = DiseaseSimulationService.safety_validator.validate(
+            payload=response_data,
+            workflow="disease_simulator",
+            channel="disease_simulation_service",
+            provider=str(simulated_meta["mode"]),
+            query=f"{focus_condition} simulation over {timeframe_months} months",
+        ).as_dict()
 
         try:
             trigger_notification_sync(

@@ -1,56 +1,38 @@
 from __future__ import annotations
 
-import re
 from typing import Any
 
+from ...safety.core.validator_engine import ValidatorEngine
 from ..models.payloads import ProviderRequest, ProviderResponse
 
 
 class MedicalSafetyValidator:
-    disclaimer = "This guidance is supportive only and does not replace urgent or in-person medical care."
-    risky_patterns = (
-        r"\bdefinitely\b",
-        r"\bguaranteed\b",
-        r"\bcure\b",
-        r"\bno need to see a doctor\b",
-    )
+    def __init__(self) -> None:
+        self.engine = ValidatorEngine()
 
     def validate(self, response: ProviderResponse, request: ProviderRequest) -> ProviderResponse:
-        content = dict(response.content)
-        warnings = list(response.warnings)
-
-        for field in ("summary", "message", "clinical_summary", "clinical_interpretation", "understanding"):
-            value = str(content.get(field) or "").strip()
-            if not value:
-                continue
-            sanitized = value
-            for pattern in self.risky_patterns:
-                if re.search(pattern, sanitized, flags=re.IGNORECASE):
-                    warnings.append(f"unsafe_phrase_removed:{field}")
-                    sanitized = re.sub(pattern, "may", sanitized, flags=re.IGNORECASE)
-            content[field] = sanitized.strip()
-
-        confidence = float(content.get("confidence_score") or response.confidence or 0.0)
-        if confidence > 0.95:
-            warnings.append("confidence_capped")
-            confidence = 0.95
-        content["confidence_score"] = round(max(0.0, min(1.0, confidence)), 4)
-
-        disclaimers = []
-        for value in (content.get("disclaimer"), content.get("medical_disclaimer")):
-            text = str(value or "").strip()
-            if text:
-                disclaimers.append(text)
-        if self.disclaimer not in disclaimers:
-            disclaimers.append(self.disclaimer)
-        content["disclaimer"] = disclaimers[0]
-        content["medical_disclaimer"] = disclaimers[0]
-        content.setdefault("safe", True)
+        validation = self.engine.validate(
+            payload=response.content,
+            workflow=request.workflow,
+            channel="provider_runtime",
+            provider=response.provider,
+            query=str(request.context.get("query") or request.metadata.get("query") or ""),
+            conversation_history=request.conversation_history,
+            degraded_mode=bool(response.degraded),
+            fallback_used=bool(response.fallback_used),
+        )
+        content = validation.as_dict()
         content.setdefault("workflow", request.workflow)
         content.setdefault("task", request.task)
-
+        capped_confidence = min(
+            float(content.get("confidence_score") or response.confidence or 0.0),
+            float(0.58 if validation.metadata.provider_risk == "maximum" else 0.82 if validation.metadata.provider_risk == "strict" else 0.9),
+        )
+        content["confidence_score"] = round(max(0.0, min(1.0, capped_confidence)), 4)
         response.content = content
+        response.text = validation.final_text or response.text
         response.confidence = content["confidence_score"]
-        response.warnings = warnings
-        response.safe = True
+        response.safe = validation.safe
+        response.warnings = list(dict.fromkeys([*response.warnings, *validation.metadata.validation_flags, *validation.metadata.warnings]))
+        response.metadata["safety"] = validation.metadata.as_dict()
         return response

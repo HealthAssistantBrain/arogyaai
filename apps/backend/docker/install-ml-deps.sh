@@ -127,3 +127,9 @@ echo "── Installed packages summary ──"
 TOTAL_PKGS=$(pip list --format=freeze 2>/dev/null | wc -l | tr -d ' ')
 echo "  Total packages installed: ${TOTAL_PKGS}"
 echo ""
+
+echo "── Validating Python package dependency graph ──"
+pip check
+
+echo "── Validating locked Supabase SDK bundle ──"
+python /tmp/validate-supabase-sdk.py

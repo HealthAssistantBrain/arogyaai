@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from models import GeneratedReport, Report, RiskScore, User
 from pipelines.storage_pipeline.service import StoragePipelineService
 from services.clinical_history_service import ClinicalHistoryService
-from services.recommendation_engine import generate_recommendation_plans
+from services.recommendation_engine import generate_fast_recommendation_plans
 from services.timeline_service import build_timeline_events
 
 logger = logging.getLogger(__name__)
@@ -385,7 +385,7 @@ class ContextManager:
             ),
         )
         health_insights = StoragePipelineService.fetch_health_insights(db, user)
-        recommendation_plans = generate_recommendation_plans(user.id, db=db)
+        recommendation_plans = generate_fast_recommendation_plans(user.id, db=db)
         timeline_events = build_timeline_events(
             db,
             user.id,
@@ -1450,6 +1450,14 @@ class ContextManager:
         structured: dict[str, list[dict[str, Any]]],
     ) -> dict[str, Any]:
         risk = _json_dict(analytics_summary.get("risk"))
+        forecasting = _json_dict(analytics_summary.get("forecasting"))
+        prevention = _json_dict(analytics_summary.get("prevention"))
+        forecast_windows = _json_dict(forecasting.get("forecast"))
+        forecast_overview = {
+            window: _clean_text(_json_dict(payload).get("summary"), limit=140)
+            for window, payload in forecast_windows.items()
+            if isinstance(payload, dict) and _clean_text(_json_dict(payload).get("summary"), limit=140)
+        }
         return {
             "risk": {
                 "risk_level": _clean_text(risk.get("risk_level"), limit=24).upper(),
@@ -1458,6 +1466,17 @@ class ContextManager:
             "drivers": structured["analytics_summaries"][:3],
             "last_updated": analytics_summary.get("last_updated"),
             "availability": _json_dict(analytics_summary.get("availability")),
+            "forecasting_overview": forecast_overview,
+            "prevention_overview": {
+                "headline": _clean_text(_json_dict(prevention.get("guidance")).get("headline"), limit=120),
+                "summary": _clean_text(_json_dict(prevention.get("guidance")).get("summary"), limit=180),
+                "overall_risk": _safe_float(_json_dict(prevention.get("monitoring")).get("overall_risk")),
+                "alerts": [
+                    _clean_text(_json_dict(item).get("title"), limit=120)
+                    for item in _json_list(prevention.get("alerts"))[:3]
+                    if _clean_text(_json_dict(item).get("title"), limit=120)
+                ],
+            },
         }
 
     def _compact_recommendation_plan(self, plan: dict[str, Any] | None) -> dict[str, Any] | None:

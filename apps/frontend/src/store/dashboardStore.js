@@ -18,7 +18,7 @@ const STALE_THRESHOLD_MS = 60_000;
 const VITALS_LIMIT = 100;
 const DEFAULT_VITAL_RANGE = '24h';
 const DASHBOARD_STORAGE_KEY = 'arogyaai-dashboard-cache';
-const DASHBOARD_PERSIST_VERSION = 2;
+const DASHBOARD_PERSIST_VERSION = 3;
 const NO_CACHE_HEADERS = {
     'Cache-Control': 'no-cache, no-store, max-age=0, must-revalidate',
     Pragma: 'no-cache',
@@ -77,6 +77,7 @@ const dashboardSignature = (bundle) => JSON.stringify({
     healthScore: bundle?.healthScore?.data ?? null,
     history: bundle?.history?.data ?? null,
     prediction: bundle?.prediction?.data ?? null,
+    preventive: bundle?.preventive?.data ?? bundle?.prevention ?? null,
     profile: bundle?.profile?.data ?? null,
     alerts: bundle?.alerts?.data ?? null,
     recommendedTests: bundle?.recommendedTests?.data ?? bundle?.recommended_tests ?? null,
@@ -98,6 +99,8 @@ const extractPayloadTimestamp = (payload) => {
         payload?.healthScore?.last_updated,
         payload?.history?.last_updated,
         payload?.prediction?.last_updated,
+        payload?.preventive?.last_updated,
+        payload?.prevention?.generated_at,
         payload?.profile?.last_updated,
         payload?.alerts?.last_updated,
         payload?.recommendedTests?.last_updated,
@@ -138,6 +141,8 @@ const buildDashboardState = (currentState, payload = {}, replace = false) => {
     if (payload.healthScore) nextDashboardData.healthScore = payload.healthScore;
     if (payload.history) nextDashboardData.history = payload.history;
     if (payload.prediction) nextDashboardData.prediction = payload.prediction;
+    if (payload.preventive) nextDashboardData.preventive = payload.preventive;
+    if (payload.prevention !== undefined) nextDashboardData.prevention = safeObject(payload.prevention);
     if (payload.profile) nextDashboardData.profile = payload.profile;
     if (payload.alerts) nextDashboardData.alerts = payload.alerts;
     if (payload.recommendedTests) nextDashboardData.recommendedTests = payload.recommendedTests;
@@ -155,6 +160,7 @@ const buildDashboardState = (currentState, payload = {}, replace = false) => {
     if (payload.healthScore) currentState = { ...currentState, healthScore: payload.healthScore };
     if (payload.history) currentState = { ...currentState, history: payload.history };
     if (payload.prediction) currentState = { ...currentState, prediction: payload.prediction };
+    if (payload.preventive) currentState = { ...currentState, preventive: payload.preventive };
     if (payload.profile) currentState = { ...currentState, profile: payload.profile };
     if (payload.alerts) currentState = { ...currentState, alerts: payload.alerts };
     if (payload.recommendedTests) currentState = { ...currentState, recommendedTests: payload.recommendedTests };
@@ -212,6 +218,12 @@ const buildDashboardState = (currentState, payload = {}, replace = false) => {
                 payload.recommendedTests?.data ??
                 nextDashboardData.recommended_tests
             ).filter(Boolean),
+            prevention: safeObject(
+                payload.prevention ??
+                payload.preventive?.data ??
+                nextDashboardData.prevention ??
+                nextDashboardData.preventive?.data
+            ),
             vitals: safeObject(currentVitals),
         },
     };
@@ -300,6 +312,7 @@ const sanitizePersistedDashboardState = (persistedState = {}) => {
         healthScore: sanitizeDashboardSlice(persistedState.healthScore),
         history: sanitizeDashboardSlice(persistedState.history),
         prediction: sanitizeDashboardSlice(persistedState.prediction),
+        preventive: sanitizeDashboardSlice(persistedState.preventive),
         profile: sanitizeDashboardSlice(persistedState.profile),
         alerts: sanitizeDashboardSlice(persistedState.alerts),
         recommendedTests: sanitizeDashboardSlice(persistedState.recommendedTests),
@@ -322,6 +335,7 @@ const useDashboardStore = create(
             healthScore: emptySlice(),
             history: emptySlice(),
             prediction: emptySlice(),
+            preventive: emptySlice(),
             profile: emptySlice(),
             alerts: emptySlice(),
             recommendedTests: emptySlice(),
@@ -358,6 +372,7 @@ const useDashboardStore = create(
                 healthScore: emptySlice(),
                 history: emptySlice(),
                 prediction: emptySlice(),
+                preventive: emptySlice(),
                 profile: emptySlice(),
                 alerts: emptySlice(),
                 recommendedTests: emptySlice(),
@@ -607,7 +622,7 @@ const useDashboardStore = create(
 
                 if (anyProcessing && !state._pollTimer) {
                     const timer = setInterval(() => {
-                        get().fetchDashboardData({ force: true });
+                        get().fetchDashboardData({ force: false, silent: true });
                     }, POLL_INTERVAL_MS);
                     set({ _pollTimer: timer }, false, 'poll/start');
                 } else if (!anyProcessing && state._pollTimer) {
@@ -628,6 +643,7 @@ const useDashboardStore = create(
                         healthScore: emptySlice(),
                         history: emptySlice(),
                         prediction: emptySlice(),
+                        preventive: emptySlice(),
                         profile: emptySlice(),
                         alerts: emptySlice(),
                         recommendedTests: emptySlice(),
@@ -660,6 +676,7 @@ const useDashboardStore = create(
                 healthScore: state.healthScore,
                 history: state.history,
                 prediction: state.prediction,
+                preventive: state.preventive,
                 profile: state.profile,
                 alerts: state.alerts,
                 recommendedTests: state.recommendedTests,

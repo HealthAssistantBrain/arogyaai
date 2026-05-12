@@ -8,14 +8,16 @@ const DASHBOARD_WS_ROOT = getApiRootUrl(
   .replace(/^http:/i, 'ws:');
 
 const PING_INTERVAL_MS = 25_000;
-const RECONNECT_BASE_MS = 1_000;
-const RECONNECT_MAX_MS = 30_000;
+const SOCKET_STALE_MS = 70_000;
+const RECONNECT_SCHEDULE_MS = [1_000, 2_000, 5_000, 10_000, 30_000];
 
 let activeSession = null;
 let activeSocket = null;
 let reconnectTimer = null;
 let pingTimer = null;
+let staleTimer = null;
 let reconnectAttempt = 0;
+let lastSocketActivityAt = 0;
 let visibilityListenerBound = false;
 const subscribers = new Set();
 
@@ -46,8 +48,20 @@ const clearPingTimer = () => {
   }
 };
 
+const clearStaleTimer = () => {
+  if (staleTimer) {
+    window.clearInterval(staleTimer);
+    staleTimer = null;
+  }
+};
+
+const markSocketActivity = () => {
+  lastSocketActivityAt = Date.now();
+};
+
 const closeActiveSocket = (reason = 'reset') => {
   clearPingTimer();
+  clearStaleTimer();
   if (!activeSocket) return;
 
   const socket = activeSocket;
@@ -67,10 +81,23 @@ const buildSocketUrl = ({ userId, token }) =>
 
 const startPingLoop = () => {
   clearPingTimer();
+  clearStaleTimer();
+  markSocketActivity();
   pingTimer = window.setInterval(() => {
     if (activeSocket?.readyState === WebSocket.OPEN) {
       activeSocket.send('ping');
     }
+  }, PING_INTERVAL_MS);
+  staleTimer = window.setInterval(() => {
+    if (!activeSocket || activeSocket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    if ((Date.now() - lastSocketActivityAt) <= SOCKET_STALE_MS) {
+      return;
+    }
+    emit({ type: 'stale', age: Date.now() - lastSocketActivityAt });
+    closeActiveSocket('stale_socket');
+    scheduleReconnect('stale_socket');
   }, PING_INTERVAL_MS);
 };
 
@@ -79,7 +106,7 @@ const scheduleReconnect = (reason = 'retry') => {
     return;
   }
 
-  const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * (2 ** reconnectAttempt));
+  const delay = RECONNECT_SCHEDULE_MS[Math.min(reconnectAttempt, RECONNECT_SCHEDULE_MS.length - 1)];
   reconnectAttempt += 1;
   reconnectTimer = window.setTimeout(() => {
     reconnectTimer = null;
@@ -113,13 +140,20 @@ export const connectDashboardSocket = () => {
 
   socket.onopen = () => {
     reconnectAttempt = 0;
+    markSocketActivity();
     emit({ type: 'open' });
     startPingLoop();
   };
 
   socket.onmessage = (event) => {
     try {
-      emit({ type: 'message', payload: JSON.parse(event.data) });
+      const payload = JSON.parse(event.data);
+      markSocketActivity();
+      if (payload?.type === 'dashboard.pong') {
+        emit({ type: 'heartbeat' });
+        return;
+      }
+      emit({ type: 'message', payload });
     } catch (error) {
       console.warn('[dashboardSocket] invalid payload ignored', error);
     }
@@ -131,6 +165,7 @@ export const connectDashboardSocket = () => {
 
   socket.onclose = (event) => {
     clearPingTimer();
+    clearStaleTimer();
     if (activeSocket === socket) {
       activeSocket = null;
     }

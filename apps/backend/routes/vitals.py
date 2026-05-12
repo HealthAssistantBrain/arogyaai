@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from core.serialization.safe_response import SafeJSONResponse
 from database.session import get_db
 from models import User
 from routes.users import get_current_user_from_header
@@ -46,7 +46,7 @@ def get_vitals(
     db: Session = Depends(get_db),
 ):
     payload = UserDataService.list_vitals(db, current_user, vital_type=type, range_value=range)
-    return JSONResponse(
+    return SafeJSONResponse(
         status_code=200,
         content=_serialize_vitals_response(payload, type, range),
         headers=NO_CACHE_HEADERS,
@@ -59,7 +59,7 @@ def get_heart_rate(
     db: Session = Depends(get_db),
 ):
     payload = UserDataService.list_vitals(db, current_user, vital_type="heart_rate", range_value="24h")
-    return JSONResponse(
+    return SafeJSONResponse(
         status_code=200,
         content={
             "success": True,

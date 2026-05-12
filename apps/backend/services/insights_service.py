@@ -5,10 +5,13 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from ai.prevention import PreventiveEngine
 from models import User
 from pipelines.storage_pipeline.service import StoragePipelineService
 from services.orchestrator import OrchestratorRequest, get_orchestrator
 from services.insight_formatter import sanitize_ai_insight_payload
+
+_preventive_engine = PreventiveEngine()
 
 
 class InsightsService:
@@ -122,15 +125,17 @@ class InsightsService:
                     "drivers": [],
                     "analysis": "",
                     "explanation": None,
-                    "recommendations": ["No data available yet"],
-                    "confidence": 0,
-                    "data_points": 0,
-                    "feature_snapshot": {},
-                    "clinical_history": None,
-                    "clinical_features": {},
-                },
-                "last_updated": None,
-            }
+                "recommendations": ["No data available yet"],
+                "confidence": 0,
+                "data_points": 0,
+                "feature_snapshot": {},
+                "clinical_history": None,
+                "clinical_features": {},
+                "forecasting": None,
+                "prevention": None,
+            },
+            "last_updated": None,
+        }
 
         return {
             "success": True,
@@ -148,6 +153,14 @@ class InsightsService:
                 "feature_snapshot": stored.get("feature_snapshot", {}) if isinstance(stored.get("feature_snapshot"), dict) else {},
                 "clinical_history": stored.get("clinical_history") if isinstance(stored.get("clinical_history"), dict) else None,
                 "clinical_features": stored.get("clinical_features", {}) if isinstance(stored.get("clinical_features"), dict) else {},
+                "forecasting": stored.get("forecasting") if isinstance(stored.get("forecasting"), dict) else None,
+                "prevention": stored.get("prevention") if isinstance(stored.get("prevention"), dict) else _preventive_engine.generate(db, user, persist=True),
+                "reasoning": stored.get("reasoning") if isinstance(stored.get("reasoning"), dict) else None,
+                "cognitive_summary": stored.get("cognitive_summary") if isinstance(stored.get("cognitive_summary"), dict) else None,
+                "clinical_narrative": stored.get("clinical_narrative"),
+                "causal_explanations": stored.get("causal_explanations", []) if isinstance(stored.get("causal_explanations"), list) else [],
+                "confidence_indicators": stored.get("confidence_indicators", []) if isinstance(stored.get("confidence_indicators"), list) else [],
+                "future_trajectory": stored.get("future_trajectory") if isinstance(stored.get("future_trajectory"), dict) else None,
             },
             "last_updated": stored.get("last_updated"),
         }
@@ -193,6 +206,8 @@ class InsightsService:
                         "has_baseline": False,
                     },
                     "clinical_history": None,
+                    "forecasting": None,
+                    "prevention": None,
                 },
                 "last_updated": None,
             }
@@ -210,6 +225,14 @@ class InsightsService:
                 "availability": data.get("availability", {}) if isinstance(data.get("availability"), dict) else {},
                 "clinical_history": data.get("clinical_history") if isinstance(data.get("clinical_history"), dict) else None,
                 "recommendation_plan": payload.get("recommendation_plan"),
+                "forecasting": data.get("forecasting") if isinstance(data.get("forecasting"), dict) else None,
+                "prevention": data.get("prevention") if isinstance(data.get("prevention"), dict) else _preventive_engine.generate(db, user, persist=True),
+                "reasoning": data.get("reasoning") if isinstance(data.get("reasoning"), dict) else None,
+                "cognitive_summary": data.get("cognitive_summary") if isinstance(data.get("cognitive_summary"), dict) else None,
+                "clinical_narrative": data.get("clinical_narrative"),
+                "causal_explanations": data.get("causal_explanations", []) if isinstance(data.get("causal_explanations"), list) else [],
+                "confidence_indicators": data.get("confidence_indicators", []) if isinstance(data.get("confidence_indicators"), list) else [],
+                "future_trajectory": data.get("future_trajectory") if isinstance(data.get("future_trajectory"), dict) else None,
             },
             "last_updated": data.get("last_updated"),
         }

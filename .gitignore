@@ -94,3 +94,4 @@ test_all_routes.mjs
 test_auth_nav.mjs
 test_nav.mjs
 TASK.md
+docs/

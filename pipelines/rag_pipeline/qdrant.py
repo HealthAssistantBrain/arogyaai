@@ -650,6 +650,9 @@ def query_qdrant_points(
     collection_name: str | None = None,
     limit: int = 5,
     with_payload: bool = True,
+    with_vectors: bool = False,
+    query_filter: Any = None,
+    score_threshold: float | None = None,
     allow_fallback: bool = True,
 ) -> QdrantExecutionResult:
     resolved_collection_name = collection_name or settings.collection_name
@@ -659,16 +662,22 @@ def query_qdrant_points(
             result = client.search(
                 collection_name=resolved_collection_name,
                 query_vector=query_vector,
+                query_filter=query_filter,
                 limit=max(1, int(limit)),
                 with_payload=with_payload,
+                with_vectors=with_vectors,
+                score_threshold=score_threshold,
             )
             return list(result or [])
 
         response = client.query_points(
             collection_name=resolved_collection_name,
             query=query_vector,
+            query_filter=query_filter,
             limit=max(1, int(limit)),
             with_payload=with_payload,
+            with_vectors=with_vectors,
+            score_threshold=score_threshold,
         )
         return list(getattr(response, "points", response) or [])
 

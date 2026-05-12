@@ -2,6 +2,11 @@ import { create } from 'zustand';
 import { persist, devtools } from 'zustand/middleware';
 import api from '../lib/axios';
 import { normalizeClinicalCards } from '../lib/clinicalCards';
+import {
+  extractRecommendationExplanationData,
+  logRecommendationDebug,
+  summarizeRecommendationExplanation,
+} from '../lib/recommendationContracts';
 import { clearPredictionExplanationMemo } from '../services/predictionExplanationService';
 import { fetchProgressivePredictionExplanation } from '../services/progressiveAiService';
 import useDashboardStore from './dashboardStore';
@@ -14,6 +19,7 @@ const DEFAULT_METRIC_RANGE = '24h';
 let metricsRequestSeq = 0;
 const metricsInFlightByRange = new Map();
 let explanationRequestSeq = 0;
+const explanationInFlightByKey = new Map();
 
 const getResolvedTimezone = () => {
   try {
@@ -27,6 +33,13 @@ const toFiniteNumber = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 };
+
+const isAbortError = (error) =>
+  error?.name === 'AbortError' ||
+  error?.name === 'CanceledError' ||
+  error?.code === 'ERR_CANCELED';
+
+const canForceRefresh = (forceSource = 'auto') => ['manual', 'admin', 'debug'].includes(String(forceSource || 'auto').toLowerCase());
 
 const normalizePriority = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
@@ -198,12 +211,16 @@ const normalizeRecommendationPlan = (value) => {
   };
 };
 
-const normalizeExplanationPayload = (payload) => {
+export const normalizeExplanationPayload = (payload) => {
   if (!payload) {
     return null;
   }
 
-  const data = safeObject(payload.data ?? payload);
+  const data = safeObject(extractRecommendationExplanationData(payload));
+  if (!Object.keys(data).length) {
+    return null;
+  }
+
   const recommendations = safeArray(data.recommendations).map(normalizeExplanationRecommendation);
   const recommendationPlan = normalizeRecommendationPlan(data.recommendation_plan ?? data.recommendationPlan);
   const recommendationPlans = safeArray(data.recommendation_plans ?? data.recommendationPlans)
@@ -293,7 +310,7 @@ export const useHealthStore = create(
         setGoogleFitData: (data) => set({ googleFitData: data, lastFetch: Date.now() }),
         markAllRead: () => set({ unreadCount: 0 }),
 
-        fetchExplanation: async ({ force = false, silent = false, predictionId = null } = {}) => {
+        fetchExplanation: async ({ force = false, silent = false, predictionId = null, signal = null, forceSource = 'auto' } = {}) => {
           const state = get();
           const dashboardStore = useDashboardStore.getState();
           const resolvedPredictionId =
@@ -301,105 +318,172 @@ export const useHealthStore = create(
             dashboardStore.prediction?.data?.prediction_id ??
             state.explanationPredictionId ??
             null;
+          const resolvedForce = force && canForceRefresh(forceSource);
+          const requestKey = `${resolvedPredictionId ?? state.explanationPredictionId ?? 'latest'}:${resolvedForce ? 'force' : 'cached'}`;
+          const hasMatchingExplanation =
+            Boolean(state.explanation) &&
+            (!resolvedPredictionId || state.explanationPredictionId === resolvedPredictionId);
+          const explanationIsFresh =
+            hasMatchingExplanation &&
+            state.explanationLastFetched &&
+            (Date.now() - state.explanationLastFetched) < EXPLANATION_STALE_MS;
+
+          if (force && !resolvedForce) {
+            console.info('[FORCE_REFRESH_BLOCKED] prediction explanation refresh ignored because it was not triggered manually.');
+          }
 
           if (
-            !force &&
-            state.explanation &&
-            state.explanationLastFetched &&
-            (Date.now() - state.explanationLastFetched) < EXPLANATION_STALE_MS &&
-            (!resolvedPredictionId || state.explanationPredictionId === resolvedPredictionId)
+            !resolvedForce &&
+            explanationIsFresh
           ) {
             return state.explanation;
           }
 
-          if (!silent) {
-            set({
-              loading: !state.explanation,
-              explanationHydrating: true,
-              error: null,
-            }, false, 'predictionExplanation/fetchStart');
-          }
+          const runFetch = async () => {
+            const activeRequest = explanationInFlightByKey.get(requestKey);
+            if (activeRequest) {
+              return activeRequest;
+            }
 
-          const requestId = ++explanationRequestSeq;
-          return (async () => {
-            try {
-              const updateFromPayload = (responsePayload) => {
-                const normalized = normalizeExplanationPayload(responsePayload);
-                const processing = responsePayload?.status === 'processing';
+            if (signal?.aborted) {
+              console.info('[INFERENCE_CANCELLED] prediction explanation request was skipped because the view unmounted.');
+              return get().explanation;
+            }
+
+            if (!silent) {
+              set({
+                loading: !state.explanation,
+                explanationHydrating: true,
+                error: null,
+              }, false, 'predictionExplanation/fetchStart');
+            }
+
+            const requestId = ++explanationRequestSeq;
+            const startedAt = Date.now();
+            logRecommendationDebug('RECOMMENDATIONS_FETCH_STARTED', {
+              predictionId: resolvedPredictionId,
+              requestKey,
+              force: resolvedForce,
+              silent,
+              hasCachedExplanation: Boolean(state.explanation),
+            });
+            const requestPromise = (async () => {
+              try {
+                const updateFromPayload = (responsePayload) => {
+                  const normalized = normalizeExplanationPayload(responsePayload);
+                  const processing = responsePayload?.status === 'processing';
+
+                  if (requestId !== explanationRequestSeq) {
+                    return normalized;
+                  }
+
+                  set((current) => ({
+                    explanation: normalized ?? current.explanation,
+                    recommendations: normalized?.recommendations ?? current.recommendations ?? [],
+                    recommendationPlan: normalized?.recommendationPlan ?? current.recommendationPlan ?? null,
+                    recommendationPlans: normalized?.recommendationPlans?.length
+                      ? normalized.recommendationPlans
+                      : (current.recommendationPlans ?? []),
+                    loading: processing ? !Boolean(normalized ?? current.explanation) : false,
+                    explanationHydrating: processing,
+                    error: processing ? null : current.error,
+                    explanationLastFetched: processing ? current.explanationLastFetched : Date.now(),
+                    explanationPredictionId: normalized?.predictionId ?? current.explanationPredictionId ?? resolvedPredictionId,
+                    explanationMeta: responsePayload?.meta ?? null,
+                  }), false, processing ? 'predictionExplanation/fetchProgress' : 'predictionExplanation/fetchSuccess');
+
+                  logRecommendationDebug(processing ? 'RECOMMENDATIONS_QUERY_STATE' : 'RECOMMENDATIONS_FETCH_SUCCESS', {
+                    durationMs: Date.now() - startedAt,
+                    predictionId: normalized?.predictionId ?? resolvedPredictionId,
+                    processing,
+                    ...summarizeRecommendationExplanation(responsePayload),
+                  });
+
+                  return normalized;
+                };
+
+                const responsePayload = await fetchProgressivePredictionExplanation({
+                  predictionId: resolvedPredictionId,
+                  force: resolvedForce,
+                  background: true,
+                  signal,
+                  onProgress: updateFromPayload,
+                });
+                const normalized = updateFromPayload(responsePayload);
+
+                if (signal?.aborted) {
+                  console.info('[INFERENCE_CANCELLED] prediction explanation update was discarded after unmount.');
+                  return get().explanation ?? normalized;
+                }
 
                 if (requestId !== explanationRequestSeq) {
                   return normalized;
                 }
-
-                set((current) => ({
-                  explanation: normalized ?? current.explanation,
-                  recommendations: normalized?.recommendations ?? current.recommendations ?? [],
-                  recommendationPlan: normalized?.recommendationPlan ?? current.recommendationPlan ?? null,
-                  recommendationPlans: normalized?.recommendationPlans?.length
-                    ? normalized.recommendationPlans
-                    : (current.recommendationPlans ?? []),
-                  loading: processing ? !Boolean(normalized ?? current.explanation) : false,
-                  explanationHydrating: processing,
-                  error: processing ? null : current.error,
-                  explanationLastFetched: processing ? current.explanationLastFetched : Date.now(),
-                  explanationPredictionId: normalized?.predictionId ?? current.explanationPredictionId ?? resolvedPredictionId,
-                  explanationMeta: responsePayload?.meta ?? null,
-                }), false, processing ? 'predictionExplanation/fetchProgress' : 'predictionExplanation/fetchSuccess');
-
-                return normalized;
-              };
-
-              const responsePayload = await fetchProgressivePredictionExplanation({
-                predictionId: resolvedPredictionId,
-                force,
-                onProgress: updateFromPayload,
-              });
-              const normalized = updateFromPayload(responsePayload);
-
-              if (requestId !== explanationRequestSeq) {
-                return normalized;
-              }
-              set({
-                loading: false,
-                explanationHydrating: false,
-                error: null,
-                explanationLastFetched: Date.now(),
-                explanationMeta: responsePayload?.meta ?? null,
-              }, false, 'predictionExplanation/fetchSettled');
-
-              return normalized;
-            } catch (error) {
-              const fallbackExplanation = normalizeExplanationPayload(dashboardStore.prediction?.data?.explanation);
-              const message =
-                error?.response?.data?.detail ||
-                error?.response?.data?.error ||
-                error?.message ||
-                'Unable to load personalized recommendations.';
-
-              if (requestId === explanationRequestSeq) {
-                set((current) => ({
-                  explanation: current.explanation ?? fallbackExplanation,
-                  recommendations: current.recommendations?.length
-                    ? current.recommendations
-                    : (fallbackExplanation?.recommendations ?? []),
-                  recommendationPlan: current.recommendationPlan ?? fallbackExplanation?.recommendationPlan ?? null,
-                  recommendationPlans: current.recommendationPlans?.length
-                    ? current.recommendationPlans
-                    : (fallbackExplanation?.recommendationPlans ?? []),
+                set({
                   loading: false,
                   explanationHydrating: false,
-                  error: message,
-                  explanationPredictionId:
-                    current.explanationPredictionId ??
-                    fallbackExplanation?.predictionId ??
-                    resolvedPredictionId,
-                  explanationMeta: null,
-                }), false, 'predictionExplanation/fetchError');
-              }
+                  error: null,
+                  explanationLastFetched: Date.now(),
+                  explanationMeta: responsePayload?.meta ?? null,
+                }, false, 'predictionExplanation/fetchSettled');
 
-              return get().explanation ?? fallbackExplanation;
-            }
-          })();
+                return normalized;
+              } catch (error) {
+                const fallbackExplanation = normalizeExplanationPayload(dashboardStore.prediction?.data?.explanation);
+                if (isAbortError(error)) {
+                  console.info('[INFERENCE_CANCELLED] prediction explanation polling was cancelled before completion.');
+                  return get().explanation ?? fallbackExplanation;
+                }
+                const message =
+                  error?.response?.data?.detail ||
+                  error?.response?.data?.error ||
+                  error?.message ||
+                  'Unable to load personalized recommendations.';
+
+                if (requestId === explanationRequestSeq) {
+                  set((current) => ({
+                    explanation: current.explanation ?? fallbackExplanation,
+                    recommendations: current.recommendations?.length
+                      ? current.recommendations
+                      : (fallbackExplanation?.recommendations ?? []),
+                    recommendationPlan: current.recommendationPlan ?? fallbackExplanation?.recommendationPlan ?? null,
+                    recommendationPlans: current.recommendationPlans?.length
+                      ? current.recommendationPlans
+                      : (fallbackExplanation?.recommendationPlans ?? []),
+                    loading: false,
+                    explanationHydrating: false,
+                    error: message,
+                    explanationPredictionId:
+                      current.explanationPredictionId ??
+                      fallbackExplanation?.predictionId ??
+                      resolvedPredictionId,
+                    explanationMeta: null,
+                  }), false, 'predictionExplanation/fetchError');
+                }
+
+                logRecommendationDebug('RECOMMENDATIONS_FETCH_ERROR', {
+                  durationMs: Date.now() - startedAt,
+                  predictionId: resolvedPredictionId,
+                  message,
+                  fallbackPlanCount: fallbackExplanation?.recommendationPlans?.length ?? 0,
+                });
+
+                return get().explanation ?? fallbackExplanation;
+              } finally {
+                explanationInFlightByKey.delete(requestKey);
+              }
+            })();
+
+            explanationInFlightByKey.set(requestKey, requestPromise);
+            return requestPromise;
+          };
+
+          if (!resolvedForce && hasMatchingExplanation) {
+            void runFetch();
+            return state.explanation;
+          }
+
+          return runFetch();
         },
 
         setMetricsRange: (range = DEFAULT_METRIC_RANGE) => {

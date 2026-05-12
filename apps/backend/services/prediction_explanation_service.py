@@ -10,6 +10,9 @@ from typing import Any
 
 from sqlalchemy.orm import Session, object_session
 
+from ai.cache import get_workflow_cache
+from ai.prevention import PreventiveEngine
+from ai.reasoning import get_reasoning_orchestrator
 from database.session import (
     analytics_dual_write_enabled,
     analytics_reads_from_primary,
@@ -21,9 +24,16 @@ from pipelines.storage_pipeline.service import StoragePipelineService
 from services.clinical_insight_service import ClinicalInsightService
 from services.clinical_history_service import ClinicalHistoryService
 from services.insight_formatter import sanitize_ai_insight_payload
-from services.recommendation_engine import generate_recommendation_plans
+from services.recommendation_engine import generate_fast_recommendation_plans
 
 logger = logging.getLogger("uvicorn.error")
+workflow_cache = get_workflow_cache()
+_preventive_engine = PreventiveEngine()
+WORKFLOW_CACHE_TTL_SECONDS = 600.0
+
+
+class _PipelineExplanationError(RuntimeError):
+    pass
 
 
 class RagExplanationPipeline:
@@ -638,7 +648,9 @@ class PredictionExplanationService:
             return payload
         safe_payload = dict(payload)
         try:
-            return PredictionExplanationService._attach_recommendation_plans(db, user, safe_payload) or safe_payload
+            safe_payload = PredictionExplanationService._attach_recommendation_plans(db, user, safe_payload) or safe_payload
+            safe_payload = PredictionExplanationService._attach_prevention_intelligence(db, user, safe_payload) or safe_payload
+            return safe_payload
         except Exception as exc:
             logger.warning(
                 "Prediction explanation recommendation plan attach failed | user_id=%s error=%s",
@@ -944,10 +956,26 @@ class PredictionExplanationService:
     def _attach_recommendation_plans(db: Session, user: User, payload: dict[str, Any] | None) -> dict[str, Any] | None:
         if not isinstance(payload, dict):
             return payload
-        plans = generate_recommendation_plans(user.id, db=db)
+        if isinstance(payload.get("recommendation_plans"), list) and payload.get("recommendation_plans"):
+            if payload.get("recommendation_plan") is None:
+                payload["recommendation_plan"] = payload["recommendation_plans"][0]
+            return payload
+        if isinstance(payload.get("recommendation_plan"), dict):
+            payload["recommendation_plans"] = [payload["recommendation_plan"]]
+            return payload
+        plans = generate_fast_recommendation_plans(user.id, db=db)
         if plans:
             payload["recommendation_plan"] = plans[0]
             payload["recommendation_plans"] = plans
+        return payload
+
+    @staticmethod
+    def _attach_prevention_intelligence(db: Session, user: User, payload: dict[str, Any] | None) -> dict[str, Any] | None:
+        if not isinstance(payload, dict):
+            return payload
+        if isinstance(payload.get("prevention"), dict):
+            return payload
+        payload["prevention"] = _preventive_engine.generate(db, user, persist=True)
         return payload
 
     @staticmethod
@@ -1024,6 +1052,7 @@ class PredictionExplanationService:
     ) -> dict[str, Any]:
         started_at = time.perf_counter()
         session_id = db.info.get("session_id")
+        use_workflow_cache = isinstance(db, Session)
         risk_score = PredictionExplanationService._risk_record(db, user, prediction_id=prediction_id)
         if risk_score is None:
             return {
@@ -1073,9 +1102,27 @@ class PredictionExplanationService:
                 shap_values,
                 clinical_history=latest_clinical_history,
             )
+            workflow_cache_key = f"prediction_explanation:{getattr(user, 'id', 'unknown')}:{resolved_prediction_id}:{cache_key}"
+            if use_workflow_cache and not force_refresh:
+                cached_payload = workflow_cache.get(workflow_cache_key)
+                if isinstance(cached_payload, dict):
+                    logger.info(
+                        "[WORKFLOW_CACHE_HIT] workflow=ai_insights prediction_id=%s session_id=%s",
+                        resolved_prediction_id,
+                        session_id,
+                    )
+                    return {
+                        "success": True,
+                        "status": "ready",
+                        "source": "workflow_cache",
+                        "error": None,
+                        "data": PredictionExplanationService._attach_recommendation_plans_safe(db, user, cached_payload),
+                    }
             if not force_refresh:
                 cached = PredictionExplanationService._cached_explanation(risk_score_snapshot, cache_key)
                 if cached is not None:
+                    if use_workflow_cache:
+                        workflow_cache.set(workflow_cache_key, cached, ttl_seconds=WORKFLOW_CACHE_TTL_SECONDS)
                     logger.info(
                         "Prediction explanation cache hit | prediction_id=%s session_id=%s duration_ms=%s",
                         resolved_prediction_id,
@@ -1108,25 +1155,156 @@ class PredictionExplanationService:
                     ),
                 }
             logger.info(
-                "Prediction explanation cache miss | prediction_id=%s session_id=%s force_refresh=%s",
+                "[WORKFLOW_CACHE_MISS] workflow=ai_insights prediction_id=%s session_id=%s force_refresh=%s",
                 resolved_prediction_id,
                 session_id,
                 force_refresh,
             )
 
-            pipeline = RagExplanationPipeline()
-            try:
-                generated = await pipeline.explain(
-                    risk_score=resolved_risk_score,
-                    risk_level=resolved_risk_level,
+            async def _generate_explanation() -> dict[str, Any]:
+                pipeline = RagExplanationPipeline()
+                try:
+                    generated = await pipeline.explain(
+                        risk_score=resolved_risk_score,
+                        risk_level=resolved_risk_level,
+                        shap_values=shap_values,
+                        db=db,
+                        user=user,
+                        prediction_id=resolved_prediction_id,
+                        feature_payload=feature_payload,
+                        clinical_history=latest_clinical_history,
+                    )
+                except Exception as exc:
+                    raise _PipelineExplanationError(str(exc)) from exc
+
+                explanation_source = generated.pop("_orchestrator_source", "ai_orchestrator") if isinstance(generated, dict) else "ai_orchestrator"
+                explanation = {
+                    "prediction_id": resolved_prediction_id,
+                    "explanation_id": resolved_prediction_id,
+                    "risk_score": risk_score_snapshot.get("overall_score_raw"),
+                    "risk_percent": round(resolved_risk_score * 100, 2),
+                    "confidence": risk_score_snapshot.get("overall_score_raw"),
+                    "risk_level": resolved_risk_level,
+                    "summary": generated.get("summary") or "",
+                    "clinical_insight": generated.get("clinical_insight") or generated.get("summary") or "",
+                    "recommendation": generated.get("recommendation") or "",
+                    "factors": PredictionExplanationService._normalize_factor_payload(
+                        generated.get("factors") or [],
+                        shap_values,
+                    ),
+                    "recommendations": PredictionExplanationService._normalize_recommendations(
+                        generated.get("recommendations") or [],
+                        shap_values,
+                        risk_level=resolved_risk_level,
+                    ),
+                    "sources": generated.get("sources") or [],
+                    "retrieval": generated.get("retrieval") or {},
+                    "top_features": generated.get("top_features") or [],
+                    "provider_source": explanation_source,
+                }
+                condition_risk_map = PredictionExplanationService._condition_risk_map(risk_score_snapshot, feature_payload)
+                clinical_payload = ClinicalInsightService.enrich_payload(
+                    feature_payload=feature_payload,
+                    risk_map=condition_risk_map,
                     shap_values=shap_values,
-                    db=db,
-                    user=user,
-                    prediction_id=resolved_prediction_id,
+                    focus_condition="cardiovascular",
+                )
+                history_analysis = latest_clinical_history.get("analysis", {}) if isinstance(latest_clinical_history, dict) else {}
+                history_recommendations = [
+                    {
+                        "title": text,
+                        "description": text,
+                        "detail": text,
+                        "priority": history_analysis.get("priority", "medium"),
+                        "category": "consultation",
+                        "feature": "clinical_history",
+                        "impact": 0.0,
+                        "sources": [],
+                    }
+                    for text in (history_analysis.get("recommendations") or [])
+                    if PredictionExplanationService._clean_text(text)
+                ]
+                explanation["summary"] = explanation["summary"] or clinical_payload["summary"]
+                explanation["risk_scores"] = condition_risk_map
+                explanation["outcome"] = clinical_payload["outcome"]
+                explanation["possible_conditions"] = PredictionExplanationService._merge_text_values(
+                    clinical_payload["possible_conditions"],
+                    history_analysis.get("possible_conditions") or [],
+                )
+                explanation["symptoms"] = PredictionExplanationService._merge_text_values(
+                    clinical_payload["symptoms"],
+                    history_analysis.get("symptoms") or [],
+                )
+                explanation["key_drivers"] = clinical_payload["key_drivers"]
+                explanation["recommendations"] = PredictionExplanationService._merge_recommendations(
+                    explanation["recommendations"],
+                    history_recommendations,
+                    clinical_payload["recommendations"],
+                )
+                explanation["clinical_history"] = latest_clinical_history
+                explanation["clinical_features"] = history_analysis.get("ml_features", {}) if isinstance(history_analysis, dict) else {}
+                explanation["clinical_context"] = history_analysis.get("rag_context") if isinstance(history_analysis, dict) else None
+                explanation = sanitize_ai_insight_payload(explanation) or explanation
+                explanation = PredictionExplanationService._attach_recommendation_plans_safe(db, user, explanation) or explanation
+                reasoning_bundle = get_reasoning_orchestrator().generate(
+                    workflow="ai_insights",
+                    user_id=str(getattr(user, "id", "") or ""),
+                    source="prediction_explanation",
+                    risk_payload={
+                        "risk_scores": condition_risk_map,
+                        "risk_level": resolved_risk_level,
+                        "overall_risk_score": resolved_risk_score,
+                    },
                     feature_payload=feature_payload,
                     clinical_history=latest_clinical_history,
+                    forecasting=(
+                        risk_score_snapshot.get("risk_payload", {}).get("forecasting")
+                        if isinstance(risk_score_snapshot.get("risk_payload"), dict)
+                        and isinstance(risk_score_snapshot.get("risk_payload", {}).get("forecasting"), dict)
+                        else {}
+                    ),
+                    drivers=explanation.get("key_drivers") if isinstance(explanation.get("key_drivers"), list) else explanation.get("factors") or [],
+                    shap_values=shap_values,
+                    recommendations=explanation.get("recommendations") if isinstance(explanation.get("recommendations"), list) else [],
+                    user_context={
+                        "longitudinal_summary": latest_clinical_history.get("analysis", {}) if isinstance(latest_clinical_history, dict) else {},
+                        "continuity_summary": {},
+                    },
+                    conversation_history=[],
+                    labs=[],
                 )
-            except Exception as exc:
+                explanation["reasoning"] = reasoning_bundle
+                explanation["cognitive_summary"] = reasoning_bundle.get("cognitive_summary")
+                explanation["clinical_narrative"] = reasoning_bundle.get("clinical_narrative")
+                explanation["causal_explanations"] = reasoning_bundle.get("causal_explanations") or []
+                explanation["confidence_indicators"] = reasoning_bundle.get("confidence_indicators") or []
+                explanation["future_trajectory"] = reasoning_bundle.get("trajectory_explanation") or {}
+                explanation["follow_up_questions"] = reasoning_bundle.get("follow_up_questions") or []
+                explanation["reasoned_recommendations"] = reasoning_bundle.get("recommendations") or []
+                explanation["memory_persistence"] = reasoning_bundle.get("memory_persistence") or {}
+                PredictionExplanationService._store_cache(db, risk_score_snapshot, cache_key, explanation)
+                logger.info(
+                    "Prediction explanation ready | prediction_id=%s session_id=%s source=%s duration_ms=%s",
+                    resolved_prediction_id,
+                    session_id,
+                    explanation.get("provider_source") or "ai_orchestrator",
+                    round((time.perf_counter() - started_at) * 1000, 2),
+                )
+                return explanation
+
+            try:
+                if use_workflow_cache:
+                    explanation = await workflow_cache.run_singleflight(
+                        workflow_cache_key,
+                        _generate_explanation,
+                        ttl_seconds=WORKFLOW_CACHE_TTL_SECONDS,
+                        use_cache=not force_refresh,
+                        workflow="ai_insights",
+                        resource=resolved_prediction_id,
+                    )
+                else:
+                    explanation = await _generate_explanation()
+            except _PipelineExplanationError as exc:
                 fallback_payload = PredictionExplanationService._fallback_explanation_payload(
                     risk_score_snapshot,
                     summary="A detailed medical explanation is temporarily unavailable.",
@@ -1143,86 +1321,10 @@ class PredictionExplanationService:
                     "data": PredictionExplanationService._attach_recommendation_plans_safe(db, user, fallback_payload),
                 }
 
-            explanation_source = generated.pop("_orchestrator_source", "ai_orchestrator") if isinstance(generated, dict) else "ai_orchestrator"
-            explanation = {
-                "prediction_id": resolved_prediction_id,
-                "explanation_id": resolved_prediction_id,
-                "risk_score": risk_score_snapshot.get("overall_score_raw"),
-                "risk_percent": round(resolved_risk_score * 100, 2),
-                "confidence": risk_score_snapshot.get("overall_score_raw"),
-                "risk_level": resolved_risk_level,
-                "summary": generated.get("summary") or "",
-                "clinical_insight": generated.get("clinical_insight") or generated.get("summary") or "",
-                "recommendation": generated.get("recommendation") or "",
-                "factors": PredictionExplanationService._normalize_factor_payload(
-                    generated.get("factors") or [],
-                    shap_values,
-                ),
-                "recommendations": PredictionExplanationService._normalize_recommendations(
-                    generated.get("recommendations") or [],
-                    shap_values,
-                    risk_level=resolved_risk_level,
-                ),
-                "sources": generated.get("sources") or [],
-                "retrieval": generated.get("retrieval") or {},
-                "top_features": generated.get("top_features") or [],
-            }
-            condition_risk_map = PredictionExplanationService._condition_risk_map(risk_score_snapshot, feature_payload)
-            clinical_payload = ClinicalInsightService.enrich_payload(
-                feature_payload=feature_payload,
-                risk_map=condition_risk_map,
-                shap_values=shap_values,
-                focus_condition="cardiovascular",
-            )
-            history_analysis = latest_clinical_history.get("analysis", {}) if isinstance(latest_clinical_history, dict) else {}
-            history_recommendations = [
-                {
-                    "title": text,
-                    "description": text,
-                    "detail": text,
-                    "priority": history_analysis.get("priority", "medium"),
-                    "category": "consultation",
-                    "feature": "clinical_history",
-                    "impact": 0.0,
-                    "sources": [],
-                }
-                for text in (history_analysis.get("recommendations") or [])
-                if PredictionExplanationService._clean_text(text)
-            ]
-            explanation["summary"] = explanation["summary"] or clinical_payload["summary"]
-            explanation["risk_scores"] = condition_risk_map
-            explanation["outcome"] = clinical_payload["outcome"]
-            explanation["possible_conditions"] = PredictionExplanationService._merge_text_values(
-                clinical_payload["possible_conditions"],
-                history_analysis.get("possible_conditions") or [],
-            )
-            explanation["symptoms"] = PredictionExplanationService._merge_text_values(
-                clinical_payload["symptoms"],
-                history_analysis.get("symptoms") or [],
-            )
-            explanation["key_drivers"] = clinical_payload["key_drivers"]
-            explanation["recommendations"] = PredictionExplanationService._merge_recommendations(
-                explanation["recommendations"],
-                history_recommendations,
-                clinical_payload["recommendations"],
-            )
-            explanation["clinical_history"] = latest_clinical_history
-            explanation["clinical_features"] = history_analysis.get("ml_features", {}) if isinstance(history_analysis, dict) else {}
-            explanation["clinical_context"] = history_analysis.get("rag_context") if isinstance(history_analysis, dict) else None
-            explanation = sanitize_ai_insight_payload(explanation) or explanation
-            explanation = PredictionExplanationService._attach_recommendation_plans_safe(db, user, explanation) or explanation
-            PredictionExplanationService._store_cache(db, risk_score_snapshot, cache_key, explanation)
-            logger.info(
-                "Prediction explanation ready | prediction_id=%s session_id=%s source=%s duration_ms=%s",
-                resolved_prediction_id,
-                session_id,
-                explanation_source,
-                round((time.perf_counter() - started_at) * 1000, 2),
-            )
             return {
                 "success": True,
                 "status": "ready",
-                "source": explanation_source,
+                "source": explanation.get("provider_source") or "ai_orchestrator",
                 "error": None,
                 "data": explanation,
             }

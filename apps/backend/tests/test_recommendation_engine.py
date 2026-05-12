@@ -171,7 +171,7 @@ def test_fasting_glucose_100_adds_sugar_control_and_tests(monkeypatch):
     assert "100 to 125 may indicate elevated risk" in plan_text
 
 
-def test_all_predicted_conditions_generate_one_plan_each_when_low_risk(monkeypatch, capsys):
+def test_all_predicted_conditions_generate_one_plan_each_when_low_risk(monkeypatch):
     monkeypatch.setattr(recommendation_engine, "_retrieve_rag_context", lambda condition, signals: {"query": condition, "basis": "", "sources": [], "rag_status": "fallback"})
 
     plans = recommendation_engine.build_recommendation_plans(
@@ -192,6 +192,22 @@ def test_all_predicted_conditions_generate_one_plan_each_when_low_risk(monkeypat
     assert all("No immediate concern" in plan["summary"] for plan in plans)
     assert all(plan["fallback_recommendation"]["summary"] for plan in plans)
 
-    output = capsys.readouterr().out
-    assert "Predictions:" in output
-    assert "Generated recommendations: 3" in output
+
+def test_fast_recommendation_plans_do_not_call_rag(monkeypatch):
+    def _fail_rag(_condition, _signals):
+        raise AssertionError("fast path must not retrieve RAG context")
+
+    monkeypatch.setattr(recommendation_engine, "_retrieve_rag_context", _fail_rag)
+
+    plans = recommendation_engine.build_fast_recommendation_plans(
+        RecommendationSignals(
+            disease_probabilities={"cardiovascular": 0.78},
+            vitals={"steps": 3200, "systolic_bp": 146, "diastolic_bp": 94},
+            has_ml=True,
+            has_vitals=True,
+        )
+    )
+
+    assert plans[0]["condition_key"] == "cardiovascular"
+    assert plans[0]["snapshot_mode"] == "fast"
+    assert plans[0]["rag_status"] == "deferred"

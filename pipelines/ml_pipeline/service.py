@@ -351,14 +351,29 @@ class MLPipelineService:
             run_id=run_id,
         )
 
-        health_payload = MLPipelineService._compute_health_score(feature_snapshot_record, risk_payload)
-        health_score_record = StoragePipelineService.store_health_score(
+        from ai.scoring.realtime.event_listener import ScoringEventListener
+
+        health_score_record, scoring_payload = ScoringEventListener.on_prediction_change(
             db,
             user,
             risk_score=risk_score_record,
-            health_payload=health_payload,
-            source="ml",
+            feature_snapshot=feature_snapshot_record,
         )
+        enriched_risk_payload = dict(risk_score_record.risk_payload or {})
+        enriched_risk_payload["health_score"] = float(scoring_payload.get("score") or 0.0)
+        enriched_risk_payload["health_intelligence"] = {
+            "trend": scoring_payload.get("trend"),
+            "confidence": scoring_payload.get("confidence"),
+            "volatility": scoring_payload.get("volatility"),
+            "baseline_delta": scoring_payload.get("baseline_delta"),
+            "anomaly_level": scoring_payload.get("anomaly_level"),
+            "explanation": scoring_payload.get("explanation"),
+        }
+        risk_score_record.risk_payload = enriched_risk_payload
+        risk_score_record.health_score = float(scoring_payload.get("score") or 0.0)
+        db.add(risk_score_record)
+        db.commit()
+        db.refresh(risk_score_record)
         return risk_score_record, health_score_record
 
     @staticmethod

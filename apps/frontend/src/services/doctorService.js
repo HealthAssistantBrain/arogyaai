@@ -31,3 +31,8 @@ export const triggerDoctorFollowUp = async (patientId, payload = {}) => {
   const response = await api.post(`/doctor/patient/${patientId}/follow-up`, payload);
   return unwrap(response);
 };
+
+export const queryDoctorPatientIntelligence = async (patientId, query) => {
+  const response = await api.post(`/doctor/patient/${patientId}/query`, { query });
+  return unwrap(response);
+};

@@ -1,6 +1,7 @@
 from .continuity import build_continuity_snapshot, build_memory_persistence
+from .core import ConversationEngine
 from .depth_controller import DEPTH_CONFIG, resolve_depth
-from .emotion import infer_emotional_context
+from .emotion import infer_emotional_context, neutral_emotional_context
 from .followup_engine import generate_follow_up_questions
 from .humanizer import humanize_response_payload
 from .intent import classify_intent
@@ -12,6 +13,7 @@ from .service import ConversationIntelligenceService
 __all__ = [
     "ConversationIntelligenceService",
     "ConversationRouterOrchestrator",
+    "ConversationEngine",
     "DEPTH_CONFIG",
     "build_continuity_snapshot",
     "build_memory_persistence",
@@ -20,6 +22,7 @@ __all__ = [
     "get_persona",
     "humanize_response_payload",
     "infer_emotional_context",
+    "neutral_emotional_context",
     "resolve_depth",
     "route_message",
     "select_persona",

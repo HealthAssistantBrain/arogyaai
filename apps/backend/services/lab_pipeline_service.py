@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from core.pipeline_logger import log_pipeline
 from database.session import SessionLocal
-from models import Report
+from models import Report, User
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -789,6 +789,14 @@ def _run_pipeline(
                 )
             except Exception:
                 logger.exception("lab_pipeline: failed to emit abnormal lab notification event")
+        try:
+            user = db.query(User).filter(User.id == user_id).first()
+            if user is not None:
+                from ai.scoring.realtime.event_listener import ScoringEventListener
+
+                ScoringEventListener.on_lab_upload(db, user)
+        except Exception:
+            logger.exception("lab_pipeline: scoring refresh failed for user=%s report=%s", user_id, report_id)
         logger.info("lab_pipeline: stored %d results (user=%s report=%s)", count, user_id, report_id)
         log_pipeline("lab", step="complete", status="healthy", data="fetched", extra=f"stored={count}")
         return normalized

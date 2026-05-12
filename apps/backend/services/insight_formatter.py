@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.serialization import make_json_safe
 from pipelines.rag_pipeline.text_cleaning import (
     clean_clinical_text,
     clean_label_text,
@@ -444,7 +445,7 @@ def sanitize_ai_insight_payload(payload: Any) -> dict[str, Any] | None:
                 "recommendations": [],
             }
         )
-        return {
+        return make_json_safe({
             "condition": clinical_report["condition"],
             "icd_code": clinical_report["icd_code"],
             "confidence": clinical_report["confidence"],
@@ -457,7 +458,7 @@ def sanitize_ai_insight_payload(payload: Any) -> dict[str, Any] | None:
             "references": clinical_report["references"],
             "clinical_report": clinical_report,
             "clinical_cards": [clinical_report],
-        }
+        })
 
     if not isinstance(payload, dict):
         return None
@@ -494,4 +495,4 @@ def sanitize_ai_insight_payload(payload: Any) -> dict[str, Any] | None:
     cleaned["structured_recommendations"] = clinical_report["recommendations"]
     cleaned["clinical_report"] = clinical_report
     cleaned["clinical_cards"] = build_clinical_cards(cleaned)
-    return cleaned
+    return make_json_safe(cleaned)

@@ -1,3 +1,4 @@
+from .core import ValidatorEngine
 from .provider_safety import (
     apply_provider_safety_prompt,
     get_provider_risk_flags,
@@ -31,6 +32,7 @@ __all__ = [
     "infer_provider_type",
     "ProviderType",
     "RiskLevel",
+    "ValidatorEngine",
     "validate_response",
     "ValidationFlag",
     "ValidationResult",

@@ -19,7 +19,20 @@ from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from core.config import settings
+from core.resilience import CircuitOpenError, TimeoutPolicyError, get_circuit_breaker, run_with_retry, run_with_timeout
 from core.security import decrypt_secret, encrypt_secret
+from integrations.googlefit.cache import (
+    AVAILABILITY_REASON_CIRCUIT_OPEN,
+    AVAILABILITY_REASON_DELAYED,
+    AVAILABILITY_REASON_EMPTY,
+    AVAILABILITY_REASON_TIMEOUT,
+    AVAILABILITY_REASON_UNAVAILABLE,
+    AVAILABILITY_REASON_UNSUPPORTED,
+    GoogleFitAvailabilityCache,
+    GoogleFitMetricAvailabilityError,
+    GoogleFitMetricRegistry,
+    classify_google_fit_failure,
+)
 from models import (
     Device,
     DeviceTypeEnum,
@@ -89,6 +102,11 @@ GOOGLE_FIT_MAX_SYNC_RETRIES = 2
 GOOGLE_FIT_API_REQUEST_RETRIES = 2
 GOOGLE_FIT_SYNC_LOCK_TTL_SECONDS = 300
 GOOGLE_FIT_SYNC_RATE_LIMIT_SECONDS = 60
+GOOGLE_FIT_METRIC_TIMEOUT_SECONDS = 2.0
+GOOGLE_FIT_DASHBOARD_TIMEOUT_SECONDS = 5.0
+GOOGLE_FIT_RECOMMENDATION_TIMEOUT_SECONDS = 8.0
+GOOGLE_FIT_CIRCUIT_FAILURE_THRESHOLD = 3
+GOOGLE_FIT_CIRCUIT_RECOVERY_SECONDS = 15 * 60
 GOOGLE_FIT_DAILY_BUCKET_MILLIS = 24 * 60 * 60 * 1000
 GLUCOSE_MGDL_PER_MMOLL = 18.0
 GLUCOSE_MMOLL_INFERENCE_MAX = 30.0
@@ -113,6 +131,20 @@ GOOGLE_FIT_STEP_SOURCE_PRIORITY = (
 GOOGLE_FIT_OPTIONAL_SYNC_METRICS = {"sleep", "spo2", "location"}
 GOOGLE_FIT_RECONSENT_METRICS = {"glucose", "blood_pressure", "body_temperature"}
 logger = logging.getLogger("google_fit_service")
+GOOGLE_FIT_DATA_TYPE_TO_METRIC = {
+    GOOGLE_FIT_STEP_DATA_TYPE: "steps",
+    GOOGLE_FIT_HEART_RATE_DATA_TYPE: "heart_rate",
+    GOOGLE_FIT_SLEEP_DATA_TYPE: "sleep",
+    GOOGLE_FIT_SPO2_DATA_TYPE: "spo2",
+    GOOGLE_FIT_SPO2_SUMMARY_DATA_TYPE: "spo2",
+    GOOGLE_FIT_GLUCOSE_DATA_TYPE: "glucose",
+    GOOGLE_FIT_GLUCOSE_SUMMARY_DATA_TYPE: "glucose",
+    GOOGLE_FIT_BLOOD_PRESSURE_DATA_TYPE: "blood_pressure",
+    GOOGLE_FIT_BLOOD_PRESSURE_SUMMARY_DATA_TYPE: "blood_pressure",
+    GOOGLE_FIT_BODY_TEMPERATURE_DATA_TYPE: "body_temperature",
+    GOOGLE_FIT_BODY_TEMPERATURE_SUMMARY_DATA_TYPE: "body_temperature",
+    GOOGLE_FIT_LOCATION_DATA_TYPE: "location",
+}
 
 
 class BloodPressureFetchResult(list):
@@ -151,6 +183,125 @@ class GoogleFitService:
         ),
         "body_temperature": (UserVitalTypeEnum.BODY_TEMPERATURE,),
     }
+
+    @staticmethod
+    def _metric_name_from_data_type(data_type_name: str) -> str:
+        return GOOGLE_FIT_DATA_TYPE_TO_METRIC.get(data_type_name, data_type_name)
+
+    @staticmethod
+    def _user_circuit_breaker(user_id: Any) -> Any:
+        return get_circuit_breaker(
+            f"google_fit:{user_id}",
+            failure_threshold=GOOGLE_FIT_CIRCUIT_FAILURE_THRESHOLD,
+            recovery_timeout_seconds=GOOGLE_FIT_CIRCUIT_RECOVERY_SECONDS,
+        )
+
+    @staticmethod
+    async def _mark_metric_unavailable(
+        user_id: Any,
+        metric_name: str,
+        *,
+        reason: str,
+        detail: str = "",
+    ) -> None:
+        record = await GoogleFitAvailabilityCache.set(
+            str(user_id),
+            metric_name,
+            reason=reason,
+            detail=detail,
+        )
+        if reason in {AVAILABILITY_REASON_UNSUPPORTED, AVAILABILITY_REASON_UNAVAILABLE}:
+            logger.warning(
+                "[GFIT UNSUPPORTED] user=%s metric=%s reason=%s cooldown_seconds=%s detail=%s",
+                user_id,
+                metric_name,
+                reason,
+                record.cooldown_seconds,
+                detail[:180],
+            )
+
+    @staticmethod
+    async def _clear_metric_unavailable(user_id: Any, metric_name: str) -> None:
+        await GoogleFitAvailabilityCache.clear(str(user_id), metric_name)
+
+    @staticmethod
+    async def _should_skip_metric(user_id: Any, metric_name: str) -> tuple[bool, str | None]:
+        should_query, record = await GoogleFitMetricRegistry.should_query(str(user_id), metric_name)
+        if should_query:
+            return False, None
+        return True, record.reason if record is not None else None
+
+    @staticmethod
+    async def _run_metric_fetch(
+        user: User,
+        metric_name: str,
+        fetcher: Any,
+        access_token: str,
+        *,
+        fetch_kwargs: dict[str, Any],
+        optional_metrics: set[str],
+    ) -> Any:
+        breaker = GoogleFitService._user_circuit_breaker(user.id)
+        try:
+            breaker.before_call()
+        except CircuitOpenError as exc:
+            await GoogleFitService._mark_metric_unavailable(
+                user.id,
+                metric_name,
+                reason=AVAILABILITY_REASON_CIRCUIT_OPEN,
+                detail=str(exc),
+            )
+            raise GoogleFitMetricAvailabilityError(metric_name, AVAILABILITY_REASON_CIRCUIT_OPEN, str(exc)) from exc
+
+        try:
+            fetched = await run_with_timeout(
+                fetcher(
+                    user,
+                    access_token,
+                    **fetch_kwargs,
+                ),
+                timeout_seconds=GOOGLE_FIT_METRIC_TIMEOUT_SECONDS,
+                operation=f"google_fit_metric:{metric_name}",
+            )
+            breaker.record_success()
+            return fetched
+        except HTTPException as exc:
+            classification = classify_google_fit_failure(
+                detail=str(exc.detail) if getattr(exc, "detail", None) is not None else str(exc),
+                status_code=exc.status_code,
+            )
+            if classification in {AVAILABILITY_REASON_UNSUPPORTED, AVAILABILITY_REASON_UNAVAILABLE}:
+                breaker.record_success()
+                await GoogleFitService._mark_metric_unavailable(
+                    user.id,
+                    metric_name,
+                    reason=classification,
+                    detail=str(exc.detail),
+                )
+                raise GoogleFitMetricAvailabilityError(metric_name, classification, str(exc.detail)) from exc
+            breaker.record_failure(exc)
+            raise
+        except TimeoutPolicyError as exc:
+            breaker.record_failure(exc)
+            await GoogleFitService._mark_metric_unavailable(
+                user.id,
+                metric_name,
+                reason=AVAILABILITY_REASON_TIMEOUT,
+                detail=str(exc),
+            )
+            raise GoogleFitMetricAvailabilityError(metric_name, AVAILABILITY_REASON_TIMEOUT, str(exc)) from exc
+        except (httpx.TimeoutException, httpx.TransportError) as exc:
+            breaker.record_failure(exc)
+            await GoogleFitService._mark_metric_unavailable(
+                user.id,
+                metric_name,
+                reason=AVAILABILITY_REASON_TIMEOUT,
+                detail=str(exc),
+            )
+            raise GoogleFitMetricAvailabilityError(metric_name, AVAILABILITY_REASON_TIMEOUT, str(exc)) from exc
+        except Exception as exc:
+            breaker.record_failure(exc)
+            raise
 
     @staticmethod
     def _ensure_configured() -> None:
@@ -325,43 +476,19 @@ class GoogleFitService:
         **kwargs: Any,
     ) -> httpx.Response:
         verify = GoogleFitService._google_fit_verify()
-        last_error: Exception | None = None
-        for attempt in range(1, GOOGLE_FIT_API_REQUEST_RETRIES + 1):
-            try:
-                async with httpx.AsyncClient(timeout=timeout, verify=verify) as client:
-                    response = await client.request(method, url, **kwargs)
-                break
-            except (httpx.TimeoutException, httpx.TransportError) as exc:
-                last_error = exc
-                if attempt >= GOOGLE_FIT_API_REQUEST_RETRIES:
-                    logger.exception(
-                        "[GFit] Google API transport failure | operation=%s | method=%s | url=%s | verify=%s | attempt=%s/%s | error_type=%s | error=%s",
-                        operation,
-                        method.upper(),
-                        url,
-                        verify,
-                        attempt,
-                        GOOGLE_FIT_API_REQUEST_RETRIES,
-                        exc.__class__.__name__,
-                        exc,
-                    )
-                    raise
-
-                logger.warning(
-                    "[GFit] Google API transport retry | operation=%s | method=%s | url=%s | verify=%s | attempt=%s/%s | error_type=%s | error=%s",
-                    operation,
-                    method.upper(),
-                    url,
-                    verify,
-                    attempt,
-                    GOOGLE_FIT_API_REQUEST_RETRIES,
-                    exc.__class__.__name__,
-                    exc,
-                )
-                await asyncio.sleep(float(attempt))
-
-        if last_error is not None and "response" not in locals():
-            raise last_error
+        response = await run_with_retry(
+            lambda: GoogleFitService._issue_google_api_request(
+                method,
+                url,
+                timeout=timeout,
+                verify=verify,
+                **kwargs,
+            ),
+            operation=operation,
+            attempts=GOOGLE_FIT_API_REQUEST_RETRIES,
+            backoff_seconds=(0.25,),
+            retriable=lambda exc: isinstance(exc, (httpx.TimeoutException, httpx.TransportError)),
+        )
 
         logger.info(
             "[GFit] Google API response | operation=%s | method=%s | status=%s | bytes=%s | success=%s",
@@ -372,6 +499,18 @@ class GoogleFitService:
             not response.is_error,
         )
         return response
+
+    @staticmethod
+    async def _issue_google_api_request(
+        method: str,
+        url: str,
+        *,
+        timeout: float,
+        verify: str | bool,
+        **kwargs: Any,
+    ) -> httpx.Response:
+        async with httpx.AsyncClient(timeout=timeout, verify=verify) as client:
+            return await client.request(method, url, **kwargs)
 
     @staticmethod
     def _resolve_timezone(timezone_name: str | None) -> str:
@@ -1617,8 +1756,13 @@ class GoogleFitService:
                 "[GFit] Prioritized %s sources | ids=%s",
                 metric_name,
                 [GoogleFitService._data_source_id(source) for source in prioritized],
-        )
+            )
         return prioritized
+
+    @staticmethod
+    def _primary_data_source(metric_name: str, sources: list[dict[str, Any]] | None) -> dict[str, Any] | None:
+        prioritized = GoogleFitService._prioritize_data_sources(metric_name, sources)
+        return prioritized[0] if prioritized else None
 
     @staticmethod
     def _estimated_step_sources(sources: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
@@ -1863,15 +2007,23 @@ class GoogleFitService:
             )
 
         if response.is_error:
+            detail = response.text[:500]
+            classification = classify_google_fit_failure(detail=detail, status_code=response.status_code)
             logger.warning(
                 "[GFit] Aggregate request failed | data_type=%s | data_source_id=%s | status=%s | bytes=%s | body=%s",
                 data_type_name,
                 data_source_id or "all_sources",
                 response.status_code,
                 len(response.text or ""),
-                response.text[:500],
+                detail,
             )
-            raise HTTPException(status_code=400, detail=f"Failed to fetch Google Fit data for {data_type_name}")
+            if classification in {AVAILABILITY_REASON_UNSUPPORTED, AVAILABILITY_REASON_UNAVAILABLE}:
+                raise GoogleFitMetricAvailabilityError(
+                    GoogleFitService._metric_name_from_data_type(data_type_name),
+                    classification,
+                    detail,
+                )
+            raise HTTPException(status_code=400, detail=f"Failed to fetch Google Fit data for {data_type_name}: {detail}")
 
         payload = response.json()
         logger.info(
@@ -1916,14 +2068,22 @@ class GoogleFitService:
             )
 
         if response.is_error:
+            detail = response.text[:500]
+            classification = classify_google_fit_failure(detail=detail, status_code=response.status_code)
             logger.warning(
                 "[GFit] Raw dataset failed | data_source_id=%s | status=%s | bytes=%s | body=%s",
                 data_source_id,
                 response.status_code,
                 len(response.text or ""),
-                response.text[:500],
+                detail,
             )
-            raise HTTPException(status_code=400, detail=f"Failed to fetch raw Google Fit data for {data_source_id}")
+            if classification in {AVAILABILITY_REASON_UNSUPPORTED, AVAILABILITY_REASON_UNAVAILABLE}:
+                raise GoogleFitMetricAvailabilityError(
+                    GoogleFitService._metric_name_from_data_type(data_source_id),
+                    classification,
+                    detail,
+                )
+            raise HTTPException(status_code=400, detail=f"Failed to fetch raw Google Fit data for {data_source_id}: {detail}")
 
         payload = response.json()
         logger.info(
@@ -3020,6 +3180,8 @@ class GoogleFitService:
                 continue
             except (httpx.TimeoutException, httpx.TransportError):
                 raise
+            except GoogleFitMetricAvailabilityError:
+                raise
             except Exception as exc:
                 logger.warning("[GFit] Realtime steps source fetch failed | source=%s | error=%s", source_id, exc)
                 continue
@@ -3079,19 +3241,12 @@ class GoogleFitService:
             days=days,
         ):
             records = []
-            metric_sources = GoogleFitService._prioritize_data_sources("heart_rate", data_sources)
-            if not metric_sources:
-                metric_sources = [
-                    {
-                        "dataStreamId": GOOGLE_FIT_MERGED_HEART_RATE_DATASOURCE_ID,
-                        "dataType": {"name": "com.google.heart_rate.bpm"},
-                    }
-                ]
-
-            for source in metric_sources:
-                source_id = GoogleFitService._data_source_id(source)
-                if not source_id:
-                    continue
+            primary_source = GoogleFitService._primary_data_source("heart_rate", data_sources) or {
+                "dataStreamId": GOOGLE_FIT_MERGED_HEART_RATE_DATASOURCE_ID,
+                "dataType": {"name": "com.google.heart_rate.bpm"},
+            }
+            source_id = GoogleFitService._data_source_id(primary_source)
+            if source_id:
                 try:
                     response_json = await GoogleFitService._fetch_source_dataset_with_raw_fallback(
                         access_token,
@@ -3107,12 +3262,14 @@ class GoogleFitService:
                     if exc.status_code == status.HTTP_401_UNAUTHORIZED:
                         raise
                     logger.warning("[GFit] Heart rate source fetch failed | source=%s | error=%s", source_id, exc.detail)
-                    continue
+                    response_json = {"bucket": []}
                 except (httpx.TimeoutException, httpx.TransportError):
+                    raise
+                except GoogleFitMetricAvailabilityError:
                     raise
                 except Exception as exc:
                     logger.warning("[GFit] Heart rate source fetch failed | source=%s | error=%s", source_id, exc)
-                    continue
+                    response_json = {"bucket": []}
                 GoogleFitService._log_raw_google_fit_response(
                     "heart_rate_source",
                     response_json,
@@ -3148,67 +3305,14 @@ class GoogleFitService:
                     len(source_records),
                     dataset_size,
                 )
-                if not source_records:
-                    logger.info("[GFit] Skipping zero heart_rate source | source=%s", source_id)
-                    continue
-                records = sorted(source_records, key=lambda item: item["timestamp"])
-                logger.info(
-                    "[GFit] Selected heart_rate source | user=%s | source=%s | records=%s",
-                    getattr(user, "id", "unknown"),
-                    source_id,
-                    len(records),
-                )
-                break
-
-            if metric_sources and not records:
-                logger.warning(
-                    "[GFit] Heart rate source aggregates empty, retrying all_sources aggregate | user=%s | sources=%s",
-                    getattr(user, "id", "unknown"),
-                    [GoogleFitService._data_source_id(source) for source in metric_sources],
-                )
-
-            if not records:
-                response_json = await GoogleFitService._aggregate_fit_data(
-                    access_token,
-                    "com.google.heart_rate.bpm",
-                    start_millis,
-                    end_millis,
-                    60 * 60 * 1000,
-                )
-                GoogleFitService._log_raw_google_fit_response(
-                    "heart_rate",
-                    response_json,
-                    start_millis=start_millis,
-                    end_millis=end_millis,
-                    timezone_name=timezone_name,
-                    data_source_id="all_sources",
-                )
-
-                if GoogleFitService._response_point_count(response_json) == 0:
-                    logger.info("[GFit] Skipping empty heart_rate aggregate | dataset_size=0")
-                else:
-                    for bucket in response_json.get("bucket", []):
-                        timestamp = GoogleFitService._extract_bucket_start_millis(bucket)
-                        value = GoogleFitService._aggregate_bucket_hour_average(bucket)
-                        if timestamp is None or value is None or float(value) <= 0:
-                            continue
-                        records.append(
-                            GoogleFitService._normalize_google_fit_record(
-                                UserVitalTypeEnum.HEART_RATE.value,
-                                timestamp,
-                                round(float(value), 1),
-                                timezone_name=timezone_name,
-                                unit="bpm",
-                            )
-                        )
-                    records = sorted(records, key=lambda item: item["timestamp"])
+                records = sorted(source_records, key=lambda item: item["timestamp"]) if source_records else []
 
             logger.info(
-                "[GFit] Heart rate dataset count | user=%s | window_days=%s | records=%s | sources=%s | start_ms=%s | end_ms=%s",
+                "[GFit] Heart rate dataset count | user=%s | window_days=%s | records=%s | source=%s | start_ms=%s | end_ms=%s",
                 getattr(user, "id", "unknown"),
                 window_days,
                 len(records),
-                [GoogleFitService._data_source_id(source) for source in metric_sources] or ["all_sources"],
+                source_id or "none",
                 start_millis,
                 end_millis,
             )
@@ -3263,6 +3367,8 @@ class GoogleFitService:
                 logger.warning("[GFit] Estimated steps fetch failed | source=%s | error=%s", source_id, exc.detail)
                 continue
             except (httpx.TimeoutException, httpx.TransportError):
+                raise
+            except GoogleFitMetricAvailabilityError:
                 raise
             except Exception as exc:
                 logger.warning("[GFit] Estimated steps fetch failed | source=%s | error=%s", source_id, exc)
@@ -3506,12 +3612,9 @@ class GoogleFitService:
         ):
             records = []
             intervals_by_timestamp: dict[int, list[tuple[int, int]]] = defaultdict(list)
-            metric_sources = [source for source in (data_sources or []) if GoogleFitService._data_source_id(source)]
-
-            for source in metric_sources:
-                source_id = GoogleFitService._data_source_id(source)
-                if not source_id:
-                    continue
+            primary_source = GoogleFitService._primary_data_source("sleep", data_sources)
+            source_id = GoogleFitService._data_source_id(primary_source) if primary_source else None
+            if source_id:
                 try:
                     response_json = await GoogleFitService._fetch_source_dataset_with_raw_fallback(
                         access_token,
@@ -3528,12 +3631,14 @@ class GoogleFitService:
                     if exc.status_code == status.HTTP_401_UNAUTHORIZED:
                         raise
                     logger.warning("[GFit] Sleep source fetch failed | source=%s | error=%s", source_id, exc.detail)
-                    continue
+                    response_json = {"bucket": []}
                 except (httpx.TimeoutException, httpx.TransportError):
+                    raise
+                except GoogleFitMetricAvailabilityError:
                     raise
                 except Exception as exc:
                     logger.warning("[GFit] Sleep source fetch failed | source=%s | error=%s", source_id, exc)
-                    continue
+                    response_json = {"bucket": []}
                 GoogleFitService._log_raw_google_fit_response(
                     "sleep_source",
                     response_json,
@@ -3561,7 +3666,6 @@ class GoogleFitService:
                     source_records,
                     dataset_size,
                 )
-
             for timestamp, intervals in sorted(intervals_by_timestamp.items()):
                 sleep_hours = GoogleFitService._sleep_hours_from_intervals(intervals)
                 if sleep_hours <= 0:
@@ -3582,55 +3686,12 @@ class GoogleFitService:
                     }
                 )
 
-            if metric_sources and not records:
-                logger.warning(
-                    "[GFit] Sleep source aggregates empty, retrying all_sources aggregate | user=%s | sources=%s",
-                    getattr(user, "id", "unknown"),
-                    [GoogleFitService._data_source_id(source) for source in metric_sources],
-                )
-
-            if not records:
-                response_json = await GoogleFitService._aggregate_fit_data(
-                    access_token,
-                    "com.google.sleep.segment",
-                    start_millis,
-                    end_millis,
-                    24 * 60 * 60 * 1000,
-                )
-                GoogleFitService._log_raw_google_fit_response(
-                    "sleep",
-                    response_json,
-                    start_millis=start_millis,
-                    end_millis=end_millis,
-                    timezone_name=timezone_name,
-                    data_source_id="all_sources",
-                )
-                if GoogleFitService._response_point_count(response_json) == 0:
-                    logger.info("[GFit] Skipping empty sleep aggregate | dataset_size=0")
-                    continue
-
-                for bucket in response_json.get("bucket", []):
-                    timestamp = GoogleFitService._extract_bucket_end_millis(bucket) or GoogleFitService._extract_bucket_start_millis(bucket)
-                    sleep_hours = GoogleFitService._aggregate_sleep_hours(bucket)
-                    if timestamp is None or sleep_hours <= 0:
-                        continue
-                    records.append(
-                        {
-                            "type": UserVitalTypeEnum.SLEEP.value,
-                            "value": sleep_hours,
-                            "unit": "hours",
-                            "timestamp": datetime.fromtimestamp(timestamp / 1000, tz=timezone.utc),
-                            "source": "google_fit",
-                            "timezone": timezone_name,
-                        }
-                    )
-
             logger.info(
-                "[GFit] Sleep segment dataset count | user=%s | window_days=%s | records=%s | sources=%s | start_ms=%s | end_ms=%s",
+                "[GFit] Sleep segment dataset count | user=%s | window_days=%s | records=%s | source=%s | start_ms=%s | end_ms=%s",
                 getattr(user, "id", "unknown"),
                 window_days,
                 len(records),
-                [GoogleFitService._data_source_id(source) for source in metric_sources] or ["all_sources"],
+                source_id or "sleep_sessions",
                 start_millis,
                 end_millis,
             )
@@ -3857,17 +3918,11 @@ class GoogleFitService:
             end_ts=end_ts,
             days=days,
         ):
-            metric_sources = [
-                source
-                for source in GoogleFitService._prioritize_data_sources(metric_name, data_sources)
-                if GoogleFitService._data_source_id(source)
-            ]
+            primary_source = GoogleFitService._primary_data_source(metric_name, data_sources)
             records: list[dict[str, Any]] = []
 
-            for source in metric_sources:
-                source_id = GoogleFitService._data_source_id(source)
-                if not source_id:
-                    continue
+            source_id = GoogleFitService._data_source_id(primary_source) if primary_source else None
+            if source_id:
                 try:
                     response_json = await GoogleFitService._fetch_source_dataset_with_raw_fallback(
                         access_token,
@@ -3883,12 +3938,14 @@ class GoogleFitService:
                     if exc.status_code == status.HTTP_401_UNAUTHORIZED:
                         raise
                     logger.warning("[GFit] %s source fetch failed | source=%s | error=%s", metric_name, source_id, exc.detail)
-                    continue
+                    response_json = {"bucket": []}
                 except (httpx.TimeoutException, httpx.TransportError):
+                    raise
+                except GoogleFitMetricAvailabilityError:
                     raise
                 except Exception as exc:
                     logger.warning("[GFit] %s source fetch failed | source=%s | error=%s", metric_name, source_id, exc)
-                    continue
+                    response_json = {"bucket": []}
 
                 GoogleFitService._log_raw_google_fit_response(
                     f"{metric_name}_source",
@@ -3909,13 +3966,12 @@ class GoogleFitService:
                     timezone_name=timezone_name,
                     value_transform=value_transform,
                 )
-                if records:
-                    break
 
             data_types_to_try = [data_type_name]
             if summary_data_type_name and summary_data_type_name != data_type_name:
                 data_types_to_try.append(summary_data_type_name)
-            for candidate_data_type in data_types_to_try:
+            aggregate_candidates = data_types_to_try[:1] if source_id else data_types_to_try[:2]
+            for candidate_data_type in aggregate_candidates:
                 if records:
                     break
                 try:
@@ -3961,11 +4017,12 @@ class GoogleFitService:
                 )
 
             logger.info(
-                "[GFit] %s dataset count | user=%s | window_days=%s | records=%s | start_ms=%s | end_ms=%s",
+                "[GFit] %s dataset count | user=%s | window_days=%s | records=%s | source=%s | start_ms=%s | end_ms=%s",
                 metric_name,
                 getattr(user, "id", "unknown"),
                 window_days,
                 len(records),
+                source_id or "all_sources",
                 start_millis,
                 end_millis,
             )
@@ -4074,17 +4131,11 @@ class GoogleFitService:
             end_ts=end_ts,
             days=days,
         ):
-            metric_sources = [
-                source
-                for source in GoogleFitService._prioritize_data_sources("blood_pressure", data_sources)
-                if GoogleFitService._data_source_id(source)
-            ]
+            primary_source = GoogleFitService._primary_data_source("blood_pressure", data_sources)
             response_json: dict[str, Any] | None = None
 
-            for source in metric_sources:
-                source_id = GoogleFitService._data_source_id(source)
-                if not source_id:
-                    continue
+            source_id = GoogleFitService._data_source_id(primary_source) if primary_source else None
+            if source_id:
                 try:
                     source_response = await GoogleFitService._fetch_source_dataset_with_raw_fallback(
                         access_token,
@@ -4100,12 +4151,14 @@ class GoogleFitService:
                     if exc.status_code == status.HTTP_401_UNAUTHORIZED:
                         raise
                     logger.warning("[GFit] blood_pressure source fetch failed | source=%s | error=%s", source_id, exc.detail)
-                    continue
+                    source_response = {"bucket": []}
                 except (httpx.TimeoutException, httpx.TransportError):
+                    raise
+                except GoogleFitMetricAvailabilityError:
                     raise
                 except Exception as exc:
                     logger.warning("[GFit] blood_pressure source fetch failed | source=%s | error=%s", source_id, exc)
-                    continue
+                    source_response = {"bucket": []}
 
                 GoogleFitService._log_raw_google_fit_response(
                     "blood_pressure_source",
@@ -4124,7 +4177,6 @@ class GoogleFitService:
                 logger.info("BP_RAW_RESPONSE | stage=google_fit_fetch | source=%s | payload=%s", source_id, source_response)
                 if GoogleFitService._response_point_count(source_response) > 0:
                     response_json = source_response
-                    break
 
             if response_json is None:
                 try:
@@ -4197,10 +4249,11 @@ class GoogleFitService:
                     ]
                 )
             logger.info(
-                "[GFit] Blood pressure dataset count | user=%s | window_days=%s | records=%s",
+                "[GFit] Blood pressure dataset count | user=%s | window_days=%s | records=%s | source=%s",
                 getattr(user, "id", "unknown"),
                 window_days,
                 len(records),
+                source_id or "all_sources",
             )
             if records:
                 return BloodPressureFetchResult(
@@ -4494,6 +4547,55 @@ class GoogleFitService:
             resolved_timezone,
             sync_days,
         )
+
+        async def _fetch_metric_job(
+            metric_name: str,
+            fetcher: Any,
+        ) -> dict[str, Any]:
+            if metric_name in GoogleFitService.CORE_METRIC_SCOPE_REQUIREMENTS and not scope_status.get(metric_name, False):
+                return {
+                    "metric_name": metric_name,
+                    "state": "missing_scope",
+                }
+
+            should_skip, skip_reason = await GoogleFitService._should_skip_metric(user.id, metric_name)
+            if should_skip:
+                return {
+                    "metric_name": metric_name,
+                    "state": "skipped",
+                    "skip_reason": skip_reason or "cooldown",
+                }
+
+            fetch_kwargs = {
+                "days": sync_days,
+                "timezone_name": resolved_timezone,
+                "start_ts": fetch_start_millis,
+                "end_ts": fetch_end_millis,
+            }
+            if metric_name in data_sources_by_metric:
+                fetch_kwargs["data_sources"] = data_sources_by_metric.get(metric_name, [])
+
+            try:
+                fetched = await GoogleFitService._run_metric_fetch(
+                    user,
+                    metric_name,
+                    fetcher,
+                    access_token,
+                    fetch_kwargs=fetch_kwargs,
+                    optional_metrics=optional_metrics,
+                )
+                return {
+                    "metric_name": metric_name,
+                    "state": "ready",
+                    "fetched": fetched,
+                }
+            except Exception as exc:
+                return {
+                    "metric_name": metric_name,
+                    "state": "failed",
+                    "error": exc,
+                }
+
         fetch_jobs = [
             ("steps", GoogleFitService.fetch_steps),
             ("heart_rate", GoogleFitService.fetch_heart_rate),
@@ -4505,34 +4607,41 @@ class GoogleFitService:
             ("location", GoogleFitService.fetch_location),
         ]
 
-        for metric_name, fetcher in fetch_jobs:
-            if metric_name in GoogleFitService.CORE_METRIC_SCOPE_REQUIREMENTS and not scope_status.get(metric_name, False):
+        metric_results = await asyncio.gather(
+            *[_fetch_metric_job(metric_name, fetcher) for metric_name, fetcher in fetch_jobs]
+        )
+
+        for result in metric_results:
+            metric_name = result["metric_name"]
+            state = result["state"]
+
+            if state == "missing_scope":
                 missing_scopes.append(metric_name)
                 metric_statuses[metric_name] = "missing_scope"
                 logger.warning("[GFit] Missing scope for metric=%s | user=%s", metric_name, user.id)
                 continue
 
-            fetch_kwargs = {
-                "days": sync_days,
-                "timezone_name": resolved_timezone,
-                "start_ts": fetch_start_millis,
-                "end_ts": fetch_end_millis,
-            }
-            if metric_name in data_sources_by_metric:
-                fetch_kwargs["data_sources"] = data_sources_by_metric.get(metric_name, [])
+            if state == "skipped":
+                metric_statuses[metric_name] = result.get("skip_reason") or "cooldown"
+                continue
 
-            fetched = []
-            last_fetch_error: Exception | None = None
-            for attempt in range(1, GOOGLE_FIT_MAX_SYNC_RETRIES + 1):
-                try:
-                    fetched = await fetcher(
-                        user,
-                        access_token,
-                        **fetch_kwargs,
+            if state == "failed":
+                exc = result.get("error")
+                if isinstance(exc, GoogleFitMetricAvailabilityError):
+                    if exc.reason in {AVAILABILITY_REASON_TIMEOUT, AVAILABILITY_REASON_CIRCUIT_OPEN}:
+                        external_failure_detected = True
+                    metric_statuses[metric_name] = "not_available" if metric_name in optional_metrics else exc.reason
+                    if metric_name not in optional_metrics and exc.reason in {AVAILABILITY_REASON_TIMEOUT, AVAILABILITY_REASON_CIRCUIT_OPEN}:
+                        failed_metrics.append(metric_name)
+                    logger.warning(
+                        "SYNC_ABORTED | user=%s | metric=%s | reason=%s",
+                        user.id,
+                        metric_name,
+                        exc.reason,
                     )
-                    last_fetch_error = None
-                    break
-                except HTTPException as exc:
+                    continue
+
+                if isinstance(exc, HTTPException):
                     if exc.status_code == status.HTTP_401_UNAUTHORIZED:
                         if metric_name in optional_metrics:
                             logger.warning(
@@ -4540,9 +4649,8 @@ class GoogleFitService:
                                 user.id,
                                 metric_name,
                             )
-                            fetched = []
-                            last_fetch_error = None
-                            break
+                            metric_statuses[metric_name] = "not_available"
+                            continue
                         logger.warning(
                             "SYNC_BLOCKED_AUTH | user=%s | sync_mode=direct | reason=token_revoked | metric=%s",
                             user.id,
@@ -4556,40 +4664,31 @@ class GoogleFitService:
                             timezone_name=resolved_timezone,
                             connected=True,
                         )
-                    last_fetch_error = exc
-                except (httpx.TimeoutException, httpx.TransportError) as exc:
-                    external_failure_detected = True
-                    last_fetch_error = exc
-                    GoogleFitService._log_external_service_failure(
-                        operation=f"fetch_{metric_name}",
-                        exc=exc,
-                        user_id=user.id,
-                        retry_count=attempt,
-                        fallback_used=True,
-                    )
-                except Exception as exc:
-                    last_fetch_error = exc
+                    classification = classify_google_fit_failure(detail=str(exc.detail), status_code=exc.status_code)
+                    if classification in {AVAILABILITY_REASON_UNSUPPORTED, AVAILABILITY_REASON_UNAVAILABLE}:
+                        await GoogleFitService._mark_metric_unavailable(
+                            user.id,
+                            metric_name,
+                            reason=classification,
+                            detail=str(exc.detail),
+                        )
+                        metric_statuses[metric_name] = "not_available" if metric_name in optional_metrics else classification
+                        continue
+                    metric_statuses[metric_name] = "not_available" if metric_name in optional_metrics else "failed"
+                    if metric_name not in optional_metrics:
+                        failed_metrics.append(metric_name)
+                    logger.warning("SYNC_ABORTED | user=%s | metric=%s | reason=http_error | error=%s", user.id, metric_name, exc.detail)
+                    continue
 
-                logger.warning(
-                    "[GFit] %s fetch attempt failed | user=%s | attempt=%s/%s | error=%s",
-                    metric_name,
-                    user.id,
-                    attempt,
-                    GOOGLE_FIT_MAX_SYNC_RETRIES,
-                    last_fetch_error,
-                )
-
-            if last_fetch_error is not None:
                 metric_statuses[metric_name] = "not_available" if metric_name in optional_metrics else "failed"
                 if metric_name not in optional_metrics:
                     failed_metrics.append(metric_name)
-                logger.warning(
-                    "SYNC_ABORTED | user=%s | metric=%s | reason=max_retries_exhausted | attempts=%s",
-                    user.id,
-                    metric_name,
-                    GOOGLE_FIT_MAX_SYNC_RETRIES,
-                )
+                logger.warning("SYNC_ABORTED | user=%s | metric=%s | reason=unexpected_error | error=%s", user.id, metric_name, exc)
                 continue
+
+            fetched = result.get("fetched") or []
+            if not isinstance(fetched, (list, BloodPressureFetchResult)):
+                fetched = []
 
             records = list(fetched or [])
             invalid_bp_blocked = (
@@ -4604,6 +4703,7 @@ class GoogleFitService:
                     user.id,
                 )
             if records:
+                await GoogleFitService._clear_metric_unavailable(user.id, metric_name)
                 metric_statuses[metric_name] = "ready"
                 fetched_metric_names.append(metric_name)
                 all_records.extend(records)
@@ -4614,6 +4714,12 @@ class GoogleFitService:
                 elif metric_name == "sleep":
                     sleep_records = records
             else:
+                await GoogleFitService._mark_metric_unavailable(
+                    user.id,
+                    metric_name,
+                    reason=AVAILABILITY_REASON_EMPTY,
+                    detail="Metric returned an empty dataset.",
+                )
                 metric_statuses[metric_name] = "not_available" if metric_name in optional_metrics else "empty"
                 logger.warning("[GFit] %s fetch returned empty dataset | user=%s", metric_name, user.id)
 
@@ -4656,6 +4762,12 @@ class GoogleFitService:
                 ]
                 all_records.extend(step_records)
                 if not step_records:
+                    await GoogleFitService._mark_metric_unavailable(
+                        user.id,
+                        "steps",
+                        reason=AVAILABILITY_REASON_DELAYED,
+                        detail="Realtime step data is delayed; keeping last known records.",
+                    )
                     metric_statuses["steps"] = "delayed"
                     fetched_metric_names = [name for name in fetched_metric_names if name != "steps"]
                     overwrite_metric_names = [name for name in overwrite_metric_names if name != "steps"]
@@ -4991,6 +5103,13 @@ class GoogleFitService:
             generate_health_alerts(user.id, db)
         except Exception:
             logger.exception("[GFit] Alert generation failed for user=%s", user.id)
+        try:
+            if saved_records:
+                from ai.scoring.realtime.event_listener import ScoringEventListener
+
+                ScoringEventListener.on_wearable_sync(db, user)
+        except Exception:
+            logger.exception("[GFit] Scoring refresh failed for user=%s", user.id)
         if saved_records:
             try:
                 db.close()
@@ -5009,6 +5128,13 @@ class GoogleFitService:
                     emit_event("SLEEP_ALERT", user.id, {"sleep": record.value})
         except Exception:
             logger.exception("[GFit] Failed to emit sync notification events for user=%s", user.id)
+        try:
+            if saved_records:
+                from workers.recommendation_tasks import refresh_recommendation_snapshot_task
+
+                refresh_recommendation_snapshot_task.delay(user_id=str(user.id))
+        except Exception:
+            logger.exception("[GFit] Failed to enqueue recommendation snapshot refresh for user=%s", user.id)
 
         serialized_records = GoogleFitService._serialize_vitals(saved_records)
         stats = GoogleFitService._build_stats(daily_steps, resolved_timezone)
@@ -5335,6 +5461,13 @@ class GoogleFitService:
                     emit_event("HEART_RATE_ALERT", user.id, {"heart_rate": row.value})
         except Exception:
             logger.exception("[GFit] Failed to emit heart rate sync notification for user=%s", user.id)
+        try:
+            if saved_rows:
+                from ai.scoring.realtime.event_listener import ScoringEventListener
+
+                ScoringEventListener.on_wearable_sync(db, user)
+        except Exception:
+            logger.exception("[GFit] Heart-rate scoring refresh failed for user=%s", user.id)
 
         if not saved_rows:
             return {

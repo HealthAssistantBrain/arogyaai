@@ -248,6 +248,98 @@ const EmptyCompact = ({ children }) => (
   </div>
 );
 
+const PreventiveIntelPanel = ({ prevention = {} }) => {
+  const alerts = Array.isArray(prevention.alerts) ? prevention.alerts : [];
+  const priorities = Array.isArray(prevention.priorities) ? prevention.priorities : [];
+  const hasData = prevention.summary || prevention.headline || alerts.length > 0 || priorities.length > 0;
+
+  if (!hasData) {
+    return null;
+  }
+
+  return (
+    <Motion.section
+      variants={itemVariants}
+      initial="initial"
+      animate="animate"
+      className="rounded-[28px] border border-primary/15 bg-gradient-to-br from-primary/5 via-white to-secondary/5 p-5 shadow-lg shadow-slate-900/5 dark:border-primary/20 dark:from-primary/10 dark:via-white/[0.04] dark:to-secondary/10"
+    >
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="max-w-3xl">
+          <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-primary">
+            <ShieldCheck size={12} />
+            Autonomous Prevention
+          </div>
+          <h2 className="mt-3 text-2xl font-black tracking-tight text-text-primary dark:text-text-primary">
+            {prevention.headline || 'Preventive intelligence is active'}
+          </h2>
+          {prevention.summary ? (
+            <p className="mt-2 max-w-3xl text-sm font-medium leading-relaxed text-slate-600 dark:text-text-muted">
+              {prevention.summary}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 lg:min-w-[240px]">
+          <div className="rounded-2xl border border-white/70 bg-white/80 p-3 dark:border-stroke dark:bg-white/[0.05]">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-text-muted">Overall Risk</p>
+            <p className="mt-2 text-xl font-black text-text-primary dark:text-text-primary">
+              {prevention.overallRisk ? `${prevention.overallRisk}%` : '--'}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-white/70 bg-white/80 p-3 dark:border-stroke dark:bg-white/[0.05]">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-text-muted">Focus Domain</p>
+            <p className="mt-2 text-sm font-black uppercase tracking-[0.14em] text-text-primary dark:text-text-primary">
+              {prevention.focusDomain || 'General'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="rounded-2xl border border-white/70 bg-white/75 p-4 dark:border-stroke dark:bg-white/[0.04]">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={16} className="text-amber-500" />
+            <h3 className="text-sm font-black uppercase tracking-[0.16em] text-text-primary dark:text-text-primary">Preventive Alerts</h3>
+          </div>
+          <div className="mt-3 space-y-3">
+            {alerts.length > 0 ? alerts.slice(0, 2).map((alert) => (
+              <div key={alert.id} className="rounded-2xl border border-amber-200/70 bg-amber-50/70 p-3 dark:border-amber-500/20 dark:bg-amber-500/10">
+                <p className="text-sm font-black text-text-primary dark:text-text-primary">{alert.title}</p>
+                <p className="mt-1 text-xs font-medium leading-relaxed text-slate-600 dark:text-text-muted">{alert.description}</p>
+              </div>
+            )) : (
+              <EmptyCompact>No preventive alerts are active right now.</EmptyCompact>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/70 bg-white/75 p-4 dark:border-stroke dark:bg-white/[0.04]">
+          <div className="flex items-center gap-2">
+            <Sparkles size={16} className="text-primary" />
+            <h3 className="text-sm font-black uppercase tracking-[0.16em] text-text-primary dark:text-text-primary">Top Priorities</h3>
+          </div>
+          <div className="mt-3 space-y-3">
+            {priorities.length > 0 ? priorities.slice(0, 2).map((item) => (
+              <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3 dark:border-stroke dark:bg-white/[0.03]">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-black text-text-primary dark:text-text-primary">{item.title}</p>
+                  <span className={`rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${priorityStyles[item.priority] || priorityStyles.medium}`}>
+                    {item.priority}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs font-medium leading-relaxed text-slate-600 dark:text-text-muted">{item.description}</p>
+              </div>
+            )) : (
+              <EmptyCompact>Intervention priorities will appear after more preventive analysis.</EmptyCompact>
+            )}
+          </div>
+        </div>
+      </div>
+    </Motion.section>
+  );
+};
+
 const MetricMini = ({ label, value, accent }) => (
   <Motion.div
     variants={revealItem}
@@ -576,6 +668,7 @@ const PreventiveRecommendations = ({ data, error, onRetry }) => {
     groupedRecommendations = {},
     sources = [],
     metricInsights = [],
+    prevention = {},
     lastUpdated = null,
     hasAnyData = false,
   } = data || {};
@@ -662,6 +755,8 @@ const PreventiveRecommendations = ({ data, error, onRetry }) => {
           </button>
         </div>
       ) : null}
+
+      <PreventiveIntelPanel prevention={prevention} />
 
       {!hasAnyData ? (
         <EmptyInsight />

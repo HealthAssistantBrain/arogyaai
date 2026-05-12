@@ -7307,5 +7307,279 @@
       "input": "{\n  \"query\": \"nothing just checking in\",\n  \"context\": {\n    \"ml_prediction\": {\n      \"risk_score\": null,\n      \"risk_level\": \"low\",\n      \"disease_probabilities\": {},\n      \"health_score\": null,\n      \"drivers\": [],\n      \"prediction_id\": null\n    },\n    \"wearables\": {\n      \"heart_rate\": null,\n      \"steps\": null,\n      \"sleep\": null,\n      \"trends\": {},\n      \"highlights\": []\n    },\n    \"labs\": {\n      \"recent\": [],\n      \"abnormal\": []\n    },\n    \"symptoms\": [\n      \"Daytime fatigue\",\n      \"Daytime cognitive slowing\"\n    ],\n    \"rag_context\": [],\n    \"rag_disease_context\": [],\n    \"conversation_history\": [\n      {\n        \"role\": \"user\",\n        \"content\": \"Explain my risk score.\"\n      },\n      {\n        \"role\": \"assistant\",\n        \"content\": \"I understand your concern. From what you are describing, the main issue is daytime fatigue and daytime cognitive slowing.\\n\\nBased on your recent data, there is no strong high-risk signal, but symptoms still matter. The main patterns I am weighing are your recent sleep hours and systolic bp trends. Your overall wellness trend looks watchful rather than clearly reassuring.\\n\\nThis could relate to no dominant condition signal detected. Medical guidance on sleep clinical reference suggests a Sleep explanation may be worth considering.\\n\\nWhat symptoms are you noticing, when did they start, and how severe are they from 1 to 10? Also, have you noticed any triggers, recent illness, medication changes, dehydration, or unusual exertion around the same time?\\n\\nFor now, diabetes Clinical Reference.Symptoms\"\n      },\n      {\n        \"role\": \"user\",\n        \"content\": \"hi\"\n      },\n      {\n        \"role\": \"assistant\",\n        \"content\": \"You mentioned fatigue previously. How has that been since we last talked?\\n\\nHey! What would you like help with today?\"\n      },\n      {\n        \"role\": \"assistant\",\n        \"content\": \"Hey! What would you like help with today?\"\n      }\n    ],\n    \"conversation_state\": {},\n    \"continuity_summary\": {\n      \"recurring_concerns\": [],\n      \"known_conditions\": []\n    },\n    \"patient_profile\": null,\n    \"patient_vitals\": {},\n    \"ml_risk_scores\": {\n      \"risk_level\": null,\n      \"overall_risk\": null,\n      \"condition_risks\": null,\n      \"health_score\": null,\n      \"prediction_id\": null\n    },\n    \"shap_drivers\": [],\n    \"context_bundle\": {\n      \"user_data\": {\n        \"profile\": null,\n        \"vitals\": {},\n        \"wearable_trends\": {},\n        \"lab_results\": [],\n        \"abnormal_labs\": [],\n        \"clinical_history\": null,\n        \"history_timeline\": [],\n        \"conversation_state\": {},\n        \"continuity_summary\": {\n          \"recurring_concerns\": [],\n          \"known_conditions\": []\n        }\n      },\n      \"ml_output\": {\n        \"risk_score\": null,\n        \"risk_level\": null,\n        \"condition_risks\": {},\n        \"health_score\": null,\n        \"shap_drivers\": [],\n        \"source\": null\n      },\n      \"rag_context\": {\n        \"summary\": [],\n        \"top_chunks\": [],\n        \"disease_context\": [],\n        \"source\": null\n      }\n    }\n  }\n}",
       "output": "{\n  \"understanding\": \"I understand you are noticing Daytime fatigue, Daytime cognitive slowing.\",\n  \"clinical_interpretation\": \"From what you are describing, the main concern is Daytime fatigue, Daytime cognitive slowing. The main patterns I am weighing are your recent sleep hours and systolic bp trends. Medical guidance on sleep clinical reference is useful background, but an in-person exam gives more certainty.\",\n  \"message\": \"You mentioned fatigue previously. How has that been since we last talked?\\n\\nI understand your concern. From what you are describing, the main issue is daytime fatigue and daytime cognitive slowing. Based on your recent data, there is no strong high-risk signal, but symptoms still matter. The main patterns I am weighing are your recent sleep hours and systolic bp trends. Your overall wellness trend looks watchful rather than clearly reassuring.\\n\\n\\ud83d\\udca1 Worth noting: I'd encourage you to bring these findings to your doctor at your next visit, or sooner if anything changes.\\n\\nNote: This response is based on limited available data and carries meaningful uncertainty. Please treat it as general guidance, not a clinical assessment.\",\n  \"possible_causes\": [\n    \"This could relate to no dominant condition signal detected.\",\n    \"Medical guidance on sleep clinical reference suggests a Sleep explanation may be worth considering.\",\n    \"Medical guidance on sleep deficiency - risk factors and mechanisms 2 suggests a Sleep explanation may be worth considering.\",\n    \"Medical guidance on sleep deficiency - red flags and escalation 3 suggests a Sleep explanation may be worth considering.\"\n  ],\n  \"follow_up_questions\": [\n    \"What symptoms are you noticing, when did they start, and how severe are they from 1 to 10?\",\n    \"Have you noticed any triggers, recent illness, medication changes, dehydration, or unusual exertion around the same time?\"\n  ],\n  \"recommendations\": [\n    \"Diabetes Clinical Reference.Symptoms.\",\n    \"Hypertension And Elevated Blood Pressure - Lifestyle Recommendations 2.\",\n    \"Hypertension And Elevated Blood Pressure - Lifestyle Recommendations 1.\",\n    \"Work toward at least 8,000 daily steps or equivalent moderate activity to improve cardiovascular and metabolic resilience.\"\n  ],\n  \"risk_level\": \"low\",\n  \"confidence_score\": 0.73\n}"
     }
+  },
+  {
+    "timestamp": "2026-05-12T04:57:54.435657+00:00",
+    "input": {
+      "query": "i am feeling like i am having a heart attack",
+      "history": [
+        {
+          "role": "user",
+          "content": "no thanks bye"
+        },
+        {
+          "role": "assistant",
+          "content": "Happy to help! Let me know if anything else comes up."
+        },
+        {
+          "role": "user",
+          "content": "hi"
+        },
+        {
+          "role": "assistant",
+          "content": "This sounds more watchful than immediately dangerous, but it still deserves a careful read. You mentioned fatigue previously. How has that been."
+        },
+        {
+          "role": "assistant",
+          "content": "Network Error"
+        }
+      ]
+    },
+    "context": {
+      "ml_prediction": {
+        "risk_score": null,
+        "risk_level": "low",
+        "disease_probabilities": {},
+        "health_score": null,
+        "drivers": [],
+        "prediction_id": null
+      },
+      "wearables": {
+        "heart_rate": null,
+        "steps": null,
+        "sleep": null,
+        "trends": {},
+        "highlights": []
+      },
+      "labs": {
+        "recent": [],
+        "abnormal": []
+      },
+      "symptoms": [],
+      "rag_context": [],
+      "rag_disease_context": [],
+      "conversation_history": [
+        {
+          "role": "user",
+          "content": "no thanks bye"
+        },
+        {
+          "role": "assistant",
+          "content": "Happy to help! Let me know if anything else comes up."
+        },
+        {
+          "role": "user",
+          "content": "hi"
+        },
+        {
+          "role": "assistant",
+          "content": "This sounds more watchful than immediately dangerous, but it still deserves a careful read. You mentioned fatigue previously. How has that been."
+        },
+        {
+          "role": "assistant",
+          "content": "Network Error"
+        }
+      ],
+      "conversation_state": {},
+      "continuity_summary": {},
+      "prevention": {},
+      "patient_profile": null,
+      "patient_vitals": {},
+      "ml_risk_scores": {
+        "risk_level": null,
+        "overall_risk": null,
+        "condition_risks": null,
+        "health_score": null,
+        "prediction_id": null
+      },
+      "shap_drivers": [],
+      "context_bundle": {
+        "user_data": {
+          "profile": null,
+          "vitals": {},
+          "wearable_trends": {},
+          "lab_results": [],
+          "abnormal_labs": [],
+          "clinical_history": null,
+          "history_timeline": [],
+          "conversation_state": {},
+          "continuity_summary": {},
+          "preventive_guidance": {},
+          "preventive_alerts": []
+        },
+        "ml_output": {
+          "risk_score": null,
+          "risk_level": null,
+          "condition_risks": {},
+          "health_score": null,
+          "shap_drivers": [],
+          "source": null
+        },
+        "rag_context": {
+          "summary": [],
+          "top_chunks": [],
+          "disease_context": [],
+          "source": null
+        }
+      }
+    },
+    "output": {
+      "message": "This sounds more watchful than immediately dangerous, but it still deserves a careful read. This sounds serious. Please call emergency services now. If you can, do not drive yourself and get someone nearby to stay with you.",
+      "understanding": "I understand your concern, and we can look at this carefully.",
+      "clinical_interpretation": "Urgent safety escalation triggered.",
+      "clinical_insight": "Urgent safety escalation triggered.",
+      "possible_causes": [],
+      "risk_level": "low",
+      "confidence_score": 0.45,
+      "follow_up_questions": [
+        "When did this start, and has it been improving, stable, or getting worse?",
+        "Is there one trigger or pattern that makes it clearly better or worse?"
+      ],
+      "recommendations": [],
+      "safety_note": "If this feels severe, unusual, or is getting worse, it is best to get checked in person.",
+      "formatted_response": "This sounds more watchful than immediately dangerous, but it still deserves a careful read. This sounds serious. Please call emergency services now. If you can, do not drive yourself and get someone nearby to stay with you."
+    },
+    "fine_tuning_example": {
+      "instruction": "You are a clinical AI assistant speaking like a calm, careful doctor. You listen first, reason privately, avoid overconfidence, ask at most one or two focused questions, explain in simple language, and prioritize patient safety. Never give a final diagnosis. Use patient vitals, recent risk data, symptoms, labs, wearables, and medical context internally. Return JSON with message, follow_up_questions, recommendations, and risk_level. The message must read like natural clinical conversation.",
+      "input": "{\n  \"query\": \"i am feeling like i am having a heart attack\",\n  \"context\": {\n    \"ml_prediction\": {\n      \"risk_score\": null,\n      \"risk_level\": \"low\",\n      \"disease_probabilities\": {},\n      \"health_score\": null,\n      \"drivers\": [],\n      \"prediction_id\": null\n    },\n    \"wearables\": {\n      \"heart_rate\": null,\n      \"steps\": null,\n      \"sleep\": null,\n      \"trends\": {},\n      \"highlights\": []\n    },\n    \"labs\": {\n      \"recent\": [],\n      \"abnormal\": []\n    },\n    \"symptoms\": [],\n    \"rag_context\": [],\n    \"rag_disease_context\": [],\n    \"conversation_history\": [\n      {\n        \"role\": \"user\",\n        \"content\": \"no thanks bye\"\n      },\n      {\n        \"role\": \"assistant\",\n        \"content\": \"Happy to help! Let me know if anything else comes up.\"\n      },\n      {\n        \"role\": \"user\",\n        \"content\": \"hi\"\n      },\n      {\n        \"role\": \"assistant\",\n        \"content\": \"This sounds more watchful than immediately dangerous, but it still deserves a careful read. You mentioned fatigue previously. How has that been.\"\n      },\n      {\n        \"role\": \"assistant\",\n        \"content\": \"Network Error\"\n      }\n    ],\n    \"conversation_state\": {},\n    \"continuity_summary\": {},\n    \"prevention\": {},\n    \"patient_profile\": null,\n    \"patient_vitals\": {},\n    \"ml_risk_scores\": {\n      \"risk_level\": null,\n      \"overall_risk\": null,\n      \"condition_risks\": null,\n      \"health_score\": null,\n      \"prediction_id\": null\n    },\n    \"shap_drivers\": [],\n    \"context_bundle\": {\n      \"user_data\": {\n        \"profile\": null,\n        \"vitals\": {},\n        \"wearable_trends\": {},\n        \"lab_results\": [],\n        \"abnormal_labs\": [],\n        \"clinical_history\": null,\n        \"history_timeline\": [],\n        \"conversation_state\": {},\n        \"continuity_summary\": {},\n        \"preventive_guidance\": {},\n        \"preventive_alerts\": []\n      },\n      \"ml_output\": {\n        \"risk_score\": null,\n        \"risk_level\": null,\n        \"condition_risks\": {},\n        \"health_score\": null,\n        \"shap_drivers\": [],\n        \"source\": null\n      },\n      \"rag_context\": {\n        \"summary\": [],\n        \"top_chunks\": [],\n        \"disease_context\": [],\n        \"source\": null\n      }\n    }\n  }\n}",
+      "output": "{\n  \"understanding\": \"I understand your concern, and we can look at this carefully.\",\n  \"clinical_interpretation\": \"Urgent safety escalation triggered.\",\n  \"message\": \"This sounds more watchful than immediately dangerous, but it still deserves a careful read. This sounds serious. Please call emergency services now. If you can, do not drive yourself and get someone nearby to stay with you.\",\n  \"possible_causes\": [],\n  \"follow_up_questions\": [\n    \"When did this start, and has it been improving, stable, or getting worse?\",\n    \"Is there one trigger or pattern that makes it clearly better or worse?\"\n  ],\n  \"recommendations\": [],\n  \"risk_level\": \"low\",\n  \"confidence_score\": 0.45\n}"
+    }
+  },
+  {
+    "timestamp": "2026-05-12T04:58:26.582362+00:00",
+    "input": {
+      "query": "what i do",
+      "history": [
+        {
+          "role": "user",
+          "content": "hi"
+        },
+        {
+          "role": "assistant",
+          "content": "This sounds more watchful than immediately dangerous, but it still deserves a careful read. You mentioned fatigue previously. How has that been."
+        },
+        {
+          "role": "user",
+          "content": "i am feeling like i am having a heart attack"
+        },
+        {
+          "role": "assistant",
+          "content": "This sounds more watchful than immediately dangerous, but it still deserves a careful read. This sounds serious. Please call emergency services now. If you can, do not drive yourself and get someone nearby to stay with you."
+        },
+        {
+          "role": "assistant",
+          "content": "Network Error"
+        }
+      ]
+    },
+    "context": {
+      "ml_prediction": {
+        "risk_score": null,
+        "risk_level": "low",
+        "disease_probabilities": {},
+        "health_score": null,
+        "drivers": [],
+        "prediction_id": null
+      },
+      "wearables": {
+        "heart_rate": null,
+        "steps": null,
+        "sleep": null,
+        "trends": {},
+        "highlights": []
+      },
+      "labs": {
+        "recent": [],
+        "abnormal": []
+      },
+      "symptoms": [],
+      "rag_context": [],
+      "rag_disease_context": [],
+      "conversation_history": [
+        {
+          "role": "user",
+          "content": "hi"
+        },
+        {
+          "role": "assistant",
+          "content": "This sounds more watchful than immediately dangerous, but it still deserves a careful read. You mentioned fatigue previously. How has that been."
+        },
+        {
+          "role": "user",
+          "content": "i am feeling like i am having a heart attack"
+        },
+        {
+          "role": "assistant",
+          "content": "This sounds more watchful than immediately dangerous, but it still deserves a careful read. This sounds serious. Please call emergency services now. If you can, do not drive yourself and get someone nearby to stay with you."
+        },
+        {
+          "role": "assistant",
+          "content": "Network Error"
+        }
+      ],
+      "conversation_state": {},
+      "continuity_summary": {},
+      "prevention": {},
+      "patient_profile": null,
+      "patient_vitals": {},
+      "ml_risk_scores": {
+        "risk_level": null,
+        "overall_risk": null,
+        "condition_risks": null,
+        "health_score": null,
+        "prediction_id": null
+      },
+      "shap_drivers": [],
+      "context_bundle": {
+        "user_data": {
+          "profile": null,
+          "vitals": {},
+          "wearable_trends": {},
+          "lab_results": [],
+          "abnormal_labs": [],
+          "clinical_history": null,
+          "history_timeline": [],
+          "conversation_state": {},
+          "continuity_summary": {},
+          "preventive_guidance": {},
+          "preventive_alerts": []
+        },
+        "ml_output": {
+          "risk_score": null,
+          "risk_level": null,
+          "condition_risks": {},
+          "health_score": null,
+          "shap_drivers": [],
+          "source": null
+        },
+        "rag_context": {
+          "summary": [],
+          "top_chunks": [],
+          "disease_context": [],
+          "source": null
+        }
+      }
+    },
+    "output": {
+      "message": "This sounds more watchful than immediately dangerous, but it still deserves a careful read. This sounds serious. Please call emergency services now. If you can, do not drive yourself and get someone nearby to stay with you.",
+      "understanding": "I understand your concern, and we can look at this carefully.",
+      "clinical_interpretation": "Urgent safety escalation triggered.",
+      "clinical_insight": "Urgent safety escalation triggered.",
+      "possible_causes": [],
+      "risk_level": "low",
+      "confidence_score": 0.45,
+      "follow_up_questions": [
+        "When did this start, and has it been improving, stable, or getting worse?",
+        "Is there one trigger or pattern that makes it clearly better or worse?"
+      ],
+      "recommendations": [],
+      "safety_note": "If this feels severe, unusual, or is getting worse, it is best to get checked in person.",
+      "formatted_response": "This sounds more watchful than immediately dangerous, but it still deserves a careful read. This sounds serious. Please call emergency services now. If you can, do not drive yourself and get someone nearby to stay with you."
+    },
+    "fine_tuning_example": {
+      "instruction": "You are a clinical AI assistant speaking like a calm, careful doctor. You listen first, reason privately, avoid overconfidence, ask at most one or two focused questions, explain in simple language, and prioritize patient safety. Never give a final diagnosis. Use patient vitals, recent risk data, symptoms, labs, wearables, and medical context internally. Return JSON with message, follow_up_questions, recommendations, and risk_level. The message must read like natural clinical conversation.",
+      "input": "{\n  \"query\": \"what i do\",\n  \"context\": {\n    \"ml_prediction\": {\n      \"risk_score\": null,\n      \"risk_level\": \"low\",\n      \"disease_probabilities\": {},\n      \"health_score\": null,\n      \"drivers\": [],\n      \"prediction_id\": null\n    },\n    \"wearables\": {\n      \"heart_rate\": null,\n      \"steps\": null,\n      \"sleep\": null,\n      \"trends\": {},\n      \"highlights\": []\n    },\n    \"labs\": {\n      \"recent\": [],\n      \"abnormal\": []\n    },\n    \"symptoms\": [],\n    \"rag_context\": [],\n    \"rag_disease_context\": [],\n    \"conversation_history\": [\n      {\n        \"role\": \"user\",\n        \"content\": \"hi\"\n      },\n      {\n        \"role\": \"assistant\",\n        \"content\": \"This sounds more watchful than immediately dangerous, but it still deserves a careful read. You mentioned fatigue previously. How has that been.\"\n      },\n      {\n        \"role\": \"user\",\n        \"content\": \"i am feeling like i am having a heart attack\"\n      },\n      {\n        \"role\": \"assistant\",\n        \"content\": \"This sounds more watchful than immediately dangerous, but it still deserves a careful read. This sounds serious. Please call emergency services now. If you can, do not drive yourself and get someone nearby to stay with you.\"\n      },\n      {\n        \"role\": \"assistant\",\n        \"content\": \"Network Error\"\n      }\n    ],\n    \"conversation_state\": {},\n    \"continuity_summary\": {},\n    \"prevention\": {},\n    \"patient_profile\": null,\n    \"patient_vitals\": {},\n    \"ml_risk_scores\": {\n      \"risk_level\": null,\n      \"overall_risk\": null,\n      \"condition_risks\": null,\n      \"health_score\": null,\n      \"prediction_id\": null\n    },\n    \"shap_drivers\": [],\n    \"context_bundle\": {\n      \"user_data\": {\n        \"profile\": null,\n        \"vitals\": {},\n        \"wearable_trends\": {},\n        \"lab_results\": [],\n        \"abnormal_labs\": [],\n        \"clinical_history\": null,\n        \"history_timeline\": [],\n        \"conversation_state\": {},\n        \"continuity_summary\": {},\n        \"preventive_guidance\": {},\n        \"preventive_alerts\": []\n      },\n      \"ml_output\": {\n        \"risk_score\": null,\n        \"risk_level\": null,\n        \"condition_risks\": {},\n        \"health_score\": null,\n        \"shap_drivers\": [],\n        \"source\": null\n      },\n      \"rag_context\": {\n        \"summary\": [],\n        \"top_chunks\": [],\n        \"disease_context\": [],\n        \"source\": null\n      }\n    }\n  }\n}",
+      "output": "{\n  \"understanding\": \"I understand your concern, and we can look at this carefully.\",\n  \"clinical_interpretation\": \"Urgent safety escalation triggered.\",\n  \"message\": \"This sounds more watchful than immediately dangerous, but it still deserves a careful read. This sounds serious. Please call emergency services now. If you can, do not drive yourself and get someone nearby to stay with you.\",\n  \"possible_causes\": [],\n  \"follow_up_questions\": [\n    \"When did this start, and has it been improving, stable, or getting worse?\",\n    \"Is there one trigger or pattern that makes it clearly better or worse?\"\n  ],\n  \"recommendations\": [],\n  \"risk_level\": \"low\",\n  \"confidence_score\": 0.45\n}"
+    }
   }
 ]

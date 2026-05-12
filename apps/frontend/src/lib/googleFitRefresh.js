@@ -4,6 +4,7 @@ import { fetchConnectedDeviceSummaries } from './deviceApi';
 import { GOOGLE_FIT_PROVIDER } from './deviceApi';
 import useDeviceStore from '../store/deviceStore';
 import { setGoogleFitConnectionState } from './googleFitConnectionState';
+import useRecommendationSnapshotStore from '../store/recommendationSnapshotStore';
 
 export async function refreshAfterGoogleFitSync() {
   const dashboardStore = useDashboardStore.getState();
@@ -11,6 +12,7 @@ export async function refreshAfterGoogleFitSync() {
 
   dashboardStore.invalidateWearableCache?.(['heart_rate', 'steps', 'sleep', 'spo2', 'blood_pressure', 'body_temperature', 'glucose']);
   useHealthStore.getState().invalidateMetricsCache?.();
+  useRecommendationSnapshotStore.getState().invalidateSnapshot?.();
 
   await Promise.all([
     fetchConnectedDeviceSummaries().then((summaries) => {

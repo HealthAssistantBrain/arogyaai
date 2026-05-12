@@ -101,4 +101,6 @@ def test_simulation_recomputes_multi_condition_risk_and_insights():
     assert "Type 2 diabetes risk" in data["possible_conditions"]
     assert any(item["feature"] == "glucose" for item in data["recommendations"])
     assert data["key_drivers"]
+    assert data["reasoning"]["clinical_narrative"]
+    assert data["reasoning"]["disease_simulation_reasoning"]["strongest_interaction"] in {"cardiovascular", "diabetes", "respiratory"}
     trigger_notification.assert_called_once()

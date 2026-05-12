@@ -11,7 +11,7 @@ pydantic-settings
 alembic
 psycopg2-binary
 redis
-httpx
+httpx==0.27.2
 certifi
 cryptography
 APScheduler
@@ -26,7 +26,12 @@ python-multipart
 celery
 requests
 pywebpush
-supabase>=2.3.0,<2.7.0
+supabase==2.6.0
+realtime==1.0.6
+postgrest==0.16.11
+storage3==0.7.7
+gotrue==2.12.4
+supafunc==0.5.1
 joblib
 scikit-learn
 pandas

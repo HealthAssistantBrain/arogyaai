@@ -5,16 +5,17 @@ from typing import Any
 
 from ai.workflows import ProviderTaskRequest
 from ai.conversation import ConversationIntelligenceService
+from core.serialization import make_json_safe
 from services.orchestrator.workflow_engine import BaseWorkflow, WorkflowExecutionContext
 
 
 class RecommendationsWorkflow(BaseWorkflow):
     name = "recommendations"
-    timeout_seconds = 8.0
+    timeout_seconds = 20.0
     stage_timeouts = {
         "build_context": 4.0,
         "retrieve_knowledge": 4.0,
-        "generate_response": 4.0,
+        "generate_response": 10.0,
         "validate_response": 2.0,
         "format_output": 2.0,
         "timeline_event_generation": 2.0,
@@ -47,6 +48,14 @@ class RecommendationsWorkflow(BaseWorkflow):
         query = str(request.payload.get("query") or request.query or "").strip()
         if not query:
             return {"query": "", "source": "skipped", "summary": [], "documents": []}
+        allow_ai_generation = bool(
+            request.payload.get("allow_ai_generation")
+            or request.metadata.get("allow_ai_generation")
+            or request.metadata.get("deep_analysis")
+            or request.payload.get("deep_analysis")
+        )
+        if not allow_ai_generation:
+            return {"query": query, "source": "deferred_fast_path", "summary": [], "documents": []}
         lifecycle_key = (
             str(request.metadata.get("retrieval_session") or "").strip()
             or f"recommendations:{request.user_id}:{query.lower()}"
@@ -64,23 +73,56 @@ class RecommendationsWorkflow(BaseWorkflow):
         deps: Any,
         context: WorkflowExecutionContext,
     ) -> dict[str, Any]:
-        plan = deps.recommendation_pipeline.generate_plan(request.user_id, db=request.db)
+        plans = deps.recommendation_pipeline.generate_plans(request.user_id, db=request.db)
+        plan = plans[0] if plans else None
         tests = deps.recommendation_pipeline.generate_tests(request.user_id, db=request.db)
         response = {
             "plan": plan,
             "tests": tests,
             "recommendation_plan": plan,
-            "recommendation_plans": deps.recommendation_pipeline.generate_plans(request.user_id, db=request.db),
+            "recommendation_plans": plans,
             "retrieval": context.retrieved_knowledge,
         }
+        allow_ai_generation = bool(
+            request.payload.get("allow_ai_generation")
+            or request.metadata.get("allow_ai_generation")
+            or request.metadata.get("deep_analysis")
+            or request.payload.get("deep_analysis")
+        )
+        if not allow_ai_generation:
+            response["narrative"] = {
+                "summary": (plan or {}).get("summary") if isinstance(plan, dict) else "",
+                "message": "Recommendations were generated from the fast deterministic snapshot. Deeper AI synthesis can refresh asynchronously.",
+                "recommendations": [
+                    str(item.get("text") or item.get("test_name") or item.get("title"))
+                    for item in (tests or [])[:4]
+                    if isinstance(item, dict)
+                ],
+                "risk_level": (plan or {}).get("risk_level") if isinstance(plan, dict) else "LOW",
+                "confidence_score": (plan or {}).get("confidence") if isinstance(plan, dict) else 0.4,
+            }
+            response["provider"] = "deterministic_fast_path"
+            response["provider_attempts"] = []
+            return response
+
         prompt_pack = deps.prompt_manager.render(
             self.name,
             context={
                 "query": str(request.payload.get("query") or request.query or "").strip(),
                 "plan": plan,
                 "tests": tests,
-                "retrieval": context.retrieved_knowledge,
-                "user_context": context.user_context,
+                "retrieval": {
+                    "summary": (context.retrieved_knowledge or {}).get("summary", [])[:2]
+                    if isinstance((context.retrieved_knowledge or {}).get("summary"), list)
+                    else [],
+                    "source": (context.retrieved_knowledge or {}).get("source"),
+                },
+                "user_context": {
+                    "risk_changes": (context.user_context or {}).get("risk_changes", [])[:3],
+                    "biomarkers": (context.user_context or {}).get("biomarkers", [])[:3],
+                    "recommendation_plan": (context.user_context or {}).get("recommendation_plan"),
+                    "context_meta": (context.user_context or {}).get("context_meta"),
+                },
                 "intent": "recommendations",
             },
         )
@@ -150,7 +192,7 @@ class RecommendationsWorkflow(BaseWorkflow):
             )
         formatted["provider"] = formatted.get("provider") or "deterministic_fallback"
         formatted["status"] = "ready" if formatted.get("plan") else "fallback"
-        return formatted
+        return make_json_safe(formatted)
 
     async def persist_memory(
         self,
@@ -204,16 +246,17 @@ class RecommendationsWorkflow(BaseWorkflow):
         error: Exception,
     ) -> dict[str, Any]:
         tests = deps.recommendation_pipeline.generate_tests(request.user_id, db=request.db)
-        plan = deps.recommendation_pipeline.generate_plan(request.user_id, db=request.db)
-        return {
+        plans = deps.recommendation_pipeline.generate_plans(request.user_id, db=request.db)
+        plan = plans[0] if plans else None
+        return make_json_safe({
             "plan": plan,
             "tests": tests,
             "recommendation_plan": plan,
-            "recommendation_plans": deps.recommendation_pipeline.generate_plans(request.user_id, db=request.db),
+            "recommendation_plans": plans,
             "provider": "deterministic_fallback",
             "context_meta": context.user_context.get("context_meta") if isinstance(context.user_context, dict) else {},
             "longitudinal_summary": context.user_context.get("longitudinal_summary") if isinstance(
                 context.user_context,
                 dict,
             ) else {},
-        }
+        })

@@ -13,8 +13,8 @@ TASKS = {
 }
 
 TASK_MODEL_MAP = {
-    "health_insights": {"model_profile": "fast", "workflow": "ai_insights", "primary_provider": "nvidia"},
-    "recommendations": {"model_profile": "fast", "workflow": "recommendations", "primary_provider": "nvidia"},
+    "health_insights": {"model_profile": "fast", "workflow": "ai_insights", "primary_provider": "ollama"},
+    "recommendations": {"model_profile": "fast", "workflow": "recommendations", "primary_provider": "ollama"},
     "doctor_summary": {"model_profile": "summary", "workflow": "report_summary", "primary_provider": "nvidia"},
     "ocr_analysis": {"model_profile": "structured", "workflow": "ocr_medical_report", "primary_provider": "nvidia"},
     "chat_assistant": {"model_profile": "chat", "workflow": "chatbot", "primary_provider": "nvidia"},

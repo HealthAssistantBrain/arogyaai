@@ -63,8 +63,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # ── Copy dependency files ────────────────────────────────────────────────────
 COPY apps/backend/requirements.txt /tmp/requirements.txt
+COPY apps/backend/supabase-sdk.lock.txt /tmp/supabase-sdk.lock.txt
 COPY apps/backend/docker/constraints-arm64.txt /tmp/constraints-arm64.txt
 COPY apps/backend/docker/install-ml-deps.sh /tmp/install-ml-deps.sh
+COPY apps/backend/docker/validate-supabase-sdk.py /tmp/validate-supabase-sdk.py
 RUN chmod +x /tmp/install-ml-deps.sh
 
 # ── Install Python dependencies (platform-aware) ────────────────────────────

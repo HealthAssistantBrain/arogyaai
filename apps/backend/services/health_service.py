@@ -21,6 +21,7 @@ from database.session import (
 )
 from services.ollama_client import probe_ollama_health
 from services.startup_lifecycle import startup_lifecycle
+from services.supabase_sdk_validation import get_supabase_sdk_validation_snapshot
 from services.supabase_jwt_verifier import get_supabase_auth_snapshot
 from pipelines.rag_pipeline.config import RagSettings
 from pipelines.rag_pipeline.qdrant import probe_qdrant_health
@@ -336,6 +337,7 @@ async def get_system_readiness() -> dict[str, Any]:
     order = [
         "db",
         "redis",
+        "package_compatibility",
         "supabase_auth",
         "prediction_service",
         "rag_service",
@@ -367,6 +369,13 @@ async def get_system_readiness() -> dict[str, Any]:
     checks: dict[str, dict[str, Any]] = {}
 
     for key in order:
+        if key == "package_compatibility":
+            snapshot = get_supabase_sdk_validation_snapshot()
+            status = "ok" if snapshot.get("status") == "healthy" else "degraded"
+            services[key] = status
+            checks[key] = snapshot
+            continue
+
         if key == "supabase_auth":
             snapshot = get_supabase_auth_snapshot()
             auth_status = str(snapshot.get("status") or "warming").lower()
@@ -402,7 +411,12 @@ async def get_system_readiness() -> dict[str, Any]:
         services[key] = status
         checks[key] = result
 
-    core_status = "healthy" if services.get("db") in {"ok", "skipped"} else "down"
+    core_status = (
+        "healthy"
+        if services.get("db") in {"ok", "skipped"}
+        and services.get("package_compatibility") in {"ok", "skipped"}
+        else "down"
+    )
     overall_status = "ok" if core_status == "healthy" else "down"
 
     if services.get("supabase_auth") not in AUTH_HEALTHY_STATUSES:

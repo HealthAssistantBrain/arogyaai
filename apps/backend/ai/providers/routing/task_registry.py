@@ -41,7 +41,11 @@ def _provider_model(profile: str, provider: str) -> str:
             "structured": "NVIDIA_STRUCTURED_JSON_MODEL",
         }
         env_name = env_map.get(profile, "NVIDIA_DEFAULT_MODEL")
-        return os.getenv(env_name, os.getenv("NVIDIA_DEFAULT_MODEL", "meta/llama-3.1-70b-instruct")).strip()
+        default_model = "meta/llama-3.1-8b-instruct" if profile == "fast" else os.getenv("NVIDIA_DEFAULT_MODEL", "meta/llama-3.1-70b-instruct")
+        resolved = os.getenv(env_name, default_model).strip()
+        if profile == "fast" and "70b" in resolved.lower():
+            return "meta/llama-3.1-8b-instruct"
+        return resolved
     if provider == "ollama":
         return os.getenv("OLLAMA_MODEL", "llama3.1:8b").strip()
     if provider == "openai":

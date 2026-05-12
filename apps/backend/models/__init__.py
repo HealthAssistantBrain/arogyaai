@@ -21,6 +21,7 @@ from .clinical_history import ClinicalHistory
 from .report          import Report, ReportTypeEnum, ReportStatusEnum
 from .risk_score      import RiskScore, RiskLevelEnum
 from .recommendation  import Recommendation, RecCategoryEnum, PriorityEnum
+from .recommendation_snapshot import RecommendationSnapshotRecord
 from .feature_snapshot import FeatureSnapshotRecord
 from .baseline_metric import BaselineMetricRecord
 from .shap_value     import ShapValueRecord
@@ -73,6 +74,7 @@ __all__ = [
     "Report",
     "RiskScore",
     "Recommendation",
+    "RecommendationSnapshotRecord",
     "FeatureSnapshotRecord",
     "BaselineMetricRecord",
     "ShapValueRecord",

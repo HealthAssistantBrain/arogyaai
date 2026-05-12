@@ -8,6 +8,9 @@ from fastapi import HTTPException, status
 from sqlalchemy import desc, or_
 from sqlalchemy.orm import Session
 
+from ai.clinical import get_clinical_copilot, get_provider_intelligence_engine
+from ai.forecasting import PredictiveForecastingEngine
+from ai.prevention import PreventiveEngine
 from models import (
     Alert,
     Notification,
@@ -29,6 +32,9 @@ from services.alert_service import generate_health_alerts
 from services.notification_service import NotificationService
 from services.prediction_explanation_service import PredictionExplanationService
 from services.timeline_service import build_timeline_events
+
+_FORECASTING_ENGINE = PredictiveForecastingEngine()
+_PREVENTIVE_ENGINE = PreventiveEngine()
 
 
 TRIAGE_ORDER = {
@@ -280,6 +286,7 @@ class DoctorService:
                 -_event_time(item.get("last_activity")),
             )
         )
+        provider_intelligence = get_provider_intelligence_engine().build_dashboard_intelligence(summaries)
 
         return {
             "success": True,
@@ -294,6 +301,7 @@ class DoctorService:
                     "name": doctor.full_name or doctor.email,
                     "role": doctor.role,
                 },
+                "provider_intelligence": provider_intelligence,
             },
             "last_updated": _now_iso(),
         }
@@ -493,8 +501,56 @@ class DoctorService:
         return merged
 
     @staticmethod
-    async def get_patient_detail(db: Session, doctor: User, patient_id: Any) -> dict[str, Any]:
-        patient = DoctorService._get_patient(db, patient_id)
+    def _recommendation_context(db: Session, risk: RiskScore | None) -> list[dict[str, Any]]:
+        if risk is None:
+            return []
+
+        persisted = (
+            db.query(Recommendation)
+            .filter(Recommendation.risk_score_id == risk.id)
+            .order_by(Recommendation.created_at.desc())
+            .limit(8)
+            .all()
+        )
+        recommendations = [
+            {
+                "title": recommendation.recommendation_text,
+                "description": recommendation.recommendation_text,
+                "category": _enum_value(recommendation.category).lower(),
+                "priority": _enum_value(recommendation.priority).lower(),
+                "created_at": _iso(recommendation.created_at),
+            }
+            for recommendation in persisted
+        ]
+        if recommendations:
+            return recommendations
+
+        payload = risk.risk_payload if isinstance(risk.risk_payload, dict) else {}
+        fallback = payload.get("recommendations") if isinstance(payload.get("recommendations"), list) else []
+        normalized: list[dict[str, Any]] = []
+        for item in fallback[:8]:
+            if isinstance(item, str):
+                normalized.append(
+                    {
+                        "title": item,
+                        "description": item,
+                        "category": "consultation",
+                        "priority": "medium",
+                    }
+                )
+            elif isinstance(item, dict):
+                normalized.append(
+                    {
+                        "title": str(item.get("title") or item.get("description") or item.get("detail") or "Recommendation"),
+                        "description": str(item.get("description") or item.get("detail") or item.get("title") or ""),
+                        "category": str(item.get("category") or "consultation").lower(),
+                        "priority": str(item.get("priority") or "medium").lower(),
+                    }
+                )
+        return normalized
+
+    @staticmethod
+    async def _patient_detail_data(db: Session, doctor: User, patient: User) -> dict[str, Any]:
         profile = DoctorService._profile(db, patient)
         risk = StoragePipelineService.latest_risk_score(db, patient)
         rag_explanation = None
@@ -512,40 +568,106 @@ class DoctorService:
             rag_error = explanation_response.get("error") if isinstance(explanation_response, dict) else None
 
         summary = DoctorService._patient_summary(db, patient)
+        vitals = DoctorService._vitals_panel(db, patient)
+        prediction_panel = DoctorService._prediction_panel(db, patient, risk)
+        shap_insights = DoctorService._shap_panel(db, risk)
+        alerts = DoctorService._patient_alerts(db, patient)
         timeline = build_timeline_events(db, patient.id, include_vitals=True, limit_per_type=25)
+        health_insights = prediction_panel.get("insights") if isinstance(prediction_panel.get("insights"), dict) else {}
+        forecasting = health_insights.get("forecasting") if isinstance(health_insights.get("forecasting"), dict) else None
+        prevention = health_insights.get("prevention") if isinstance(health_insights.get("prevention"), dict) else None
+        if forecasting is None:
+            try:
+                forecasting = _FORECASTING_ENGINE.generate(db, patient, persist=False)
+            except Exception:
+                forecasting = {}
+        if prevention is None:
+            try:
+                prevention = _PREVENTIVE_ENGINE.generate(db, patient, persist=False)
+            except Exception:
+                prevention = {}
+
+        provider_context = {
+            "patient": {
+                **summary,
+                "profile": {
+                    "age": getattr(profile, "age", None),
+                    "gender": getattr(profile, "gender", None),
+                    "city": getattr(profile, "city", None),
+                    "blood_group": getattr(profile, "blood_group", None),
+                },
+            },
+            "vitals": vitals,
+            "ml_predictions": prediction_panel,
+            "shap_insights": shap_insights,
+            "rag_explanation": {
+                "status": rag_status,
+                "error": rag_error,
+                "data": rag_explanation,
+            },
+            "alerts": alerts,
+            "history": timeline,
+            "forecasting": forecasting,
+            "prevention": prevention,
+            "health_insights": health_insights,
+            "clinical_history": health_insights.get("clinical_history") if isinstance(health_insights.get("clinical_history"), dict) else None,
+            "recommendations": DoctorService._recommendation_context(db, risk),
+        }
+        provider_intelligence = await get_provider_intelligence_engine().build_patient_intelligence(provider_context)
+
+        return {
+            "patient": provider_context["patient"],
+            "vitals": vitals,
+            "ml_predictions": prediction_panel,
+            "shap_insights": shap_insights,
+            "rag_explanation": provider_context["rag_explanation"],
+            "alerts": alerts,
+            "history": timeline,
+            "provider_intelligence": provider_intelligence,
+            "forecasting": forecasting,
+            "prevention": prevention,
+            "action_state": {
+                "can_mark_reviewed": True,
+                "can_send_recommendation": True,
+                "can_trigger_follow_up": True,
+                "doctor_id": str(doctor.id),
+            },
+        }
+
+    @staticmethod
+    async def get_patient_detail(db: Session, doctor: User, patient_id: Any) -> dict[str, Any]:
+        patient = DoctorService._get_patient(db, patient_id)
+        data = await DoctorService._patient_detail_data(db, doctor, patient)
 
         return {
             "success": True,
             "status": "ready",
             "source": "db",
             "error": None,
-            "data": {
-                "patient": {
-                    **summary,
-                    "profile": {
-                        "age": getattr(profile, "age", None),
-                        "gender": getattr(profile, "gender", None),
-                        "city": getattr(profile, "city", None),
-                        "blood_group": getattr(profile, "blood_group", None),
-                    },
-                },
-                "vitals": DoctorService._vitals_panel(db, patient),
-                "ml_predictions": DoctorService._prediction_panel(db, patient, risk),
-                "shap_insights": DoctorService._shap_panel(db, risk),
-                "rag_explanation": {
-                    "status": rag_status,
-                    "error": rag_error,
-                    "data": rag_explanation,
-                },
-                "alerts": DoctorService._patient_alerts(db, patient),
-                "history": timeline,
-                "action_state": {
-                    "can_mark_reviewed": True,
-                    "can_send_recommendation": True,
-                    "can_trigger_follow_up": True,
-                    "doctor_id": str(doctor.id),
-                },
-            },
+            "data": data,
+            "last_updated": _now_iso(),
+        }
+
+    @staticmethod
+    async def run_provider_query(
+        db: Session,
+        doctor: User,
+        patient_id: Any,
+        *,
+        query: str,
+    ) -> dict[str, Any]:
+        patient = DoctorService._get_patient(db, patient_id)
+        detail = await DoctorService._patient_detail_data(db, doctor, patient)
+        response = await get_clinical_copilot().answer_query(
+            query,
+            intelligence_bundle=detail.get("provider_intelligence") if isinstance(detail.get("provider_intelligence"), dict) else {},
+        )
+        return {
+            "success": True,
+            "status": "ready",
+            "source": "clinical_copilot",
+            "error": None,
+            "data": response,
             "last_updated": _now_iso(),
         }
 

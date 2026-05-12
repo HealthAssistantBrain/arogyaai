@@ -109,6 +109,8 @@ class StoragePipelineService:
         drivers = payload.get("drivers")
         recommendations = payload.get("recommendations")
         availability = payload.get("availability")
+        prevention = payload.get("prevention")
+        forecasting = payload.get("forecasting")
 
         return {
             "risk": risk if isinstance(risk, dict) else {},
@@ -119,6 +121,8 @@ class StoragePipelineService:
                 "has_lab": False,
                 "has_baseline": False,
             },
+            "prevention": prevention if isinstance(prevention, dict) else None,
+            "forecasting": forecasting if isinstance(forecasting, dict) else None,
         }
 
     @staticmethod
@@ -718,6 +722,7 @@ class StoragePipelineService:
     @staticmethod
     def fetch_health_insights(db: Session, user: User) -> dict[str, Any] | None:
         latest_risk = StoragePipelineService.latest_risk_score(db, user)
+        latest_health = StoragePipelineService.latest_health_score(db, user)
         if latest_risk is None:
             return None
 
@@ -825,6 +830,29 @@ class StoragePipelineService:
                 clinical_history_payload.get("analysis", {}).get("ml_features", {})
                 if isinstance(clinical_history_payload, dict)
                 else {}
+            ),
+            "health_intelligence": latest_health.health_payload if latest_health and isinstance(latest_health.health_payload, dict) else {},
+            "forecasting": (
+                latest_health.health_payload.get("forecasting")
+                if latest_health and isinstance(latest_health.health_payload, dict) and isinstance(latest_health.health_payload.get("forecasting"), dict)
+                else (
+                    risk_payload.get("forecasting")
+                    if isinstance(risk_payload.get("forecasting"), dict)
+                    else None
+                )
+            ),
+            "prevention": (
+                latest_health.health_payload.get("prevention")
+                if latest_health and isinstance(latest_health.health_payload, dict) and isinstance(latest_health.health_payload.get("prevention"), dict)
+                else (
+                    stored.get("prevention")
+                    if isinstance(stored.get("prevention"), dict)
+                    else (
+                        risk_payload.get("prevention")
+                        if isinstance(risk_payload.get("prevention"), dict)
+                        else None
+                    )
+                )
             ),
             "data_points": risk_payload.get("data_points"),
             "last_updated": latest_risk.calculated_at.isoformat() if latest_risk.calculated_at else None,

@@ -30,12 +30,18 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
+from ai.forecasting import PredictiveForecastingEngine
+from ai.prevention import PreventiveEngine
+from ai.scoring.core.orchestration import HealthScoringOrchestrator
 from core.config import settings
+from core.serialization import make_json_safe
 from models import GoogleFitConnection, User, UserVital, UserVitalTypeEnum, WearableMetric
-from services.recommendation_engine import generate_recommendation_plan
+from services.recommendation_engine import generate_fast_recommendation_plan
 from services.recommendation_service import generate_test_recommendations
 
 logger = logging.getLogger(__name__)
+_forecasting_engine = PredictiveForecastingEngine()
+_preventive_engine = PreventiveEngine()
 ROLLING_WINDOW_HOURS = 24
 COMPARISON_WINDOW_HOURS = 48
 STEP_STREAK_WINDOW_DAYS = 7
@@ -106,6 +112,14 @@ METRIC_VALUE_BOUNDS = {
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _safe_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
 
 
 def _resolve_timezone_name(db: Session, user: User, timezone_name: str | None = None) -> str:
@@ -629,14 +643,53 @@ def _metric_payload_from_series(
 
 
 def _envelope(data: dict, status: str, source: str, error: Optional[str] = None) -> dict:
-    return {
-        "success": error is None,
-        "status": status,          # "ready" | "processing" | "fallback"
-        "source": source,          # "ml" | "wearable" | "computed" | "mock"
-        "data": data,
-        "error": error,
-        "last_updated": _now(),
-    }
+    return make_json_safe(
+        {
+            "success": error is None,
+            "status": status,          # "ready" | "processing" | "fallback"
+            "source": source,          # "ml" | "wearable" | "computed" | "mock"
+            "data": data,
+            "error": error,
+            "last_updated": _now(),
+        }
+    )
+
+
+def _severity_label_from_preventive(severity: str) -> str:
+    normalized = str(severity or "info").strip().lower()
+    if normalized == "critical":
+        return "HIGH"
+    if normalized == "warning":
+        return "MEDIUM"
+    return "INFO"
+
+
+def _merge_preventive_alerts(base_alerts: list[dict[str, Any]], preventive_payload: dict[str, Any], user: User) -> list[dict[str, Any]]:
+    merged = list(base_alerts)
+    seen_titles = {str(item.get("title") or "").strip().lower() for item in base_alerts if item.get("title")}
+    for alert_payload in _safe_list(preventive_payload.get("alerts")):
+        alert = _safe_dict(alert_payload)
+        title = str(alert.get("title") or "").strip()
+        if not title or title.lower() in seen_titles:
+            continue
+        merged.append(
+            {
+                "id": str(alert.get("alert_id") or title.lower().replace(" ", "-")),
+                "anomaly_id": None,
+                "user_id": str(user.id),
+                "alert_type": "preventive_alert",
+                "severity": str(alert.get("severity") or "info"),
+                "severity_label": _severity_label_from_preventive(str(alert.get("severity") or "info")),
+                "title": title,
+                "message": str(alert.get("message") or ""),
+                "action_label": (_safe_list(alert.get("guidance"))[:1] or [None])[0],
+                "is_read": False,
+                "created_at": alert.get("created_at"),
+                "metadata": _safe_dict(alert.get("metadata")),
+            }
+        )
+        seen_titles.add(title.lower())
+    return merged
 
 
 def _rolling_window_bounds(hours: int = ROLLING_WINDOW_HOURS) -> tuple[datetime, datetime, datetime]:
@@ -1615,24 +1668,45 @@ from database.session import SessionLocal
 # Private data fetchers (delegated to integrations)
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def _fetch_ml_health_score(user: User) -> Optional[dict]:
-    """Reads the latest persisted health score first."""
-    db = SessionLocal()
+async def _fetch_ml_health_score(user: User, db: Session | None = None) -> Optional[dict]:
+    owns_session = db is None
+    session = db or SessionLocal()
     try:
-        latest = StoragePipelineService.latest_health_score(db, user)
-        if latest is not None:
-            return {
-                "score": float(latest.score),
-                "risk_component": float(latest.risk_component) if latest.risk_component is not None else None,
-                "lifestyle_component": float(latest.lifestyle_component) if latest.lifestyle_component is not None else None,
-                "vitals_component": float(latest.vitals_component) if latest.vitals_component is not None else None,
-                "sleep_component": float(latest.sleep_component) if latest.sleep_component is not None else None,
-                "health_payload": latest.health_payload or {},
-                "calculated_at": latest.calculated_at.isoformat() if latest.calculated_at else None,
-            }
+        payload = HealthScoringOrchestrator.ensure_fresh_score(
+            session,
+            user,
+            trigger="dashboard_score_read",
+            window="24h",
+        )
+        response = HealthScoringOrchestrator.to_response(payload).model_dump()
+        score = float(response.get("score") or 0.0)
+        return {
+            "score": score,
+            "confidence": float(response.get("confidence") or 0.0),
+            "trend": response.get("trend"),
+            "volatility": float(response.get("volatility") or 0.0),
+            "baseline_delta": float(response.get("baseline_delta") or 0.0),
+            "anomaly_level": response.get("anomaly_level"),
+            "explanation": response.get("explanation"),
+            "trend_metadata": response.get("trend_metadata"),
+            "anomalies": response.get("anomalies", []),
+            "category_scores": response.get("category_scores", {}),
+            "drivers": response.get("drivers", []),
+            "insights": response.get("insights", []),
+            "recommendations": response.get("recommendations", []),
+            "risk_component": payload.get("risk_component"),
+            "lifestyle_component": payload.get("lifestyle_component"),
+            "vitals_component": payload.get("vitals_component"),
+            "sleep_component": payload.get("sleep_component"),
+            "health_payload": payload,
+            "calculated_at": payload.get("generated_at"),
+            "risk_level": "Low" if score >= 80 else "Moderate" if score >= 60 else "High",
+            "label": "Optimal" if score >= 80 else "Monitor" if score >= 60 else "Needs attention",
+            "change_percent": getattr(user, "score_change_percent", 0.0) or 0.0,
+        }
     finally:
-        db.close()
-    return None
+        if owns_session:
+            session.close()
 
 
 async def _fetch_wearable_history(user: User) -> Optional[dict]:
@@ -1722,7 +1796,7 @@ async def _fetch_ml_prediction(user: User) -> Optional[dict]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 async def get_health_score(user: User, db: Session) -> dict:
-    ml_result = await _fetch_ml_health_score(user)
+    ml_result = await _fetch_ml_health_score(user, db)
 
     if ml_result is not None:
         return _envelope(ml_result, status="ready", source="ml")
@@ -1757,58 +1831,64 @@ async def get_health_score(user: User, db: Session) -> dict:
     )
 
 
-async def get_health_history(user: User, db: Session) -> dict:
-    previous_start, current_start, current_end = _rolling_window_bounds()
-    heart_rows = _query_vital_rows(db, user, UserVitalTypeEnum.HEART_RATE, previous_start, current_end)
-    sleep_rows = _query_vital_rows(db, user, UserVitalTypeEnum.SLEEP, previous_start, current_end)
+async def get_health_history(user: User, db: Session, *, range_value: str = "24h") -> dict:
+    normalized_range = str(range_value or "24h").strip().lower()
+    if normalized_range not in {"24h", "7d", "30d"}:
+        normalized_range = "24h"
 
-    current_heart = [row for row in heart_rows if row.timestamp and row.timestamp >= current_start]
-    current_sleep = [row for row in sleep_rows if row.timestamp and row.timestamp >= current_start]
-
-    heart_series = []
-    for item in _serialize_vital_series(current_heart, UserVitalTypeEnum.HEART_RATE):
-        label_ts = datetime.fromisoformat(item["timestamp"].replace("Z", "+00:00")) if item.get("timestamp") else None
-        heart_series.append(
-            {
-                "time": label_ts.strftime("%I:%M %p").lstrip("0") if label_ts else "",
-                "value": item["value"],
-                "timestamp": item["timestamp"],
-            }
-        )
-    sleep_series = []
-    for item in _serialize_vital_series(current_sleep, UserVitalTypeEnum.SLEEP):
-        label_ts = datetime.fromisoformat(item["timestamp"].replace("Z", "+00:00")) if item.get("timestamp") else None
-        sleep_series.append(
-            {
-                "day": label_ts.strftime("%a").upper() if label_ts else "",
-                "hours": item["value"],
-                "timestamp": item["timestamp"],
-            }
-        )
-    avg_sleep = round(sum(item["hours"] for item in sleep_series) / len(sleep_series), 1) if sleep_series else None
-    avg_hr = round(sum(item["value"] for item in heart_series) / len(heart_series), 1) if heart_series else None
-    has_data = bool(heart_series or sleep_series)
+    metric_range = normalized_range if normalized_range in {"24h", "7d"} else "7d"
+    temporal_payload = _build_temporal_metric_payloads(db, user, range_value=metric_range, timezone_name=_resolve_timezone_name(db, user))
+    metrics = temporal_payload.get("metrics", {})
+    heart_series = [
+        {
+            "time": item.get("timestamp"),
+            "value": item.get("value"),
+            "timestamp": item.get("timestamp"),
+        }
+        for item in (metrics.get("heart_rate", {}).get("series") or [])
+    ]
+    sleep_series = [
+        {
+            "day": item.get("timestamp"),
+            "hours": item.get("value"),
+            "timestamp": item.get("timestamp"),
+        }
+        for item in (metrics.get("sleep", {}).get("series") or [])
+    ]
+    score_history = HealthScoringOrchestrator.get_score_history(db, user, range_key=normalized_range).to_dict()
+    latest_score = HealthScoringOrchestrator.ensure_fresh_score(
+        db,
+        user,
+        trigger="dashboard_history_read",
+        window=normalized_range,
+    )
+    has_data = bool(heart_series or sleep_series or score_history.get("points"))
 
     return _envelope(
         {
             "hrv": heart_series,
-            "hrv_average_bpm": avg_hr,
+            "hrv_average_bpm": metrics.get("heart_rate", {}).get("current"),
             "sleep": sleep_series,
-            "sleep_average_hours": avg_sleep,
-            "window": "rolling_24h",
-            "window_start": current_start.isoformat(),
-            "window_end": current_end.isoformat(),
+            "sleep_average_hours": metrics.get("sleep", {}).get("current"),
+            "score_history": score_history.get("points", []),
+            "trend_metadata": latest_score.get("metadata", {}).get("overall_trend", {}),
+            "anomalies": latest_score.get("anomalies", []),
+            "window": normalized_range,
+            "window_start": temporal_payload.get("window_start"),
+            "window_end": temporal_payload.get("window_end"),
         },
         status="ready" if has_data else "fallback",
-        source="wearable" if has_data else "db",
-        error=None if has_data else "No recent wearable history available",
+        source="wearable+scoring" if has_data else "db",
+        error=None if has_data else "No recent wearable or scoring history available",
     )
 
 
 async def get_latest_prediction(user: User, db: Session) -> dict:
     ml = await _fetch_ml_prediction(user)
+    preventive_payload = _preventive_engine.generate(db, user, persist=True)
 
     if ml is not None:
+        ml["prevention"] = preventive_payload
         return _envelope(ml, status="ready", source="ml")
 
     # ── Fallback: compute from stored health score ────────────────────────────
@@ -1830,9 +1910,50 @@ async def get_latest_prediction(user: User, db: Session) -> dict:
                 "Schedule a routine check-up in 6 months",
                 "Focus on consistent sleep patterns",
             ],
+            "prevention": preventive_payload,
         },
         status="fallback",
         source="computed",
+    )
+
+
+async def get_health_forecast(
+    user: User,
+    db: Session,
+    *,
+    force_refresh: bool = False,
+) -> dict:
+    payload = _forecasting_engine.generate(
+        db,
+        user,
+        force_refresh=force_refresh,
+        persist=True,
+    )
+    payload["prevention"] = _preventive_engine.generate(
+        db,
+        user,
+        force_refresh=force_refresh,
+        persist=True,
+    )
+    return _envelope(payload, status=str(payload.get("status") or "ready"), source=str(payload.get("source") or "forecasting_engine"))
+
+
+async def get_preventive_intelligence(
+    user: User,
+    db: Session,
+    *,
+    force_refresh: bool = False,
+) -> dict:
+    payload = _preventive_engine.generate(
+        db,
+        user,
+        force_refresh=force_refresh,
+        persist=True,
+    )
+    return _envelope(
+        payload,
+        status=str(payload.get("status") or "ready"),
+        source=str(payload.get("source") or "preventive_engine"),
     )
 
 
@@ -1857,7 +1978,14 @@ async def get_alerts(user: User, db: Session) -> dict:
     """
     Returns dynamic alerts list via alert_service.
     """
-    return await get_active_alerts(user, db)
+    base = await get_active_alerts(user, db)
+    payload = base.get("data") if isinstance(base.get("data"), dict) else {}
+    alerts = payload.get("alerts") if isinstance(payload.get("alerts"), list) else []
+    preventive_payload = _preventive_engine.generate(db, user, persist=True)
+    merged = _merge_preventive_alerts(alerts, preventive_payload, user)
+    base["data"] = {"alerts": merged}
+    base["last_updated"] = preventive_payload.get("generated_at") or _now()
+    return make_json_safe(base)
 
 
 async def get_recommended_tests(user: User, db: Session) -> dict:
@@ -1867,23 +1995,9 @@ async def get_recommended_tests(user: User, db: Session) -> dict:
 
 
 async def get_recommendation_plan(user: User, db: Session) -> dict:
-    from services.orchestrator import OrchestratorRequest, get_orchestrator
-
-    orchestrated = await get_orchestrator().run(
-        OrchestratorRequest(
-            workflow="recommendations",
-            user_id=str(user.id),
-            db=db,
-            current_user=user,
-            endpoint_type="dashboard_recommendations",
-            intent="recommendations",
-            latency_tier="interactive",
-        )
-    )
-    payload = orchestrated.get("data") if isinstance(orchestrated.get("data"), dict) else {}
-    plan = payload.get("plan")
+    plan = generate_fast_recommendation_plan(user.id, db=db)
     status = "ready" if plan else "fallback"
-    return _envelope(plan, status=status, source="ai_orchestrator")
+    return _envelope(plan, status=status, source="fast_recommendation_engine")
 
 
 async def get_health_metrics(
@@ -1919,17 +2033,41 @@ async def get_health_metrics(
             "metadata": latest_location.metric_metadata or {},
         }
 
+    latest_health_payload = HealthScoringOrchestrator.ensure_fresh_score(
+        db,
+        user,
+        trigger="dashboard_metrics_read",
+        window=resolved_range,
+    )
     latest_health = StoragePipelineService.latest_health_score(db, user)
     if latest_health is not None:
-        health_payload = latest_health.health_payload or {}
         metrics["health_score"] = {
             "value": float(latest_health.score),
             "unit": "score",
             "status": "ready",
             "source": latest_health.source,
             "last_updated": latest_health.calculated_at.isoformat() if latest_health.calculated_at else None,
-            "components": health_payload,
+            "components": latest_health_payload,
+            "trend": latest_health_payload.get("trend"),
+            "confidence": latest_health_payload.get("confidence"),
+            "volatility": latest_health_payload.get("volatility"),
+            "baseline_delta": latest_health_payload.get("baseline_delta"),
+            "anomaly_level": latest_health_payload.get("anomaly_level"),
         }
+
+    preventive_payload = _preventive_engine.generate(db, user, persist=True)
+    preventive_monitoring = _safe_dict(preventive_payload.get("monitoring"))
+    preventive_guidance = _safe_dict(preventive_payload.get("guidance"))
+    metrics["preventive_risk"] = {
+        "value": float(preventive_monitoring.get("overall_risk") or 0.0),
+        "unit": "risk",
+        "status": "ready",
+        "source": "preventive_engine",
+        "last_updated": preventive_payload.get("generated_at"),
+        "headline": preventive_guidance.get("headline"),
+        "focus_domain": preventive_guidance.get("focus_domain"),
+        "components": preventive_payload,
+    }
 
     latest_metric_update = max(
         [

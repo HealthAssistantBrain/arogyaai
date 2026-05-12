@@ -8,9 +8,21 @@ Run with:
 """
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
+import sys
 
 import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+
+for path in (REPO_ROOT, BACKEND_ROOT):
+    resolved = str(path)
+    if resolved not in sys.path:
+        sys.path.insert(0, resolved)
+
+from services.supabase_sdk_validation import SupabaseSDKCompatibilityError
 
 
 FAKE_SUPABASE_URL = "https://testproject.supabase.co"
@@ -38,8 +50,12 @@ class TestUploadReport:
 
         mock_client = MagicMock()
         mock_client.storage.from_.return_value = mock_storage_bucket
+        mock_factory = MagicMock(return_value=mock_client)
 
-        with patch("integrations.supabase_storage.create_client", return_value=mock_client):
+        with patch(
+            "integrations.supabase_storage.load_supabase_client_symbols",
+            return_value=(MagicMock(), mock_factory),
+        ):
             from integrations.supabase_storage import upload_report
 
             storage_path, storage_reference = upload_report(FAKE_USER_ID, FAKE_FILENAME, FAKE_BYTES)
@@ -55,8 +71,12 @@ class TestUploadReport:
 
         mock_client = MagicMock()
         mock_client.storage.from_.return_value = mock_storage_bucket
+        mock_factory = MagicMock(return_value=mock_client)
 
-        with patch("integrations.supabase_storage.create_client", return_value=mock_client):
+        with patch(
+            "integrations.supabase_storage.load_supabase_client_symbols",
+            return_value=(MagicMock(), mock_factory),
+        ):
             from integrations.supabase_storage import upload_report
 
             upload_report(FAKE_USER_ID, FAKE_FILENAME, FAKE_BYTES)
@@ -70,8 +90,12 @@ class TestUploadReport:
 
         mock_client = MagicMock()
         mock_client.storage.from_.return_value = mock_storage_bucket
+        mock_factory = MagicMock(return_value=mock_client)
 
-        with patch("integrations.supabase_storage.create_client", return_value=mock_client):
+        with patch(
+            "integrations.supabase_storage.load_supabase_client_symbols",
+            return_value=(MagicMock(), mock_factory),
+        ):
             from integrations.supabase_storage import upload_report
 
             upload_report(FAKE_USER_ID, "report.pdf", FAKE_BYTES)
@@ -87,8 +111,12 @@ class TestUploadReport:
 
         mock_client = MagicMock()
         mock_client.storage.from_.return_value = mock_storage_bucket
+        mock_factory = MagicMock(return_value=mock_client)
 
-        with patch("integrations.supabase_storage.create_client", return_value=mock_client):
+        with patch(
+            "integrations.supabase_storage.load_supabase_client_symbols",
+            return_value=(MagicMock(), mock_factory),
+        ):
             from integrations.supabase_storage import upload_report
 
             with pytest.raises(HTTPException) as exc_info:
@@ -109,16 +137,35 @@ class TestUploadReport:
             with pytest.raises(SupabaseStorageError, match="SUPABASE_SERVICE_ROLE_KEY"):
                 upload_report(FAKE_USER_ID, FAKE_FILENAME, FAKE_BYTES)
 
+    def test_incompatible_sdk_raises_storage_error(self):
+        snapshot = {
+            "status": "failed",
+            "errors": ["import_failure:realtime.connection error=No module named 'realtime.connection'"],
+        }
+
+        with patch(
+            "integrations.supabase_storage.load_supabase_client_symbols",
+            side_effect=SupabaseSDKCompatibilityError(snapshot),
+        ):
+            from integrations.supabase_storage import SupabaseStorageError, upload_report
+
+            with pytest.raises(SupabaseStorageError, match="Supabase SDK compatibility validation failed"):
+                upload_report(FAKE_USER_ID, FAKE_FILENAME, FAKE_BYTES)
+
     def test_safe_filename_strips_special_chars(self):
         mock_storage_bucket = MagicMock()
         mock_storage_bucket.upload.return_value = None
 
         mock_client = MagicMock()
         mock_client.storage.from_.return_value = mock_storage_bucket
+        mock_factory = MagicMock(return_value=mock_client)
 
         weird_name = "blood test (2024) #1 report!.pdf"
 
-        with patch("integrations.supabase_storage.create_client", return_value=mock_client):
+        with patch(
+            "integrations.supabase_storage.load_supabase_client_symbols",
+            return_value=(MagicMock(), mock_factory),
+        ):
             from integrations.supabase_storage import upload_report
 
             storage_path, _ = upload_report(FAKE_USER_ID, weird_name, FAKE_BYTES)
@@ -135,8 +182,12 @@ class TestUploadReport:
 
         mock_client = MagicMock()
         mock_client.storage.from_.return_value = mock_storage_bucket
+        mock_factory = MagicMock(return_value=mock_client)
 
-        with patch("integrations.supabase_storage.create_client", return_value=mock_client):
+        with patch(
+            "integrations.supabase_storage.load_supabase_client_symbols",
+            return_value=(MagicMock(), mock_factory),
+        ):
             from integrations.supabase_storage import upload_report
 
             storage_path, storage_reference = upload_report(FAKE_USER_ID, FAKE_FILENAME, FAKE_BYTES)
@@ -153,8 +204,12 @@ class TestSignedUrls:
         }
         mock_client = MagicMock()
         mock_client.storage.from_.return_value = mock_storage_bucket
+        mock_factory = MagicMock(return_value=mock_client)
 
-        with patch("integrations.supabase_storage.create_client", return_value=mock_client):
+        with patch(
+            "integrations.supabase_storage.load_supabase_client_symbols",
+            return_value=(MagicMock(), mock_factory),
+        ):
             from integrations.supabase_storage import create_signed_download_url
 
             result = create_signed_download_url(f"{FAKE_USER_ID}/abc.pdf", FAKE_BUCKET, expires_in=300)

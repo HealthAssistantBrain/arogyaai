@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -21,6 +22,13 @@ for path in (REPO_ROOT, BACKEND_ROOT):
     resolved = str(path)
     if resolved not in sys.path:
         sys.path.insert(0, resolved)
+
+os.environ.setdefault("JWT_SECRET_KEY", "test-jwt-secret")
+os.environ.setdefault("APP_ENCRYPTION_KEY", "G4u8Y4VhV1v2kJx6lS0Q7pA3mF9nR2tU")
+os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
+os.environ.setdefault("SUPABASE_ANON_KEY", "test-anon-key")
+os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
+os.environ.setdefault("DATABASE_URL", "sqlite:///./supabase_jwt_verifier_test.db")
 
 from core.config import settings
 from services.supabase_jwt_verifier import JWKSCacheState, SupabaseJWTVerifier

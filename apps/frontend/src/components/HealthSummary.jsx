@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import { Activity, AlertCircle, FlaskConical, HeartPulse, Moon, Sparkles } from 'lucide-react';
-import api from '../lib/axios';
+import { useInsightsData } from '../hooks/useInsightsData';
 import { safeArray, safeObject, safeText } from '../utils/safeData';
 
 const ICON_RULES = [
@@ -49,38 +49,43 @@ const LoadingState = () => (
 );
 
 const HealthSummary = () => {
-  const [insights, setInsights] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { data, loading, error } = useInsightsData();
+  const insights = useMemo(() => {
+    const preventive = safeObject(data?.prevention);
+    const preventivePriorities = safeArray(preventive.priorities).map((item, index) => ({
+      title: safeText(item?.title, `Preventive Priority ${index + 1}`),
+      value: safeText(item?.priority, 'Priority'),
+      description: safeText(item?.description ?? item?.detail, 'Your preventive layer identified this as a top action.'),
+      recommendation: safeText(item?.categoryLabel ?? item?.category),
+    }));
+    const preventiveAlerts = safeArray(preventive.alerts).map((item, index) => ({
+      title: safeText(item?.title, `Preventive Alert ${index + 1}`),
+      value: safeText(item?.value ?? item?.severity, 'Alert'),
+      description: safeText(item?.description ?? item?.message, 'A preventive monitoring alert was generated.'),
+      recommendation: safeText(item?.recommendation),
+    }));
 
-  useEffect(() => {
-    const controller = new AbortController();
+    if (preventivePriorities.length > 0 || preventiveAlerts.length > 0) {
+      return [...preventivePriorities, ...preventiveAlerts].slice(0, 3);
+    }
 
-    const fetchInsights = async () => {
-      try {
-        const response = await api.get('/health/insights', { signal: controller.signal });
-        const payload = response.data?.data ?? response.data ?? {};
-        const nextInsights = safeArray(payload.insights)
-          .map(normalizeInsight)
-          .filter((item) => item.title && item.description);
+    const metricInsights = safeArray(data?.metricInsights).map((item, index) => ({
+      title: safeText(item?.label, `Health Insight ${index + 1}`),
+      value: safeText(item?.value, 'Insight'),
+      description: safeText(item?.assessment, 'Your latest data generated this AI health signal.'),
+      recommendation: '',
+    }));
 
-        setInsights(nextInsights);
-        setError(null);
-      } catch (err) {
-        if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
-        setInsights([]);
-        setError(err?.response?.data?.detail || err?.message || 'Unable to load health insights.');
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      }
-    };
+    if (metricInsights.length > 0) {
+      return metricInsights.slice(0, 3);
+    }
 
-    void fetchInsights();
-
-    return () => controller.abort();
-  }, []);
+    return safeArray(data?.recommendations)
+      .map(normalizeInsight)
+      .filter((item) => item.title && item.description)
+      .slice(0, 3);
+  }, [data]);
+  const showLoading = loading && insights.length === 0;
 
   return (
     <div className="bg-white dark:bg-background p-8 rounded-xl shadow-sm border border-slate-100 dark:border-stroke flex flex-col">
@@ -93,7 +98,7 @@ const HealthSummary = () => {
       </div>
 
       <div className="space-y-5 flex-1 overflow-y-auto custom-scrollbar">
-        {loading ? (
+        {showLoading ? (
           <LoadingState />
         ) : insights.length > 0 ? (
           insights.map((item, index) => {

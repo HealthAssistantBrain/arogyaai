@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     Activity,
     AlertTriangle,
@@ -11,13 +11,17 @@ import {
     Stethoscope,
     Utensils,
 } from 'lucide-react';
-import useHealthStore from '../store/healthStore';
-import useDashboardStore from '../store/dashboardStore';
+import { useShallow } from 'zustand/shallow';
+import { logRecommendationDebug } from '../lib/recommendationContracts';
 import SmartLoadingOverlay from '../components/ui/SmartLoadingOverlay';
 import useSmartFetchOverlay from '../hooks/useSmartFetchOverlay';
 import RecommendationSection, { ActionItem, PriorityTag } from '../components/recommendations/RecommendationSection';
 import ActionTimeline from '../components/recommendations/ActionTimeline';
 import MonitoringCard from '../components/recommendations/MonitoringCard';
+import useRecommendationSnapshotStore from '../store/recommendationSnapshotStore';
+
+const SLOW_LOADING_MS = 1500;
+const LOADING_TIMEOUT_MS = 5000;
 
 const RISK_CLASSES = {
     HIGH: 'border-red-200 bg-red-50 text-red-700 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-200',
@@ -77,10 +81,12 @@ const RecommendationSkeleton = () => (
 
 const EmptyPlan = ({ error, onRetry }) => (
     <div className="mx-auto max-w-3xl rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm dark:border-stroke dark:bg-[#171923]">
-        <div className="mx-auto flex size-14 items-center justify-center rounded-xl bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-200">
+        <div className={`mx-auto flex size-14 items-center justify-center rounded-xl ${error ? 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-200' : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-200'}`}>
             <AlertTriangle size={26} />
         </div>
-        <h2 className="mt-6 text-2xl font-black tracking-tight text-slate-950 dark:text-text-primary">No prevention plan available yet</h2>
+        <h2 className="mt-6 text-2xl font-black tracking-tight text-slate-950 dark:text-text-primary">
+            {error ? 'Unable to load prevention plan' : 'No prevention plan available yet'}
+        </h2>
         <p className="mx-auto mt-3 max-w-xl text-sm font-medium leading-relaxed text-slate-600 dark:text-text-muted">
             {error || 'Run a fresh prediction or connect recent wearable and lab data to generate a structured prevention plan.'}
         </p>
@@ -144,26 +150,36 @@ const SourceStrip = ({ plan }) => {
 };
 
 const PreventiveRecommendations = () => {
-    const explanation = useHealthStore((state) => state.explanation);
-    const recommendationPlans = useHealthStore((state) => state.recommendationPlans);
-    const recommendationPlan = useHealthStore((state) => state.recommendationPlan);
-    const loading = useHealthStore((state) => state.loading);
-    const explanationHydrating = useHealthStore((state) => state.explanationHydrating);
-    const error = useHealthStore((state) => state.error);
-    const metrics = useHealthStore((state) => state.metrics);
-    const metricsLoading = useHealthStore((state) => state.metricsLoading);
-    const fetchExplanation = useHealthStore((state) => state.fetchExplanation);
-    const fetchHealthMetrics = useHealthStore((state) => state.fetchHealthMetrics);
-
-    const fetchDashboardData = useDashboardStore((state) => state.fetchDashboardData);
-    const dashboardIsFetching = useDashboardStore((state) => state.isFetching);
-    const dashboardUpdatedAt = useDashboardStore((state) => state.dashboardUpdatedAt);
-    const dashboardHydrated = useDashboardStore((state) => state.hasHydratedCache);
-    const predictionId = useDashboardStore((state) => state.prediction?.data?.prediction_id ?? null);
+    const {
+        explanation,
+        recommendations,
+        recommendationPlans,
+        recommendationPlan,
+        loading,
+        error,
+        metrics,
+        refreshing,
+        predictionId,
+        lastUpdated,
+        fetchSnapshot,
+    } = useRecommendationSnapshotStore(useShallow((state) => ({
+        explanation: state.explanation,
+        recommendations: state.recommendations,
+        recommendationPlans: state.recommendationPlans,
+        recommendationPlan: state.recommendationPlan,
+        loading: state.loading,
+        error: state.error,
+        metrics: state.metrics,
+        refreshing: state.refreshing,
+        predictionId: state.predictionId,
+        lastUpdated: state.lastUpdated,
+        fetchSnapshot: state.fetchSnapshot,
+    })));
 
     const [selectedPlanIndex, setSelectedPlanIndex] = useState(0);
-    const loadKeyRef = useRef(null);
-    const refreshKeyRef = useRef(null);
+    const [hasStartedInitialLoad, setHasStartedInitialLoad] = useState(false);
+    const [slowLoading, setSlowLoading] = useState(false);
+    const [showTimeoutRecovery, setShowTimeoutRecovery] = useState(false);
     const plans = useMemo(
         () => (recommendationPlans?.length ? recommendationPlans : (recommendationPlan ? [recommendationPlan] : [])),
         [recommendationPlan, recommendationPlans]
@@ -171,48 +187,97 @@ const PreventiveRecommendations = () => {
     const activePlan = plans[Math.min(selectedPlanIndex, Math.max(plans.length - 1, 0))] ?? null;
     const hasPlan = Boolean(activePlan);
     const hasExplanationSnapshot = Boolean(explanation);
-    const showSkeleton = !hasExplanationSnapshot && !hasPlan && (loading || !dashboardHydrated);
+    const showSkeleton = !hasPlan && !error && (!hasStartedInitialLoad || loading);
     const showRefreshOverlay = useSmartFetchOverlay(
-        explanationHydrating || metricsLoading || dashboardIsFetching,
+        refreshing,
         hasExplanationSnapshot || hasPlan,
         { exitDelayMs: 200 }
     );
 
     useEffect(() => {
-        const loadKey = predictionId ?? 'latest';
-        if (loadKeyRef.current === loadKey) return;
-
-        loadKeyRef.current = loadKey;
+        const controller = new AbortController();
         const silent = hasExplanationSnapshot || hasPlan;
-        const loadPage = async () => {
-            try {
-                void fetchDashboardData({ silent });
-                void fetchHealthMetrics({ silent });
-                void fetchExplanation({ silent, predictionId });
-            } catch (loadError) {
+        setHasStartedInitialLoad(true);
+        void fetchSnapshot({
+            silent,
+            predictionId,
+            signal: controller.signal,
+        }).catch((loadError) => {
+            if (!controller.signal.aborted) {
                 console.error('Failed to load recommendations page:', loadError);
             }
+        });
+        return () => {
+            controller.abort();
         };
-
-        void loadPage();
-    }, [fetchDashboardData, fetchHealthMetrics, fetchExplanation, predictionId, hasExplanationSnapshot, hasPlan]);
+    }, [fetchSnapshot, hasExplanationSnapshot, hasPlan, predictionId]);
 
     useEffect(() => {
-        if (!dashboardUpdatedAt) return;
-
-        const refreshKey = `${predictionId ?? 'latest'}:${dashboardUpdatedAt}`;
-        if (refreshKeyRef.current === refreshKey) return;
-
-        refreshKeyRef.current = refreshKey;
-        void fetchHealthMetrics({ force: true, silent: true });
-        void fetchExplanation({ force: true, silent: true, predictionId });
-    }, [dashboardUpdatedAt, fetchExplanation, fetchHealthMetrics, predictionId]);
+        if (hasExplanationSnapshot || hasPlan) {
+            setHasStartedInitialLoad(true);
+        }
+    }, [hasExplanationSnapshot, hasPlan]);
 
     useEffect(() => {
         if (selectedPlanIndex >= plans.length) {
             setSelectedPlanIndex(0);
         }
     }, [plans.length, selectedPlanIndex]);
+
+    useEffect(() => {
+        logRecommendationDebug('RECOMMENDATIONS_QUERY_STATE', {
+            loading,
+            refreshing,
+            hasExplanationSnapshot,
+            hasPlan,
+            predictionId,
+            planCount: plans.length,
+            error: error ?? null,
+        });
+    }, [
+        error,
+        hasExplanationSnapshot,
+        hasPlan,
+        loading,
+        plans.length,
+        predictionId,
+        refreshing,
+    ]);
+
+    useEffect(() => {
+        const state = showSkeleton ? 'loading' : hasPlan ? 'success' : error ? 'error' : 'empty';
+        logRecommendationDebug(state === 'empty' ? 'RECOMMENDATIONS_EMPTY' : 'RECOMMENDATIONS_RENDER', {
+            state,
+            planCount: plans.length,
+            recommendationCount: recommendations?.length ?? explanation?.recommendations?.length ?? 0,
+            predictionId: predictionId ?? null,
+        });
+    }, [error, explanation?.recommendations?.length, hasPlan, plans.length, predictionId, recommendations?.length, showSkeleton]);
+
+    useEffect(() => {
+        if (!showSkeleton) {
+            setSlowLoading(false);
+            setShowTimeoutRecovery(false);
+            return undefined;
+        }
+
+        const slowTimer = window.setTimeout(() => {
+            setSlowLoading(true);
+            logRecommendationDebug('RECOMMENDATIONS_LOADING_SLOW', {
+                loading,
+                predictionId: predictionId ?? null,
+            });
+        }, SLOW_LOADING_MS);
+
+        const timeoutTimer = window.setTimeout(() => {
+            setShowTimeoutRecovery(true);
+        }, LOADING_TIMEOUT_MS);
+
+        return () => {
+            window.clearTimeout(slowTimer);
+            window.clearTimeout(timeoutTimer);
+        };
+    }, [loading, predictionId, showSkeleton]);
 
     const metricCards = useMemo(() => metrics?.cards ?? [], [metrics]);
     const snapshotMetrics = useMemo(() => {
@@ -224,16 +289,37 @@ const PreventiveRecommendations = () => {
     }, [metricCards]);
 
     const handleRetry = () => {
-        void fetchDashboardData({ force: true });
-        void fetchHealthMetrics({ force: true });
-        void fetchExplanation({ force: true, predictionId });
+        void fetchSnapshot({ force: true, silent: false, predictionId });
     };
 
     if (showSkeleton) {
         return (
             <div className="min-h-screen bg-slate-100 px-6 py-8 text-slate-950 dark:bg-[#10131a] dark:text-slate-100 lg:px-8">
-                <div className="mx-auto max-w-7xl">
+                <div className="mx-auto max-w-7xl space-y-4">
                     <RecommendationSkeleton />
+                    {slowLoading ? (
+                        <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm font-semibold text-slate-600 shadow-sm dark:border-stroke dark:bg-[#171923] dark:text-text-secondary">
+                            Prevention plan data is taking longer than expected to settle.
+                            {showTimeoutRecovery ? (
+                                <div className="mt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            logRecommendationDebug('RECOMMENDATIONS_FETCH_STARTED', {
+                                                source: 'timeout_recovery',
+                                                predictionId: predictionId ?? null,
+                                            });
+                                            handleRetry();
+                                        }}
+                                        className="inline-flex items-center gap-2 rounded-xl bg-background px-4 py-2 text-xs font-black uppercase tracking-[0.14em] text-text-primary transition hover:bg-card dark:bg-white dark:text-slate-950"
+                                    >
+                                        <RefreshCcw size={14} />
+                                        Retry refresh
+                                    </button>
+                                </div>
+                            ) : null}
+                        </div>
+                    ) : null}
                 </div>
             </div>
         );
@@ -241,7 +327,7 @@ const PreventiveRecommendations = () => {
 
     return (
         <div className="relative min-h-screen bg-slate-100 text-slate-950 dark:bg-[#10131a] dark:text-slate-100">
-            {showRefreshOverlay ? <SmartLoadingOverlay label="Refreshing prevention plan" /> : null}
+            {showRefreshOverlay ? <SmartLoadingOverlay label="Updating insights..." /> : null}
 
             <div className="mx-auto max-w-7xl px-6 py-8 lg:px-8">
                 {!hasPlan ? (
@@ -269,6 +355,11 @@ const PreventiveRecommendations = () => {
                                         <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-black uppercase tracking-[0.14em] text-slate-600 dark:border-stroke dark:bg-white/[0.04] dark:text-text-secondary">
                                             Confidence {formatConfidence(activePlan.confidence)}
                                         </span>
+                                        {refreshing ? (
+                                            <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-black uppercase tracking-[0.14em] text-blue-700 dark:border-blue-500/25 dark:bg-blue-500/10 dark:text-blue-200">
+                                                Updating insights...
+                                            </span>
+                                        ) : null}
                                     </div>
                                     <h1 className="mt-5 text-3xl font-black tracking-tight text-slate-950 dark:text-text-primary lg:text-5xl">
                                         {activePlan.condition}
@@ -291,7 +382,7 @@ const PreventiveRecommendations = () => {
                             <div className="mt-6 flex flex-col gap-4 border-t border-slate-200 pt-5 dark:border-stroke lg:flex-row lg:items-center lg:justify-between">
                                 <SourceStrip plan={activePlan} />
                                 <p className="text-xs font-black uppercase tracking-[0.14em] text-text-muted">
-                                    Updated {formatUpdatedAt(metrics?.lastUpdated ?? dashboardUpdatedAt)}
+                                    Updated {formatUpdatedAt(metrics?.lastUpdated ?? lastUpdated)}
                                 </p>
                             </div>
                         </section>

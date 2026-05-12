@@ -3,9 +3,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from ai.reasoning import get_reasoning_orchestrator
 from ai.workflows import ProviderTaskRequest
 from ai.conversation import ConversationIntelligenceService
-from pipelines.rag_pipeline import RagExplanationPipeline
 from pipelines.rag_pipeline.query_builder import build_query_from_shap
 from services.agents import run_medical_pipeline
 from services.clinical_insight_service import ClinicalInsightService
@@ -249,18 +249,6 @@ class ReasoningPipeline:
         context_bundle: dict[str, Any] | None = None,
         rag_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        try:
-            generated = await RagExplanationPipeline().explain(
-                risk_score=risk_score,
-                risk_level=risk_level,
-                shap_values=shap_values,
-            )
-            if isinstance(generated, dict) and generated:
-                generated.setdefault("provider", "rag_pipeline")
-                return generated
-        except Exception:
-            pass
-
         query_payload = build_query_from_shap(shap_values)
         if not isinstance(rag_context, dict) or not rag_context:
             rag_context = await self.rag_pipeline.retrieve_ai_insight_context(shap_values)
@@ -323,7 +311,7 @@ class ReasoningPipeline:
                 },
                 memory=(context_bundle.get("structured_context") if isinstance(context_bundle, dict) and isinstance(context_bundle.get("structured_context"), dict) else {}),
                 rag_context=self._compact_rag_prompt_context(rag_context),
-                timeout_seconds=10.0,
+                timeout_seconds=25.0,
             )
         )
         payload = generated.get("payload") if isinstance(generated.get("payload"), dict) else {}
@@ -346,6 +334,31 @@ class ReasoningPipeline:
         )
         merged["provider"] = generated.get("provider") or "deterministic_fallback"
         merged["provider_attempts"] = generated.get("attempts") or []
+        reasoning_bundle = get_reasoning_orchestrator().generate(
+            workflow="ai_insights",
+            user_id=str(((context_bundle or {}).get("profile") or {}).get("user_id") or ""),
+            source="reasoning_pipeline",
+            risk_payload={
+                "overall_risk_score": risk_score,
+                "risk_level": risk_level,
+            },
+            feature_payload=feature_payload,
+            clinical_history=clinical_history,
+            forecasting=rag_context.get("forecasting") if isinstance(rag_context, dict) and isinstance(rag_context.get("forecasting"), dict) else {},
+            drivers=merged.get("factors") if isinstance(merged.get("factors"), list) else [],
+            shap_values=shap_values,
+            recommendations=merged.get("recommendations") if isinstance(merged.get("recommendations"), list) else [],
+            user_context=context_bundle or {},
+        )
+        merged["reasoning"] = reasoning_bundle
+        merged["cognitive_summary"] = reasoning_bundle.get("cognitive_summary")
+        merged["clinical_narrative"] = reasoning_bundle.get("clinical_narrative") or merged.get("clinical_insight") or merged.get("summary")
+        merged["causal_explanations"] = reasoning_bundle.get("causal_explanations") or []
+        merged["confidence_indicators"] = reasoning_bundle.get("confidence_indicators") or []
+        merged["future_trajectory"] = reasoning_bundle.get("trajectory_explanation") or {}
+        merged["memory_persistence"] = reasoning_bundle.get("memory_persistence") or {}
+        if not merged.get("follow_up_questions"):
+            merged["follow_up_questions"] = reasoning_bundle.get("follow_up_questions") or []
         return merged
 
     def _compact_user_prompt_context(self, user_context: dict[str, Any], *, workflow: str) -> dict[str, Any]:

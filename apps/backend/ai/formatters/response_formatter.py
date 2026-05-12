@@ -35,9 +35,7 @@ def _safe_list(value: Any) -> list[Any]:
 
 
 class StructuredResponseFormatter:
-    DEFAULT_DISCLAIMER = (
-        "This response is supportive clinical guidance only. Seek urgent or in-person medical care for severe, worsening, or emergency symptoms."
-    )
+    DEFAULT_DISCLAIMER = ""
     SECTION_TEMPLATES = {
         "ai_insights": [
             ("executive_summary", "Executive Summary", ("summary", "clinical_insight", "analysis")),
@@ -420,7 +418,7 @@ class StructuredResponseFormatter:
     def _build_disclaimer(self, payload: dict[str, Any], validation: Any) -> str:
         base = self._first_text(payload.get("medical_disclaimer"), payload.get("disclaimer"), self.DEFAULT_DISCLAIMER)
         if validation.disclaimer_suffix:
-            return f"{base} {validation.disclaimer_suffix}".strip()
+            return f"{base} {validation.disclaimer_suffix}".strip() if base else validation.disclaimer_suffix
         return base
 
     def _latency_ms(self, payload: dict[str, Any], *, context: Any = None) -> float:

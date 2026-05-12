@@ -260,6 +260,9 @@ def test_get_prediction_explanation_adds_clinical_sections():
     assert "Hypertension risk" in payload["possible_conditions"]
     assert "Headache" in payload["symptoms"]
     assert payload["key_drivers"][0]["title"]
+    assert payload["reasoning"]["clinical_narrative"]
+    assert payload["cognitive_summary"]["trend_state"] in {"variable", "deteriorating", "stable", "improving"}
+    assert isinstance(payload["confidence_indicators"], list)
 
 
 def test_get_prediction_explanation_merges_latest_clinical_history():

@@ -395,6 +395,13 @@ async def ollama_generate_json(
             try:
                 await asyncio.wait_for(semaphore.acquire(), timeout=_ollama_queue_timeout_seconds())
             except asyncio.TimeoutError as exc:
+                logger.warning(
+                    "[OLLAMA_QUEUE_PROTECTED] workflow=%s model=%s request_id=%s timeout_seconds=%s",
+                    record.workflow,
+                    record.model,
+                    record.request_id,
+                    _ollama_queue_timeout_seconds(),
+                )
                 failure = {
                     **asdict(record),
                     "timestamp": _utc_now(),

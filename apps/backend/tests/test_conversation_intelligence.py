@@ -31,6 +31,19 @@ def test_emotion_inference_detects_anxiety_and_urgency():
     assert "urgency_language" in result["stress_indicators"]
 
 
+def test_emotion_inference_returns_safe_neutral_context_when_no_signal_exists():
+    result = infer_emotional_context(
+        query="",
+        conversation_history=[],
+        conversation_state=None,
+    )
+
+    assert result["dominant_emotion"] == "neutral"
+    assert result["neutral"] == 0.0
+    assert result["anxiety"] == 0.0
+    assert result["adaptation"]["tone"] == "calm"
+
+
 def test_persona_selection_prefers_emergency_triage_for_high_urgency():
     persona = select_persona(
         workflow="chatbot",
@@ -94,3 +107,28 @@ def test_conversation_service_enriches_response_with_persona_emotion_continuity_
     assert enriched["emotional_context"]["dominant_emotion"] != ""
     assert enriched["continuity"]["reference"]
     assert enriched["memory_persistence"]["recommendations"]
+
+
+def test_conversation_service_falls_back_to_neutral_emotion_when_inference_fails(monkeypatch):
+    monkeypatch.setattr(
+        "ai.conversation.service.infer_emotional_context",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("emotion failure")),
+    )
+
+    service = ConversationIntelligenceService()
+    enriched = service.enrich_response(
+        workflow="chatbot",
+        query="Can you explain this?",
+        response_payload={
+            "summary": "This could reflect a mild change worth monitoring.",
+            "clinical_interpretation": "This could reflect a mild change worth monitoring.",
+            "risk_level": "low",
+        },
+        user_context={"conversation_state": {"follow_up_pending": True}},
+        conversation_history=[{"role": "user", "content": "I'm not sure what this means."}],
+        risk_level="low",
+        conversation_intent="conversation",
+    )
+
+    assert enriched["message"]
+    assert enriched["emotional_context"]["dominant_emotion"] == "neutral"

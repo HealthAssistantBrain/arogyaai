@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from database.session import get_db
+from ai.forecasting import PredictiveForecastingEngine
+from ai.prevention import PreventiveEngine
 from models import RiskScore, User
 from pipelines.ml_pipeline.service import MLPipelineService
 from pipelines.storage_pipeline.service import StoragePipelineService
@@ -16,6 +18,9 @@ router = APIRouter(prefix="/api/v1/prediction", tags=["Prediction"])
 from services.disease_simulation_service import DiseaseSimulationService
 from services.prediction_service import get_health_prediction
 from pipelines.orchestration_pipeline.service import OrchestrationPipelineService
+
+forecasting_engine = PredictiveForecastingEngine()
+preventive_engine = PreventiveEngine()
 @router.post("/compute", response_model=None)
 async def compute_prediction(
     req: PredictionRequest, 
@@ -186,6 +191,62 @@ async def get_prediction_explanation(
     )
 
 
+@router.get("/forecast", response_model=None)
+async def get_predictive_forecast(
+    force_refresh: bool = Query(default=False),
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
+    payload = forecasting_engine.generate(
+        db,
+        current_user,
+        force_refresh=force_refresh,
+        persist=True,
+    )
+    payload["prevention"] = preventive_engine.generate(
+        db,
+        current_user,
+        force_refresh=force_refresh,
+        persist=True,
+    )
+    log_event(
+        current_user.id,
+        "forecast_generation",
+        "/api/v1/prediction/forecast",
+        {
+            "status": payload.get("status"),
+            "windows": sorted((payload.get("forecast") or {}).keys()),
+            "confidence": payload.get("confidence"),
+        },
+    )
+    return payload
+
+
+@router.get("/preventive", response_model=None)
+async def get_preventive_projection(
+    force_refresh: bool = Query(default=False),
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
+    payload = preventive_engine.generate(
+        db,
+        current_user,
+        force_refresh=force_refresh,
+        persist=True,
+    )
+    log_event(
+        current_user.id,
+        "preventive_generation",
+        "/api/v1/prediction/preventive",
+        {
+            "status": payload.get("status"),
+            "overall_risk": payload.get("monitoring", {}).get("overall_risk") if isinstance(payload.get("monitoring"), dict) else None,
+            "alert_count": len(payload.get("alerts") or []),
+        },
+    )
+    return payload
+
+
 @router.get("/simulator/baseline", response_model=None)
 def get_simulator_baseline(
     current_user: User = Depends(get_current_user_from_header),
@@ -203,6 +264,7 @@ def get_simulator_baseline(
             "medical_conditions": baseline["conditions"],
             "focus_options": baseline["focus_options"],
             "assumptions": baseline["assumptions"],
+            "forecasting": baseline.get("forecasting"),
         },
     }
 
