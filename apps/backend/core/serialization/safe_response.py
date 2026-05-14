@@ -6,8 +6,9 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import WebSocket
+from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
+from starlette.websockets import WebSocketState
 
 from .json_safe import make_json_safe, serialization_debug_enabled
 
@@ -115,5 +116,36 @@ def safe_json_dumps(content: Any, *, channel: str = "websocket", **json_kwargs: 
     return json.dumps(payload, **json_kwargs)
 
 
-async def websocket_send_json_safe(websocket: WebSocket, payload: Any) -> None:
-    await websocket.send_text(safe_json_dumps(payload, channel="websocket"))
+def is_socket_alive(websocket: WebSocket) -> bool:
+    try:
+        return (
+            websocket.client_state == WebSocketState.CONNECTED
+            and websocket.application_state == WebSocketState.CONNECTED
+        )
+    except AttributeError:
+        return not bool(getattr(websocket, "closed", False))
+    except Exception:
+        return False
+
+
+async def websocket_send_json_safe(
+    websocket: WebSocket,
+    payload: Any,
+    *,
+    channel: str = "websocket",
+    context: str = "websocket",
+) -> bool:
+    if not is_socket_alive(websocket):
+        logger.info("[WS CLOSED] action=skip_send context=%s", context)
+        return False
+
+    try:
+        await websocket.send_text(safe_json_dumps(payload, channel=channel))
+        return True
+    except WebSocketDisconnect:
+        logger.info("[WS CLOSED] action=disconnect_during_send context=%s", context)
+    except RuntimeError as exc:
+        logger.warning("[WS CLOSED] action=runtime_error context=%s error=%s", context, exc)
+    except Exception:
+        logger.exception("[WS CLOSED] action=send_failed context=%s", context)
+    return False

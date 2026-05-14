@@ -11,6 +11,7 @@ import httpx
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+from core.redis_resilience import get_resilient_redis_pool
 from database.session import (
     ANALYTICS_DB_MODE,
     analytics_reads_from_primary,
@@ -25,11 +26,6 @@ from services.supabase_sdk_validation import get_supabase_sdk_validation_snapsho
 from services.supabase_jwt_verifier import get_supabase_auth_snapshot
 from pipelines.rag_pipeline.config import RagSettings
 from pipelines.rag_pipeline.qdrant import probe_qdrant_health
-
-try:
-    from redis.asyncio import Redis
-except Exception:  # pragma: no cover - optional dependency fallback
-    Redis = None  # type: ignore[assignment]
 
 logger = logging.getLogger("health_service")
 
@@ -138,16 +134,10 @@ async def _check_redis() -> dict[str, Any]:
             "error": None,
         }
 
-    if Redis is None:
-        return {
-            "status": "degraded",
-            "error": "redis_client_unavailable",
-        }
-
     started_at = datetime.now(timezone.utc)
-    client = Redis.from_url(REDIS_URL, socket_connect_timeout=1.0, socket_timeout=1.0, decode_responses=True)
     try:
-        await client.ping()
+        pool = await get_resilient_redis_pool("health-probe", url=REDIS_URL)
+        await asyncio.wait_for(pool.ping(), timeout=1.5)
         return {
             "status": "ok",
             "latency_ms": round((datetime.now(timezone.utc) - started_at).total_seconds() * 1000, 2),
@@ -158,11 +148,6 @@ async def _check_redis() -> dict[str, Any]:
             "status": "degraded",
             "error": "redis_unavailable",
         }
-    finally:
-        try:
-            await client.aclose()
-        except Exception:
-            logger.debug("[Health] Redis client close failed", exc_info=True)
 
 
 async def _check_http_service(service_name: str, base_url: str) -> dict[str, Any]:

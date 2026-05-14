@@ -9,7 +9,9 @@ const DASHBOARD_WS_ROOT = getApiRootUrl(
 
 const PING_INTERVAL_MS = 25_000;
 const SOCKET_STALE_MS = 70_000;
-const RECONNECT_SCHEDULE_MS = [1_000, 2_000, 5_000, 10_000, 30_000];
+const RECONNECT_BASE_MS = 500;
+const RECONNECT_MAX_MS = 10_000;
+const NON_RECONNECT_CLOSE_CODES = new Set([1008, 4001]);
 
 let activeSession = null;
 let activeSocket = null;
@@ -19,6 +21,8 @@ let staleTimer = null;
 let reconnectAttempt = 0;
 let lastSocketActivityAt = 0;
 let visibilityListenerBound = false;
+let connectionSequence = 0;
+let lastReconnectReason = null;
 const subscribers = new Set();
 
 const isBrowser = () => typeof window !== 'undefined' && typeof document !== 'undefined';
@@ -59,6 +63,12 @@ const markSocketActivity = () => {
   lastSocketActivityAt = Date.now();
 };
 
+const computeReconnectDelay = () => {
+  const exponential = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * (2 ** reconnectAttempt));
+  const jitter = Math.floor(Math.random() * 350);
+  return exponential + jitter;
+};
+
 const closeActiveSocket = (reason = 'reset') => {
   clearPingTimer();
   clearStaleTimer();
@@ -85,7 +95,13 @@ const startPingLoop = () => {
   markSocketActivity();
   pingTimer = window.setInterval(() => {
     if (activeSocket?.readyState === WebSocket.OPEN) {
-      activeSocket.send('ping');
+      try {
+        activeSocket.send('ping');
+      } catch (error) {
+        emit({ type: 'error', error, reason: 'ping_failed' });
+        closeActiveSocket('ping_failed');
+        scheduleReconnect('ping_failed');
+      }
     }
   }, PING_INTERVAL_MS);
   staleTimer = window.setInterval(() => {
@@ -106,8 +122,9 @@ const scheduleReconnect = (reason = 'retry') => {
     return;
   }
 
-  const delay = RECONNECT_SCHEDULE_MS[Math.min(reconnectAttempt, RECONNECT_SCHEDULE_MS.length - 1)];
+  const delay = computeReconnectDelay();
   reconnectAttempt += 1;
+  lastReconnectReason = reason;
   reconnectTimer = window.setTimeout(() => {
     reconnectTimer = null;
     connectDashboardSocket();
@@ -135,45 +152,80 @@ export const connectDashboardSocket = () => {
   closeActiveSocket('reconnect');
 
   const socket = new WebSocket(buildSocketUrl(activeSession));
+  const connectionId = ++connectionSequence;
+  const sessionKey = activeSession.sessionKey;
   activeSocket = socket;
-  emit({ type: 'connecting' });
+  emit({ type: 'connecting', connectionId });
+
+  const isCurrentSocket = () => (
+    activeSocket === socket &&
+    activeSession?.sessionKey === sessionKey &&
+    connectionId === connectionSequence
+  );
 
   socket.onopen = () => {
+    if (!isCurrentSocket()) {
+      socket.close(1000, 'superseded_before_open');
+      return;
+    }
     reconnectAttempt = 0;
+    lastReconnectReason = null;
     markSocketActivity();
-    emit({ type: 'open' });
+    emit({ type: 'open', connectionId });
     startPingLoop();
   };
 
   socket.onmessage = (event) => {
+    if (!isCurrentSocket()) {
+      return;
+    }
     try {
       const payload = JSON.parse(event.data);
       markSocketActivity();
       if (payload?.type === 'dashboard.pong') {
-        emit({ type: 'heartbeat' });
+        emit({ type: 'heartbeat', connectionId });
         return;
       }
-      emit({ type: 'message', payload });
+      emit({ type: 'message', payload, connectionId });
     } catch (error) {
       console.warn('[dashboardSocket] invalid payload ignored', error);
     }
   };
 
   socket.onerror = () => {
-    emit({ type: 'error' });
+    if (!isCurrentSocket()) {
+      return;
+    }
+    emit({ type: 'error', connectionId });
   };
 
   socket.onclose = (event) => {
+    const wasCurrentSocket = isCurrentSocket();
+    if (!wasCurrentSocket) {
+      emit({ type: 'close_ignored', code: event.code, reason: event.reason, connectionId });
+      return;
+    }
     clearPingTimer();
     clearStaleTimer();
     if (activeSocket === socket) {
       activeSocket = null;
     }
-    emit({ type: 'close', code: event.code, reason: event.reason });
+    emit({ type: 'close', code: event.code, reason: event.reason, connectionId });
 
-    if (activeSession) {
-      scheduleReconnect(event.reason || 'socket_closed');
+    if (!activeSession) {
+      return;
     }
+
+    if (NON_RECONNECT_CLOSE_CODES.has(event.code)) {
+      emit({ type: 'reconnect_suppressed', code: event.code, reason: event.reason, connectionId });
+      return;
+    }
+
+    if (lastReconnectReason === 'document_hidden' && !isVisible()) {
+      return;
+    }
+
+    scheduleReconnect(event.reason || 'socket_closed');
   };
 };
 

@@ -17,18 +17,21 @@ import psycopg2
 from psycopg2 import extensions
 from sqlalchemy.orm import Session
 
-from core.config import settings
 from core.resilience import TimeoutPolicyError, run_with_timeout
 from core.serialization import normalize_outbound_payload
+from dashboard_realtime.connection_manager import DashboardConnectionManager, dashboard_connection_manager
+from dashboard_realtime.snapshot_cache import RealtimeSnapshotCache
 from database.session import SessionLocal, get_listener_engines
 from models import User
-from dashboard_realtime.connection_manager import DashboardConnectionManager, dashboard_connection_manager
 from services.google_fit_service import GoogleFitService
 from services import dashboard_service as dashboard_svc
 from services.user_data_service import UserDataService
 
 logger = logging.getLogger("dashboard_realtime")
+
 DASHBOARD_AGGREGATION_TIMEOUT_SECONDS = 5.0
+SNAPSHOT_STALE_AFTER_SECONDS = max(5, int(os.getenv("DASHBOARD_SNAPSHOT_STALE_AFTER_SECONDS", "30")))
+REFRESH_DEBOUNCE_SECONDS = max(0.0, float(os.getenv("DASHBOARD_REFRESH_DEBOUNCE_SECONDS", "0.2")))
 
 
 def _parse_iso_datetime(value: Any) -> datetime | None:
@@ -121,9 +124,7 @@ def _extract_latest_steps(bundle: dict[str, Any]) -> int:
     try:
         return max(0, int(round(float(latest_steps))))
     except (TypeError, ValueError):
-        pass
-
-    return 0
+        return 0
 
 
 def _dashboard_flat_contract(bundle: dict[str, Any]) -> dict[str, Any]:
@@ -182,13 +183,24 @@ def _degraded_dashboard_message(user_id: str, *, reason: str) -> dict[str, Any]:
     }
 
 
+def _processing_dashboard_payload(user_id: str, *, reason: str) -> dict[str, Any]:
+    last_updated = datetime.now(timezone.utc).isoformat()
+    return {
+        "status": "processing",
+        "error": reason,
+        "message": "Dashboard snapshot refresh is in progress.",
+        "user_id": str(user_id),
+        "last_updated": last_updated,
+    }
+
+
 def _serialize_vitals_slice(db: Session, current_user: User, vital_type: str, range_value: str = "24h") -> dict[str, Any]:
     try:
         payload = UserDataService.list_vitals(db, current_user, vital_type=vital_type, range_value=range_value)
-    except Exception as e:
-        logger.error(f"Error fetching vitals slice {vital_type}: {e}")
+    except Exception as exc:
+        logger.error("Error fetching vitals slice %s: %s", vital_type, exc)
         payload = {}
-        
+
     vitals = payload.get("data", {}).get("vitals", []) if isinstance(payload, dict) else []
     trimmed = vitals[-100:] if len(vitals) > 100 else vitals
     return {
@@ -206,15 +218,16 @@ def _serialize_vitals_slice(db: Session, current_user: User, vital_type: str, ra
 async def _safe_call(coro, fallback_data=None):
     try:
         return await coro
-    except Exception as e:
-        logger.error(f"Pipeline component error: {e}")
+    except Exception as exc:
+        logger.error("Pipeline component error: %s", exc)
         return {
             "success": False,
             "status": "fallback",
             "source": "error",
-            "error": str(e),
-            "data": fallback_data if fallback_data is not None else {}
+            "error": str(exc),
+            "data": fallback_data if fallback_data is not None else {},
         }
+
 
 async def _run_user_slice(
     user_id: str,
@@ -249,6 +262,42 @@ async def _run_user_slice(
         }
     finally:
         session.close()
+
+
+class FastRealtimeSnapshotBuilder:
+    @staticmethod
+    def from_dashboard_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(bundle, dict):
+            return {}
+
+        vitals = _safe_dict(bundle.get("vitals"))
+        realtime = {
+            "healthScore": bundle.get("healthScore"),
+            "forecast": bundle.get("forecast"),
+            "preventive": bundle.get("preventive"),
+            "recommendedTests": bundle.get("recommendedTests"),
+            "googleFit": bundle.get("googleFit"),
+            "vitals": {
+                key: copy_value
+                for key, copy_value in vitals.items()
+                if key in {"heart_rate:24h", "steps:24h", "sleep:24h"}
+            },
+            "heart_rate": bundle.get("heart_rate") or vitals.get("heart_rate:24h"),
+            "steps": bundle.get("steps") if isinstance(bundle.get("steps"), (int, float)) else _extract_latest_steps(bundle),
+            "sleep": bundle.get("sleep") if bundle.get("sleep") is not None else vitals.get("sleep:24h"),
+            "last_updated": _latest_iso(bundle.get("last_updated")),
+        }
+        realtime["last_updated"] = _dashboard_last_updated(realtime) or bundle.get("last_updated")
+        return _normalize_dashboard_payload(realtime, channel="dashboard.realtime.fast")
+
+
+def _snapshot_is_stale(snapshot: dict[str, Any] | None) -> bool:
+    if not isinstance(snapshot, dict):
+        return True
+    parsed = _parse_iso_datetime(snapshot.get("last_updated"))
+    if parsed is None:
+        return True
+    return max(0.0, time.time() - parsed.timestamp()) >= SNAPSHOT_STALE_AFTER_SECONDS
 
 
 async def build_dashboard_bundle(db: Session, current_user: User) -> dict[str, Any]:
@@ -366,6 +415,191 @@ async def build_realtime_payload(db: Session, current_user: User) -> dict[str, A
         return _normalize_dashboard_payload(degraded, channel="dashboard.realtime")
 
 
+async def _store_dashboard_snapshots(user_id: str, bundle: dict[str, Any]) -> dict[str, Any]:
+    realtime = FastRealtimeSnapshotBuilder.from_dashboard_bundle(bundle)
+    await asyncio.gather(
+        RealtimeSnapshotCache.set("bundle", user_id, bundle),
+        RealtimeSnapshotCache.set("realtime", user_id, realtime),
+    )
+    return realtime
+
+
+async def _cached_bundle_or_stale(user_id: str) -> tuple[dict[str, Any] | None, bool]:
+    cached = await RealtimeSnapshotCache.get("bundle", user_id)
+    if cached is not None:
+        return cached, _snapshot_is_stale(cached)
+    stale = await RealtimeSnapshotCache.get_stale("bundle", user_id)
+    return stale, True
+
+
+async def _cached_realtime_or_stale(user_id: str) -> tuple[dict[str, Any] | None, bool]:
+    cached = await RealtimeSnapshotCache.get("realtime", user_id)
+    if cached is not None:
+        return cached, _snapshot_is_stale(cached)
+
+    stale = await RealtimeSnapshotCache.get_stale("realtime", user_id)
+    if stale is not None:
+        return stale, True
+
+    bundle, bundle_stale = await _cached_bundle_or_stale(user_id)
+    if bundle is not None:
+        realtime = FastRealtimeSnapshotBuilder.from_dashboard_bundle(bundle)
+        await RealtimeSnapshotCache.set("realtime", user_id, realtime)
+        return realtime, bundle_stale or _snapshot_is_stale(realtime)
+    return None, True
+
+
+_listener_threads: list[threading.Thread] = []
+_listener_stop = threading.Event()
+_listener_loop: asyncio.AbstractEventLoop | None = None
+_refresh_tasks: dict[str, asyncio.Task[Any]] = {}
+_refresh_dirty_users: set[str] = set()
+_refresh_lock = asyncio.Lock()
+
+
+async def get_cached_dashboard_bundle(
+    db: Session,
+    current_user: User,
+    *,
+    allow_sync_seed: bool = True,
+    force_refresh: bool = False,
+) -> dict[str, Any]:
+    user_id = str(current_user.id)
+    if not force_refresh:
+        snapshot, stale = await _cached_bundle_or_stale(user_id)
+        if snapshot is not None:
+            if stale:
+                await ensure_dashboard_snapshot_refresh(user_id, reason="bundle_stale")
+            return snapshot
+
+    if allow_sync_seed:
+        logger.info("[REALTIME CACHE MISS] kind=bundle user_id=%s action=sync_seed", user_id)
+        bundle = await build_dashboard_bundle(db, current_user)
+        await _store_dashboard_snapshots(user_id, bundle)
+        return bundle
+
+    await ensure_dashboard_snapshot_refresh(user_id, reason="bundle_cache_miss")
+    stale = await RealtimeSnapshotCache.get_stale("bundle", user_id)
+    return stale or _normalize_dashboard_payload(
+        _processing_dashboard_payload(user_id, reason="bundle_cache_warming"),
+        channel="dashboard.bundle.processing",
+    )
+
+
+async def get_cached_realtime_payload(
+    user_id: str,
+    *,
+    schedule_refresh: bool = True,
+) -> dict[str, Any]:
+    snapshot, stale = await _cached_realtime_or_stale(user_id)
+    if snapshot is not None:
+        if stale and schedule_refresh:
+            await ensure_dashboard_snapshot_refresh(user_id, reason="realtime_stale")
+        return snapshot
+
+    if schedule_refresh:
+        await ensure_dashboard_snapshot_refresh(user_id, reason="realtime_cache_miss")
+
+    stale_snapshot = await RealtimeSnapshotCache.get_stale("realtime", user_id)
+    if stale_snapshot is not None:
+        logger.warning("[REALTIME DEGRADED] user_id=%s source=last_valid_snapshot", user_id)
+        return stale_snapshot
+
+    logger.warning("[REALTIME DEGRADED] user_id=%s source=processing_fallback", user_id)
+    return _normalize_dashboard_payload(
+        _processing_dashboard_payload(user_id, reason="realtime_cache_warming"),
+        channel="dashboard.realtime.processing",
+    )
+
+
+async def _refresh_dashboard_snapshots(user_id: str, *, reason: str) -> None:
+    while True:
+        if REFRESH_DEBOUNCE_SECONDS > 0:
+            await asyncio.sleep(REFRESH_DEBOUNCE_SECONDS)
+
+        db = SessionLocal()
+        try:
+            try:
+                user_uuid = uuid.UUID(str(user_id))
+            except (TypeError, ValueError):
+                return
+
+            user = db.query(User).filter(User.id == user_uuid, User.is_deleted == False).first()
+            if not user:
+                return
+
+            logger.info("[REALTIME CACHE MISS] kind=refresh user_id=%s reason=%s", user_id, reason)
+            bundle = await build_dashboard_bundle(db, user)
+            realtime = await _store_dashboard_snapshots(user_id, bundle)
+            logger.info("[REALTIME CACHE HIT] kind=refresh user_id=%s source=rebuild", user_id)
+            await dashboard_connection_manager.broadcast_snapshot(user_id, realtime)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("[REALTIME DEGRADED] user_id=%s reason=%s", user_id, reason)
+            stale = await RealtimeSnapshotCache.get_stale("realtime", user_id)
+            if stale is None:
+                await dashboard_connection_manager.broadcast(
+                    user_id,
+                    _degraded_dashboard_message(user_id, reason="snapshot_refresh_failed"),
+                )
+        finally:
+            db.close()
+
+        async with _refresh_lock:
+            if user_id in _refresh_dirty_users:
+                _refresh_dirty_users.discard(user_id)
+                reason = "refresh_coalesced"
+                continue
+            current = _refresh_tasks.get(user_id)
+            if current is asyncio.current_task():
+                _refresh_tasks.pop(user_id, None)
+            return
+
+
+async def ensure_dashboard_snapshot_refresh(user_id: str, *, reason: str) -> None:
+    async with _refresh_lock:
+        active = _refresh_tasks.get(user_id)
+        if active is not None and not active.done():
+            _refresh_dirty_users.add(user_id)
+            return
+        task = asyncio.create_task(
+            _refresh_dashboard_snapshots(user_id, reason=reason),
+            name=f"dashboard-snapshot-refresh:{user_id}",
+        )
+        _refresh_tasks[user_id] = task
+
+
+async def cancel_dashboard_refresh(user_id: str) -> None:
+    async with _refresh_lock:
+        task = _refresh_tasks.pop(user_id, None)
+        _refresh_dirty_users.discard(user_id)
+    if task is not None and not task.done():
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+        logger.info("[WS CLEANUP] user_id=%s action=cancel_refresh reason=no_active_socket", user_id)
+
+
+async def _broadcast_current_snapshot(user_id: str) -> None:
+    payload = await get_cached_realtime_payload(user_id, schedule_refresh=False)
+    await dashboard_connection_manager.broadcast_snapshot(user_id, payload)
+
+
+def _schedule_broadcast_refresh(user_id: str) -> None:
+    asyncio.create_task(
+        ensure_dashboard_snapshot_refresh(user_id, reason="database_notify"),
+        name=f"dashboard-notify-refresh:{user_id}",
+    )
+
+
+def _enqueue_broadcast(user_id: str) -> None:
+    loop = _listener_loop
+    if not loop or loop.is_closed():
+        return
+    loop.call_soon_threadsafe(_schedule_broadcast_refresh, user_id)
+
+
 def _build_psycopg2_kwargs(source_engine) -> dict[str, Any]:
     url = source_engine.url
     kwargs: dict[str, Any] = {}
@@ -384,58 +618,6 @@ def _build_psycopg2_kwargs(source_engine) -> dict[str, Any]:
         if url.query.get(key):
             kwargs[key] = url.query[key]
     return kwargs
-
-_listener_threads: list[threading.Thread] = []
-_listener_stop = threading.Event()
-_listener_loop: asyncio.AbstractEventLoop | None = None
-_pending_user_tasks: dict[str, asyncio.Task] = {}
-
-
-async def _broadcast_current_snapshot(user_id: str) -> None:
-    db = SessionLocal()
-    try:
-        try:
-            user_uuid = uuid.UUID(str(user_id))
-        except (TypeError, ValueError):
-            return
-
-        user = db.query(User).filter(User.id == user_uuid, User.is_deleted == False).first()
-        if not user:
-            return
-
-        try:
-            payload = await build_realtime_payload(db, user)
-        except Exception:
-            logger.exception("[Dashboard WS] snapshot build failed | user_id=%s", user_id)
-            await dashboard_connection_manager.broadcast(
-                str(user.id),
-                _degraded_dashboard_message(str(user.id), reason="snapshot_build_failed"),
-            )
-            return
-        await dashboard_connection_manager.broadcast_snapshot(str(user.id), payload)
-    finally:
-        db.close()
-
-
-def _schedule_broadcast(user_id: str) -> None:
-    if user_id in _pending_user_tasks:
-        return
-
-    async def _runner() -> None:
-        try:
-            await asyncio.sleep(0.25)
-            await _broadcast_current_snapshot(user_id)
-        finally:
-            _pending_user_tasks.pop(user_id, None)
-
-    _pending_user_tasks[user_id] = asyncio.create_task(_runner())
-
-
-def _enqueue_broadcast(user_id: str) -> None:
-    loop = _listener_loop
-    if not loop or loop.is_closed():
-        return
-    loop.call_soon_threadsafe(_schedule_broadcast, user_id)
 
 
 def _listen_for_dashboard_updates(source_engine) -> None:

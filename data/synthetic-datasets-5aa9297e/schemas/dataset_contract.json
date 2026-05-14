@@ -1,0 +1,73 @@
+{
+  "dataset_version": "synthetic_dataset.v1",
+  "schema_version": "synthetic-medical-contract.v1",
+  "generator_version": "sim-1.0.0",
+  "generated_at": "2026-05-14T14:13:49.778993+00:00",
+  "sequence_window": {
+    "duration_days": 3,
+    "step_hours": 1
+  },
+  "feature_manifest": [
+    {
+      "name": "rolling_mean_features",
+      "description": "6h and 24h rolling aggregates."
+    },
+    {
+      "name": "baseline_delta_features",
+      "description": "Deviation from adaptive user baseline."
+    },
+    {
+      "name": "temporal_embeddings",
+      "description": "Hour-of-day cyclic embeddings and day-of-week."
+    }
+  ],
+  "label_manifest": [
+    {
+      "name": "anomaly_score",
+      "type": "continuous"
+    },
+    {
+      "name": "risk_target",
+      "type": "continuous"
+    },
+    {
+      "name": "future_recovery_target",
+      "type": "continuous"
+    },
+    {
+      "name": "trajectory_label",
+      "type": "categorical"
+    }
+  ],
+  "sequence_definitions": {
+    "longitudinal_sequence": "Hourly physiological stream with daily labs and recovery states."
+  },
+  "normalization_metadata": {
+    "strategy": "baseline-relative feature scaling with bounded ratio normalization"
+  },
+  "temporal_window_definitions": {
+    "lookback_hours": 12,
+    "horizon_hours": 6
+  },
+  "universal_schema_fields": [
+    "user_id",
+    "timestamp",
+    "signal_type",
+    "signal_name",
+    "value",
+    "unit",
+    "confidence",
+    "baseline_delta",
+    "anomaly_score",
+    "risk_level",
+    "physiological_state",
+    "recovery_state",
+    "trend_direction",
+    "synthetic_profile",
+    "demographic_profile",
+    "trajectory_phase",
+    "source",
+    "labels",
+    "metadata"
+  ]
+}

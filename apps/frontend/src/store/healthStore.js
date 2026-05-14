@@ -4,6 +4,8 @@ import api from '../lib/axios';
 import { normalizeClinicalCards } from '../lib/clinicalCards';
 import {
   extractRecommendationExplanationData,
+  isRecommendationPlanLike,
+  normalizeRecommendationPayload,
   logRecommendationDebug,
   summarizeRecommendationExplanation,
 } from '../lib/recommendationContracts';
@@ -217,13 +219,40 @@ export const normalizeExplanationPayload = (payload) => {
   }
 
   const data = safeObject(extractRecommendationExplanationData(payload));
+  const normalizedPayload = normalizeRecommendationPayload(payload);
   if (!Object.keys(data).length) {
     return null;
   }
 
-  const recommendations = safeArray(data.recommendations).map(normalizeExplanationRecommendation);
-  const recommendationPlan = normalizeRecommendationPlan(data.recommendation_plan ?? data.recommendationPlan);
-  const recommendationPlans = safeArray(data.recommendation_plans ?? data.recommendationPlans)
+  const rawRecommendationItems =
+    safeArray(
+      data.recommendation_items ??
+      data.recommendationItems ??
+      data.follow_up_recommendations ??
+      data.followUpRecommendations ??
+      data.structured_recommendations ??
+      data.structuredRecommendations
+    ).length
+      ? safeArray(
+          data.recommendation_items ??
+          data.recommendationItems ??
+          data.follow_up_recommendations ??
+          data.followUpRecommendations ??
+          data.structured_recommendations ??
+          data.structuredRecommendations
+        )
+      : (normalizedPayload.recommendations.some(isRecommendationPlanLike) ? [] : normalizedPayload.recommendations);
+  const recommendations = rawRecommendationItems.map(normalizeExplanationRecommendation);
+  const recommendationPlan = normalizeRecommendationPlan(
+    data.recommendation_plan ??
+    data.recommendationPlan ??
+    normalizedPayload.plans[0]
+  );
+  const recommendationPlans = safeArray(
+    normalizedPayload.plans.length
+      ? normalizedPayload.plans
+      : (data.recommendation_plans ?? data.recommendationPlans)
+  )
     .map(normalizeRecommendationPlan)
     .filter(Boolean);
   const factors = safeArray(data.factors).map(normalizeExplanationFactor);
@@ -241,14 +270,15 @@ export const normalizeExplanationPayload = (payload) => {
   });
 
   return {
-    predictionId: safeText(data.prediction_id ?? data.predictionId),
+    predictionId: safeText(data.prediction_id ?? data.predictionId ?? normalizedPayload.predictionId),
     riskScore: toFiniteNumber(data.risk_score ?? data.riskScore),
     riskPercent: toFiniteNumber(data.risk_percent ?? data.riskPercent),
     riskLevel: safeText(data.risk_level ?? data.riskLevel),
     condition: safeText(data.condition ?? clinicalReport.condition),
     icdCode: safeText(data.icd_code ?? data.icdCode ?? clinicalReport.icd_code),
     confidence: toFiniteNumber(data.confidence ?? clinicalReport.confidence ?? data.risk_score),
-    summary: safeText(data.summary),
+    summary: safeText(data.summary ?? normalizedPayload.summary),
+    source: safeText(data.source ?? normalizedPayload.source),
     clinicalReport,
     clinicalCards,
     factors,

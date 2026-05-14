@@ -194,3 +194,60 @@ def test_recommendation_snapshot_get_snapshot_returns_fast_fallback_when_empty(m
     assert payload["data"]["explanation"]["data"]["recommendation_plans"]
     set_mock.assert_awaited_once()
     refresh_mock.assert_awaited_once()
+
+
+def test_fallback_explanation_payload_exposes_all_plan_aliases():
+    plans = [{
+        "condition": "Hypertension prevention plan",
+        "risk_level": "MEDIUM",
+        "summary": "Monitor BP and lifestyle consistency.",
+    }]
+
+    payload = RecommendationSnapshotService._fallback_explanation_payload(
+        user_id="user-1",
+        prediction_id="pred-1",
+        plans=plans,
+        tests=[{"test_name": "Lipid panel", "reason": "Check cardiovascular risk"}],
+    )
+
+    assert payload["prediction_id"] == "pred-1"
+    assert payload["predictionId"] == "pred-1"
+    assert payload["summary"] == "Monitor BP and lifestyle consistency."
+    assert payload["source"] == "deterministic_fallback"
+    assert payload["recommendation_plans"] == plans
+    assert payload["recommendationPlans"] == plans
+    assert payload["recommendations"] == plans
+    assert payload["plans"] == plans
+    assert payload["cards"] == plans
+    assert payload["recommendation_items"][0]["title"] == "Lipid panel"
+    assert payload["followUpRecommendations"][0]["description"] == "Check cardiovascular risk"
+    assert payload["generated_at"]
+    assert payload["generatedAt"]
+
+
+def test_recommendation_snapshot_fallback_envelope_keeps_contract_aliases(monkeypatch):
+    refresh_mock = AsyncMock()
+    set_mock = AsyncMock()
+
+    monkeypatch.setattr("cache.recommendations.service.RecommendationSnapshotStore.get", AsyncMock(return_value=None))
+    monkeypatch.setattr("cache.recommendations.service.RecommendationSnapshotStore.get_stale", AsyncMock(return_value=None))
+    monkeypatch.setattr("cache.recommendations.service.RecommendationSnapshotStore.set", set_mock)
+    monkeypatch.setattr(RecommendationSnapshotService, "ensure_refresh", refresh_mock)
+
+    payload = asyncio.run(
+        RecommendationSnapshotService.get_snapshot(
+            db=None,
+            user=SimpleNamespace(id="user-1"),
+            prediction_id="pred-2",
+        )
+    )
+
+    explanation = payload["data"]["explanation"]["data"]
+
+    assert payload["meta"]["refresh_queued"] is True
+    assert explanation["recommendation_plans"]
+    assert explanation["recommendationPlans"] == explanation["recommendation_plans"]
+    assert explanation["recommendations"] == explanation["recommendation_plans"]
+    assert explanation["cards"] == explanation["recommendation_plans"]
+    assert explanation["prediction_id"] == "pred-2"
+    assert explanation["predictionId"] == "pred-2"

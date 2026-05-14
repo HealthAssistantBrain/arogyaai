@@ -180,6 +180,18 @@ export default function App() {
       reason: (event as any)?.reason ?? null,
       delay: (event as any)?.delay ?? null,
     }, event.type === 'error' || event.type === 'close' ? 'warn' : 'debug');
+
+    // Fix 6 — Prevent websocket reconnects from resetting recommendation state.
+    // On reconnect events, do NOT trigger any store mutations that could
+    // clear the recommendation snapshot and re-trigger skeleton loading.
+    if (event.type === 'open' || event.type === 'reconnecting') {
+      logOrchestration('websocket', 'dashboard.reconnect_guarded', {
+        type: event.type,
+        reason: 'preventing recommendation state reset',
+      }, 'debug');
+      return;
+    }
+
     if (event.type !== 'message') return;
 
     const message = event.payload;

@@ -5,6 +5,7 @@ import {
     CalendarCheck,
     ClipboardList,
     HeartPulse,
+    Loader2,
     Moon,
     RefreshCcw,
     ShieldAlert,
@@ -12,7 +13,11 @@ import {
     Utensils,
 } from 'lucide-react';
 import { useShallow } from 'zustand/shallow';
-import { logRecommendationDebug } from '../lib/recommendationContracts';
+import {
+    logHydrationState,
+    logRecommendationDebug,
+    normalizeRecommendationPayload,
+} from '../lib/recommendationContracts';
 import SmartLoadingOverlay from '../components/ui/SmartLoadingOverlay';
 import useSmartFetchOverlay from '../hooks/useSmartFetchOverlay';
 import RecommendationSection, { ActionItem, PriorityTag } from '../components/recommendations/RecommendationSection';
@@ -100,6 +105,37 @@ const EmptyPlan = ({ error, onRetry }) => (
     </div>
 );
 
+/* Fix 8 — Failsafe UI: shown when we have SOME data but no fully structured plan */
+const InsightsUpdating = ({ onRetry, summary, items = [] }) => (
+    <div className="mx-auto max-w-3xl rounded-2xl border border-blue-200 bg-blue-50 p-10 text-center shadow-sm dark:border-blue-500/20 dark:bg-blue-500/10">
+        <div className="mx-auto flex size-14 items-center justify-center rounded-xl bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200">
+            <Loader2 size={26} className="animate-spin" />
+        </div>
+        <h2 className="mt-6 text-2xl font-black tracking-tight text-slate-950 dark:text-text-primary">
+            Insights still updating
+        </h2>
+        <p className="mx-auto mt-3 max-w-xl text-sm font-medium leading-relaxed text-slate-600 dark:text-text-muted">
+            {summary || 'Your personalized prevention plan is being prepared. Cached recommendations are available and will update automatically.'}
+        </p>
+        {items.length ? (
+            <ul className="mx-auto mt-6 max-w-2xl space-y-3 text-left">
+                {items.slice(0, 3).map((item, index) => (
+                    <li key={`${item.title ?? item.condition ?? 'partial'}-${index}`} className="rounded-xl border border-blue-200/80 bg-white/80 px-4 py-3 text-sm font-semibold text-slate-700 dark:border-blue-500/20 dark:bg-slate-950/20 dark:text-slate-100">
+                        {item.title || item.condition || item.summary || 'Cached recommendation available'}
+                    </li>
+                ))}
+            </ul>
+        ) : null}
+        <button
+            onClick={onRetry}
+            className="mt-8 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-black uppercase tracking-[0.14em] text-white transition hover:bg-blue-700"
+        >
+            <RefreshCcw size={16} />
+            Refresh now
+        </button>
+    </div>
+);
+
 const PlanTabs = ({ plans, selectedIndex, onSelect }) => {
     if (plans.length <= 1) return null;
 
@@ -155,6 +191,7 @@ const PreventiveRecommendations = () => {
         recommendations,
         recommendationPlans,
         recommendationPlan,
+        snapshot,
         loading,
         error,
         metrics,
@@ -167,6 +204,7 @@ const PreventiveRecommendations = () => {
         recommendations: state.recommendations,
         recommendationPlans: state.recommendationPlans,
         recommendationPlan: state.recommendationPlan,
+        snapshot: state.snapshot,
         loading: state.loading,
         error: state.error,
         metrics: state.metrics,
@@ -184,10 +222,43 @@ const PreventiveRecommendations = () => {
         () => (recommendationPlans?.length ? recommendationPlans : (recommendationPlan ? [recommendationPlan] : [])),
         [recommendationPlan, recommendationPlans]
     );
+    const normalizedSnapshot = useMemo(() => normalizeRecommendationPayload(snapshot), [snapshot]);
     const activePlan = plans[Math.min(selectedPlanIndex, Math.max(plans.length - 1, 0))] ?? null;
     const hasPlan = Boolean(activePlan);
     const hasExplanationSnapshot = Boolean(explanation);
-    const showSkeleton = !hasPlan && !error && (!hasStartedInitialLoad || loading);
+    const hasNormalizedSnapshot = Boolean(
+        normalizedSnapshot.plans.length ||
+        normalizedSnapshot.recommendations.length ||
+        normalizedSnapshot.cards.length
+    );
+    const partialItems = useMemo(() => {
+        if (normalizedSnapshot.plans.length) {
+            return normalizedSnapshot.plans;
+        }
+        if (normalizedSnapshot.cards.length) {
+            return normalizedSnapshot.cards;
+        }
+        return recommendations?.length ? recommendations : normalizedSnapshot.recommendations;
+    }, [normalizedSnapshot.cards, normalizedSnapshot.plans, normalizedSnapshot.recommendations, recommendations]);
+    const fallbackSummary = explanation?.summary || normalizedSnapshot.summary;
+
+    // Fix 2 — Resilient hydration detection.
+    // hasData is true when ANY usable data exists, breaking the deadlock
+    // where hasPlan=false but fallback data is actually available.
+    const hasData =
+        hasPlan ||
+        hasExplanationSnapshot ||
+        hasNormalizedSnapshot ||
+        (recommendationPlans?.length > 0) ||
+        (recommendations?.length > 0);
+
+    // Fix 2 — Skeletons ONLY for genuine initial loads with zero data.
+    // Background refreshes (refreshing=true) NEVER block rendering.
+    const showSkeleton =
+        !hasData &&
+        !error &&
+        (!hasStartedInitialLoad || loading);
+
     const showRefreshOverlay = useSmartFetchOverlay(
         refreshing,
         hasExplanationSnapshot || hasPlan,
@@ -196,7 +267,7 @@ const PreventiveRecommendations = () => {
 
     useEffect(() => {
         const controller = new AbortController();
-        const silent = hasExplanationSnapshot || hasPlan;
+        const silent = hasData;
         setHasStartedInitialLoad(true);
         void fetchSnapshot({
             silent,
@@ -210,13 +281,13 @@ const PreventiveRecommendations = () => {
         return () => {
             controller.abort();
         };
-    }, [fetchSnapshot, hasExplanationSnapshot, hasPlan, predictionId]);
+    }, [fetchSnapshot, hasData, predictionId]);
 
     useEffect(() => {
-        if (hasExplanationSnapshot || hasPlan) {
+        if (hasData) {
             setHasStartedInitialLoad(true);
         }
-    }, [hasExplanationSnapshot, hasPlan]);
+    }, [hasData]);
 
     useEffect(() => {
         if (selectedPlanIndex >= plans.length) {
@@ -224,35 +295,52 @@ const PreventiveRecommendations = () => {
         }
     }, [plans.length, selectedPlanIndex]);
 
+    // Fix 7 — Comprehensive hydration state logging
     useEffect(() => {
+        logHydrationState('PAGE_STATE', {
+            hasPlan,
+            hasData,
+            loading,
+            refreshing,
+            showSkeleton,
+            source: 'PreventiveRecommendations',
+            rawPayload: snapshot,
+            normalizedSnapshot,
+        });
         logRecommendationDebug('RECOMMENDATIONS_QUERY_STATE', {
             loading,
             refreshing,
             hasExplanationSnapshot,
             hasPlan,
+            hasData,
+            normalizedSnapshot,
             predictionId,
             planCount: plans.length,
             error: error ?? null,
         });
     }, [
         error,
+        hasData,
         hasExplanationSnapshot,
         hasPlan,
         loading,
         plans.length,
         predictionId,
         refreshing,
+        showSkeleton,
+        snapshot,
+        normalizedSnapshot,
     ]);
 
     useEffect(() => {
-        const state = showSkeleton ? 'loading' : hasPlan ? 'success' : error ? 'error' : 'empty';
+        const state = showSkeleton ? 'loading' : hasPlan ? 'success' : error ? 'error' : hasData ? 'partial' : 'empty';
         logRecommendationDebug(state === 'empty' ? 'RECOMMENDATIONS_EMPTY' : 'RECOMMENDATIONS_RENDER', {
             state,
             planCount: plans.length,
             recommendationCount: recommendations?.length ?? explanation?.recommendations?.length ?? 0,
             predictionId: predictionId ?? null,
         });
-    }, [error, explanation?.recommendations?.length, hasPlan, plans.length, predictionId, recommendations?.length, showSkeleton]);
+    }, [error, explanation?.recommendations?.length, hasData, hasPlan, plans.length, predictionId, recommendations?.length, showSkeleton]);
 
     useEffect(() => {
         if (!showSkeleton) {
@@ -330,8 +418,11 @@ const PreventiveRecommendations = () => {
             {showRefreshOverlay ? <SmartLoadingOverlay label="Updating insights..." /> : null}
 
             <div className="mx-auto max-w-7xl px-6 py-8 lg:px-8">
-                {!hasPlan ? (
+                {!hasPlan && !hasData ? (
                     <EmptyPlan error={error} onRetry={handleRetry} />
+                ) : !hasPlan && hasData ? (
+                    /* Fix 8 — Failsafe: we have data but no structured plan yet */
+                    <InsightsUpdating onRetry={handleRetry} summary={fallbackSummary} items={partialItems} />
                 ) : (
                     <div className="space-y-6">
                         <PlanTabs plans={plans} selectedIndex={selectedPlanIndex} onSelect={setSelectedPlanIndex} />

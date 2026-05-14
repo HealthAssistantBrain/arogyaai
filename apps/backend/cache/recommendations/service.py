@@ -99,34 +99,66 @@ class RecommendationSnapshotService:
         safe_plans = plans or build_fast_recommendation_plans(RecommendationSignals())
         safe_tests = tests or []
         active_plan = safe_plans[0] if safe_plans else {}
-        return {
+        confidence = active_plan.get("confidence") if isinstance(active_plan, dict) else None
+        risk_level = active_plan.get("risk_level") if isinstance(active_plan, dict) else "LOW"
+        summary_text = (
+            active_plan.get("summary")
+            if isinstance(active_plan, dict)
+            else "Snapshot is ready with baseline preventive guidance."
+        )
+        recs = [
+            {
+                "title": str(item.get("test_name") or item.get("title") or "Recommended follow-up"),
+                "description": str(item.get("reason") or item.get("description") or item.get("text") or ""),
+                "priority": str(item.get("priority") or "low"),
+                "category": "consultation",
+            }
+            for item in safe_tests[:5]
+            if isinstance(item, dict)
+        ]
+        now_iso = datetime.now(timezone.utc).isoformat()
+        payload = {
+            # snake_case (canonical)
             "prediction_id": prediction_id,
             "explanation_id": prediction_id,
-            "risk_score": active_plan.get("confidence") if isinstance(active_plan, dict) else None,
-            "confidence": active_plan.get("confidence") if isinstance(active_plan, dict) else None,
-            "risk_level": active_plan.get("risk_level") if isinstance(active_plan, dict) else "LOW",
-            "summary": active_plan.get("summary")
-            if isinstance(active_plan, dict)
-            else "Snapshot is ready with baseline preventive guidance.",
+            "risk_score": confidence,
+            "confidence": confidence,
+            "risk_level": risk_level,
+            "summary": summary_text,
             "clinical_insight": "Recommendations are served from the fast deterministic snapshot while deeper AI synthesis refreshes in the background.",
             "recommendation_plan": active_plan if isinstance(active_plan, dict) else None,
             "recommendation_plans": safe_plans,
-            "recommendations": [
-                {
-                    "title": str(item.get("test_name") or item.get("title") or "Recommended follow-up"),
-                    "description": str(item.get("reason") or item.get("description") or item.get("text") or ""),
-                    "priority": str(item.get("priority") or "low"),
-                    "category": "consultation",
-                }
-                for item in safe_tests[:5]
-                if isinstance(item, dict)
-            ],
+            "recommendations": safe_plans,
+            "recommendation_items": recs,
+            "follow_up_recommendations": recs,
+            # camelCase aliases (Fix 5 — frontend contract alignment)
+            "predictionId": prediction_id,
+            "recommendationPlan": active_plan if isinstance(active_plan, dict) else None,
+            "recommendationPlans": safe_plans,
+            "recommendationItems": recs,
+            "followUpRecommendations": recs,
+            "riskLevel": risk_level,
+            # Additional alias keys the frontend may check
+            "plans": safe_plans,
+            "cards": safe_plans,
+            # Metadata
+            "source": "deterministic_fallback",
+            "generated_at": now_iso,
+            "generatedAt": now_iso,
             "sources": [],
             "retrieval": {
                 "source": "deferred_background_refresh",
                 "documents_used": 0,
             },
         }
+        logger.debug(
+            "[FALLBACK EXPLANATION PAYLOAD] user=%s prediction_id=%s plan_count=%d payload=%s",
+            user_id,
+            prediction_id,
+            len(safe_plans),
+            payload,
+        )
+        return payload
 
     @classmethod
     def _fast_snapshot(
@@ -155,7 +187,7 @@ class RecommendationSnapshotService:
         )
         active_plan = plans[0] if plans else {}
         now = datetime.now(timezone.utc).isoformat()
-        return {
+        result = {
             "user_id": user_id,
             "prediction_id": resolved_prediction_id,
             "last_updated": now,
@@ -185,6 +217,17 @@ class RecommendationSnapshotService:
                 "refresh_state": "background_refresh_queued",
             },
         }
+        # Fix 7 — Backend debug logging for payload structure tracing
+        logger.debug(
+            "[FAST SNAPSHOT BUILT] user=%s source=%s explanation_keys=%s plan_count=%d has_recommendation_plans=%s has_camelCase=%s",
+            user_id,
+            source,
+            list(explanation_payload.keys()) if isinstance(explanation_payload, dict) else [],
+            len(plans),
+            bool(explanation_payload.get("recommendation_plans")),
+            bool(explanation_payload.get("recommendationPlans")),
+        )
+        return result
 
     @classmethod
     async def get_snapshot(
@@ -217,7 +260,8 @@ class RecommendationSnapshotService:
         )
         if is_stale:
             await cls.ensure_refresh(user_id=user_id, prediction_id=prediction_id)
-        return {
+        # Fix 7 — Backend debug: log the served envelope structure
+        envelope = {
             "success": True,
             "status": "ready",
             "source": "recommendation_snapshot_cache" if cached else "fallback_snapshot",
@@ -230,6 +274,16 @@ class RecommendationSnapshotService:
             },
             "last_updated": snapshot.get("last_updated"),
         }
+        explanation_data = (snapshot.get("explanation") or {}).get("data") if isinstance(snapshot.get("explanation"), dict) else None
+        logger.debug(
+            "[SNAPSHOT ENVELOPE SERVED] user=%s source=%s snapshot_keys=%s explanation_data_keys=%s has_plans=%s",
+            user_id,
+            envelope["source"],
+            list(snapshot.keys()) if isinstance(snapshot, dict) else [],
+            list(explanation_data.keys()) if isinstance(explanation_data, dict) else [],
+            bool((explanation_data or {}).get("recommendation_plans")),
+        )
+        return envelope
 
     @classmethod
     async def ensure_refresh(

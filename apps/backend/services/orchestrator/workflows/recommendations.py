@@ -192,6 +192,11 @@ class RecommendationsWorkflow(BaseWorkflow):
             )
         formatted["provider"] = formatted.get("provider") or "deterministic_fallback"
         formatted["status"] = "ready" if formatted.get("plan") else "fallback"
+        # Fix 5 — Ensure camelCase aliases exist in formatted output
+        if "recommendation_plans" in formatted and "recommendationPlans" not in formatted:
+            formatted["recommendationPlans"] = formatted["recommendation_plans"]
+        if "recommendation_plan" in formatted and "recommendationPlan" not in formatted:
+            formatted["recommendationPlan"] = formatted["recommendation_plan"]
         return make_json_safe(formatted)
 
     async def persist_memory(
@@ -249,11 +254,17 @@ class RecommendationsWorkflow(BaseWorkflow):
         plans = deps.recommendation_pipeline.generate_plans(request.user_id, db=request.db)
         plan = plans[0] if plans else None
         return make_json_safe({
+            # snake_case (canonical)
             "plan": plan,
             "tests": tests,
             "recommendation_plan": plan,
             "recommendation_plans": plans,
             "provider": "deterministic_fallback",
+            # Fix 5 — camelCase aliases for frontend contract alignment
+            "recommendationPlan": plan,
+            "recommendationPlans": plans,
+            "plans": plans,
+            "cards": plans,
             "context_meta": context.user_context.get("context_meta") if isinstance(context.user_context, dict) else {},
             "longitudinal_summary": context.user_context.get("longitudinal_summary") if isinstance(
                 context.user_context,

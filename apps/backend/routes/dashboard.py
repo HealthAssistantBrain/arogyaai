@@ -24,7 +24,7 @@ from models import User
 from routes.users import get_current_user_from_header
 from services import aqi_service
 from services import dashboard_service as svc
-from services.dashboard_realtime import build_dashboard_bundle
+from services.dashboard_realtime import get_cached_dashboard_bundle
 
 router = APIRouter(prefix="/api/v1", tags=["Dashboard"])
 NO_CACHE_HEADERS = {
@@ -40,7 +40,7 @@ async def get_dashboard_bundle(
     db: Session = Depends(get_db),
 ):
     print("Serving latest dashboard data")
-    bundle = await build_dashboard_bundle(db, current_user)
+    bundle = await get_cached_dashboard_bundle(db, current_user, allow_sync_seed=True)
 
     return SafeJSONResponse(
         status_code=200,

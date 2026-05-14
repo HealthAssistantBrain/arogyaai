@@ -8,7 +8,7 @@ from database.session import SessionLocal
 from models import User
 from dashboard_realtime.connection_manager import dashboard_connection_manager
 from services.auth_service import AuthService
-from services.dashboard_realtime import build_realtime_payload
+from services.dashboard_realtime import cancel_dashboard_refresh, ensure_dashboard_snapshot_refresh, get_cached_realtime_payload
 
 router = APIRouter(tags=["Dashboard Realtime"])
 
@@ -42,7 +42,7 @@ async def dashboard_socket(websocket: WebSocket, user_id: str):
         await websocket.close(code=1008)
         return
 
-    await dashboard_connection_manager.connect(str(current_user.id), websocket)
+    session_id = await dashboard_connection_manager.connect(str(current_user.id), websocket)
 
     try:
         db: Session = SessionLocal()
@@ -51,35 +51,46 @@ async def dashboard_socket(websocket: WebSocket, user_id: str):
             if not fresh_user:
                 await websocket.close(code=1008)
                 return
-            initial_payload = await build_realtime_payload(db, fresh_user)
         finally:
             db.close()
 
-        await websocket_send_json_safe(
+        initial_payload = await get_cached_realtime_payload(str(current_user.id), schedule_refresh=True)
+        sent = await websocket_send_json_safe(
             websocket,
             {
                 "type": "dashboard.update",
                 "user_id": str(current_user.id),
                 "data": initial_payload,
                 "last_updated": initial_payload.get("last_updated"),
-            }
+            },
+            channel="dashboard.initial",
+            context=f"dashboard.initial:{current_user.id}:{session_id}",
         )
-        await dashboard_connection_manager.prime_snapshot(str(current_user.id), initial_payload)
+        if not sent:
+            return
+        await dashboard_connection_manager.prime_snapshot(str(current_user.id), initial_payload, session_id=session_id)
+        await ensure_dashboard_snapshot_refresh(str(current_user.id), reason="socket_connect")
 
         while True:
             message = await websocket.receive_text()
-            await dashboard_connection_manager.mark_heartbeat(str(current_user.id), websocket)
+            await dashboard_connection_manager.mark_heartbeat(str(current_user.id), websocket, session_id=session_id)
             if message == "ping":
-                await websocket_send_json_safe(
+                sent = await websocket_send_json_safe(
                     websocket,
                     {
                         "type": "dashboard.pong",
                         "user_id": str(current_user.id),
                         "last_updated": initial_payload.get("last_updated"),
                     },
+                    channel="dashboard.heartbeat",
+                    context=f"dashboard.pong:{current_user.id}:{session_id}",
                 )
+                if not sent:
+                    return
                 continue
     except WebSocketDisconnect:
         pass
     finally:
-        await dashboard_connection_manager.disconnect(str(current_user.id), websocket)
+        await dashboard_connection_manager.disconnect(str(current_user.id), websocket, session_id=session_id, reason="socket_closed")
+        if not await dashboard_connection_manager.has_connection(str(current_user.id)):
+            await cancel_dashboard_refresh(str(current_user.id))
