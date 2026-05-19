@@ -1,0 +1,126 @@
+name: Frontend Tests
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+
+env:
+  NODE_VERSION: "20"
+  VITE_API_URL: http://localhost:8000
+  VITE_API_BASE_URL: http://localhost:8000
+  VITE_SUPABASE_URL: https://ci.supabase.invalid
+  VITE_SUPABASE_ANON_KEY: ci-anon-key
+  VITE_GOOGLE_FIT_DEFAULT_TIMEZONE: Asia/Kolkata
+  FRONTEND_MAX_JS_CHUNK_KB: "650"
+  FRONTEND_MAX_CSS_CHUNK_KB: "360"
+  FRONTEND_MAX_TOTAL_ASSET_KB: "2800"
+
+jobs:
+  frontend:
+    name: Vite, Routes, Hydration, Bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: |
+          echo "::group::[FRONTEND] npm ci"
+          npm ci --prefix apps/frontend
+          echo "::endgroup::"
+
+      - name: Install root browser test dependencies
+        run: |
+          echo "::group::[FRONTEND] Playwright dependencies"
+          npm ci
+          npx playwright install --with-deps chromium
+          echo "::endgroup::"
+
+      - name: TypeScript validation
+        working-directory: apps/frontend
+        run: |
+          echo "::group::[FRONTEND] TypeScript"
+          if npm run | grep -q "typecheck"; then
+            npm run typecheck
+          else
+            echo "::warning::No typecheck script configured; Vite transpilation will still validate imports."
+          fi
+          echo "::endgroup::"
+
+      - name: ESLint
+        working-directory: apps/frontend
+        run: |
+          echo "::group::[FRONTEND] ESLint"
+          npm run lint
+          echo "::endgroup::"
+
+      - name: Frontend contract checks
+        run: |
+          echo "::group::[FRONTEND] Routes, Zustand, websocket contracts"
+          node .github/scripts/frontend_ci_checks.mjs
+          echo "::endgroup::"
+
+      - name: Build production bundle
+        working-directory: apps/frontend
+        run: |
+          echo "::group::[FRONTEND] Vite production build"
+          npm run build
+          echo "::endgroup::"
+
+      - name: Bundle budget
+        run: |
+          echo "::group::[PERFORMANCE] Bundle budget"
+          node .github/scripts/performance_budget.mjs
+          echo "::endgroup::"
+
+      - name: Hydration and route smoke test
+        run: |
+          echo "::group::[FRONTEND] Hydration and route smoke"
+          npm run preview --prefix apps/frontend -- --host 127.0.0.1 --port 4173 > frontend-preview.log 2>&1 &
+          for attempt in {1..40}; do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          FRONTEND_BASE_URL=http://127.0.0.1:4173 node .github/scripts/frontend_hydration_check.mjs
+          echo "::endgroup::"
+
+      - name: Upload frontend artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-validation-artifacts
+          path: |
+            apps/frontend/dist
+            frontend-preview.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## [FRONTEND] Validation Summary"
+            echo ""
+            echo "- npm cache: enabled"
+            echo "- Vite build: completed"
+            echo "- ESLint: completed"
+            echo "- Route and Zustand hydration contracts: completed"
+            echo "- Bundle budget: completed"
+            echo "- Browser route smoke: completed"
+          } >> "$GITHUB_STEP_SUMMARY"

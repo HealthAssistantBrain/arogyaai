@@ -1,0 +1,157 @@
+name: Deployment Readiness
+
+on:
+  workflow_call:
+    inputs:
+      require_secrets:
+        required: false
+        type: boolean
+        default: false
+      lint_result:
+        required: false
+        type: string
+        default: skipped
+      frontend_result:
+        required: false
+        type: string
+        default: skipped
+      backend_result:
+        required: false
+        type: string
+        default: skipped
+      ai_result:
+        required: false
+        type: string
+        default: skipped
+      docker_result:
+        required: false
+        type: string
+        default: skipped
+      security_result:
+        required: false
+        type: string
+        default: skipped
+      performance_result:
+        required: false
+        type: string
+        default: skipped
+  workflow_dispatch:
+    inputs:
+      require_secrets:
+        description: Require production deployment secrets
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  checks: write
+
+jobs:
+  readiness:
+    name: Release Gate and Dependency Graph
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      REQUIRE_SECRETS: ${{ inputs.require_secrets }}
+      HAS_PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL != '' }}
+      HAS_PRODUCTION_REDIS_URL: ${{ secrets.PRODUCTION_REDIS_URL != '' }}
+      HAS_PRODUCTION_SUPABASE_URL: ${{ secrets.PRODUCTION_SUPABASE_URL != '' }}
+      HAS_PRODUCTION_SUPABASE_ANON_KEY: ${{ secrets.PRODUCTION_SUPABASE_ANON_KEY != '' }}
+      HAS_PRODUCTION_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PRODUCTION_SUPABASE_SERVICE_ROLE_KEY != '' }}
+      HAS_PRODUCTION_APP_ENCRYPTION_KEY: ${{ secrets.PRODUCTION_APP_ENCRYPTION_KEY != '' }}
+      HAS_PRODUCTION_JWT_SECRET_KEY: ${{ secrets.PRODUCTION_JWT_SECRET_KEY != '' }}
+      HAS_GHCR_TOKEN: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate upstream gates
+        run: |
+          echo "::group::[DEPLOYMENT] Upstream gate results"
+          declare -A results=(
+            [lint]="${{ inputs.lint_result }}"
+            [frontend]="${{ inputs.frontend_result }}"
+            [backend]="${{ inputs.backend_result }}"
+            [ai]="${{ inputs.ai_result }}"
+            [docker]="${{ inputs.docker_result }}"
+            [security]="${{ inputs.security_result }}"
+            [performance]="${{ inputs.performance_result }}"
+          )
+          for gate in "${!results[@]}"; do
+            result="${results[$gate]}"
+            echo "$gate=$result"
+            if [[ "$result" == "failure" || "$result" == "cancelled" ]]; then
+              echo "::error::$gate gate failed with result=$result"
+              exit 1
+            fi
+          done
+          echo "::endgroup::"
+
+      - name: Validate deployment secrets
+        run: |
+          echo "::group::[DEPLOYMENT] Secret readiness"
+          required=(
+            HAS_PRODUCTION_DATABASE_URL
+            HAS_PRODUCTION_REDIS_URL
+            HAS_PRODUCTION_SUPABASE_URL
+            HAS_PRODUCTION_SUPABASE_ANON_KEY
+            HAS_PRODUCTION_SUPABASE_SERVICE_ROLE_KEY
+            HAS_PRODUCTION_APP_ENCRYPTION_KEY
+            HAS_PRODUCTION_JWT_SECRET_KEY
+            HAS_GHCR_TOKEN
+          )
+          missing=0
+          for key in "${required[@]}"; do
+            value="${!key}"
+            echo "$key=$value"
+            if [[ "${REQUIRE_SECRETS}" == "true" && "$value" != "true" ]]; then
+              echo "::error::Missing required deployment secret marker: $key"
+              missing=1
+            fi
+          done
+          echo "::endgroup::"
+          exit "$missing"
+
+      - name: Dependency graph summary
+        run: |
+          {
+            echo "## [DEPLOYMENT] Readiness Summary"
+            echo ""
+            echo "### Pipeline Dependency Graph"
+            echo ""
+            echo '```mermaid'
+            echo "graph TD"
+            echo "  detect[Detect changed areas] --> lint[Lint and format]"
+            echo "  detect --> frontend[Frontend validation]"
+            echo "  detect --> backend[Backend validation]"
+            echo "  detect --> ai[AI runtime validation]"
+            echo "  detect --> docker[Docker validation]"
+            echo "  detect --> security[Security scan]"
+            echo "  frontend --> performance[Performance check]"
+            echo "  backend --> performance"
+            echo "  lint --> readiness[Deployment readiness]"
+            echo "  frontend --> readiness"
+            echo "  backend --> readiness"
+            echo "  ai --> readiness"
+            echo "  docker --> readiness"
+            echo "  security --> readiness"
+            echo "  performance --> readiness"
+            echo "  readiness --> release[Release pipeline]"
+            echo '```'
+            echo ""
+            echo "### Service Startup Order"
+            echo ""
+            echo "PostgreSQL/Timescale and Redis start first, Qdrant follows, prediction and RAG services warm next, then FastAPI, Celery, frontend, and nginx."
+            echo ""
+            echo "### Release Readiness"
+            echo ""
+            echo "- Production secrets required: ${{ inputs.require_secrets }}"
+            echo "- Lint: ${{ inputs.lint_result }}"
+            echo "- Frontend: ${{ inputs.frontend_result }}"
+            echo "- Backend: ${{ inputs.backend_result }}"
+            echo "- AI runtime: ${{ inputs.ai_result }}"
+            echo "- Docker: ${{ inputs.docker_result }}"
+            echo "- Security: ${{ inputs.security_result }}"
+            echo "- Performance: ${{ inputs.performance_result }}"
+          } >> "$GITHUB_STEP_SUMMARY"

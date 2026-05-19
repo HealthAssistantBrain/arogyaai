@@ -1,0 +1,129 @@
+name: AI Runtime Validation
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+
+env:
+  PYTHON_VERSION: "3.11"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_NO_INPUT: "1"
+  PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/backend
+  APP_ENV: ci
+  DATABASE_URL: sqlite:///./ai-runtime-ci.db
+  REDIS_URL: redis://localhost:6379/0
+  JWT_SECRET_KEY: ci-jwt-secret-key-not-for-production
+  APP_ENCRYPTION_KEY: ci-encryption-key-not-for-production
+  SUPABASE_URL: https://ci.supabase.invalid
+  SUPABASE_ANON_KEY: ci-anon-key
+  SUPABASE_SERVICE_ROLE_KEY: ci-service-role-key
+  SUPABASE_BUCKET_NAME: medical-reports
+  SUPABASE_JWKS_STARTUP_WARMUP: "false"
+  QDRANT_MODE: local
+  QDRANT_URL: http://localhost:6333
+  LOCAL_QDRANT_URL: http://localhost:6333
+  AI_PROVIDER_DEMO_MODE: "true"
+  AI_PROVIDER_PRIMARY: nvidia
+  AI_PROVIDER_FALLBACK_CHAIN: nvidia,ollama,openai
+  NVIDIA_API_KEY: ""
+  OLLAMA_WARMUP_ON_STARTUP: "false"
+  OLLAMA_HEALTH_WARMUP_ENABLED: "false"
+  OCR_GOOGLE_VISION_ENABLED: "false"
+
+jobs:
+  ai-runtime:
+    name: Providers, Safety, Scoring, Recommendations
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      qdrant:
+        image: qdrant/qdrant:latest
+        ports:
+          - 6333:6333
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: apps/backend/requirements.txt
+
+      - name: Restore pytest cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .pytest_cache
+            apps/backend/.pytest_cache
+          key: pytest-ai-${{ runner.os }}-${{ hashFiles('apps/backend/requirements.txt', 'apps/backend/tests/**/*.py') }}
+          restore-keys: |
+            pytest-ai-${{ runner.os }}-
+
+      - name: Install AI runtime dependencies
+        run: |
+          echo "::group::[AI_RUNTIME] pip install"
+          python -m pip install --upgrade pip
+          python -m pip install -r apps/backend/requirements.txt pytest pytest-asyncio
+          echo "::endgroup::"
+
+      - name: AI runtime contracts
+        run: |
+          echo "::group::[AI_RUNTIME] Provider fallback and safety contracts"
+          python .github/scripts/ai_runtime_contracts.py
+          echo "::endgroup::"
+
+      - name: AI runtime pytest slice
+        run: |
+          echo "::group::[AI_RUNTIME] Pytest slice"
+          mkdir -p reports
+          python -m pytest -q \
+            apps/backend/tests/test_provider_runtime.py \
+            apps/backend/tests/test_ai_safety_validator.py \
+            apps/backend/tests/test_ollama_integration.py \
+            apps/backend/tests/test_recommendation_engine.py \
+            apps/backend/tests/test_recommendation_service.py \
+            apps/backend/tests/test_health_scoring_engine.py \
+            apps/backend/tests/test_forecasting_engine.py \
+            apps/backend/tests/test_report_upload_lab_pipeline.py \
+            apps/backend/tests/test_stabilization_layers.py \
+            --junitxml=reports/ai-runtime-pytest.xml \
+            --durations=20
+          echo "::endgroup::"
+
+      - name: Upload AI reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-runtime-reports
+          path: reports
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## [AI_RUNTIME] Validation Summary"
+            echo ""
+            echo "- Provider routing and NVIDIA to Ollama fallback: completed"
+            echo "- Safety validator and hallucination guard slice: completed"
+            echo "- Recommendation generation: completed"
+            echo "- Scoring and forecasting pytest slice: completed"
+            echo "- OCR/report AI pipeline slice: completed"
+          } >> "$GITHUB_STEP_SUMMARY"

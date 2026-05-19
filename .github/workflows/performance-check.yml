@@ -1,0 +1,127 @@
+name: Performance Check
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+
+env:
+  NODE_VERSION: "20"
+  PYTHON_VERSION: "3.11"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_NO_INPUT: "1"
+  FRONTEND_MAX_JS_CHUNK_KB: "650"
+  FRONTEND_MAX_CSS_CHUNK_KB: "360"
+  FRONTEND_MAX_TOTAL_ASSET_KB: "2800"
+  BACKEND_STARTUP_BUDGET_SECONDS: "20"
+  AI_CONTRACT_BUDGET_SECONDS: "20"
+
+jobs:
+  performance:
+    name: Bundle, Startup, AI Latency Budgets
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/backend
+      APP_ENV: ci
+      DATABASE_URL: sqlite:///./performance-ci.db
+      REDIS_URL: redis://localhost:6379/0
+      JWT_SECRET_KEY: ci-jwt-secret-key-not-for-production
+      APP_ENCRYPTION_KEY: ci-encryption-key-not-for-production
+      SUPABASE_URL: https://ci.supabase.invalid
+      SUPABASE_ANON_KEY: ci-anon-key
+      SUPABASE_SERVICE_ROLE_KEY: ci-service-role-key
+      SUPABASE_BUCKET_NAME: medical-reports
+      SUPABASE_JWKS_STARTUP_WARMUP: "false"
+      QDRANT_MODE: local
+      QDRANT_URL: http://localhost:6333
+      LOCAL_QDRANT_URL: http://localhost:6333
+      AI_PROVIDER_DEMO_MODE: "true"
+      OLLAMA_WARMUP_ON_STARTUP: "false"
+      OLLAMA_HEALTH_WARMUP_ENABLED: "false"
+      OCR_GOOGLE_VISION_ENABLED: "false"
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      qdrant:
+        image: qdrant/qdrant:latest
+        ports:
+          - 6333:6333
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: apps/backend/requirements.txt
+
+      - name: Frontend build and bundle budgets
+        env:
+          VITE_API_URL: http://localhost:8000
+          VITE_API_BASE_URL: http://localhost:8000
+          VITE_SUPABASE_URL: https://ci.supabase.invalid
+          VITE_SUPABASE_ANON_KEY: ci-anon-key
+        run: |
+          echo "::group::[PERFORMANCE] Frontend bundle budget"
+          npm ci --prefix apps/frontend
+          npm run build --prefix apps/frontend
+          node .github/scripts/performance_budget.mjs
+          echo "::endgroup::"
+
+      - name: Backend startup import timing
+        run: |
+          echo "::group::[PERFORMANCE] Backend startup timing"
+          python -m pip install --upgrade pip
+          python -m pip install -r apps/backend/requirements.txt pytest
+          start=$(python -c "import time; print(time.time())")
+          python .github/scripts/backend_smoke_checks.py
+          end=$(python -c "import time; print(time.time())")
+          elapsed=$(python -c "print(round(float('$end') - float('$start'), 2))")
+          echo "[BACKEND] startup_import_seconds=$elapsed"
+          python -c "elapsed = float('$elapsed'); budget = float('${{ env.BACKEND_STARTUP_BUDGET_SECONDS }}'); raise SystemExit(0 if elapsed <= budget else 1)"
+          echo "::endgroup::"
+
+      - name: AI contract latency budget
+        run: |
+          echo "::group::[PERFORMANCE] AI fallback latency"
+          start=$(python -c "import time; print(time.time())")
+          python .github/scripts/ai_runtime_contracts.py
+          end=$(python -c "import time; print(time.time())")
+          elapsed=$(python -c "print(round(float('$end') - float('$start'), 2))")
+          echo "[AI_RUNTIME] contract_seconds=$elapsed"
+          python -c "elapsed = float('$elapsed'); budget = float('${{ env.AI_CONTRACT_BUDGET_SECONDS }}'); raise SystemExit(0 if elapsed <= budget else 1)"
+          echo "::endgroup::"
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## [PERFORMANCE] Validation Summary"
+            echo ""
+            echo "- Frontend bundle budgets: completed"
+            echo "- Backend startup import budget: ${{ env.BACKEND_STARTUP_BUDGET_SECONDS }}s"
+            echo "- AI runtime deterministic fallback budget: ${{ env.AI_CONTRACT_BUDGET_SECONDS }}s"
+            echo "- Websocket reconnect behavior: covered by frontend and Docker validation"
+          } >> "$GITHUB_STEP_SUMMARY"

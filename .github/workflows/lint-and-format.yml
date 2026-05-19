@@ -1,0 +1,96 @@
+name: Lint and Format
+
+on:
+  workflow_call:
+    inputs:
+      changed_files:
+        required: false
+        type: string
+        default: "[]"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+
+env:
+  NODE_VERSION: "20"
+  PYTHON_VERSION: "3.11"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_NO_INPUT: "1"
+
+jobs:
+  lint:
+    name: Multi-Service Lint and Format
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+
+      - name: Install lint tooling
+        run: |
+          echo "::group::[CI] Install lint tooling"
+          python -m pip install --upgrade pip
+          python -m pip install ruff black isort
+          npm ci --prefix apps/frontend
+          echo "::endgroup::"
+
+      - name: Python critical lint
+        run: |
+          echo "::group::[BACKEND] Ruff critical rules"
+          ruff check apps/backend pipelines --select E9,F63,F7,F82 --output-format=github
+          echo "::endgroup::"
+
+      - name: Python import order
+        run: |
+          echo "::group::[BACKEND] isort check"
+          isort --check-only --diff apps/backend pipelines
+          echo "::endgroup::"
+
+      - name: Python formatting
+        run: |
+          echo "::group::[BACKEND] Black check"
+          black --check --diff apps/backend pipelines
+          echo "::endgroup::"
+
+      - name: Frontend ESLint
+        working-directory: apps/frontend
+        run: |
+          echo "::group::[FRONTEND] ESLint"
+          npm run lint
+          echo "::endgroup::"
+
+      - name: CI helper syntax
+        run: |
+          echo "::group::[CI] Helper syntax"
+          python -m py_compile .github/scripts/*.py
+          node --check .github/scripts/frontend_ci_checks.mjs
+          node --check .github/scripts/performance_budget.mjs
+          echo "::endgroup::"
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## [CI] Lint and Format"
+            echo ""
+            echo "- Ruff critical checks: completed"
+            echo "- isort check: completed"
+            echo "- Black check: completed"
+            echo "- Frontend ESLint: completed"
+            echo "- Changed files: ${{ inputs.changed_files }}"
+          } >> "$GITHUB_STEP_SUMMARY"

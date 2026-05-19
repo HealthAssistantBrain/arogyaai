@@ -1,0 +1,180 @@
+name: Backend Tests
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+
+env:
+  PYTHON_VERSION: "3.11"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_NO_INPUT: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+  PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/backend
+  APP_ENV: ci
+  DATABASE_URL: postgresql+psycopg2://postgres:ci-postgres-password@localhost:5432/arogyaai
+  REDIS_URL: redis://localhost:6379/0
+  CELERY_BROKER_URL: redis://localhost:6379/0
+  CELERY_RESULT_BACKEND: redis://localhost:6379/1
+  JWT_SECRET_KEY: ci-jwt-secret-key-not-for-production
+  APP_ENCRYPTION_KEY: ci-encryption-key-not-for-production
+  SUPABASE_URL: https://ci.supabase.invalid
+  SUPABASE_ANON_KEY: ci-anon-key
+  SUPABASE_SERVICE_ROLE_KEY: ci-service-role-key
+  SUPABASE_BUCKET_NAME: medical-reports
+  SUPABASE_JWT_ISSUER: https://ci.supabase.invalid/auth/v1
+  SUPABASE_JWKS_STARTUP_WARMUP: "false"
+  QDRANT_MODE: local
+  QDRANT_URL: http://localhost:6333
+  LOCAL_QDRANT_URL: http://localhost:6333
+  QDRANT_TIMEOUT_SECONDS: "5.0"
+  ANALYTICS_DB_MODE: primary
+  TIMESCALE_ENABLED: "true"
+  OLLAMA_WARMUP_ON_STARTUP: "false"
+  OLLAMA_HEALTH_WARMUP_ENABLED: "false"
+  AI_PROVIDER_DEMO_MODE: "true"
+  OCR_GOOGLE_VISION_ENABLED: "false"
+  RAG_STARTUP_INDEX_CHECK: "false"
+
+jobs:
+  backend:
+    name: FastAPI, Migrations, Pytest
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: timescale/timescaledb:2.15.3-pg15
+        env:
+          POSTGRES_DB: arogyaai
+          POSTGRES_PASSWORD: ci-postgres-password
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d arogyaai"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      qdrant:
+        image: qdrant/qdrant:latest
+        ports:
+          - 6333:6333
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: apps/backend/requirements.txt
+
+      - name: Restore pytest cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .pytest_cache
+            apps/backend/.pytest_cache
+          key: pytest-backend-${{ runner.os }}-${{ hashFiles('apps/backend/requirements.txt', 'apps/backend/tests/**/*.py') }}
+          restore-keys: |
+            pytest-backend-${{ runner.os }}-
+
+      - name: Install backend dependencies
+        run: |
+          echo "::group::[BACKEND] pip install"
+          python -m pip install --upgrade pip
+          python -m pip install -r apps/backend/requirements.txt pytest pytest-cov pytest-asyncio websockets
+          echo "::endgroup::"
+
+      - name: Validate backend env
+        run: |
+          echo "::group::[BACKEND] Environment validation"
+          python .github/scripts/validate_env.py \
+            --template .github/env/backend.env.template \
+            --require DATABASE_URL \
+            --require JWT_SECRET_KEY \
+            --require APP_ENCRYPTION_KEY \
+            --require SUPABASE_URL \
+            --require SUPABASE_ANON_KEY \
+            --require SUPABASE_SERVICE_ROLE_KEY
+          echo "::endgroup::"
+
+      - name: Migration heads
+        working-directory: apps/backend
+        run: |
+          echo "::group::[BACKEND] Alembic heads"
+          alembic heads
+          alembic -c alembic_analytics.ini heads
+          echo "::endgroup::"
+
+      - name: Transactional migrations
+        working-directory: apps/backend
+        run: |
+          echo "::group::[BACKEND] Transactional migrations"
+          alembic upgrade head
+          echo "::endgroup::"
+
+      - name: Analytics migration dry validation
+        working-directory: apps/backend
+        run: |
+          echo "::group::[BACKEND] Analytics migration track"
+          alembic -c alembic_analytics.ini upgrade head
+          echo "::endgroup::"
+
+      - name: Backend startup smoke
+        run: |
+          echo "::group::[BACKEND] FastAPI startup contracts"
+          python .github/scripts/backend_smoke_checks.py
+          echo "::endgroup::"
+
+      - name: Backend pytest
+        run: |
+          echo "::group::[BACKEND] Pytest"
+          mkdir -p reports
+          python -m pytest apps/backend/tests -q \
+            --durations=20 \
+            --junitxml=reports/backend-pytest.xml \
+            --cov=apps/backend \
+            --cov=pipelines \
+            --cov-report=xml:reports/backend-coverage.xml \
+            --cov-report=term
+          echo "::endgroup::"
+
+      - name: Upload backend reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-reports
+          path: reports
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## [BACKEND] Validation Summary"
+            echo ""
+            echo "- pip cache: enabled"
+            echo "- PostgreSQL/Timescale service: enabled"
+            echo "- Redis service: enabled"
+            echo "- Qdrant service: enabled"
+            echo "- Transactional migrations: completed"
+            echo "- Analytics migrations: completed"
+            echo "- FastAPI startup smoke: completed"
+            echo "- Pytest coverage artifact: uploaded"
+          } >> "$GITHUB_STEP_SUMMARY"

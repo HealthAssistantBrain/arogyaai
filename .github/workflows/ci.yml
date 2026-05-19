@@ -2,472 +2,137 @@ name: ArogyaAI CI
 
 on:
   push:
-    branches: [master, develop]
+    branches: [master, main, develop]
   pull_request:
-    branches: [master, develop]
+    branches: [master, main, develop]
   workflow_dispatch:
 
 permissions:
   contents: read
+  pull-requests: write
+  checks: write
+  security-events: write
+  actions: read
+  packages: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  NODE_VERSION: "20"
-  PIP_DISABLE_PIP_VERSION_CHECK: "1"
-  PIP_NO_INPUT: "1"
-  PYTHON_VERSION: "3.11"
-  PYTHONDONTWRITEBYTECODE: "1"
-  VITE_API_URL: "http://localhost:8000"
-
 jobs:
-  validate:
-    name: Validate
+  detect-changes:
+    name: Detect Changed Areas
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
+    outputs:
+      frontend: ${{ steps.detect.outputs.frontend }}
+      backend: ${{ steps.detect.outputs.backend }}
+      ai_runtime: ${{ steps.detect.outputs.ai_runtime }}
+      infra: ${{ steps.detect.outputs.infra }}
+      security: ${{ steps.detect.outputs.security }}
+      docs: ${{ steps.detect.outputs.docs }}
+      ci: ${{ steps.detect.outputs.ci }}
+      code: ${{ steps.detect.outputs.code }}
+      all: ${{ steps.detect.outputs.all }}
+      changed_files: ${{ steps.detect.outputs.changed_files }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
-      - name: Debug Context
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "Event: ${{ github.event_name }}"
-          echo "Ref: ${{ github.ref }}"
-          echo "Changed files:"
-          git diff --name-only HEAD~1 || git diff-tree --no-commit-id --name-only -r HEAD
-
-      - name: Show Docker versions
-        run: |
-          set -e
-          docker version
-          docker compose version
-
-      - name: Validate Docker Compose file
-        run: |
-          set -e
-          docker compose config --quiet
-
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    needs: validate
-    if: always()
-    timeout-minutes: 60
-    strategy:
-      fail-fast: true
-    env:
-      COMPOSE_PARALLEL_LIMIT: "4"
-      DOCKER_BUILDKIT: "1"
-    steps:
-      - name: Enforce validate result
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "Validate result: ${{ needs.validate.result }}"
-          test "${{ needs.validate.result }}" = "success"
-
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-
-      - name: Debug Context
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "Event: ${{ github.event_name }}"
-          echo "Ref: ${{ github.ref }}"
-          echo "Changed files:"
-          git diff --name-only HEAD~1 || git diff-tree --no-commit-id --name-only -r HEAD
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: apps/frontend/package-lock.json
-
-      - name: Install frontend dependencies
-        working-directory: apps/frontend
-        run: |
-          set -e
-          npm ci
-
-      - name: Build frontend
-        working-directory: apps/frontend
-        run: |
-          set -e
-          npm run build
+      - name: Detect changed paths
+        id: detect
         env:
-          VITE_API_URL: ${{ env.VITE_API_URL }}
+          GITHUB_EVENT_BEFORE: ${{ github.event.before }}
+        run: python .github/scripts/detect_changes.py
 
-      - name: Run frontend tests when configured
-        working-directory: apps/frontend
-        shell: bash
+      - name: CI summary
         run: |
-          set -euo pipefail
-          if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts.test ? 0 : 1)"; then
-            npm test -- --watch=false
-          else
-            echo "No frontend test script configured."
-          fi
+          {
+            echo "## [CI] Changed Area Detection"
+            echo ""
+            echo "| Area | Run |"
+            echo "|---|---|"
+            echo "| Frontend | ${{ steps.detect.outputs.frontend }} |"
+            echo "| Backend | ${{ steps.detect.outputs.backend }} |"
+            echo "| AI runtime | ${{ steps.detect.outputs.ai_runtime }} |"
+            echo "| Docker/infra | ${{ steps.detect.outputs.infra }} |"
+            echo "| Security/env | ${{ steps.detect.outputs.security }} |"
+            echo "| CI | ${{ steps.detect.outputs.ci }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Create CI env files
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat > .env <<'EOF'
-          POSTGRES_USER=postgres
-          POSTGRES_PASSWORD=password
-          POSTGRES_DB=arogyaai
-          PGADMIN_DEFAULT_EMAIL=admin@arogyaai.local
-          PGADMIN_DEFAULT_PASSWORD=admin
-          REDIS_URL=redis://redis:6379/0
-          DATABASE_URL=postgresql+psycopg2://postgres:password@postgres:5432/arogyaai
-          QDRANT_HOST=qdrant
-          QDRANT_PORT=6333
-          QDRANT_TIMEOUT_SECONDS=5.0
-          QDRANT_URL=http://qdrant:6333
-          VITE_API_URL=http://localhost:8000
-          VITE_SUPABASE_URL=https://supabase.invalid
-          VITE_SUPABASE_ANON_KEY=ci-only-anon-key
-          EOF
-          # Strip leading whitespace from heredoc
-          sed -i 's/^[[:space:]]*//' .env
+  lint-and-format:
+    name: Lint and Format
+    needs: detect-changes
+    if: needs.detect-changes.outputs.code == 'true' || needs.detect-changes.outputs.ci == 'true'
+    uses: ./.github/workflows/lint-and-format.yml
+    secrets: inherit
+    with:
+      changed_files: ${{ needs.detect-changes.outputs.changed_files }}
 
-          cat > apps/backend/.env <<'EOF'
-          APP_ENCRYPTION_KEY=ci-only-encryption-key
-          DATABASE_URL=postgresql+psycopg2://postgres:password@postgres:5432/arogyaai
-          FRONTEND_APP_URL=http://localhost:5173
-          JWT_SECRET_KEY=ci-only-jwt-secret
-          QDRANT_HOST=qdrant
-          QDRANT_PORT=6333
-          QDRANT_TIMEOUT_SECONDS=5.0
-          QDRANT_URL=http://qdrant:6333
-          REDIS_URL=redis://redis:6379/0
-          RUN_MIGRATIONS=true
-          SUPABASE_BUCKET_NAME=medical-reports
-          SUPABASE_SERVICE_ROLE_KEY=ci-only-service-role-key
-          SUPABASE_URL=https://supabase.invalid
-          SUPABASE_ANON_KEY=ci-only-anon-key
-          EOF
-          sed -i 's/^[[:space:]]*//' apps/backend/.env
+  frontend-tests:
+    name: Frontend Validation
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.ci == 'true'
+    uses: ./.github/workflows/frontend-tests.yml
+    secrets: inherit
 
-      - name: Build Docker services
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker compose build frontend backend prediction-service rag-service
+  backend-tests:
+    name: Backend Validation
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.ai_runtime == 'true' || needs.detect-changes.outputs.ci == 'true'
+    uses: ./.github/workflows/backend-tests.yml
+    secrets: inherit
 
-      - name: Run backend health check
-        shell: bash
-        run: |
-          set -euo pipefail
+  ai-runtime-validation:
+    name: AI Runtime Validation
+    needs: detect-changes
+    if: needs.detect-changes.outputs.ai_runtime == 'true' || needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.ci == 'true'
+    uses: ./.github/workflows/ai-runtime-validation.yml
+    secrets: inherit
 
-          docker compose up -d postgres redis qdrant backend
+  docker-validation:
+    name: Docker Validation
+    needs: detect-changes
+    if: needs.detect-changes.outputs.infra == 'true' || needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.ci == 'true'
+    uses: ./.github/workflows/docker-validation.yml
+    secrets: inherit
 
-          for attempt in {1..10}; do
-            if curl -fsS http://localhost:6333/collections; then
-              echo "Qdrant is reachable."
-              break
-            fi
-            echo "Waiting for Qdrant (${attempt}/10)..."
-            sleep 3
-          done
+  security-scan:
+    name: Security Scan
+    needs: detect-changes
+    if: needs.detect-changes.outputs.security == 'true' || needs.detect-changes.outputs.code == 'true' || needs.detect-changes.outputs.ci == 'true'
+    uses: ./.github/workflows/security-scan.yml
+    secrets: inherit
 
-          for attempt in {1..60}; do
-            if curl -fsS http://localhost:8000/health; then
-              echo "Backend health check passed."
-              exit 0
-            fi
-            echo "Waiting for backend health endpoint (${attempt}/60)..."
-            sleep 3
-          done
+  performance-check:
+    name: Performance Check
+    needs: [detect-changes, frontend-tests, backend-tests]
+    if: always() && (needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.ai_runtime == 'true' || needs.detect-changes.outputs.ci == 'true')
+    uses: ./.github/workflows/performance-check.yml
+    secrets: inherit
 
-          echo "Backend health check timed out."
-          docker compose ps || true
-          docker compose logs --tail=200 backend postgres redis qdrant || true
-          exit 1
-
-      - name: Dump Docker logs on failure
-        if: failure()
-        run: |
-          set -e
-          docker compose ps || true
-          docker compose logs --tail=200 || true
-
-      - name: Clean up Docker Compose
-        if: always()
-        run: |
-          set -e
-          docker compose down -v --remove-orphans
-
-  test-backend:
-    name: Backend Tests
-    runs-on: ubuntu-latest
-    needs: build
+  deployment-readiness:
+    name: Deployment Readiness
+    needs:
+      - detect-changes
+      - lint-and-format
+      - frontend-tests
+      - backend-tests
+      - ai-runtime-validation
+      - docker-validation
+      - security-scan
+      - performance-check
     if: always()
-    timeout-minutes: 45
-    strategy:
-      fail-fast: true
-    services:
-      postgres:
-        image: timescale/timescaledb:2.15.3-pg15
-        env:
-          POSTGRES_DB: arogyaai
-          POSTGRES_PASSWORD: password
-          POSTGRES_USER: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d arogyaai"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      APP_ENCRYPTION_KEY: ci-only-encryption-key
-      DATABASE_URL: postgresql+psycopg2://postgres:password@localhost:5432/arogyaai
-      FRONTEND_APP_URL: http://localhost:5173
-      JWT_SECRET_KEY: ci-only-jwt-secret
-      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/backend
-      REDIS_URL: redis://localhost:6379/0
-      QDRANT_HOST: qdrant
-      QDRANT_PORT: "6333"
-      QDRANT_TIMEOUT_SECONDS: "5.0"
-      QDRANT_URL: http://qdrant:6333
-      SUPABASE_BUCKET_NAME: medical-reports
-      SUPABASE_SERVICE_ROLE_KEY: ci-only-service-role-key
-      SUPABASE_URL: https://supabase.invalid
-    steps:
-      - name: Enforce build result
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "Build result: ${{ needs.build.result }}"
-          test "${{ needs.build.result }}" = "success"
-
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-
-      - name: Debug Context
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "Event: ${{ github.event_name }}"
-          echo "Ref: ${{ github.ref }}"
-          echo "Changed files:"
-          git diff --name-only HEAD~1 || git diff-tree --no-commit-id --name-only -r HEAD
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-          cache-dependency-path: apps/backend/requirements.txt
-
-      - name: Install backend dependencies
-        run: |
-          set -e
-          python -m pip install --upgrade pip
-          python -m pip install -r apps/backend/requirements.txt pytest
-
-      - name: Run Alembic migrations
-        working-directory: apps/backend
-        run: |
-          set -e
-          alembic upgrade head
-
-      - name: Run backend pytest
-        run: |
-          set -e
-          python -m pytest apps/backend/tests -q
-
-  test-ml:
-    name: ML Pipeline Tests
-    runs-on: ubuntu-latest
-    needs: build
-    if: always()
-    timeout-minutes: 30
-    strategy:
-      fail-fast: true
-    env:
-      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/backend
-    steps:
-      - name: Enforce build result
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "Build result: ${{ needs.build.result }}"
-          test "${{ needs.build.result }}" = "success"
-
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-
-      - name: Debug Context
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "Event: ${{ github.event_name }}"
-          echo "Ref: ${{ github.ref }}"
-          echo "Changed files:"
-          git diff --name-only HEAD~1 || git diff-tree --no-commit-id --name-only -r HEAD
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-          cache-dependency-path: apps/backend/requirements.txt
-
-      - name: Install ML dependencies
-        run: |
-          set -e
-          python -m pip install --upgrade pip
-          python -m pip install -r apps/backend/requirements.txt pytest
-
-      - name: Run ML pytest
-        run: |
-          set -e
-          python -m pytest \
-            apps/backend/tests/test_ml_data_mapper.py \
-            apps/backend/tests/test_ml_multimodel.py \
-            apps/backend/tests/test_ml_notification_hook.py \
-            apps/backend/tests/test_ml_predict.py \
-            apps/backend/tests/test_feature_pipeline_labs.py \
-            -q
-
-  test-rag:
-    name: RAG Pipeline Tests
-    runs-on: ubuntu-latest
-    needs: build
-    if: always()
-    timeout-minutes: 30
-    strategy:
-      fail-fast: true
-    env:
-      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/backend
-    steps:
-      - name: Enforce build result
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "Build result: ${{ needs.build.result }}"
-          test "${{ needs.build.result }}" = "success"
-
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-
-      - name: Debug Context
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "Event: ${{ github.event_name }}"
-          echo "Ref: ${{ github.ref }}"
-          echo "Changed files:"
-          git diff --name-only HEAD~1 || git diff-tree --no-commit-id --name-only -r HEAD
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-          cache-dependency-path: apps/backend/requirements.txt
-
-      - name: Install RAG dependencies
-        run: |
-          set -e
-          python -m pip install --upgrade pip
-          python -m pip install -r apps/backend/requirements.txt pytest
-
-      - name: Run RAG pytest
-        run: |
-          set -e
-          python -m pytest \
-            apps/backend/tests/test_rag_pipeline_retrieval.py \
-            apps/backend/tests/test_llama_index_rag_integration.py \
-            -q
-
-  smoke:
-    name: Smoke (${{ matrix.service }})
-    runs-on: ubuntu-latest
-    needs: [test-backend, test-ml, test-rag]
-    if: always()
-    timeout-minutes: 20
-    strategy:
-      fail-fast: true
-      matrix:
-        include:
-          - service: prediction-service
-            path: pipelines/prediction-service
-          - service: rag-service
-            path: pipelines/rag-service
-          - service: wearable-service
-            path: pipelines/wearable-service
-    steps:
-      - name: Enforce upstream test results
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "Backend tests result: ${{ needs.test-backend.result }}"
-          echo "ML tests result: ${{ needs.test-ml.result }}"
-          echo "RAG tests result: ${{ needs.test-rag.result }}"
-          test "${{ needs.test-backend.result }}" = "success"
-          test "${{ needs.test-ml.result }}" = "success"
-          test "${{ needs.test-rag.result }}" = "success"
-
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-
-      - name: Debug Context
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "Event: ${{ github.event_name }}"
-          echo "Ref: ${{ github.ref }}"
-          echo "Changed files:"
-          git diff --name-only HEAD~1 || git diff-tree --no-commit-id --name-only -r HEAD
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-          cache-dependency-path: ${{ matrix.path }}/requirements.txt
-
-      - name: Install service dependencies
-        working-directory: ${{ matrix.path }}
-        run: |
-          set -e
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt pytest
-
-      - name: Compile service code
-        working-directory: ${{ matrix.path }}
-        run: |
-          set -e
-          python -m compileall -q .
-
-      - name: Run service pytest when present
-        working-directory: ${{ matrix.path }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ -d tests ]]; then
-            python -m pytest -q
-          else
-            echo "No ${{ matrix.service }} pytest suite configured."
-          fi
+    uses: ./.github/workflows/deployment-readiness.yml
+    secrets: inherit
+    with:
+      require_secrets: false
+      lint_result: ${{ needs.lint-and-format.result }}
+      frontend_result: ${{ needs.frontend-tests.result }}
+      backend_result: ${{ needs.backend-tests.result }}
+      ai_result: ${{ needs.ai-runtime-validation.result }}
+      docker_result: ${{ needs.docker-validation.result }}
+      security_result: ${{ needs.security-scan.result }}
+      performance_result: ${{ needs.performance-check.result }}

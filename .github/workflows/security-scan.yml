@@ -1,0 +1,113 @@
+name: Security Scan
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+env:
+  NODE_VERSION: "20"
+  PYTHON_VERSION: "3.11"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_NO_INPUT: "1"
+
+jobs:
+  security:
+    name: Secrets, Dependencies, Containers
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+
+      - name: Environment and tracked secret guard
+        run: |
+          echo "::group::[SECURITY] Env strategy"
+          python .github/scripts/validate_env.py \
+            --template .github/env/ci.env.template \
+            --template .github/env/backend.env.template \
+            --template .github/env/frontend.env.template
+          echo "::endgroup::"
+
+      - name: Gitleaks secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Python dependency audit
+        run: |
+          echo "::group::[SECURITY] Python dependency audit"
+          python -m pip install --upgrade pip
+          python -m pip install pip-audit bandit
+          pip-audit -r apps/backend/requirements.txt --progress-spinner off
+          bandit -r apps/backend pipelines -ll -ii -f json -o bandit-report.json
+          echo "::endgroup::"
+
+      - name: npm audit
+        working-directory: apps/frontend
+        run: |
+          echo "::group::[SECURITY] npm audit"
+          npm ci
+          npm audit --omit=dev --audit-level=high
+          echo "::endgroup::"
+
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+          format: sarif
+          output: trivy-results.sarif
+
+      - name: Upload Trivy SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+
+      - name: Upload security artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-scan-reports
+          path: |
+            bandit-report.json
+            trivy-results.sarif
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## [SECURITY] Scan Summary"
+            echo ""
+            echo "- Env leak prevention: completed"
+            echo "- Gitleaks: completed"
+            echo "- pip-audit: completed"
+            echo "- Bandit: completed"
+            echo "- npm audit: completed"
+            echo "- Trivy filesystem scan: completed"
+          } >> "$GITHUB_STEP_SUMMARY"

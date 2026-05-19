@@ -1,0 +1,118 @@
+name: Docker Validation
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+
+env:
+  DOCKER_BUILDKIT: "1"
+  COMPOSE_DOCKER_CLI_BUILD: "1"
+  COMPOSE_PARALLEL_LIMIT: "4"
+
+jobs:
+  docker:
+    name: Compose Build, Startup, Health
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create CI env files
+        run: |
+          echo "::group::[DOCKER] Create CI env"
+          cp .github/env/ci.env.template .env
+          cp .github/env/backend.env.template apps/backend/.env
+          cp .github/env/frontend.env.template apps/frontend/.env
+          echo "::endgroup::"
+
+      - name: Validate Compose config
+        run: |
+          echo "::group::[DOCKER] Compose config"
+          docker compose config --quiet
+          docker compose config > compose.resolved.yml
+          echo "::endgroup::"
+
+      - name: Build Docker services
+        run: |
+          echo "::group::[DOCKER] Compose build"
+          docker compose build frontend backend prediction-service rag-service celery-worker
+          echo "::endgroup::"
+
+      - name: Start infrastructure
+        run: |
+          echo "::group::[DOCKER] Start dependency services"
+          docker compose up -d postgres redis qdrant prediction-service rag-service
+          docker compose ps
+          echo "::endgroup::"
+
+      - name: Start backend and frontend
+        run: |
+          echo "::group::[DOCKER] Start application services"
+          docker compose up -d backend celery-worker frontend
+          docker compose ps
+          echo "::endgroup::"
+
+      - name: Health checks
+        run: |
+          echo "::group::[DOCKER] Health checks"
+          for attempt in {1..90}; do
+            if curl -fsS http://127.0.0.1:8000/health >/tmp/backend-health.json; then
+              cat /tmp/backend-health.json
+              break
+            fi
+            sleep 3
+          done
+          curl -fsS http://127.0.0.1:8000/health
+          curl -fsS http://127.0.0.1:5173/
+          curl -fsS http://127.0.0.1:6333/collections
+          echo "::endgroup::"
+
+      - name: Websocket connectivity
+        run: |
+          echo "::group::[WEBSOCKET] Dashboard socket probe"
+          python -m pip install --upgrade pip
+          python -m pip install websockets
+          python .github/scripts/websocket_probe.py ws://127.0.0.1:8000/ws/dashboard/ci-user --timeout 5 --expect-policy-close
+          echo "::endgroup::"
+
+      - name: Upload Docker diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-validation-diagnostics
+          path: |
+            compose.resolved.yml
+            /tmp/backend-health.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Dump Docker logs on failure
+        if: failure()
+        run: |
+          docker compose ps || true
+          docker compose logs --tail=250 || true
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## [DOCKER] Validation Summary"
+            echo ""
+            echo "- Compose config: completed"
+            echo "- Docker service builds: completed"
+            echo "- Startup order: postgres, redis, qdrant, prediction, rag, backend, celery, frontend"
+            echo "- Backend/frontend/vector health: completed"
+            echo "- Websocket probe: completed"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -72,6 +72,9 @@ Thumbs.db
 .memory/
 adapters/
 scripts/
+!.github/scripts/
+!.github/scripts/**
+.github/scripts/__pycache__/
 gsd-template/
 skills-lock.json
 GSD-STYLE.md
